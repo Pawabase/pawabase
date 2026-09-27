@@ -1,0 +1,143 @@
+# Pawabase, self-hosted.
+#
+#   cp .env.example .env      # then set the secrets
+#   docker compose up -d
+#
+# Clients use the gateway (:8080). Operators use Studio (:8090). Everything
+# else stays on the internal network.
+
+x-pawabase: &pawabase
+  build: .
+  image: ${PAWABASE_IMAGE:-pawabase:local}
+  restart: unless-stopped
+  env_file: .env
+  environment: &env
+    PAWABASE_APP_ENV: ${PAWABASE_APP_ENV:-production}
+    PAWABASE_REDIS_URL: redis://redis:6379/0
+    PAWABASE_API_URL: http://api:8001
+    PAWABASE_AKOUNTZ_URL: http://akountz:8002
+    PAWABASE_ANGULA_URL: http://angula:8003
+    PAWABASE_GATEWAY_URL: http://gateway:8080
+    PAWABASE_STUDIO_URL: http://studio:8090
+
+x-api-env: &api-env
+  <<: *env
+  PAWABASE_DATABASE_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase
+  PAWABASE_DEFAULT_DATA_URL: ${PAWABASE_DEFAULT_DATA_URL:-sqlite:///data/envs/{project}__{env}.db}
+  PAWABASE_STORAGE_ROOT: /data/objects
+  PAWABASE_CODE_PATH: /code
+  PAWABASE_INLINE_WORKER: "false"
+  PAWABASE_INLINE_SCHEDULER: "false"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pawabase
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: pawabase
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/10-databases.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pawabase -d pawabase"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redis:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    <<: *pawabase
+    command: ["api"]
+    environment: *api-env
+    volumes: [api-data:/data, ./examples/code:/code:ro]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck: &health
+      test: ["CMD", "python", "-c", "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % os.environ.get('PORT', '8001'), timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  worker:
+    <<: *pawabase
+    command: ["worker"]
+    environment: *api-env
+    volumes: [api-data:/data, ./examples/code:/code:ro]
+    depends_on:
+      api: { condition: service_healthy }
+
+  scheduler:
+    <<: *pawabase
+    command: ["scheduler"]
+    environment: *api-env
+    volumes: [api-data:/data, ./examples/code:/code:ro]
+    depends_on:
+      api: { condition: service_healthy }
+
+  akountz:
+    <<: *pawabase
+    command: ["akountz"]
+    environment:
+      <<: *env
+      PORT: "8002"
+      PAWABASE_DATABASE_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/akountz
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      api: { condition: service_healthy }
+    healthcheck: *health
+
+  angula:
+    <<: *pawabase
+    command: ["angula"]
+    environment:
+      <<: *env
+      PORT: "8003"
+    depends_on:
+      redis: { condition: service_healthy }
+    healthcheck: *health
+
+  gateway:
+    <<: *pawabase
+    command: ["gateway"]
+    environment:
+      <<: *env
+      PORT: "8080"
+    ports: ["${PAWABASE_GATEWAY_PORT:-8080}:8080"]
+    depends_on:
+      api: { condition: service_healthy }
+      akountz: { condition: service_healthy }
+      angula: { condition: service_healthy }
+    healthcheck: *health
+
+  studio:
+    <<: *pawabase
+    command: ["studio"]
+    environment:
+      <<: *env
+      PORT: "8090"
+    ports: ["${PAWABASE_STUDIO_PORT:-8090}:8090"]
+    depends_on:
+      api: { condition: service_healthy }
+      akountz: { condition: service_healthy }
+    healthcheck: *health
+
+volumes:
+  postgres:
+  redis:
+  api-data:
+

@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Pawabase API: projects, resources, routes, flows, events, jobs, storage and the management plane."
 requires-python = ">=3.11"
 license = "BSD-3-Clause"
-dependencies = ["pawabase-kit", "sillo-framework[all,storage-s3]>=1.0.0", "sillo-oauth>=1.0.0"]
+dependencies = ["pawabase-kit", "sillo-framework[all,storage-s3]>=1.0.0", "sillo-oauth>=1.0.0", "asyncpg>=0.29"]
 
 [tool.uv]
 package = false
