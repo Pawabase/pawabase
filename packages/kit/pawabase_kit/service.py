@@ -38,6 +38,8 @@ def create_service(
     version: str = "0.1.0",
     backends: Sequence[AuthenticationBackend] = (),
     docs: Any = None,
+    inner: Sequence[Any] = (),
+    installables: Sequence[Any] = (),
 ) -> SilloApp:
     """Build a service application with the shared platform plumbing.
 
@@ -48,6 +50,10 @@ def create_service(
         backends: Authentication backends in addition to :class:`ServiceBackend`.
         docs: Passed to ``SilloApp(docs=...)``; ``None`` keeps Sillo's default
             Atlas reference at ``/docs``.
+        inner: ASGI middleware that must run *inside* the platform context
+            and telemetry (a dispatcher that needs the verified context).
+        installables: Sillo installables to install before the platform
+            middleware, so their middleware also runs inside it.
     """
     if settings.app_env == "production":
         problems = settings.validate_for_production()
@@ -68,6 +74,10 @@ def create_service(
     )
     app.state["settings"] = settings
     app.state["service_name"] = name
+    for installable in installables:
+        app.install(installable)
+    for middleware in inner:
+        app.use(middleware)
 
     # Registered after SilloApp installed authentication, so it runs before it:
     # a bearer token is verified against the environment the context names.
