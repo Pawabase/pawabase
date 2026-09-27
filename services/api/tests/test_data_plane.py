@@ -187,3 +187,73 @@ async def test_store_applies_declared_defaults(acme):
     store = await state.store("posts")
     row = await store.create({"title": "from a flow", "owner_id": "1"})
     assert (row["status"], row["views"]) == ("draft", 0)
+
+
+async def test_each_write_checks_its_own_policy(acme):
+    # Regression: create, update and delete once shared one closure variable,
+    # so every write was judged by the *delete* policy.
+    api = acme
+    ledger = {
+        "name": "ledger",
+        "fields": [{"name": "note", "type": "string", "required": True}],
+        "operations": {
+            "list": {"enabled": True, "policy": "authenticated"},
+            "get": {"enabled": True, "policy": "authenticated"},
+            "create": {"enabled": True, "policy": "authenticated"},
+            "update": {"enabled": True, "policy": "authenticated"},
+            "delete": {"enabled": True, "policy": "deny"},
+        },
+    }
+    await api.studio.post(f"{ENV}/resources", json=ledger)
+    await api.studio.post(f"{ENV}/resources/ledger/migrate")
+    ada = api.user_headers("acme", "development", user_id="1")
+
+    created = await api.http.post("/rest/v1/ledger", json={"note": "paid"}, headers=ada)
+    assert created.status_code == 201, created.text
+    record = created.json()
+    updated = await api.http.patch(f"/rest/v1/ledger/{record['id']}", json={"note": "paid in full"}, headers=ada)
+    assert updated.status_code == 200, updated.text
+    assert (await api.http.delete(f"/rest/v1/ledger/{record['id']}", headers=ada)).status_code == 403
+
+
+async def test_operators_read_the_openapi_document_without_public_docs(acme):
+    # Studio's "API docs" button relies on this; /docs/v1 stays 404 until
+    # the environment turns public_docs on.
+    api = acme
+    document = await api.studio.get(f"{ENV}/openapi")
+    assert "/rest/v1/posts" in document["paths"]
+    assert (await api.http.get("/docs/v1/acme/development")).status_code == 404
+
+
+async def test_expand_respects_the_related_resources_read_policy(acme):
+    # Regression: ?expand= read related rows straight from the store, so a
+    # relation leaked rows the related resource's own policy refuses.
+    api = acme
+    ledger = {
+        "name": "receipts",
+        "fields": [
+            {"name": "post_id", "type": "integer", "required": True},
+            {"name": "amount", "type": "number", "required": True},
+        ],
+        "operations": {
+            "list": {"enabled": True, "policy": {"role": "bursar"}},
+            "get": {"enabled": True, "policy": {"role": "bursar"}},
+        },
+    }
+    await api.studio.post(f"{ENV}/resources", json=ledger)
+    await api.studio.post(f"{ENV}/resources/receipts/migrate")
+    posts = await api.studio.get(f"{ENV}/resources/posts")
+    posts = {k: v for k, v in posts.items() if k not in ("id", "environment", "environment_id", "created_at", "updated_at", "version")}
+    posts["relations"] = [*posts["relations"], {"name": "receipts", "type": "has_many", "resource": "receipts", "field": "post_id"}]
+    await api.studio.put(f"{ENV}/resources/posts", json=posts)
+
+    ada = api.user_headers("acme", "development", user_id="1")
+    post = (await api.http.post("/rest/v1/posts", json={"title": "t", "status": "live"}, headers=ada)).json()
+    await api.studio.post(f"{ENV}/resources/receipts/records", json={"post_id": post["id"], "amount": 9})
+
+    assert (await api.http.get("/rest/v1/receipts", headers=ada)).status_code == 403
+    expanded = (await api.http.get(f"/rest/v1/posts/{post['id']}?expand=receipts", headers=ada)).json()
+    assert expanded["receipts"] == []
+    service = api.context_headers("acme", "development", role="service")
+    as_service = (await api.http.get(f"/rest/v1/posts/{post['id']}?expand=receipts", headers=service)).json()
+    assert [r["amount"] for r in as_service["receipts"]] == [9]

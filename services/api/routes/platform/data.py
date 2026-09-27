@@ -8,6 +8,7 @@ side effects as the public API (cache invalidation, events, realtime).
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -136,14 +137,24 @@ def register(r: Router, platform: Platform) -> None:
         return no_content()
 
     @r.get(
+        f"{base}/openapi",
+        auth=OPERATOR,
+        tags=["resources"],
+        summary="The environment's whole compiled OpenAPI document",
+    )
+    async def environment_openapi(ctx: HttpContext, ref: str, env: str):
+        # Operators read the docs whether or not ``public_docs`` publishes them
+        # at /docs/v1; that setting only decides what anonymous callers see.
+        state = await platform.state(ref, env)
+        return json.loads((await state.compiled()).build_openapi("/rest/v1"))
+
+    @r.get(
         f"{base}/resources/{{name}}/openapi",
         auth=OPERATOR,
         tags=["resources"],
         summary="The resource's compiled routes",
     )
     async def compiled_routes(ctx: HttpContext, ref: str, env: str, name: str):
-        import json
-
         state = await platform.state(ref, env)
         document = json.loads((await state.compiled()).build_openapi("/rest/v1"))
         prefix = f"/rest/v1/{name}"

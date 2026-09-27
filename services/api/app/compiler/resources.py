@@ -84,10 +84,46 @@ async def _present(state: EnvironmentState, resource: Any, ctx: HttpContext, dat
     return data
 
 
+async def _readable(
+    state: EnvironmentState, ctx: HttpContext, resource_name: str, items: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """The related rows the caller could read directly, shaped as a direct read would be.
+
+    An expansion is a read of another resource, so it answers to that
+    resource's own read policy (``get``, else ``list``) and transformer. Without this, a relation
+    was a side door: ``invoices?expand=payments`` returned the payments
+    ledger to callers the ``payments`` policy refuses.
+    """
+    target = state.resources.get(resource_name)
+    settings = None
+    if target is not None:
+        settings = operation_settings(target, "get") or operation_settings(target, "list")
+    if settings is None:
+        # No public read of the target at all: only service credentials see it.
+        return items if _is_service(ctx) else []
+    policy = settings.get("policy") or DEFAULT_POLICY
+    kept = [
+        item
+        for item in items
+        if await state.engine.check(policy, build_policy_context(ctx, record=item))
+    ]
+    if kept and target.transformer:
+        kept = await _present(state, target, ctx, kept)
+    return kept
+
+
 async def _expand(
-    state: EnvironmentState, spec: ResourceSpec, rows: list[dict[str, Any]], names: list[str]
+    state: EnvironmentState,
+    ctx: HttpContext,
+    spec: ResourceSpec,
+    rows: list[dict[str, Any]],
+    names: list[str],
 ) -> None:
-    """Attach ``belongs_to`` and ``has_many`` relations requested with ``?expand=``."""
+    """Attach ``belongs_to`` and ``has_many`` relations requested with ``?expand=``.
+
+    Related rows are filtered by the related resource's read policy and shaped
+    by its transformer (see :func:`_readable`).
+    """
     relations = {relation["name"]: relation for relation in spec.relations}
     for name in names:
         relation = relations.get(name)
@@ -103,15 +139,18 @@ async def _expand(
                 },
                 key=str,
             )
+            fetched = await target.get_many(target.spec.primary_key, ids)
             related = {
                 str(item[target.spec.primary_key]): item
-                for item in await target.get_many(target.spec.primary_key, ids)
+                for item in await _readable(state, ctx, relation["resource"], fetched)
             }
             for row in rows:
                 row[name] = related.get(str(row.get(relation["field"])))
         else:  # has_many: relation["field"] is the foreign key on the target
             ids = [row[spec.primary_key] for row in rows]
-            children = await target.get_many(relation["field"], ids)
+            children = await _readable(
+                state, ctx, relation["resource"], await target.get_many(relation["field"], ids)
+            )
             for row in rows:
                 row[name] = [
                     child
@@ -204,7 +243,11 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
                 total = None  # a per-row policy makes the database total unreliable
             if expand:
                 await _expand(
-                    state, spec, rows, [name.strip() for name in expand.split(",") if name.strip()]
+                    state,
+                    ctx,
+                    spec,
+                    rows,
+                    [name.strip() for name in expand.split(",") if name.strip()],
                 )
             body = {
                 "data": await _present(state, resource, ctx, rows),
@@ -259,6 +302,7 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
             if expand:
                 await _expand(
                     state,
+                    ctx,
                     spec,
                     [record],
                     [name.strip() for name in expand.split(",") if name.strip()],
@@ -288,7 +332,7 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
         create_model_ = compile_model(
             f"{title}Create", spec.fields, mode="create", registry=registry
         )
-        policy = settings.get("policy") or DEFAULT_POLICY
+        create_policy = settings.get("policy") or DEFAULT_POLICY
 
         async def create_record(ctx: HttpContext, body):
             # Defaults count as values; unset optional fields are simply absent.
@@ -301,7 +345,7 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
                 elif not _is_service(ctx):
                     raise HTTPException(status_code=401, detail="Authentication required")
             decision = await state.engine.check(
-                policy, build_policy_context(ctx, record=data, input=data)
+                create_policy, build_policy_context(ctx, record=data, input=data)
             )
             if not decision:
                 raise HTTPException(status_code=403, detail=decision.reason)
@@ -337,7 +381,7 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
         update_model = compile_model(
             f"{title}Update", spec.fields, mode="update", registry=registry
         )
-        policy = settings.get("policy") or DEFAULT_POLICY
+        update_policy = settings.get("policy") or DEFAULT_POLICY
 
         async def update_record(ctx: HttpContext, id: str, body):
             data = body.model_dump(exclude_unset=True, mode="json")
@@ -349,7 +393,7 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
             if existing is None:
                 raise HTTPException(status_code=404, detail="Not found")
             decision = await state.engine.check(
-                policy, build_policy_context(ctx, record=existing, input=data)
+                update_policy, build_policy_context(ctx, record=existing, input=data)
             )
             if not decision:
                 raise HTTPException(
@@ -384,7 +428,7 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
     # ── delete ───────────────────────────────────────────────────────────
     settings = operation_settings(resource, "delete")
     if settings:
-        policy = settings.get("policy") or DEFAULT_POLICY
+        delete_policy = settings.get("policy") or DEFAULT_POLICY
 
         async def delete_record(ctx: HttpContext, id: str):
             record_id = _coerce_id(spec, id)
@@ -392,7 +436,7 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
             existing = await store.get(record_id)
             if existing is None:
                 raise HTTPException(status_code=404, detail="Not found")
-            decision = await state.engine.check(policy, build_policy_context(ctx, record=existing))
+            decision = await state.engine.check(delete_policy, build_policy_context(ctx, record=existing))
             if not decision:
                 raise HTTPException(
                     status_code=404 if not _auth_actor(ctx) else 403, detail=decision.reason
