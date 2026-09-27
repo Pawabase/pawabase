@@ -11,6 +11,7 @@ from sillo import HttpContext, Router, no_content
 from sillo.exceptions import HTTPException
 from tortoise.functions import Count
 
+from app.analytics import DEFAULT_RANGE, environment_analytics
 from app.platform import PLATFORM_QUEUES, Platform
 from database.models import (
     AuditEntry,
@@ -375,6 +376,9 @@ def register(r: Router, platform: Platform) -> None:
                 "mail": await MailLog.filter(project=ref, env=env, created_at__gte=day).count(),
             },
             "requests": telemetry.summary() if telemetry else None,
+            "analytics": await environment_analytics(
+                ref, env, ctx.query_params.get("range", DEFAULT_RANGE)
+            ),
             "problems": compiled.state.get("problems", []),
             "infrastructure": {
                 "database": "configured" if state.infra.get("database_url") else "platform default",
@@ -387,6 +391,16 @@ def register(r: Router, platform: Platform) -> None:
                 "events": platform.bus.backend,
             },
         }
+
+    @r.get(
+        f"{base}/analytics",
+        auth=OPERATOR,
+        tags=["observability"],
+        summary="Requests, errors, latency, events and flow runs over time",
+    )
+    async def analytics(ctx: HttpContext, ref: str, env: str):
+        await get_environment(ref, env)
+        return await environment_analytics(ref, env, ctx.query_params.get("range", DEFAULT_RANGE))
 
     @r.get("/overview", auth=OPERATOR, tags=["observability"], summary="Installation overview")
     async def installation(ctx: HttpContext):

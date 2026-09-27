@@ -1,5 +1,7 @@
 import { Head, Link, router, usePage } from "@inertiajs/react";
 import { useEffect, useState } from "react";
+import CommandSearch from "./CommandSearch";
+import StatusLights from "./StatusLights";
 import { Icon } from "./icons";
 import { Logo } from "./Logo";
 import { ToastProvider } from "./ui";
@@ -153,6 +155,8 @@ export default function Layout({ title, crumbs = [], children, full }) {
               </div>
             </div>
             <div className="top-actions">
+              <StatusLights />
+              <CommandSearch />
               <button type="button" className="icon-btn" onClick={toggleTheme} aria-label={dark ? "Switch to light" : "Switch to dark"}>
                 <Icon name={dark ? "sun" : "moon"} />
               </button>

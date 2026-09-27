@@ -10,11 +10,15 @@ they would accept.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time
+from datetime import datetime
 from html import escape as html_escape
 from pathlib import Path
 from typing import Any
 
+import httpx
 from sillo import HttpContext, SilloApp, html
 from sillo.openapi.ui import ATLAS_JS
 from sillo.responses import JSONResponse
@@ -272,6 +276,61 @@ def register_routes(
 
         return await page(ctx, component or "Errors/NotFound", load)
 
+    # ── service status ───────────────────────────────────────────────────
+
+    async def probe(label: str, check) -> dict[str, Any]:
+        started = time.perf_counter()
+        try:
+            await asyncio.wait_for(check(), timeout=3.0)
+            status, detail = "up", None
+        except Exception as exc:
+            status, detail = "down", f"{type(exc).__name__}: {exc}"[:200]
+        return {
+            "name": label,
+            "status": status,
+            "latency_ms": round((time.perf_counter() - started) * 1000, 1),
+            "detail": detail,
+        }
+
+    async def gateway_health() -> None:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            (await client.get(settings.gateway_url.rstrip("/") + "/health")).raise_for_status()
+
+    @app.get("/studio/status", exclude_from_schema=True)
+    async def status(ctx: HttpContext):
+        """Every service's health, for the status lights in Studio's top bar."""
+        operator = await signed_in(ctx)
+        if operator is None:
+            return JSONResponse({"detail": "sign in first"}, status_code=401)
+        services = list(
+            await asyncio.gather(
+                probe("Gateway", gateway_health),
+                probe("API", lambda: clients["api"].get("/health")),
+                probe("Auth", lambda: clients["akountz"].get("/health")),
+                probe("Realtime", lambda: clients["angula"].get("/health")),
+            )
+        )
+        try:
+            workers = (await call(ctx, "GET", "/workers")).get("data", [])
+        except Exception:
+            workers = None
+        for kind, label in (("worker", "Worker"), ("scheduler", "Scheduler")):
+            if workers is None:
+                services.append({"name": label, "status": "unknown", "detail": "the API is unreachable"})
+                continue
+            # Heartbeats of processes that exited long ago stay in the table;
+            # only processes seen recently say anything about health now.
+            mine = [w for w in workers if w.get("kind") == kind and _recent(w)]
+            alive = [w for w in mine if w.get("alive")]
+            services.append(
+                {
+                    "name": label,
+                    "status": "up" if alive else ("down" if mine else "unknown"),
+                    "detail": f"{len(alive)} running" if alive else ("stopped" if mine else "not running"),
+                }
+            )
+        return JSONResponse({"services": services, "checked_at": time.time()})
+
     # ── the bridge ───────────────────────────────────────────────────────
 
     async def bridge(ctx: HttpContext, target: str, path: str):
@@ -348,6 +407,17 @@ async def _body(ctx: HttpContext) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
     form = await ctx.form()
     return {k: form.get(k) for k in form}
+
+
+def _recent(worker: dict[str, Any], seconds: float = 600) -> bool:
+    """Seen within *seconds*, or an in-process worker (which has no heartbeat)."""
+    seen = worker.get("last_seen")
+    if not seen:
+        return bool(worker.get("alive"))
+    try:
+        return time.time() - datetime.fromisoformat(seen).timestamp() < seconds
+    except ValueError:
+        return False
 
 
 def _detail(exc: ServiceError) -> str:

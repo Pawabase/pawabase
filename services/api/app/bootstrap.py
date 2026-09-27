@@ -23,6 +23,7 @@ from sillo.record import Record
 from app.config import ApiSettings
 from app.dispatch import DataPlaneDispatcher
 from app.platform import Platform
+from app.request_metrics import RequestRollup
 from database.config import MODEL_MODULES, database_config
 from pawabase_kit.auth import OperatorBackend, ProjectUserBackend
 from pawabase_kit.service import create_service
@@ -50,10 +51,13 @@ def create_app(
     )
     app.state["platform"] = platform
     platform.app = app
+    rollup = RequestRollup().attach(app.state["pawabase.telemetry"])
+    app.state["request_rollup"] = rollup
 
     @app.on_startup
     async def start_platform() -> None:
         await platform.start()
+        rollup.start()
         from app.events import EventProcessor
 
         if settings.inline_worker:
@@ -70,6 +74,7 @@ def create_app(
 
     @app.on_shutdown
     async def stop_platform() -> None:
+        await rollup.stop()
         worker = app.state.get("inline_worker")
         if worker is not None:
             worker.stop()
