@@ -146,6 +146,23 @@ async def test_error_branch_and_unavailable_capability():
     assert raised.value.node == "mail"
 
 
+async def test_time_now_formats():
+    flow = {
+        "nodes": [
+            node("start", "trigger.manual"),
+            node("iso", "time.now"),
+            node("day", "time.now", format="date"),
+            node("unix", "time.now", format="unix"),
+        ],
+        "edges": [edge("start", "iso"), edge("iso", "day"), edge("day", "unix")],
+    }
+    run = await run_flow(flow, runtime=FakeRuntime(), input={})
+    steps = run.state["steps"]
+    assert steps["iso"]["output"].startswith(steps["day"]["output"] + "T")
+    assert len(steps["day"]["output"]) == 10
+    assert isinstance(steps["unix"]["output"], int)
+
+
 def test_validation_reports_problems():
     problems = validate_flow({"nodes": [node("a", "nope")], "edges": [edge("a", "b")]})
     assert any("unknown block" in p for p in problems)
