@@ -59,7 +59,7 @@ function Runs({ base, project, env, onOpen }) {
     <Card flush title={<select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 160 }}><option value="">every status</option><option>succeeded</option><option>failed</option><option>running</option></select>}>
       <Loading state={runs} empty="No runs yet.">
         {(data) => <Table rows={data.data} onRowClick={onOpen} columns={[
-          { label: "Flow", render: (r) => <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.visit(`/projects/${project.ref}/${env}/flows/${r.flow}`); }} style={{ color: "var(--accent)" }}>{r.flow}</a> },
+          { label: "Flow", render: (r) => <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.visit(`/projects/${project.ref}/${env}/flows/${r.flow}`); }} style={{ color: "var(--brand)" }}>{r.flow}</a> },
           { label: "Status", render: (r) => <Status value={r.status} /> }, { label: "Trigger", key: "trigger" },
           { label: "Duration", render: (r) => (r.duration_ms != null ? `${Math.round(r.duration_ms)} ms` : "—") },
           { label: "Error", render: (r) => r.error && <span className="error-text">{r.error}</span> }, { label: "When", render: (r) => when(r.created_at) },

@@ -12,6 +12,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from tortoise.exceptions import IntegrityError
+
 
 async def upsert(
     model: Any, defaults: Mapping[str, Any] | None = None, **lookup: Any
@@ -24,8 +26,6 @@ async def upsert(
     Returns:
         ``(instance, created)``, like ``update_or_create``.
     """
-    from tortoise.exceptions import IntegrityError
-
     values = dict(defaults or {})
 
     async def update() -> Any | None:

@@ -1,7 +1,10 @@
 import { Link, usePage } from "@inertiajs/react";
 import { Fragment } from "react";
 import Layout, { envHref } from "../../components/Layout";
+import { Icon } from "../../components/icons";
 import { Card, PageHead } from "../../components/ui";
+
+const TONES = ["lavender", "peach", "mint", "butter", "sky", "rose"];
 
 export default function Overview({ project, env, overview }) {
   const counts = overview.counts || {};
@@ -19,9 +22,10 @@ export default function Overview({ project, env, overview }) {
         </div>
       )}
       <div className="grid" style={{ marginBottom: 20 }}>
-        {Object.entries(counts).map(([key, value]) => (
-          <Link key={key} href={envHref(project.ref, env, key === "buckets" ? "storage" : key)} className="card stat">
-            <b>{value}</b><span>{key}</span>
+        {Object.entries(counts).map(([key, value], i) => (
+          <Link key={key} href={envHref(project.ref, env, key === "buckets" ? "storage" : key)} className={`tile compact pastel ${TONES[i % TONES.length]} rise`} style={{ "--i": i }}>
+            <span className="tile-icon"><Icon name={key} /></span>
+            <div className="stack" style={{ gap: 2 }}><b>{value}</b><span>{key.replace(/[-_]/g, " ")}</span></div>
           </Link>
         ))}
       </div>
@@ -38,7 +42,7 @@ export default function Overview({ project, env, overview }) {
           <KV entries={Object.entries(infra)} />
         </Card>
         <Card title="Connect">
-          <p className="muted" style={{ marginTop: 0 }}>Clients call the gateway with a key from <Link href={envHref(project.ref, env, "keys")} style={{ color: "var(--accent)" }}>API keys</Link>.</p>
+          <p className="muted" style={{ marginTop: 0 }}>Clients call the gateway with a key from <Link href={envHref(project.ref, env, "keys")} style={{ color: "var(--brand)" }}>API keys</Link>.</p>
           <pre className="code-block">{`curl ${gateway_url}/rest/v1/<resource> \\
   -H "apikey: <publishable key>" \\
   -H "Authorization: Bearer <user access token>"`}</pre>

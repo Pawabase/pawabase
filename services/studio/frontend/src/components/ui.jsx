@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { Icon } from "./icons";
 
 export function Button({ variant, size, className = "", ...props }) {
   return <button type="button" className={`btn ${variant || ""} ${size || ""} ${className}`} {...props} />;
@@ -119,7 +120,7 @@ export function Modal({ title, onClose, children, footer, wide }) {
       <div className={`modal ${wide ? "wide" : ""}`}>
         <div className="modal-head">
           <h2>{title}</h2>
-          <Button variant="ghost" size="sm" onClick={onClose}>✕</Button>
+          <button type="button" className="icon-btn" style={{ width: 34, height: 34 }} onClick={onClose} aria-label="Close"><Icon name="x" size={18} /></button>
         </div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
@@ -128,10 +129,10 @@ export function Modal({ title, onClose, children, footer, wide }) {
   );
 }
 
-export function Field({ label, hint, error, children }) {
+export function Field({ label, hint, error, optional, children, className = "" }) {
   return (
-    <label className="field">
-      {label}
+    <label className={`field ${className}`}>
+      {label && <span className="label-row"><span>{label}</span>{optional && <span className="optional">Optional</span>}</span>}
       {children}
       {hint && <span className="hint">{hint}</span>}
       {error && <span className="error-text">{error}</span>}
@@ -199,7 +200,7 @@ export function CopyText({ text }) {
     <span className="row" style={{ gap: 6 }}>
       <code style={{ overflowWrap: "anywhere" }}>{text}</code>
       <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard?.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1200); }}>
-        {copied ? "copied" : "copy"}
+        <Icon name={copied ? "check" : "copy"} />
       </Button>
     </span>
   );
@@ -218,7 +219,7 @@ export function ToastProvider({ children }) {
     <ToastContext.Provider value={push}>
       {children}
       <div className="toast-stack">
-        {toasts.map((t) => <div key={t.id} className={`toast ${t.tone}`}>{t.message}</div>)}
+        {toasts.map((t) => <div key={t.id} className={`toast ${t.tone}`}><span className="toast-dot"><Icon name={t.tone === "error" ? "x" : "check"} /></span>{t.message}</div>)}
       </div>
     </ToastContext.Provider>
   );
@@ -246,4 +247,171 @@ export function useAction() {
     }
   };
   return [run, busy];
+}
+
+/** A right-hand panel for creating and editing things: a header, optional
+ *  tabs, a scrolling body of form sections, and a sticky footer. */
+export function Sheet({ title, subtitle, icon, tone = "lavender", tabs, tab, onTab, onClose, footer, children }) {
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <>
+      <div className="sheet-overlay" onMouseDown={onClose} />
+      <div className="sheet" role="dialog" aria-label={typeof title === "string" ? title : undefined}>
+        <div className="sheet-head">
+          {icon && <span className={`tile-icon pastel ${tone}`}><Icon name={icon} size={20} /></span>}
+          <div className="grow">
+            <h2>{title}</h2>
+            {subtitle && <p>{subtitle}</p>}
+          </div>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
+        </div>
+        {tabs && <div className="sheet-tabs"><Tabs tabs={tabs} value={tab} onChange={onTab} /></div>}
+        <div className="sheet-body">{children}</div>
+        {footer && <div className="sheet-foot">{footer}</div>}
+      </div>
+    </>
+  );
+}
+
+export function Section({ title, description, actions, children }) {
+  return (
+    <section className="form-section">
+      {(title || actions) && (
+        <div className="form-section-head">
+          <div>
+            <h3>{title}</h3>
+            {description && <p>{description}</p>}
+          </div>
+          {actions && <div className="row">{actions}</div>}
+        </div>
+      )}
+      {children}
+    </section>
+  );
+}
+
+export function Switch({ checked, onChange, label, hint, size }) {
+  return (
+    <label className={`switch ${size || ""}`}>
+      <input type="checkbox" checked={!!checked} onChange={(e) => onChange(e.target.checked)} />
+      <span className="track" />
+      {(label || hint) && (
+        <span className="switch-text">
+          {label}
+          {hint && <span className="hint">{hint}</span>}
+        </span>
+      )}
+    </label>
+  );
+}
+
+export function Segmented({ options, value, onChange }) {
+  return (
+    <div className="segmented" role="radiogroup">
+      {options.map((o) => {
+        const [v, label] = Array.isArray(o) ? o : [o, o];
+        return (
+          <button key={String(v)} type="button" role="radio" aria-checked={value === v} className={value === v ? "active" : ""} onClick={() => onChange(v)}>
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** A list of short strings edited as chips. Enter or comma adds one. */
+export function TagInput({ value = [], onChange, placeholder = "Type and press Enter", suggestions = [] }) {
+  const [draft, setDraft] = useState("");
+  const input = useRef(null);
+  const add = (text) => {
+    const items = text.split(",").map((t) => t.trim()).filter(Boolean).filter((t) => !value.includes(t));
+    if (items.length) onChange([...value, ...items]);
+    setDraft("");
+  };
+  const open = suggestions.filter((s) => !value.includes(s));
+  return (
+    <div className="stack sm">
+      <div className="tag-input" onClick={() => input.current?.focus()}>
+        {value.map((t) => (
+          <span key={t} className="tag">
+            {t}
+            <button type="button" onClick={() => onChange(value.filter((x) => x !== t))} aria-label={`Remove ${t}`}><Icon name="x" size={12} /></button>
+          </span>
+        ))}
+        <input
+          ref={input}
+          value={draft}
+          placeholder={value.length ? "" : placeholder}
+          onChange={(e) => (e.target.value.endsWith(",") ? add(e.target.value) : setDraft(e.target.value))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); add(draft); }
+            if (e.key === "Backspace" && !draft && value.length) onChange(value.slice(0, -1));
+          }}
+          onBlur={() => draft && add(draft)}
+        />
+      </div>
+      {open.length > 0 && (
+        <div className="chips">
+          {open.map((s) => <button type="button" key={s} className="chip" onClick={() => onChange([...value, s])}>+ {s}</button>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A string → string map edited as rows. */
+export function KeyValue({ value = {}, onChange, keyLabel = "Key", valueLabel = "Value", addLabel = "Add row" }) {
+  const [rows, setRows] = useState(() => Object.entries(value || {}));
+  const commit = (next) => {
+    setRows(next);
+    onChange(Object.fromEntries(next.filter(([k]) => k.trim())));
+  };
+  return (
+    <div className="list-rows">
+      {rows.map(([k, v], i) => (
+        <div key={i} className="list-row">
+          <input value={k} placeholder={keyLabel} onChange={(e) => commit(rows.map((r, j) => (j === i ? [e.target.value, r[1]] : r)))} />
+          <input value={typeof v === "string" ? v : JSON.stringify(v)} placeholder={valueLabel} onChange={(e) => commit(rows.map((r, j) => (j === i ? [r[0], e.target.value] : r)))} />
+          <IconButton icon="trash" label="Remove" onClick={() => commit(rows.filter((_, j) => j !== i))} />
+        </div>
+      ))}
+      <button type="button" className="add-row" onClick={() => setRows([...rows, ["", ""]])}><Icon name="plus" />{addLabel}</button>
+    </div>
+  );
+}
+
+export function IconButton({ icon, label, onClick, disabled }) {
+  return (
+    <button type="button" className="btn ghost icon-only" title={label} aria-label={label} onClick={onClick} disabled={disabled}>
+      <Icon name={icon} />
+    </button>
+  );
+}
+
+export function EmptyState({ icon = "layers", tone = "lavender", title, children, action }) {
+  return (
+    <div className="empty-state">
+      <span className={`tile-icon pastel ${tone}`}><Icon name={icon} /></span>
+      {title && <h2>{title}</h2>}
+      {children && <p>{children}</p>}
+      {action}
+    </div>
+  );
+}
+
+export function Tile({ tone = "lavender", icon, value, label, i = 0 }) {
+  return (
+    <div className={`tile pastel ${tone} rise`} style={{ "--i": i }}>
+      {icon && <span className="tile-icon"><Icon name={icon} /></span>}
+      <div className="stack" style={{ gap: 2 }}>
+        <b>{value}</b>
+        <span>{label}</span>
+      </div>
+    </div>
+  );
 }

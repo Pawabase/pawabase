@@ -1,5 +1,6 @@
 import { createInertiaApp } from "@inertiajs/react";
 import { createRoot } from "react-dom/client";
+import "@fontsource-variable/plus-jakarta-sans";
 import "@xyflow/react/dist/style.css";
 import "./styles.css";
 
@@ -15,5 +16,5 @@ createInertiaApp({
   setup({ el, App, props }) {
     createRoot(el).render(<App {...props} />);
   },
-  progress: { color: "#22c55e" },
+  progress: { color: "#8b7cf0" },
 });

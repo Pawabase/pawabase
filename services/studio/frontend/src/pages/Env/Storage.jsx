@@ -1,6 +1,8 @@
 import { useState } from "react";
 import Layout from "../../components/Layout";
-import { Badge, Button, Card, CopyText, Field, JsonInput, Loading, Modal, PageHead, Table, useAction } from "../../components/ui";
+import { Badge, Button, Card, CopyText, EmptyState, Field, Loading, Modal, PageHead, Table, useAction } from "../../components/ui";
+import { Icon } from "../../components/icons";
+import { DefinitionSheet } from "../../components/definitions/DefinitionSheet";
 import { KINDS, editable } from "../../lib/kinds";
 import { del, envPath, post, put, useApi } from "../../lib/api";
 
@@ -14,7 +16,7 @@ export default function Storage({ project, env }) {
       <PageHead
         title="Storage"
         description="Buckets on the environment's storage driver (local disk or any S3-compatible service), with policies and signed URLs."
-        actions={<Button variant="primary" onClick={() => setEditing({ isNew: true, body: KINDS.buckets.template })}>New bucket</Button>}
+        actions={<Button variant="primary" onClick={() => setEditing({ isNew: true, body: KINDS.buckets.blank })}><Icon name="plus" />New bucket</Button>}
       />
       <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16, alignItems: "start" }}>
         <Card flush title="Buckets">
@@ -30,10 +32,18 @@ export default function Storage({ project, env }) {
             )}
           </Loading>
         </Card>
-        {bucket ? <Objects base={base} bucket={bucket} onEdit={() => setEditing({ isNew: false, body: editable(bucket) })} /> : <Card><div className="empty">Choose a bucket.</div></Card>}
+        {bucket ? <Objects base={base} bucket={bucket} onEdit={() => setEditing({ isNew: false, body: editable(bucket) })} /> : <Card><EmptyState icon="storage" tone="sky" title="Choose a bucket">Pick a bucket on the left to browse its objects, or create one.</EmptyState></Card>}
       </div>
       {editing && (
-        <BucketEditor base={base} editing={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); buckets.reload(); setBucket(null); }} />
+        <DefinitionSheet
+          kind="buckets"
+          project={project}
+          env={env}
+          editing={{ ...editing, key: editing.body.name }}
+          onSave={(body) => (editing.isNew ? post(base, body) : put(`${base}/${editing.body.name}`, body))}
+          onDelete={() => del(`${base}/${editing.body.name}`)}
+          onClose={(result) => { setEditing(null); if (result !== undefined) { buckets.reload(); setBucket(null); } }}
+        />
       )}
     </Layout>
   );
@@ -66,7 +76,7 @@ function Objects({ base, bucket, onEdit }) {
             rows={[...data.prefixes.map((p) => ({ key: p, folder: true })), ...data.files]}
             empty="No objects here."
             columns={[
-              { label: "Key", render: (o) => o.folder ? <a href="#" onClick={(e) => { e.preventDefault(); setPrefix(o.key); }} style={{ color: "var(--accent)" }}>📁 {o.key.slice(prefix.length)}</a> : o.key.slice(prefix.length) },
+              { label: "Key", render: (o) => o.folder ? <a href="#" onClick={(e) => { e.preventDefault(); setPrefix(o.key); }} style={{ color: "var(--brand)" }}>📁 {o.key.slice(prefix.length)}</a> : o.key.slice(prefix.length) },
               { label: "Type", key: "content_type" },
               { label: "Size", render: (o) => (o.folder ? "" : bytes(o.size)) },
               { label: "", render: (o) => !o.folder && <div className="row">
@@ -79,20 +89,6 @@ function Objects({ base, bucket, onEdit }) {
       </Loading>
       {signed && <Modal title="Signed link (1 hour)" onClose={() => setSigned(null)}><CopyText text={signed} /></Modal>}
     </Card>
-  );
-}
-
-function BucketEditor({ base, editing, onClose, onSaved }) {
-  const [body, setBody] = useState(editing.body);
-  const [run, busy] = useAction();
-  return (
-    <Modal wide title={editing.isNew ? "New bucket" : `Bucket ${editing.body.name}`} onClose={onClose} footer={<>
-      {!editing.isNew && <Button variant="danger" onClick={async () => { if (confirm("Delete the bucket definition? Objects stay in storage.") && await run(() => del(`${base}/${editing.body.name}`), "Deleted")) onSaved(); }}>Delete</Button>}
-      <span className="grow" />
-      <Button variant="primary" disabled={busy || !body} onClick={async () => { if (await run(() => (editing.isNew ? post(base, body) : put(`${base}/${editing.body.name}`, body)), "Saved")) onSaved(); }}>Save</Button>
-    </>}>
-      <Field label="Definition" hint="public: anyone may read. read_policy / write_policy: a policy name or condition. accepts: MIME patterns. max_bytes: 0 for no limit."><JsonInput value={body} onChange={setBody} rows={14} /></Field>
-    </Modal>
   );
 }
 

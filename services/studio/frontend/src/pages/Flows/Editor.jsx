@@ -132,9 +132,9 @@ function Editor({ project, env, flow, blocks }) {
               proOptions={{ hideAttribution: true }}
               colorMode="dark"
             >
-              <Background gap={20} color="#1d2a24" />
+              <Background gap={22} size={1.5} color="var(--line-2)" />
               <Controls />
-              <MiniMap pannable zoomable nodeColor="#22c55e" maskColor="rgba(0,0,0,0.5)" />
+              <MiniMap pannable zoomable nodeColor="#cfc4fa" maskColor="rgba(31,27,46,0.12)" />
             </ReactFlow>
           </div>
           <aside className="inspector">
@@ -385,7 +385,7 @@ function toCanvasEdge(edge) {
     sourceHandle: handle,
     label: handle === "next" ? undefined : handle,
     animated: handle === "each",
-    style: handle === "error" ? { stroke: "#f87171" } : undefined,
+    style: handle === "error" ? { stroke: "var(--danger)" } : undefined,
   };
 }
 
