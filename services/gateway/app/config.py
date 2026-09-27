@@ -1,0 +1,28 @@
+"""Gateway settings (``PAWABASE_*`` environment variables)."""
+
+from __future__ import annotations
+
+from pawabase_kit.settings import PlatformSettings
+
+
+class GatewaySettings(PlatformSettings):
+    """Gateway settings.
+
+    Attributes:
+        cors_origins: ``*`` lets any origin call the data plane. Browser clients
+            send keys and tokens in headers, never cookies, so this is the usual
+            setting for a backend-as-a-service. Environments can narrow it per
+            publishable key with ``settings.cors_origins``.
+        key_cache_ttl: Seconds a resolved API key is cached (Sillo cache).
+        rate_limit, rate_window: Requests per window, per key or client address.
+        max_body_bytes: Largest request body forwarded (uploads included).
+        upstream_timeout: Seconds to wait for an upstream response.
+    """
+
+    service_name: str = "gateway"
+    cors_origins: str = "*"
+    key_cache_ttl: int = 30
+    rate_limit: int = 600
+    rate_window: int = 60
+    max_body_bytes: int = 100 * 1024 * 1024
+    upstream_timeout: float = 60.0
