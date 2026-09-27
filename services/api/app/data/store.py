@@ -289,7 +289,14 @@ class ResourceStore:
         return {key: self._encode(key, value) for key, value in data.items()}
 
     async def create(self, data: Mapping[str, Any], *, client: Any = None) -> dict[str, Any]:
-        values = self._clean(data)
+        # Declared defaults apply however the row arrives: REST requests get
+        # them from the compiled model, flows and functions call this directly.
+        defaults = {
+            spec["name"]: spec["default"]
+            for spec in self.spec.fields
+            if "default" in spec and spec["name"] not in data
+        }
+        values = self._clean({**defaults, **data})
         dialect = self.source.dialect
         if self.spec.id_type == "uuid" and self.spec.primary_key not in values:
             values[self.spec.primary_key] = self._encode(self.spec.primary_key, str(uuid.uuid4()))

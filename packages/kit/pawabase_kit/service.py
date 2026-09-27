@@ -83,6 +83,14 @@ def create_service(
     # a bearer token is verified against the environment the context names.
     app.use(ContextMiddleware(settings.internal_secret))
     telemetry = app.install(Telemetry(name))
+    record = app.state.get("record")
+    if record is not None:
+        # Record re-enters the database context per request, but only for the
+        # middleware registered before it. The data-plane dispatcher and the
+        # other inner middleware query the database too, so the context wraps
+        # the whole stack (entering it twice is a no-op). In-process tests do
+        # not notice: there the startup task's context is still current.
+        app.use(record.ensure_context)
 
     async def service_error(ctx: HttpContext, exc: ServiceError):
         body = exc.body if isinstance(exc.body, dict) else {"detail": exc.body}

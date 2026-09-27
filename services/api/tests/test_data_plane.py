@@ -159,3 +159,31 @@ async def test_scoped_keys(acme):
     assert (
         await api.http.post("/rest/v1/posts", json={"title": "x"}, headers=read_only)
     ).status_code == 403
+
+
+async def test_requests_outside_the_startup_context(acme):
+    """A server handles each request in its own task, without the startup
+    task's database context. Every middleware that queries the database,
+    the data-plane dispatcher included, must still find it."""
+    import asyncio
+    import contextvars
+
+    api = acme
+    headers = api.context_headers("acme", "development")
+
+    async def request():
+        return await api.http.get("/rest/v1/comments", headers=headers)
+
+    task = asyncio.get_running_loop().create_task(request(), context=contextvars.Context())
+    response = await task
+    assert response.status_code == 200, response.text
+
+
+async def test_store_applies_declared_defaults(acme):
+    """Flows and functions write through the store, not the compiled model,
+    and still get the resource's defaults."""
+    api = acme
+    state = await api.platform.state("acme", "development")
+    store = await state.store("posts")
+    row = await store.create({"title": "from a flow", "owner_id": "1"})
+    assert (row["status"], row["views"]) == ("draft", 0)
