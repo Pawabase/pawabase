@@ -58,13 +58,13 @@ export const KINDS = {
     title: "Event subscriptions",
     description: "Run a flow or function, or broadcast to a realtime channel, when an event is emitted.",
     columns: ["name", "event", "target_type", "target", "enabled"],
-    template: { name: "on_signup", description: "", event: "auth.user.created", target_type: "flow", target: "welcome", condition: null, enabled: true },
+    template: { name: "on_signup", description: "", event: "user.created", target_type: "flow", target: "welcome", condition: null, enabled: true },
   },
   webhooks: {
     title: "Webhooks",
     description: "Deliver events to external URLs, signed, with retries.",
     columns: ["name", "url", "events", "enabled"],
-    template: { name: "crm", description: "", url: "https://example.com/hooks/pawabase", events: ["resource.*"], headers: {}, enabled: true, max_attempts: 5 },
+    template: { name: "crm", description: "", url: "https://example.com/hooks/pawabase", events: ["todos.*", "user.created"], headers: {}, enabled: true, max_attempts: 5 },
   },
   "inbound-hooks": {
     title: "Inbound hooks",

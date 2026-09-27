@@ -444,3 +444,31 @@ async def test_internal_key_resolution_and_config(acme, settings):
     listing = (await api.studio.get(f"{ENV}/secrets"))["data"]
     assert listing[0]["name"] == "GOOGLE_SECRET" and "s3cr3t" not in json.dumps(listing)
     await gateway.close()
+
+
+async def test_dispatch_tolerates_a_worker_recording_the_job_first(api):
+    """With a separate worker, a job can be picked up and recorded between
+    the push and the dispatcher's own record. Neither side may fail, and the
+    worker's status must survive."""
+    from app.jobs.flows import RunFlowJob
+    from database.models import JobRun
+
+    platform = api.platform
+    push = platform.queue.push
+
+    async def racing_push(queue, payload, delay=0):
+        job_id = await push(queue, payload, delay=delay)
+        await JobRun.create(
+            id=job_id, project="p", env="e", queue=queue, job="RunFlowJob", status="active"
+        )
+        return job_id
+
+    platform.queue.push = racing_push
+    try:
+        job_id = await platform.dispatch(
+            RunFlowJob, project="p", env="e", flow="f", target="f", source="event"
+        )
+    finally:
+        platform.queue.push = push
+    row = await JobRun.get(id=job_id)
+    assert (row.status, row.target, row.source) == ("active", "f", "event")

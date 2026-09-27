@@ -22,6 +22,7 @@ from datetime import UTC, datetime
 from typing import Any, ClassVar
 
 from sillo.work.queue import Job, QRetryMiddleware
+from tortoise.exceptions import IntegrityError
 
 from app.platform import get_platform, json_safe
 from database.models import JobRun
@@ -102,7 +103,9 @@ class PawabaseJob(Job):
         if not job_id:
             return
         updated = await JobRun.filter(id=job_id).update(**fields)
-        if not updated:
+        if updated:
+            return
+        try:
             await JobRun.create(
                 id=job_id,
                 project=self.project,
@@ -111,6 +114,9 @@ class PawabaseJob(Job):
                 job=type(self).__name__,
                 **fields,
             )
+        except IntegrityError:
+            # The dispatcher recorded the job between our update and create.
+            await JobRun.filter(id=job_id).update(**fields)
 
     async def _record_failure(self, error: str) -> None:
         import json

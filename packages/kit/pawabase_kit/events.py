@@ -6,7 +6,9 @@ Every service publishes domain events (``user.created``, ``order.paid``,
 
 * ``memory``: in process; tests and single-process development.
 * ``persistent``: a Redis-backed backlog with at-least-once delivery. Events
-  published while the API's event processor is down wait for it.
+  published while the API's event processor is down wait for it. The backlog
+  is a work queue (each event goes to one consumer), so only buses with
+  handlers drain it; a publish-only bus never takes events off it.
 * ``redis``: pub/sub fan-out to every instance; Angula uses this for realtime.
 
 All platform events travel on one channel, so a consumer sees every event and
@@ -15,6 +17,7 @@ filters by name. Each event is a plain JSON envelope (:class:`PlatformEvent`).
 
 from __future__ import annotations
 
+import asyncio
 import fnmatch
 import logging
 import uuid
@@ -100,6 +103,8 @@ class EventBus:
         self.published = 0
         self._handlers: list[Handler] = []
         self._subscribed = False
+        self._started = False
+        self._consuming = False
 
     @classmethod
     def from_url(cls, url: str | None, *, source: str, mode: str = "persistent") -> EventBus:
@@ -117,6 +122,10 @@ class EventBus:
         if not self._subscribed:
             self.emitter.on(self.channel, self._dispatch)
             self._subscribed = True
+        if self._started and not self._consuming:
+            # Subscribed after start(): begin consuming now.
+            self._consuming = True
+            asyncio.get_running_loop().create_task(self.emitter.start())
         return handler
 
     async def _dispatch(self, data: dict[str, Any]) -> None:
@@ -159,7 +168,20 @@ class EventBus:
         )
 
     async def start(self) -> None:
+        """Start delivering to this bus's handlers.
+
+        Publishing needs no start: the transport connects on first use. For
+        the ``persistent`` backend, starting means draining the shared backlog,
+        and a bus without handlers would drain events only to drop them, so
+        it starts when its first handler arrives instead.
+        """
+        self._started = True
+        if self.backend == "persistent" and not self._handlers:
+            return
+        self._consuming = True
         await self.emitter.start()
 
     async def stop(self) -> None:
+        self._started = False
+        self._consuming = False
         await self.emitter.stop()

@@ -107,7 +107,7 @@ function hintFor(kind) {
     resources: "Operation policies accept a policy name, a condition, or null (operators and secret keys only). Create the table after saving.",
     routes: "handler_type is flow or function; handler is its name. Paths may contain {params}.",
     "mail-templates": "{{ name }} values come from the data the sender passes.",
-    subscriptions: "Events support wildcards: resource.*, auth.user.*. condition is a policy condition over $event.",
+    subscriptions: "Events support wildcards: resource events are <resource>.created|updated|deleted (todos.*), Akountz emits user.* and session.*. condition is a policy condition over $event.",
     schedules: "Set cron (UTC) or interval_seconds.",
     webhooks: "Leave out secret to have one generated; it is shown once.",
     "inbound-hooks": "verification: none, hmac-sha256, pawabase or token.",

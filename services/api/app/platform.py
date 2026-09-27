@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 from sillo.cache import BaseCache, MemoryCache
 from sillo.cache import base as cache_base
+from tortoise.exceptions import IntegrityError
 
 from app.config import ApiSettings
 from app.data.source import DataSourcePool
@@ -213,23 +214,29 @@ class Platform:
         )
         job_id = await self.queue.push(queue_name, payload, delay=int(delay or 0))
         now = datetime.now(UTC)
-        await JobRun.update_or_create(
-            id=job_id,
-            defaults={
-                "project": project,
-                "env": env,
-                "queue": queue_name,
-                "job": job.__name__,
-                "target": target,
-                "source": source,
-                "status": "delayed" if delay else "queued",
-                "max_attempts": getattr(job, "tries", 1),
-                "payload": _truncate(kwargs),
-                "available_at": now
-                if not delay
-                else datetime.fromtimestamp(now.timestamp() + delay, UTC),
-            },
-        )
+        describe = {
+            "target": target,
+            "source": source,
+            "max_attempts": getattr(job, "tries", 1),
+            "payload": _truncate(kwargs),
+            "available_at": now
+            if not delay
+            else datetime.fromtimestamp(now.timestamp() + delay, UTC),
+        }
+        try:
+            await JobRun.create(
+                id=job_id,
+                project=project,
+                env=env,
+                queue=queue_name,
+                job=job.__name__,
+                status="delayed" if delay else "queued",
+                **describe,
+            )
+        except IntegrityError:
+            # A worker in another process picked the job up and recorded it
+            # first; keep its status and add what only the dispatcher knows.
+            await JobRun.filter(id=job_id).update(**describe)
         note("jobs", f"{job.__name__}:{job_id}", append=True)
         return job_id
 
