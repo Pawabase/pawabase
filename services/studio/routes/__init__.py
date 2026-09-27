@@ -22,6 +22,7 @@ from sillo_inertia import Inertia, back, redirect, render, set_errors
 from app import operators
 from app.config import StudioSettings
 from pawabase_kit.clients import ServiceClient, ServiceError
+from pawabase_kit.context import PlatformContext
 
 OPERATOR_SCOPE = "studio.operator"
 
@@ -60,6 +61,7 @@ BRIDGE: dict[str, tuple[str, str]] = {
     "platform": ("api", "/platform/v1/"),
     "auth": ("akountz", "/admin/v1/"),
     "realtime": ("angula", "/internal/v1/realtime/"),
+    "telemetry": ("api", "/internal/v1/telemetry/"),
 }
 
 
@@ -238,10 +240,22 @@ def register_routes(
                 except ValueError:
                     return JSONResponse({"detail": "send JSON"}, status_code=400)
         params = dict(ctx.query_params)
-        try:
-            result = await clients[service].request(
-                ctx.method, prefix + clean, json=body, params=params or None, operator=operator
+        call: dict[str, Any] = {"json": body, "params": params or None, "operator": operator}
+        segments = clean.split("/")
+        if (
+            target == "realtime"
+            and ctx.method == "POST"
+            and len(segments) == 3
+            and segments[2] == "publish"
+        ):
+            # Broadcasting acts inside one environment, which Angula reads from
+            # the platform context rather than from the path.
+            prefix, clean = "/internal/v1/publish", ""
+            call["context"] = PlatformContext(
+                project=segments[0], env=segments[1], role="service", key_id="studio"
             )
+        try:
+            result = await clients[service].request(ctx.method, prefix + clean, **call)
         except ServiceError as exc:
             return JSONResponse(
                 exc.body if isinstance(exc.body, dict) else {"detail": exc.body},

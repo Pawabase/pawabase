@@ -81,6 +81,7 @@ class FakeApi:
 
         assert operator and operator["email"] == "root@pawabase.dev"
         self.calls.append((method, path, json, params))
+        self.last_kwargs = kwargs
         if path == "/platform/v1/projects":
             return {"data": [{"ref": "shop", "name": "Shop"}]}
         if path == "/platform/v1/overview":
@@ -111,6 +112,7 @@ class Studio:
     http: Any
     api: FakeApi
     akountz: FakeAkountz
+    angula: FakeApi
 
     async def login(self) -> None:
         await self.http.get("/login")
@@ -143,11 +145,12 @@ async def studio(tmp_path):
     )
     api = FakeApi()
     akountz = FakeAkountz(master=settings.jwt_master_secret)
-    app = create_app(settings, clients={"api": api, "akountz": akountz, "angula": FakeApi()})
+    angula = FakeApi()
+    app = create_app(settings, clients={"api": api, "akountz": akountz, "angula": angula})
     await app._startup()
     http = AsyncTestClient(app, base_url="http://studio.test", follow_redirects=False)
     try:
-        yield Studio(app=app, http=http, api=api, akountz=akountz)
+        yield Studio(app=app, http=http, api=api, akountz=akountz, angula=angula)
     finally:
         await http.aclose()
         await app._shutdown()

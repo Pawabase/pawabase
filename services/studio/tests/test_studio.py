@@ -129,3 +129,23 @@ async def test_logout(studio):
     response = await studio.http.post("/logout", headers=studio.csrf())
     assert response.headers["location"] == "/login"
     assert (await studio.http.get("/")).status_code == 302
+
+
+async def test_realtime_publish_carries_the_environment(studio):
+    await studio.login()
+    response = await studio.http.post(
+        "/studio/api/realtime/shop/main/publish",
+        content=json.dumps({"channel": "room:1", "payload": {"x": 1}}),
+        headers={**studio.csrf(), "content-type": "application/json"},
+    )
+    assert response.status_code == 200
+    method, path, body, _ = studio.angula.calls[-1]
+    assert (method, path, body["channel"]) == ("POST", "/internal/v1/publish", "room:1")
+    context = studio.angula.last_kwargs["context"]
+    assert (context.project, context.env, context.role) == ("shop", "main", "service")
+    listed = await studio.http.get("/studio/api/realtime/shop/main/channels")
+    assert listed.status_code == 200
+    assert studio.angula.calls[-1][1] == "/internal/v1/realtime/shop/main/channels"
+    telemetry = await studio.http.get("/studio/api/telemetry/requests?project=shop")
+    assert telemetry.status_code == 200
+    assert studio.api.calls[-1][1] == "/internal/v1/telemetry/requests"
