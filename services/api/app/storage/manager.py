@@ -21,6 +21,37 @@ from pawabase_kit.telemetry import note
 
 from .s3 import S3Driver
 
+
+
+class MimePatterns(tuple):
+    """A bucket's ``accepts`` list that understands wildcards.
+
+    Studio and the API store MIME *patterns* (``image/*``), but Sillo's
+    ``Bucket`` checks ``resolved in accepts`` by equality, so ``image/png``
+    never matched ``image/*`` and every wildcard bucket refused every upload.
+    Sillo only uses ``in`` and iteration on this value, so overriding
+    ``__contains__`` is enough. ``*`` and ``*/*`` accept anything; parameters
+    such as ``; charset=utf-8`` and letter case are ignored.
+    """
+
+    __slots__ = ()
+
+    def __new__(cls, patterns=()):
+        return super().__new__(cls, (str(p).strip().lower() for p in patterns if str(p).strip()))
+
+    def __contains__(self, content_type: object) -> bool:
+        if not isinstance(content_type, str):
+            return False
+        wanted = content_type.split(";", 1)[0].strip().lower()
+        major = wanted.split("/", 1)[0]
+        for pattern in tuple.__iter__(self):
+            if pattern in ("*", "*/*") or pattern == wanted:
+                return True
+            if pattern.endswith("/*") and pattern[:-2] == major:
+                return True
+        return False
+
+
 if TYPE_CHECKING:
     from app.platform import Platform
     from app.state import EnvironmentState
@@ -135,7 +166,7 @@ class StorageManager:
         driver = self.driver(state, name)
         # Sillo buckets name themselves in storage events; keep the Pawabase name.
         return Bucket(
-            name, driver, policy=policy, max_bytes=max_bytes, accepts=tuple(model.accepts or ())
+            name, driver, policy=policy, max_bytes=max_bytes, accepts=MimePatterns(model.accepts or ())
         )
 
     async def close(self) -> None:

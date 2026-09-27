@@ -8,6 +8,8 @@ import textwrap
 import httpx
 import pytest
 
+from app.storage.manager import MimePatterns
+
 ENV = "/platform/v1/projects/acme/envs/development"
 
 ORDERS = {
@@ -472,3 +474,38 @@ async def test_dispatch_tolerates_a_worker_recording_the_job_first(api):
         platform.queue.push = push
     row = await JobRun.get(id=job_id)
     assert (row.status, row.target, row.source) == ("active", "f", "event")
+
+
+async def test_bucket_accepts_wildcard_mime_patterns(acme):
+    # Regression: "image/*" was compared to "image/png" by equality, so a
+    # wildcard bucket refused every upload with a 400.
+    api = acme
+    await api.studio.post(
+        f"{ENV}/buckets",
+        json={"name": "photos", "write_policy": "authenticated", "accepts": ["image/*", "application/pdf"]},
+    )
+    ada = api.user_headers("acme", "development", user_id="7")
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+    raw = await api.http.put(
+        "/storage/v1/object/photos/a.png", content=png, headers={**ada, "content-type": "image/png"}
+    )
+    assert raw.status_code == 201, raw.text
+    multipart = await api.http.post(
+        "/storage/v1/object/photos/b.png", files={"file": ("b.png", png, "image/png")}, headers=ada
+    )
+    assert multipart.status_code == 201, multipart.text
+    disguised = await api.http.put(
+        "/storage/v1/object/photos/evil.png",
+        content=b"<html><script>alert(1)</script>",
+        headers={**ada, "content-type": "image/png"},
+    )
+    assert disguised.status_code == 400  # still sniffed, still refused
+
+
+def test_mime_patterns():
+    patterns = MimePatterns(["image/*", "Application/PDF"])
+    assert "image/png" in patterns and "image/webp" in patterns
+    assert "application/pdf; charset=binary" in patterns
+    assert "text/html" not in patterns and "imagex/png" not in patterns
+    assert "text/csv" in MimePatterns(["*/*"])
+    assert ", ".join(patterns) == "image/*, application/pdf"
