@@ -113,7 +113,7 @@ async def akz(tmp_path):
     akountz = Akountz(settings, api=fake)
     app = create_app(settings, akountz=akountz)
     await app._startup()
-    http = AsyncTestClient(app, base_url="http://akountz.test")
+    http = AsyncTestClient(app, base_url="http://akountz.test", follow_redirects=False)
     admin = ServiceClient(
         "http://x", secret=settings.internal_secret, issuer="studio", audience="akountz", app=app
     )
