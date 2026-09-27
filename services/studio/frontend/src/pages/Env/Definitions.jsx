@@ -1,10 +1,10 @@
 import { useState } from "react";
 import Layout, { SECTION_TONES } from "../../components/Layout";
 import { Icon } from "../../components/icons";
-import { Badge, Button, Card, CopyText, EmptyState, Loading, Modal, PageHead, Table, formatCell } from "../../components/ui";
+import { Badge, Button, Card, CopyText, EmptyState, Field, Loading, Modal, PageHead, Table, formatCell, useAction } from "../../components/ui";
 import { DefinitionSheet, singular } from "../../components/definitions/DefinitionSheet";
 import { KINDS, editable, keyOf } from "../../lib/kinds";
-import { del, envPath, get, post, put, useApi } from "../../lib/api";
+import { del, envPath, get, patch, post, put, useApi } from "../../lib/api";
 
 const RENDER = {
   enabled: (r) => <Badge tone={r.enabled ? "green" : ""}><span className="dot" />{r.enabled ? "On" : "Off"}</Badge>,
@@ -81,7 +81,7 @@ export default function Definitions({ project, env, kind }) {
             );
           }}
           extraTabs={kind === "resources" && !editing.isNew ? {
-            records: { label: "Records", render: () => <Records base={envPath(project.ref, env, `/resources/${editing.key}/records`)} /> },
+            records: { label: "Records", render: () => <Records base={envPath(project.ref, env, `/resources/${editing.key}/records`)} fields={editing.body.fields || []} /> },
           } : {}}
         />
       )}
@@ -100,17 +100,131 @@ export default function Definitions({ project, env, kind }) {
   );
 }
 
-function Records({ base }) {
+function Records({ base, fields }) {
   const records = useApi(base, { params: { per_page: 20 } });
+  const [editing, setEditing] = useState(null);
+  const rows = records.data?.data || [];
+  const cols = fields.length ? fields.map((f) => f.name) : Object.keys(rows[0] || {}).slice(0, 8);
+  const blank = () => Object.fromEntries(fields.map((f) => [f.name, f.default ?? (f.type === "boolean" ? false : "")]));
   return (
-    <Card flush title="Latest records" actions={<Button size="sm" onClick={records.reload}>Refresh</Button>}>
-      <Loading state={records} empty="No records (or the table does not exist yet — use Create / migrate table).">
-        {(data) => {
-          const rows = data.data || [];
-          const cols = Object.keys(rows[0] || {}).slice(0, 8);
-          return <Table rows={rows} columns={cols.map((c) => ({ label: c, key: c, render: (r) => formatCell(r[c]) }))} />;
-        }}
-      </Loading>
-    </Card>
+    <>
+      <Card
+        flush
+        title="Records"
+        actions={
+          <>
+            <Button size="sm" variant="primary" onClick={() => setEditing({ isNew: true, body: blank() })}><Icon name="plus" />New record</Button>
+            <Button size="sm" onClick={records.reload}>Refresh</Button>
+          </>
+        }
+      >
+        <Loading state={records} empty="No records (or the table does not exist yet — use Create / migrate table).">
+          {() => (
+            <Table
+              rows={rows}
+              onRowClick={(row) => setEditing({ isNew: false, id: row.id, body: row })}
+              columns={cols.map((c) => ({ label: c.replace(/_/g, " "), key: c, render: (r) => formatCell(r[c]) }))}
+            />
+          )}
+        </Loading>
+      </Card>
+      {editing && (
+        <RecordEditor
+          fields={fields}
+          editing={editing}
+          onSave={(body) => (editing.isNew ? post(base, body) : patch(`${base}/${editing.id}`, body))}
+          onDelete={() => del(`${base}/${editing.id}`)}
+          onClose={(changed) => {
+            setEditing(null);
+            if (changed) records.reload();
+          }}
+        />
+      )}
+    </>
   );
+}
+
+/** A field-aware form for one record: text/number/boolean/date inputs when the
+ *  resource's field types are known, falling back to raw JSON otherwise. */
+function RecordEditor({ fields, editing, onSave, onDelete, onClose }) {
+  const [body, setBody] = useState(editing.body);
+  const [run, busy] = useAction();
+  const set = (name, value) => setBody((b) => ({ ...b, [name]: value }));
+  const known = new Set(fields.map((f) => f.name));
+  const extra = Object.keys(body).filter((k) => !known.has(k) && k !== "id" && k !== "created_at" && k !== "updated_at");
+
+  const save = async () => {
+    const ok = await run(async () => { await onSave(body); }, editing.isNew ? "Record created" : "Record saved");
+    if (ok) onClose(true);
+  };
+  const remove = async () => {
+    if (!window.confirm("Delete this record? This can't be undone.")) return;
+    const ok = await run(onDelete, "Record deleted");
+    if (ok) onClose(true);
+  };
+
+  return (
+    <Modal
+      title={editing.isNew ? "New record" : `Record #${editing.id}`}
+      onClose={() => onClose(false)}
+      footer={
+        <>
+          {!editing.isNew && <Button onClick={remove} disabled={busy} style={{ marginRight: "auto", color: "var(--danger)" }}>Delete</Button>}
+          <Button onClick={() => onClose(false)} disabled={busy}>Cancel</Button>
+          <Button variant="primary" onClick={save} disabled={busy}>{editing.isNew ? "Create" : "Save"}</Button>
+        </>
+      }
+    >
+      <div className="stack" style={{ gap: 14 }}>
+        {fields.map((f) => (
+          <Field key={f.name} label={f.name} hint={f.type}>
+            <RecordInput field={f} value={body[f.name]} onChange={(v) => set(f.name, v)} />
+          </Field>
+        ))}
+        {extra.map((k) => (
+          <Field key={k} label={k} hint="raw">
+            <RecordInput field={{ type: typeof body[k] === "boolean" ? "boolean" : typeof body[k] === "number" ? "number" : "json" }} value={body[k]} onChange={(v) => set(k, v)} />
+          </Field>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+function RecordInput({ field, value, onChange }) {
+  const type = field.type || "string";
+  if (type === "boolean") {
+    return (
+      <select value={value ? "true" : "false"} onChange={(e) => onChange(e.target.value === "true")}>
+        <option value="true">true</option>
+        <option value="false">false</option>
+      </select>
+    );
+  }
+  if (type === "integer" || type === "number" || type === "float") {
+    return <input type="number" value={value ?? ""} onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))} />;
+  }
+  if (type === "datetime" || type === "date") {
+    return <input type={type === "date" ? "date" : "datetime-local"} value={value ? String(value).slice(0, type === "date" ? 10 : 16) : ""} onChange={(e) => onChange(e.target.value)} />;
+  }
+  if (type === "text") {
+    return <textarea rows={4} value={value ?? ""} onChange={(e) => onChange(e.target.value)} />;
+  }
+  if (type === "object" || type === "array" || type === "json") {
+    return (
+      <textarea
+        rows={4}
+        className="mono"
+        defaultValue={value === undefined || value === null ? "" : JSON.stringify(value, null, 2)}
+        onBlur={(e) => {
+          try {
+            onChange(e.target.value.trim() === "" ? null : JSON.parse(e.target.value));
+          } catch {
+            /* leave the previous value; the user is still typing */
+          }
+        }}
+      />
+    );
+  }
+  return <input type="text" value={value ?? ""} onChange={(e) => onChange(e.target.value)} />;
 }

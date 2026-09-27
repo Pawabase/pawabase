@@ -1,15 +1,21 @@
 import { useState } from "react";
 import Layout from "../../components/Layout";
-import { Badge, Button, Card, Loading, PageHead, Table, formatCell, useAction } from "../../components/ui";
+import { Icon } from "../../components/icons";
+import { Badge, Button, Card, Loading, Modal, PageHead, Table, formatCell, useAction } from "../../components/ui";
 import { envPath, post, useApi } from "../../lib/api";
 
 export default function Database({ project, env }) {
   const base = envPath(project.ref, env, "/database");
   const overview = useApi(base);
   const [table, setTable] = useState(null);
+  const [sqlOpen, setSqlOpen] = useState(false);
   return (
     <Layout title="Database">
-      <PageHead title="Database" description="Browse the environment's database and run SQL. Bring your own with a database URL in Settings." />
+      <PageHead
+        title="Database"
+        description="Browse the environment's database. Bring your own with a database URL in Settings."
+        actions={<Button variant="primary" onClick={() => setSqlOpen(true)}><Icon name="code" />SQL</Button>}
+      />
       <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", gap: 16, alignItems: "start" }}>
         <Card flush title="Tables">
           <Loading state={overview} empty="No tables yet.">
@@ -26,10 +32,10 @@ export default function Database({ project, env }) {
           </Loading>
         </Card>
         <div className="stack lg" style={{ minWidth: 0 }}>
-          {table && <TableView base={base} table={table} />}
-          <SqlConsole base={base} />
+          {table ? <TableView base={base} table={table} /> : <div className="calm" style={{ padding: 24 }}>Pick a table on the left, or click <b>SQL</b> to run a query.</div>}
         </div>
       </div>
+      {sqlOpen && <SqlModal base={base} onClose={() => setSqlOpen(false)} />}
     </Layout>
   );
 }
@@ -58,17 +64,34 @@ function TableView({ base, table }) {
   );
 }
 
-function SqlConsole({ base }) {
+function SqlModal({ base, onClose }) {
   const [sql, setSql] = useState("SELECT 1 AS ok");
   const [allowWrite, setAllowWrite] = useState(false);
   const [result, setResult] = useState(null);
   const [run, busy] = useAction();
+  const execute = async () => {
+    const r = await run(() => post(`${base}/query`, { sql, allow_write: allowWrite }));
+    if (r) setResult(r);
+  };
   return (
-    <Card title="SQL" actions={<>
-      <label className="check" style={{ fontSize: 12.5 }}><input type="checkbox" checked={allowWrite} onChange={(e) => setAllowWrite(e.target.checked)} /> allow writes</label>
-      <Button variant="primary" size="sm" disabled={busy} onClick={async () => { const r = await run(() => post(`${base}/query`, { sql, allow_write: allowWrite })); if (r) setResult(r); }}>Run</Button>
-    </>}>
-      <textarea rows={6} value={sql} onChange={(e) => setSql(e.target.value)} />
+    <Modal
+      title="SQL"
+      wide
+      onClose={onClose}
+      footer={<>
+        <label className="check" style={{ fontSize: 12.5, marginRight: "auto" }}><input type="checkbox" checked={allowWrite} onChange={(e) => setAllowWrite(e.target.checked)} /> allow writes</label>
+        <Button onClick={onClose}>Close</Button>
+        <Button variant="primary" disabled={busy} onClick={execute}>Run</Button>
+      </>}
+    >
+      <textarea
+        rows={6}
+        className="mono"
+        value={sql}
+        onChange={(e) => setSql(e.target.value)}
+        onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") execute(); }}
+        autoFocus
+      />
       {result && (
         <div style={{ marginTop: 12 }}>
           {result.affected !== undefined ? (
@@ -79,6 +102,6 @@ function SqlConsole({ base }) {
           {result.truncated && <div className="hint">Showing the first 5000 rows.</div>}
         </div>
       )}
-    </Card>
+    </Modal>
   );
 }

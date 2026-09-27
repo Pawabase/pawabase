@@ -503,6 +503,11 @@ tr.clickable:hover td { background: var(--sunken); }
   .grid.three.insights { grid-template-columns: 1fr 1fr; }
 }
 
+
+.sheet-back { display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; font: inherit; font-weight: 700; font-size: inherit; color: inherit; padding: 0; cursor: pointer; }
+.sheet-back:hover { opacity: 0.75; }
+.rotate-180 { transform: rotate(180deg); }
+
 @media (max-width: 980px) {
   .shell { padding: 8px; gap: 0; }
   .sidebar { position: fixed; inset: 8px auto 8px 8px; z-index: 40; box-shadow: var(--shadow-pop); transform: translateX(-120%); transition: transform 0.25s ease; }
