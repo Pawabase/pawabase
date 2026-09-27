@@ -508,6 +508,23 @@ tr.clickable:hover td { background: var(--sunken); }
 .sheet-back:hover { opacity: 0.75; }
 .rotate-180 { transform: rotate(180deg); }
 
+
+/* ── realtime console ────────────────────────────────────────────────────── */
+.conn-badge { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 99px; background: var(--sunken); font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.conn-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.conn-badge.open { color: var(--ok); background: var(--ok-soft); }
+.conn-badge.open .dot { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }
+.conn-badge.connecting .dot, .conn-badge.closed .dot { background: var(--warn); animation: blink 1s ease-in-out infinite; }
+.conn-badge.connecting, .conn-badge.closed { color: var(--warn); background: var(--warn-soft); }
+
+.stat-tile { flex-direction: row; align-items: center; gap: 14px; padding: 16px 18px; }
+.stat-tile.danger .tile-icon { background: var(--danger-soft); color: var(--danger); }
+.stat-tile b { font-size: 24px; font-weight: 750; letter-spacing: -0.03em; }
+.stat-tile span { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+
+.rt-feed { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px; background: var(--sunken); border-radius: var(--r-md); }
+.rt-msg { background: var(--surface); border-radius: 12px; padding: 10px 12px; }
+
 @media (max-width: 980px) {
   .shell { padding: 8px; gap: 0; }
   .sidebar { position: fixed; inset: 8px auto 8px 8px; z-index: 40; box-shadow: var(--shadow-pop); transform: translateX(-120%); transition: transform 0.25s ease; }

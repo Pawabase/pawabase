@@ -19,7 +19,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from sillo import HttpContext, SilloApp, html
+import websockets
+from sillo import HttpContext, SilloApp, WebSocketContext, html
 from sillo.openapi.ui import ATLAS_JS
 from sillo.responses import JSONResponse
 from sillo.static import StaticFiles
@@ -28,7 +29,8 @@ from sillo_inertia import Inertia, back, redirect, render, set_errors
 from app import operators
 from app.config import StudioSettings
 from pawabase_kit.clients import ServiceClient, ServiceError
-from pawabase_kit.context import PlatformContext
+from pawabase_kit.context import CONTEXT_HEADER, PlatformContext
+from pawabase_kit.tokens import TokenInvalid, issue_context_token, verify_context_token
 
 OPERATOR_SCOPE = "studio.operator"
 
@@ -330,6 +332,88 @@ def register_routes(
                 }
             )
         return JSONResponse({"services": services, "checked_at": time.time()})
+
+    # ── realtime console ─────────────────────────────────────────────────
+    #
+    # Studio's Realtime page is a genuine client of Angula's own socket
+    # protocol, not a polling dashboard: the browser opens one WebSocket here
+    # and this handler relays it to Angula's ``/realtime/v1/socket``, signed
+    # with a *service* platform context. A service credential bypasses every
+    # channel policy (see ``Realtime.authorize``), so the console can watch,
+    # subscribe to presence on, and publish to any channel in the
+    # environment — an operator's tool, the same way an Ably control-plane
+    # key can see every channel.
+    #
+    # Sillo's session middleware only runs on HTTP scopes, so a WebSocket
+    # handshake carries no session. The browser instead fetches a short-lived,
+    # signed ticket over a normal (session-checked) HTTP call first, then
+    # presents that ticket as the socket opens; the ticket alone proves an
+    # operator asked for this project and environment a few seconds ago.
+
+    angula_ws_base = (
+        settings.angula_url.replace("https://", "wss://", 1).replace("http://", "ws://", 1).rstrip("/")
+        + "/realtime/v1/socket"
+    )
+
+    @app.get("/projects/{ref}/{env}/realtime/ticket", exclude_from_schema=True)
+    async def realtime_ticket(ctx: HttpContext, ref: str, env: str):
+        if await signed_in(ctx) is None:
+            return JSONResponse({"detail": "sign in first"}, status_code=401)
+        context = PlatformContext(project=ref, env=env, role="operator", key_id="studio-console")
+        return JSONResponse({"ticket": issue_context_token(settings.internal_secret, context, ttl=20)})
+
+    @app.ws_route("/studio/ws/realtime")
+    async def realtime_console(ws: WebSocketContext):
+        try:
+            context = verify_context_token(ws.query_params.get("ticket") or "", settings.internal_secret)
+        except TokenInvalid:
+            await ws.close(code=4001, reason="sign in first")
+            return
+        if context.role != "operator":
+            await ws.close(code=4001, reason="sign in first")
+            return
+        await ws.accept()
+        service_context = PlatformContext(
+            project=context.project, env=context.env, role="service", key_id="studio-console"
+        )
+        header = issue_context_token(settings.internal_secret, service_context, ttl=60)
+        try:
+            remote = await websockets.connect(
+                angula_ws_base, additional_headers={CONTEXT_HEADER: header}, open_timeout=10, max_size=2**20
+            )
+        except Exception:
+            await ws.close(code=1011, reason="could not reach the realtime service")
+            return
+
+        async def browser_to_remote() -> None:
+            while True:
+                message = await ws.receive()
+                if message["type"] == "websocket.disconnect":
+                    await remote.close()
+                    return
+                if message.get("text") is not None:
+                    await remote.send(message["text"])
+                elif message.get("bytes") is not None:
+                    await remote.send(message["bytes"])
+
+        async def remote_to_browser() -> None:
+            try:
+                async for data in remote:
+                    if isinstance(data, bytes):
+                        await ws.send_bytes(data)
+                    else:
+                        await ws.send_text(data)
+            finally:
+                await ws.close()
+
+        tasks = [asyncio.create_task(browser_to_remote()), asyncio.create_task(remote_to_browser())]
+        _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+        try:
+            await remote.close()
+        except Exception:
+            pass
 
     # ── the bridge ───────────────────────────────────────────────────────
 

@@ -1,0 +1,394 @@
+{
+  "$schema": "https://pawabase.test/docs/design-system.schema.json",
+  "name": "Pawabase Studio Design System",
+  "version": "1.0.0",
+  "source_of_truth": "services/studio/frontend/src/styles.css",
+  "description": "The visual system of the Studio control plane. Calm and rounded: an off-white canvas framed by a slightly deeper lilac, white cards with large soft corners and no borders, pill buttons (ink filled for the primary action), and a pastel palette for decoration rather than state.",
+
+  "principles": [
+    "Calm and rounded — big radii, borderless white cards floating on a tinted canvas, no hard edges.",
+    "Ink is the primary action — primary buttons fill with ink, not brand purple. Brand color is an accent for focus, links and selection.",
+    "Pastels are decoration only — lavender, peach, mint, butter, sky and rose never mean anything; if a color carries state, it is a status color.",
+    "Status colors are semantic only — ok, warn, danger and info always mean a state and are never used decoratively.",
+    "Pastel fills always carry dark ink text, in either theme.",
+    "Two themes, one token set — every color is a CSS variable; dark mode swaps values, never structure.",
+    "Everything pill-shaped that is an action; radii soften as surfaces get bigger (sm 12 → xl 30).",
+    "Motion is quiet and short (0.1–0.3s); honor prefers-reduced-motion."
+  ],
+
+  "color": {
+    "modes": ["light", "dark"],
+    "light": {
+      "surfaces": {
+        "frame": "#ebe8f3",
+        "canvas": "#f6f4fa",
+        "surface": "#ffffff",
+        "sunken": "#f1eef7"
+      },
+      "lines": {
+        "line": "#e7e3ef",
+        "line2": "#d9d4e4"
+      },
+      "ink": {
+        "ink": "#1f1b2e",
+        "onInk": "#ffffff",
+        "text": "#1f1b2e",
+        "muted": "#6b6680",
+        "faint": "#9d98b0"
+      },
+      "brand": {
+        "brand": "#6d5bd0",
+        "brandStrong": "#5a48bd",
+        "brandSoft": "#eeeafd",
+        "brandRing": "rgba(109, 91, 208, 0.28)"
+      },
+      "pastel": {
+        "lavender": "#cfc4fa",
+        "peach": "#ffd4b8",
+        "mint": "#c4ebd9",
+        "butter": "#f8e6a8",
+        "sky": "#c3dcf6",
+        "rose": "#f7cadb",
+        "pastelInk": "#1f1b2e"
+      },
+      "status": {
+        "ok": { "solid": "#2e8a5e", "soft": "#def4e9" },
+        "warn": { "solid": "#a36a09", "soft": "#fcf1d2" },
+        "danger": { "solid": "#c2413b", "soft": "#fce3e1" },
+        "info": { "solid": "#3b6db4", "soft": "#e0ebfa" }
+      },
+      "chart": { "chartMint": "#2fa57a" },
+      "overlay": {
+        "modal": "rgba(20, 17, 32, 0.38)",
+        "sheet": "rgba(20, 17, 32, 0.32)"
+      }
+    },
+    "dark": {
+      "surfaces": {
+        "frame": "#0e0d13",
+        "canvas": "#16151d",
+        "surface": "#1f1d28",
+        "sunken": "#282533"
+      },
+      "lines": {
+        "line": "#2d2a39",
+        "line2": "#3a3649"
+      },
+      "ink": {
+        "ink": "#f1eff8",
+        "onInk": "#16151d",
+        "text": "#f1eff8",
+        "muted": "#aaa5bd",
+        "faint": "#706b84"
+      },
+      "brand": {
+        "brand": "#b9abff",
+        "brandStrong": "#cdc3ff",
+        "brandSoft": "#2c2745",
+        "brandRing": "rgba(185, 171, 255, 0.3)"
+      },
+      "pastel": {
+        "lavender": "#cfc4fa",
+        "peach": "#ffd4b8",
+        "mint": "#c4ebd9",
+        "butter": "#f8e6a8",
+        "sky": "#c3dcf6",
+        "rose": "#f7cadb",
+        "pastelInk": "#1f1b2e"
+      },
+      "status": {
+        "ok": { "solid": "#6fd3a2", "soft": "#1c3329" },
+        "warn": { "solid": "#efc463", "soft": "#3a3019" },
+        "danger": { "solid": "#f39a93", "soft": "#3d2224" },
+        "info": { "solid": "#8fb8f2", "soft": "#1d2a40" }
+      },
+      "chart": { "chartMint": "#6fd3a2" },
+      "overlay": {
+        "modal": "rgba(0, 0, 0, 0.5)",
+        "sheet": "rgba(0, 0, 0, 0.5)"
+      }
+    },
+    "usage_rules": {
+      "frame": "The deepest layer — the page background around every surface.",
+      "canvas": "The main content area inside the frame; cards float on it.",
+      "surface": "Cards, sidebar, inputs, popovers — anything that raises.",
+      "sunken": "Recessed wells: segmented tracks, code blocks, switcher, summary bars.",
+      "line": "Hairline separators inside cards and tables.",
+      "line2": "Input borders, default button borders, dashed add-rows.",
+      "ink": "Primary text and primary button fill; toasts are ink pills.",
+      "brand": "Focus rings, active edges, links, selection; never a large fill except soft.",
+      "pastel": "Nav-active, tiles, sidebar cards, HTTP method chips, login art. Always with pastelInk text.",
+      "status": "Badges, alerts, lights, deltas, error text. Pair solid (text/icon) with soft (background)."
+    }
+  },
+
+  "typography": {
+    "fonts": {
+      "sans": {
+        "family": ["Plus Jakarta Sans Variable", "Plus Jakarta Sans", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+        "loaded_via": "@fontsource-variable/plus-jakarta-sans"
+      },
+      "mono": {
+        "family": ["ui-monospace", "SF Mono", "JetBrains Mono", "Menlo", "Consolas", "monospace"],
+        "loaded_via": "system stack"
+      }
+    },
+    "base": { "fontSize": 14, "lineHeight": 1.5, "letterSpacing": "-0.005em", "fontSmooth": "antialiased" },
+    "scale": {
+      "kpiValue": { "size": 30, "weight": 750, "letterSpacing": "-0.035em", "numeric": "tabular-nums" },
+      "display": { "size": 26, "weight": 700, "letterSpacing": "-0.02em", "role": "h1" },
+      "brandName": { "size": 21, "weight": 800, "letterSpacing": "-0.035em" },
+      "statValue": { "size": 28, "weight": 750, "letterSpacing": "-0.03em" },
+      "h2": { "size": 16, "weight": 700, "letterSpacing": "-0.02em" },
+      "modalTitle": { "size": 18, "weight": 700 },
+      "sheetTitle": { "size": 19, "weight": 700 },
+      "h3": { "size": 14, "weight": 700 },
+      "body": { "size": 14 },
+      "bodySmall": { "size": 13.5 },
+      "small": { "size": 12.5 },
+      "caption": { "size": 12 },
+      "eyebrow": { "size": 11, "weight": 700, "transform": "uppercase", "letterSpacing": "0.09em", "color": "faint" },
+      "code": { "size": 12.5, "family": "mono", "lineHeight": 1.55 }
+    },
+    "weights": { "regular": 450, "medium": 550, "semibold": 600, "bold": 700, "heavy": 750, "display": 800 }
+  },
+
+  "spacing": {
+    "unit": 4,
+    "scale": [4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 32, 44, 48, 64],
+    "layout": {
+      "shellPadding": 14,
+      "shellGap": 14,
+      "sidebarWidth": 272,
+      "contentMaxWidth": 1320,
+      "contentPaddingX": 32,
+      "topbarPaddingY": 18,
+      "sheetInset": 12,
+      "sheetWidth": "min(860px, calc(100vw - 24px))"
+    },
+    "gaps": { "stackSm": 6, "stack": 12, "stackLg": 20, "row": 8, "grid": 14, "formGrid": "14px 16px" }
+  },
+
+  "radius": {
+    "sm": 12,
+    "md": 16,
+    "lg": 22,
+    "xl": 30,
+    "pill": 99,
+    "modal": 26,
+    "sheet": 28,
+    "flowNode": 14,
+    "navItem": 13,
+    "tileIcon": 12,
+    "avatar": "50% (circle) or 11px rounded square",
+    "methodChip": 6
+  },
+
+  "elevation": {
+    "shadowPop": {
+      "light": "0 18px 50px rgba(31, 27, 46, 0.16), 0 2px 8px rgba(31, 27, 46, 0.06)",
+      "dark": "0 18px 50px rgba(0, 0, 0, 0.5)"
+    },
+    "cardHover": "0 10px 30px rgba(31, 27, 46, 0.07) with translateY(-2px)",
+    "raisedControl": "0 1px 3px rgba(31, 27, 46, 0.08)",
+    "fieldCardOpen": "0 6px 20px rgba(31, 27, 46, 0.06)",
+    "focusRing": "box-shadow 0 0 0 4px var(--brand-ring); border-color var(--brand)",
+    "flowNode": "0 4px 14px rgba(31, 27, 46, 0.06)"
+  },
+
+  "motion": {
+    "durations": { "instant": 0.1, "fast": 0.15, "normal": 0.2, "sheet": 0.28, "rise": 0.45, "blink": 1.4 },
+    "easings": {
+      "standard": "cubic-bezier(0.2, 1, 0.3, 1)",
+      "switchKnob": "cubic-bezier(0.3, 1.4, 0.6, 1)",
+      "linearSpin": "linear"
+    },
+    "patterns": {
+      "press": "scale(0.98) on :active",
+      "cardLift": "translateY(-2px) + shadow on hover (link cards only)",
+      "modalPop": "fade + translateY(8px) + scale(0.98) in 0.2s",
+      "sheetSlide": "translateX(40px) + fade in 0.28s",
+      "riseStagger": "rise animation with --i * 60ms delay per item",
+      "blink": "opacity pulse to 0.35 at 50% for down/pending lights",
+      "spinner": "0.7s rotation"
+    },
+    "reduced_motion": "All animation and transition durations collapse to 0.01ms under prefers-reduced-motion."
+  },
+
+  "zIndex": {
+    "topbar": 5,
+    "popover": 30,
+    "sidebarMobile": 40,
+    "overlay": 50,
+    "sheet": 51,
+    "toast": 60
+  },
+
+  "breakpoints": {
+    "xs": 560,
+    "md": 980,
+    "lg": 1180,
+    "notes": {
+      "980": "Sidebar becomes an off-canvas drawer; flow editor hides palette/inspector; form grids collapse to one column.",
+      "1180": "KPI grid drops 4 → 2 columns.",
+      "560": "KPI grid drops to 2 narrow; breadcrumbs hidden."
+    }
+  },
+
+  "iconography": {
+    "default": { "size": 18, "selector": "svg.icon" },
+    "button": 16,
+    "small": 14,
+    "tileEmptyState": 26,
+    "style": "Inline stroke SVGs (24px viewBox), stroke-width 2, round caps/joins, currentColor."
+  },
+
+  "components": {
+    "button": {
+      "shape": "pill (radius 99), inline-flex, gap 7, padding 8x16, weight 600, size 13.5",
+      "variants": {
+        "default": { "background": "surface", "border": "line2", "hover": "border-color faint" },
+        "primary": { "background": "ink", "color": "onInk", "border": "ink", "hover": "brightness(1.15)", "note": "Ink, not brand — the primary action is monochrome" },
+        "soft": { "background": "brandSoft", "color": "brandStrong", "border": "transparent" },
+        "danger": { "background": "dangerSoft", "color": "danger", "border": "transparent" },
+        "ghost": { "background": "transparent", "color": "muted", "hover": "text + sunken background" }
+      },
+      "sizes": { "sm": "padding 4x11, 12.5", "iconOnly": "30x30" },
+      "states": { "hover": "border softens", "active": "scale(0.98)", "disabled": "opacity 0.45, not-allowed" }
+    },
+    "iconButton": { "size": "40x40", "shape": "circle", "background": "transparent", "hover": "surface" },
+    "badge": {
+      "shape": "pill, padding 2x10, size 11.5, weight 600",
+      "variants": { "neutral": "sunken / muted", "green": "ok pair", "red": "danger pair", "yellow": "warn pair", "blue": "info pair", "brand": "brand pair" },
+      "dot": "6px currentColor circle for live status"
+    },
+    "alert": { "shape": "radius sm, padding 11x14, size 13", "variants": ["error", "warn", "ok", "info"], "pairing": "solid for text on soft background" },
+    "card": {
+      "base": { "background": "surface", "radius": "lg", "padding": 20 },
+      "flush": "padding 0, overflow hidden; header rows separated by line",
+      "sunken": "background sunken",
+      "linkCard": "hover lifts -2px with soft shadow",
+      "cardHead": "padding 16x20, space-between"
+    },
+    "tile": {
+      "shape": "radius lg, padding 18x20, min-height 124",
+      "pastelBackgrounds": ["lavender", "peach", "mint", "butter", "sky", "rose"],
+      "tileIcon": "38x38, radius 12, translucent white 0.55 backdrop, pastelInk icon",
+      "compact": "row layout, min-height 0",
+      "text": "value 28/750 -0.03em; label 12.5/600 muted"
+    },
+    "stat": { "value": "28 / 750 / -0.03em", "label": "12.5 / 550 muted" },
+    "input": {
+      "shape": "radius sm, border line2, padding 9x12, size 13.5, background surface",
+      "focus": "brand border + 4px brandRing",
+      "invalid": "danger border",
+      "placeholder": "faint",
+      "checkbox": "16px, accent brand",
+      "labelField": "stacked label 12.5/600 with optional marker; hint 12 muted below; error-text 12.5 danger",
+      "inputGroup": "attached segments, shared sm radius on ends, addon well sunken",
+      "select": "native, custom chevron 16px at right 10, padding-right 32",
+      "textarea": "mono 12.5, vertical resize, min-height 100; .prose variant sans 13.5"
+    },
+    "switch": {
+      "track": "38x22 pill, line2 off → ink on, 0.15s",
+      "knob": "16px white circle, travels 16px, spring easing 0.18s",
+      "sm": "track 32x19, knob 13, travels 13",
+      "focus": "4px brandRing on track",
+      "label": "13.5/600 with hint below"
+    },
+    "tagInput": { "container": "flex-wrap well, min-height 40, focus-within ring", "tag": "brandSoft pill, mono 12.5, 18px circular remove" },
+    "chip": { "shape": "dashed line2 pill 12", "on": "solid brand border + brandSoft + brandStrong", "hover": "brand" },
+    "tabs": { "shape": "sunken pill track, 4px padding, items 13/600 pill", "active": "surface pill + raisedControl shadow", "scrolls": "overflow auto, nowrap" },
+    "segmented": { "same anatomy as tabs, size 12.5, padding 3px track" },
+    "table": {
+      "cell": "padding 12x20, bottom line, left aligned",
+      "header": "11/700 uppercase faint, 0.07em, tighter y padding",
+      "rowHover": "clickable rows tint sunken",
+      "wrapper": "table-wrap scrolls horizontally"
+    },
+    "kv": { "grid": "160px label column, 13px", "dt": "muted", "dd": "overflow-wrap anywhere" },
+    "codeBlock": { "sunken well, radius sm, padding 12x14, max-height 420, scroll" },
+    "emptyState": { "padding": "48x20, centered stack", "icon": "56x56 lavender tile, radius 18" },
+    "modal": {
+      "surface": "radius 26, shadow pop, pop animation 0.2s",
+      "widths": { "default": 560, "wide": 900 },
+      "zones": { "head": "20/22/6", "body": "gap 16", "foot": "right-aligned buttons" },
+      "overlay": "modal overlay + 3px blur, starts 8vh"
+    },
+    "sheet": {
+      "shape": "right-side panel, inset 12, radius 28, slide-in 0.28s",
+      "width": "min(860, 100vw - 24)",
+      "head": "tile-icon 44x44 radius 14 + title 19 + sub 12.5 muted",
+      "body": "canvas background, scroll, sections are form-section cards",
+      "foot": "surface bar with top line, action row"
+    },
+    "toast": {
+      "shape": "ink pill, onInk text, 13.5/550, shadow pop, pop animation",
+      "iconDot": "22px circle mint (ok) / rose (error), pastelInk icon 13",
+      "stack": "fixed bottom 24 right 24, gap 8"
+    },
+    "navItem": {
+      "shape": "radius 13, padding 8x12, gap 11, 14/550",
+      "hover": "sunken + text",
+      "active": "lavender fill + pastelInk 650 — a pastel, because navigation identity is decoration, not state",
+      "sectionTitle": "eyebrow 0.1em, padded 16/12/6"
+    },
+    "switcher": { "sunken well radius md, 34px avatar, hover line; invisible native select overlay" },
+    "sidebarCard": { "pastel (default peach), radius lg, ink CTA button inside" },
+    "avatar": { "initials": "grid-centered 800 14, lavender default, mint circle variant" },
+    "lights": {
+      "shape": "pill 8x10 padding, hover surface",
+      "dot": "8px: up ok + 18% halo, down danger + 22% halo + blink, unknown line2, pending line2 + blink",
+      "popover": "270px surface card radius md shadow pop"
+    },
+    "commandPalette": {
+      "trigger": "240px pill expanding to 320 on focus, kbd chip sunken 11/600",
+      "results": "360px surface dropdown radius md, groups as eyebrows, item 13.5 radius 10, active brandSoft",
+      "icon": "28x28 sunken radius 8; active swaps to surface/brandStrong"
+    },
+    "httpMethodChip": { "GET": "sky", "POST": "mint", "PUT/PATCH": "butter", "DELETE": "rose", "all pastelInk text, mono 10.5/700, radius 6" },
+    "flowNode": {
+      "shape": "surface card radius 14, 170–240 wide, line2 border",
+      "selected": "brand border + 4px brandRing",
+      "trigger": "lavender header band",
+      "failed": "danger border",
+      "ran": "3px mint outline",
+      "handles": "10px brand dots with surface border; error handle danger",
+      "canvas": "canvas background, line2 dots, edges line2 1.8 → brand when selected"
+    },
+    "paletteItem": { "sunken well radius sm 12.5/600; hover brand border + brandSoft", "groupHeaders": "eyebrows" },
+    "chart": {
+      "grid": "line, dashed 3 4",
+      "axis": "faint 11 tabular-nums",
+      "series": "brand for emphasis, lavender for bars, chartMint for positive-only series",
+      "tooltip": "ink card radius 12, onInk 12, pointer-events none",
+      "legend": "8px square swatches (radius 3), 12 muted"
+    },
+    "kpi": {
+      "grid": "4 columns, 14 gap",
+      "value": "30/750 -0.035em tabular-nums",
+      "label": "12.5/600 muted",
+      "delta": "pill 11.5/700 — good ok pair, bad danger pair",
+      "liveDot": "8px ok with 20% halo; busy variant brand + blink 0.9s"
+    },
+    "login": {
+      "layout": "two columns 1.05fr/1fr inside frame, art panel lavender with blobs, form panel canvas with 400px card"
+    },
+    "overlayScrims": { "modal": "38% ink + 3px blur", "sheet": "32% ink + 2px blur" }
+  },
+
+  "theming": {
+    "mechanism": "CSS custom properties on :root; dark via prefers-color-scheme plus manual data-theme override (data-theme=light wins, data-theme=dark forces)",
+    "colorScheme": "light and dark values declared for native controls and scrollbars",
+    "scrollbar": "thin, line2 thumb on transparent track",
+    "selection": "brandSoft background"
+  },
+
+  "layout": {
+    "shell": "Frame padding 14 with sidebar (272, radius xl) and main canvas (radius xl) side by side; main scrolls internally.",
+    "topbar": "Sticky, canvas at 88% opacity + 10px blur, breadcrumbs as pills on the left, status lights + command palette + icon actions on the right.",
+    "content": "Max 1320 centered, 32px side padding; .full variant for edge-to-edge tools like the flow editor.",
+    "grids": { "auto": "repeat(auto-fill, minmax(220px, 1fr))", "autoWide": "minmax(320px, 1fr)", "two": 2, "three": 3 },
+    "flowEditor": "250px palette / canvas / 330px inspector grid"
+  }
+}

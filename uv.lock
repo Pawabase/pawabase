@@ -893,6 +893,7 @@ dependencies = [
     { name = "pawabase-kit" },
     { name = "sillo-framework", extra = ["cache", "jwt"] },
     { name = "sillo-inertia" },
+    { name = "websockets" },
 ]
 
 [package.metadata]
@@ -900,6 +901,7 @@ requires-dist = [
     { name = "pawabase-kit", editable = "packages/kit" },
     { name = "sillo-framework", extras = ["jwt", "cache"], specifier = ">=1.0.0" },
     { name = "sillo-inertia", specifier = ">=1.0.0" },
+    { name = "websockets", specifier = ">=12" },
 ]
 
 [[package]]
