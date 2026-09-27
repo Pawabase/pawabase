@@ -1,0 +1,25 @@
+[project]
+name = "pawabase-kit"
+version = "0.1.0"
+description = "Shared building blocks for Pawabase services: policies, flows, schemas, transformers, service auth and telemetry, built on Sillo."
+requires-python = ">=3.11"
+license = "BSD-3-Clause"
+dependencies = [
+    "sillo-framework[jwt,record,cache,events,crypto,mail,test]>=1.0.0",
+    "httpx>=0.27",
+]
+
+[project.entry-points."pawabase.blocks"]
+builtin = "pawabase_kit.flows.blocks:register"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pawabase_kit"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

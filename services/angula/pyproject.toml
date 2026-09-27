@@ -1,0 +1,19 @@
+[project]
+name = "pawabase-angula"
+version = "0.1.0"
+description = "Angula: Pawabase realtime pub/sub service."
+requires-python = ">=3.11"
+license = "BSD-3-Clause"
+dependencies = ["pawabase-kit", "sillo-framework[events,jwt]>=1.0.0", "sillo-wire>=1.0.0"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+pawabase-kit = { workspace = true }
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["."]
