@@ -15,6 +15,7 @@ from tortoise.transactions import in_transaction
 from app.platform import Platform
 from app.secrets import mask
 from database.models import Environment, Project, ProjectKey, Secret
+from pawabase_kit.records import upsert
 from routes.common import (
     NAME_PATTERN,
     OPERATOR,
@@ -410,7 +411,8 @@ def register(r: Router, platform: Platform) -> None:
         if not SECRET_NAME.match(name):
             raise HTTPException(status_code=422, detail="secret names are UPPER_SNAKE_CASE")
         environment = await get_environment(ref, env)
-        await Secret.update_or_create(
+        await upsert(
+            Secret,
             environment=environment,
             name=name,
             defaults={

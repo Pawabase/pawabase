@@ -27,6 +27,7 @@ from sillo.work.scheduler import CronTrigger, IntervalTrigger, SchedulerManager
 
 from app.platform import Platform
 from database.models import Environment, Schedule
+from pawabase_kit.records import upsert
 
 logger = logging.getLogger("pawabase.scheduler")
 
@@ -257,7 +258,8 @@ async def main(**overrides: Any) -> None:
     try:
         while not stop.is_set():
             stats = scheduler.manager.stats
-            await WorkerHeartbeat.update_or_create(
+            await upsert(
+                WorkerHeartbeat,
                 name=name,
                 defaults={
                     "kind": "scheduler",

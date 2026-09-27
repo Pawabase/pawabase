@@ -15,6 +15,7 @@ from app.environment import load_config
 from app.platform import Akountz
 from database.models import AuthUser, Invitation, Membership, Organization, Team, TeamMember
 from database.models.orgs import ORG_ROLES
+from pawabase_kit.records import upsert
 from routes.auth import signed_in_user
 
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}$")
@@ -329,8 +330,11 @@ def register(r: Router, akountz: Akountz) -> None:
                 status_code=403, detail="this invitation was sent to another address"
             )
         await links.consume(akountz, config, "invite", body.token)
-        await Membership.update_or_create(
-            organization=invitation.organization, user=user, defaults={"role": invitation.role}
+        await upsert(
+            Membership,
+            organization=invitation.organization,
+            user=user,
+            defaults={"role": invitation.role},
         )
         invitation.accepted_at = datetime.now(UTC)
         await invitation.save(update_fields=["accepted_at"])

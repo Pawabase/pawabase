@@ -19,6 +19,7 @@ from sillo.work.queue import ConnectionManager, PayloadSerializer, QueueWorker, 
 
 from app.jobs.failed import RecordFailedJobRepository
 from app.platform import PLATFORM_QUEUES, Platform
+from pawabase_kit.records import upsert
 
 logger = logging.getLogger("pawabase.worker")
 
@@ -72,7 +73,8 @@ async def heartbeat(name: str, queues: list[str], worker: QueueWorker, stop: asy
 
     started = datetime.now(UTC)
     while not stop.is_set():
-        await WorkerHeartbeat.update_or_create(
+        await upsert(
+            WorkerHeartbeat,
             name=name,
             defaults={
                 "queues": queues,

@@ -19,6 +19,7 @@ from database.models import (
     TransformerDef,
     WebhookEndpoint,
 )
+from pawabase_kit.records import upsert
 
 #: Kind name → (model, natural key fields). Secrets and keys are never copied:
 #: they belong to the environment they were created in.
@@ -67,7 +68,7 @@ async def copy_definitions(
                 if name not in SKIP and name != "environment"
             }
             lookup = {name: values.pop(name) for name in natural}
-            await model.update_or_create(defaults=values, environment_id=target.id, **lookup)
+            await upsert(model, values, environment_id=target.id, **lookup)
             count += 1
         counts[kind] = count
     return counts
