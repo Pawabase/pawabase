@@ -242,8 +242,9 @@ class ApiRuntime(BaseRuntime):
         await increment(self.state.project_ref, self.state.env_name, name, value, tags or {})
 
 
-def function_context(runtime: ApiRuntime, input: Any, trigger: str) -> FunctionContext:
+def function_context(runtime: ApiRuntime, input: Any, trigger: str, request: Mapping[str, Any] | None = None) -> FunctionContext:
     return FunctionContext(
+        request=request,
         input=input,
         auth=runtime.auth,
         project=runtime.state.project_ref,

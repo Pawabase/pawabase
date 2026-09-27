@@ -80,7 +80,7 @@ class StorageManager:
             driver = LocalDriver(
                 f"{root.rstrip('/')}/{state.project_ref}/{state.env_name}/{bucket}",
                 signer=self.signer(state, bucket),
-                base_url=f"{self.platform.settings.public_url.rstrip('/')}/storage/v1/signed/{bucket}",
+                base_url=f"{self.platform.settings.public_url.rstrip('/')}/storage/v1/signed/{state.project_ref}/{state.env_name}/{bucket}",
             )
         else:
             raise ValueError(f"unknown storage driver {kind!r}")

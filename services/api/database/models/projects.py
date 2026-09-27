@@ -5,6 +5,8 @@ from __future__ import annotations
 from sillo.record import Model
 from tortoise import fields
 
+from database.fields import AnyJSONField
+
 
 class Project(Model):
     """One application backend.
@@ -45,9 +47,9 @@ class Environment(Model):
     project = fields.ForeignKeyField("models.Project", related_name="environments", on_delete=fields.CASCADE)
     name = fields.CharField(max_length=63)
     is_default = fields.BooleanField(default=False)
-    infra = fields.JSONField(default=dict)
-    auth = fields.JSONField(default=dict)
-    settings = fields.JSONField(default=dict)
+    infra = AnyJSONField(default=dict)
+    auth = AnyJSONField(default=dict)
+    settings = AnyJSONField(default=dict)
     version = fields.IntField(default=1)
 
     class Meta:
@@ -75,7 +77,7 @@ class ProjectKey(Model):
     role = fields.CharField(max_length=20, default="publishable")
     prefix = fields.CharField(max_length=24)
     key_hash = fields.CharField(max_length=128, unique=True, db_index=True)
-    scopes = fields.JSONField(default=list)
+    scopes = AnyJSONField(default=list)
     expires_at = fields.DatetimeField(null=True)
     revoked_at = fields.DatetimeField(null=True)
     last_used_at = fields.DatetimeField(null=True)
@@ -111,7 +113,7 @@ class AuditEntry(Model):
     actor = fields.CharField(max_length=255, null=True)
     action = fields.CharField(max_length=100)
     target = fields.CharField(max_length=255, default="")
-    details = fields.JSONField(default=dict)
+    details = AnyJSONField(default=dict)
 
     class Meta:
         table = "pb_audit"

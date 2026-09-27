@@ -95,6 +95,7 @@ async def call_function(
     auth: Mapping[str, Any] | None = None,
     request_id: str | None = None,
     depth: int = 0,
+    request: Mapping[str, Any] | None = None,
 ) -> Any:
     """Call a Python function registered for this project."""
     spec = get_function(state.project_ref, name)
@@ -108,7 +109,7 @@ async def call_function(
 
             raise FlowError("invalid function input", status=422, code="invalid", details=json.loads(exc.json(include_url=False))) from exc
     runtime = ApiRuntime(platform, state, auth=auth, request_id=request_id, depth=depth)
-    context = function_context(runtime, input, trigger)
+    context = function_context(runtime, input, trigger, request)
     try:
         return await asyncio.wait_for(spec.handler(context), timeout=spec.timeout)
     except asyncio.TimeoutError as exc:

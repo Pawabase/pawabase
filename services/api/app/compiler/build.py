@@ -36,6 +36,18 @@ logger = logging.getLogger("pawabase.compiler")
 REST_PREFIX = "/rest/v1"
 
 
+def shadows_resource(path: str, resources: object) -> bool:
+    """Whether *path* is ``/<resource>`` or ``/<resource>/{param}``.
+
+    Actions such as ``/orders/{id}/pay`` are fine; only the resource's own
+    collection and item paths are reserved.
+    """
+    segments = path.strip("/").split("/")
+    if not segments or segments[0] not in resources:
+        return False
+    return len(segments) == 1 or (len(segments) == 2 and segments[1].startswith("{"))
+
+
 def compile_environment(state: EnvironmentState) -> SilloApp:
     settings = state.platform.settings
     app = SilloApp(
@@ -88,11 +100,9 @@ def compile_environment(state: EnvironmentState) -> SilloApp:
             logger.exception("resource %s could not be compiled", resource.name)
             problems.append(f"resource {resource.name}: {exc}")
 
-    resource_names = set(state.resources)
     for route in state.routes:
-        first = route.path.strip("/").split("/", 1)[0]
-        if first in resource_names:
-            problems.append(f"route {route.method} {route.path}: collides with resource {first!r}")
+        if shadows_resource(route.path, state.resources):
+            problems.append(f"route {route.method} {route.path}: shadows a resource route")
             continue
         try:
             register_route(app, state, route)

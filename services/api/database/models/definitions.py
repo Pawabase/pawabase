@@ -10,6 +10,8 @@ from __future__ import annotations
 from sillo.record import Model
 from tortoise import fields
 
+from database.fields import AnyJSONField
+
 
 class _Definition(Model):
     id = fields.IntField(primary_key=True)
@@ -24,7 +26,7 @@ class SchemaDef(_Definition):
     """A reusable schema: field definitions (see ``pawabase_kit.schemas``)."""
 
     environment = fields.ForeignKeyField("models.Environment", related_name="schemas", on_delete=fields.CASCADE)
-    fields_ = fields.JSONField(default=list, source_field="fields")
+    fields_ = AnyJSONField(default=list, source_field="fields")
 
     class Meta:
         table = "pb_schemas"
@@ -36,7 +38,7 @@ class TransformerDef(_Definition):
     """A reusable declarative transformer."""
 
     environment = fields.ForeignKeyField("models.Environment", related_name="transformers", on_delete=fields.CASCADE)
-    definition = fields.JSONField(default=dict)
+    definition = AnyJSONField(default=dict)
 
     class Meta:
         table = "pb_transformers"
@@ -48,7 +50,7 @@ class PolicyDef(_Definition):
     """A reusable policy condition."""
 
     environment = fields.ForeignKeyField("models.Environment", related_name="policies", on_delete=fields.CASCADE)
-    condition = fields.JSONField(default=dict)
+    condition = AnyJSONField(default=dict)
 
     class Meta:
         table = "pb_policies"
@@ -80,17 +82,17 @@ class Resource(_Definition):
     table = fields.CharField(max_length=128)
     primary_key = fields.CharField(max_length=64, default="id")
     id_type = fields.CharField(max_length=16, default="integer")
-    fields_ = fields.JSONField(default=list, source_field="fields")
-    operations = fields.JSONField(default=dict)
-    relations = fields.JSONField(default=list)
-    transformer = fields.JSONField(null=True)
+    fields_ = AnyJSONField(default=list, source_field="fields")
+    operations = AnyJSONField(default=dict)
+    relations = AnyJSONField(default=list)
+    transformer = AnyJSONField(null=True)
     cache_ttl = fields.IntField(default=0)
-    rate_limit = fields.JSONField(default=dict)
+    rate_limit = AnyJSONField(default=dict)
     events = fields.BooleanField(default=True)
     realtime = fields.BooleanField(default=False)
     timestamps = fields.BooleanField(default=True)
     owner_field = fields.CharField(max_length=64, null=True)
-    tags = fields.JSONField(default=list)
+    tags = AnyJSONField(default=list)
 
     class Meta:
         table = "pb_resources"
@@ -104,16 +106,16 @@ class RouteDef(_Definition):
     environment = fields.ForeignKeyField("models.Environment", related_name="routes", on_delete=fields.CASCADE)
     method = fields.CharField(max_length=10, default="POST")
     path = fields.CharField(max_length=255)
-    policy = fields.JSONField(null=True)
-    input_fields = fields.JSONField(null=True)
+    policy = AnyJSONField(null=True)
+    input_fields = AnyJSONField(null=True)
     input_schema = fields.CharField(max_length=128, null=True)
     response_schema = fields.CharField(max_length=128, null=True)
-    transformer = fields.JSONField(null=True)
+    transformer = AnyJSONField(null=True)
     handler_type = fields.CharField(max_length=16, default="flow")
     handler = fields.CharField(max_length=128)
-    rate_limit = fields.JSONField(default=dict)
+    rate_limit = AnyJSONField(default=dict)
     cache_ttl = fields.IntField(default=0)
-    tags = fields.JSONField(default=list)
+    tags = AnyJSONField(default=list)
     enabled = fields.BooleanField(default=True)
 
     class Meta:
@@ -126,7 +128,7 @@ class Flow(_Definition):
     """A visual backend flow (``@xyflow/react`` nodes and edges)."""
 
     environment = fields.ForeignKeyField("models.Environment", related_name="flows", on_delete=fields.CASCADE)
-    definition = fields.JSONField(default=dict)
+    definition = AnyJSONField(default=dict)
     enabled = fields.BooleanField(default=True)
     timeout = fields.FloatField(default=60.0)
     record_runs = fields.BooleanField(default=True)
@@ -150,9 +152,9 @@ class Bucket(_Definition):
 
     environment = fields.ForeignKeyField("models.Environment", related_name="buckets", on_delete=fields.CASCADE)
     public = fields.BooleanField(default=False)
-    read_policy = fields.JSONField(null=True)
-    write_policy = fields.JSONField(null=True)
-    accepts = fields.JSONField(default=list)
+    read_policy = AnyJSONField(null=True)
+    write_policy = AnyJSONField(null=True)
+    accepts = AnyJSONField(default=list)
     max_bytes = fields.BigIntField(default=0)
     signed_uploads = fields.BooleanField(default=True)
 
@@ -191,7 +193,7 @@ class EventSubscription(_Definition):
     event = fields.CharField(max_length=128)
     target_type = fields.CharField(max_length=16)
     target = fields.CharField(max_length=255, default="")
-    condition = fields.JSONField(null=True)
+    condition = AnyJSONField(null=True)
     enabled = fields.BooleanField(default=True)
 
     class Meta:
@@ -205,9 +207,9 @@ class WebhookEndpoint(_Definition):
 
     environment = fields.ForeignKeyField("models.Environment", related_name="webhooks", on_delete=fields.CASCADE)
     url = fields.CharField(max_length=2048)
-    events = fields.JSONField(default=list)
+    events = AnyJSONField(default=list)
     secret_ciphertext = fields.TextField()
-    headers = fields.JSONField(default=dict)
+    headers = AnyJSONField(default=dict)
     enabled = fields.BooleanField(default=True)
     max_attempts = fields.IntField(default=5)
 
@@ -259,7 +261,7 @@ class Schedule(_Definition):
     interval_seconds = fields.IntField(null=True)
     target_type = fields.CharField(max_length=16)
     target = fields.CharField(max_length=255)
-    payload = fields.JSONField(null=True)
+    payload = AnyJSONField(null=True)
     enabled = fields.BooleanField(default=True)
     last_run_at = fields.DatetimeField(null=True)
     last_status = fields.CharField(max_length=20, null=True)

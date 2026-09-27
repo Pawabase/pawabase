@@ -12,6 +12,8 @@ function's return value, is sent as JSON.
 
 from __future__ import annotations
 
+import inspect
+import re
 from typing import TYPE_CHECKING, Any
 
 from pawabase_kit.flows import FlowError
@@ -74,7 +76,9 @@ def register_route(app: SilloApp, state: EnvironmentState, route: Any) -> str:
             request_id = None
         status, headers = 200, {}
         if route.handler_type == "function":
-            result = await call_function(platform, state, route.handler, payload, trigger="http", auth=context["auth"], request_id=request_id)
+            body_value = payload["body"]
+            function_input = {**payload["params"], **body_value} if isinstance(body_value, dict) else (body_value if body_value is not None else dict(payload["params"]))
+            result = await call_function(platform, state, route.handler, function_input, trigger="http", auth=context["auth"], request_id=request_id, request=payload)
         else:
             entry = _http_entry(state, route)
             run = await run_flow(
@@ -92,21 +96,7 @@ def register_route(app: SilloApp, state: EnvironmentState, route: Any) -> str:
             await platform.cache_set(state, key, {"body": result, "status": status, "headers": headers}, ttl=route.cache_ttl)
         return json_response(result, status_code=status, headers=headers or None)
 
-    if request_model is not None:
-
-        async def handler(ctx: HttpContext, body):
-            return await run_handler(ctx, body)
-
-    else:
-
-        async def handler(ctx: HttpContext):
-            body: Any = None
-            if method in ("POST", "PUT", "PATCH"):
-                try:
-                    body = await ctx.json
-                except Exception:
-                    body = None
-            return await run_handler(ctx, body)
+    handler = _make_handler(route.path, run_handler, with_body=request_model is not None, reads_json=method in ("POST", "PUT", "PATCH"))
 
     getattr(app, method.lower())(
         route.path,
@@ -121,6 +111,36 @@ def register_route(app: SilloApp, state: EnvironmentState, route: Any) -> str:
         middleware=limits,
     )
     return f"{method} {route.path}"
+
+
+PATH_PARAM = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)(?::[A-Za-z]+)?\}")
+
+
+def _make_handler(path: str, run_handler: Any, *, with_body: bool, reads_json: bool) -> Any:
+    """A handler whose signature names the route's path parameters.
+
+    Sillo resolves handler arguments from the signature: path parameters by
+    name, and the ``request_model`` body into the first remaining parameter.
+    A compiled route's parameters are only known at runtime, so the signature
+    is built here, the same way ``sillo-inertia`` builds its page handlers'.
+    """
+    names = PATH_PARAM.findall(path)
+
+    async def handler(ctx: HttpContext, *args: Any, **kwargs: Any):
+        body = kwargs.pop("body", None)
+        if not with_body and reads_json:
+            try:
+                body = await ctx.json
+            except Exception:
+                body = None
+        return await run_handler(ctx, body)
+
+    parameters = [inspect.Parameter("ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=HttpContext)]
+    parameters += [inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=str) for name in names]
+    if with_body:
+        parameters.append(inspect.Parameter("body", inspect.Parameter.POSITIONAL_OR_KEYWORD))
+    handler.__signature__ = inspect.Signature(parameters)  # type: ignore[attr-defined]
+    return handler
 
 
 def _http_entry(state: EnvironmentState, route: Any) -> str | None:

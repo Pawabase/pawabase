@@ -265,8 +265,10 @@ async def validate_route(platform, ref, env, body: RouteBody) -> dict[str, Any]:
     for label, schema in (("input_schema", body.input_schema), ("response_schema", body.response_schema)):
         if schema and schema not in state.schemas:
             raise _invalid(f"{label}: no schema {schema!r}")
-    if body.path.strip("/").split("/", 1)[0] in state.resources:
-        raise _invalid("the path's first segment is a resource name")
+    from app.compiler.build import shadows_resource
+
+    if shadows_resource(body.path, state.resources):
+        raise _invalid("the path would shadow a resource's own routes (/<resource> or /<resource>/{id})")
     return body.model_dump()
 
 

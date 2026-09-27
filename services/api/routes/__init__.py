@@ -12,9 +12,16 @@ from app.platform import Platform
 
 
 def register_routes(app: SilloApp, platform: Platform) -> None:
-    from routes.platform import data, definitions, projects
+    from routes import internal
+    from routes.data import hooks, invoke, storage
+    from routes.platform import automation, data, definitions, operations, projects
 
     management = Router(prefix="/platform/v1")
-    for module in (projects, definitions, data):
+    for module in (projects, definitions, data, automation, operations):
         module.register(management, platform)
     app.mount_router(management)
+
+    internal.register(app, platform)
+    storage.register(app, platform)
+    invoke.register(app, platform)
+    hooks.register(app, platform)

@@ -32,6 +32,11 @@ class HttpTrigger(_Trigger):
             "default": "POST",
         },
         {"name": "path", "type": "string", "description": "Route path, e.g. /orders/{id}/pay"},
+        {
+            "name": "policy",
+            "type": "json",
+            "description": "Who may invoke it directly at /flows/v1/<name> (when no path is set)",
+        },
     ]
 
 

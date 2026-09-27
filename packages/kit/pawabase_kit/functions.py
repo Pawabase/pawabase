@@ -87,6 +87,7 @@ class FunctionContext:
         project, env: Where it runs.
         runtime: Platform capabilities (see :class:`pawabase_kit.flows.Runtime`).
         trigger: ``http``, ``flow``, ``job``, ``schedule``, ``event`` or ``webhook``.
+        request: For HTTP triggers, ``{"params", "query", "body"}``.
     """
 
     input: Any
@@ -95,6 +96,7 @@ class FunctionContext:
     env: str
     runtime: Any
     trigger: str = "http"
+    request: Mapping[str, Any] | None = None
     logs: list[dict[str, Any]] = field(default_factory=list)
 
     def log(self, message: str, **data: Any) -> None:
