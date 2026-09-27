@@ -20,9 +20,10 @@ from sillo import HttpContext
 from sillo import json as json_response
 from sillo.helpers.strings import pascal_case
 
-from app.compiler.common import cache_key, rate_limit_middleware
+from app.compiler.common import cache_key
 from pawabase_kit.flows import FlowError
 from pawabase_kit.policies import PolicyGate, build_policy_context
+from pawabase_kit.ratelimit import rate_limit_middleware
 from pawabase_kit.schemas import compile_model
 from pawabase_kit.telemetry import note
 from pawabase_kit.transformers import apply_transformer

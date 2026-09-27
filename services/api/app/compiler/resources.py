@@ -24,10 +24,11 @@ from sillo import json as json_response
 from sillo.exceptions import HTTPException
 from sillo.helpers.strings import pascal_case
 
-from app.compiler.common import PLAN_SCOPE_KEY, PlanGate, cache_key, rate_limit_middleware
+from app.compiler.common import PLAN_SCOPE_KEY, PlanGate, cache_key
 from app.data.store import MAX_PAGE_SIZE, Filter, ResourceSpec, parse_filters, parse_sort
 from app.resources import after_write, resource_tag
 from pawabase_kit.policies import build_policy_context
+from pawabase_kit.ratelimit import rate_limit_middleware
 from pawabase_kit.schemas import compile_model
 from pawabase_kit.telemetry import note
 from pawabase_kit.transformers import apply_transformer
