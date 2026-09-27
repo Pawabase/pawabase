@@ -49,6 +49,14 @@ def flow_event_entries(state: EnvironmentState, event: PlatformEvent) -> list[tu
                 and fnmatch.fnmatchcase(event.name, config["event"])
             ):
                 matches.append((flow.name, node["id"]))
+            elif (
+                block == "trigger.realtime"
+                and config.get("channel")
+                and event.name == "realtime.message"
+            ):
+                channel = str((event.payload or {}).get("channel", ""))
+                if fnmatch.fnmatchcase(channel, config["channel"]):
+                    matches.append((flow.name, node["id"]))
             elif block == "trigger.resource" and config.get("resource"):
                 resource, _, change = event.name.rpartition(".")
                 operations = config.get("operations") or ["created", "updated", "deleted"]
