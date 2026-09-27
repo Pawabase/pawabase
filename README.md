@@ -39,6 +39,18 @@ processes that talk over HTTP with audience-bound service tokens. See
 
 ## Run it with Docker
 
+To try it on your machine with ready-made settings:
+
+```sh
+cp .env.test .env
+docker compose up -d
+```
+
+Then open Studio at <http://localhost:8090> and sign in as `admin@pawabase.test` /
+`Pawabase!test1`. The values in `.env.test` are public, so use them only locally.
+
+For a real deployment, start from `.env.example` instead:
+
 ```sh
 cp .env.example .env
 # Fill in the secrets: openssl rand -hex 32 for each, and an admin password
