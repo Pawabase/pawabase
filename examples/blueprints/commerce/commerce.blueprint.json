@@ -486,6 +486,7 @@
             "type": "array",
             "required": true,
             "items": {
+              "name": "line",
               "type": "object",
               "fields": [
                 {
@@ -507,17 +508,6 @@
       }
     ],
     "transformers": [
-      {
-        "name": "public_product",
-        "description": "What shoppers see of a product.",
-        "definition": {
-          "omit": [
-            "view_count",
-            "cart_count",
-            "purchase_count"
-          ]
-        }
-      },
       {
         "name": "public_variant",
         "description": "What shoppers see of a variant: no cost, no reservations.",
@@ -1561,7 +1551,7 @@
         "realtime": true,
         "cache_ttl": 0,
         "rate_limit": {},
-        "transformer": "public_product",
+        "transformer": null,
         "tags": [
           "Catalog"
         ]
@@ -5627,16 +5617,12 @@
                   "condition": {
                     "all": [
                       {
-                        "eq": [
-                          "$steps.variant.output.track_inventory",
-                          true
-                        ]
+                        "truthy": "$steps.variant.output.track_inventory"
                       },
                       {
-                        "eq": [
-                          "$steps.variant.output.allow_backorder",
-                          false
-                        ]
+                        "not": {
+                          "truthy": "$steps.variant.output.allow_backorder"
+                        }
                       },
                       {
                         "gt": [
@@ -6246,16 +6232,12 @@
                   "condition": {
                     "all": [
                       {
-                        "eq": [
-                          "$steps.variant.output.track_inventory",
-                          true
-                        ]
+                        "truthy": "$steps.variant.output.track_inventory"
                       },
                       {
-                        "eq": [
-                          "$steps.variant.output.allow_backorder",
-                          false
-                        ]
+                        "not": {
+                          "truthy": "$steps.variant.output.allow_backorder"
+                        }
                       },
                       {
                         "gt": [
@@ -7753,10 +7735,7 @@
                 "block": "control.if",
                 "config": {
                   "condition": {
-                    "eq": [
-                      "$item.track_inventory",
-                      true
-                    ]
+                    "truthy": "$item.track_inventory"
                   }
                 }
               }
@@ -9215,10 +9194,7 @@
                 "block": "control.if",
                 "config": {
                   "condition": {
-                    "eq": [
-                      "$item.track_inventory",
-                      true
-                    ]
+                    "truthy": "$item.track_inventory"
                   }
                 }
               }
@@ -10482,10 +10458,7 @@
                 "block": "control.if",
                 "config": {
                   "condition": {
-                    "eq": [
-                      "$item.track_inventory",
-                      true
-                    ]
+                    "truthy": "$item.track_inventory"
                   }
                 }
               }
@@ -11196,10 +11169,7 @@
                 "block": "control.if",
                 "config": {
                   "condition": {
-                    "eq": [
-                      "$item.track_inventory",
-                      true
-                    ]
+                    "truthy": "$item.track_inventory"
                   }
                 }
               }
@@ -11611,10 +11581,9 @@
                         ]
                       },
                       {
-                        "eq": [
-                          "$steps.variant.output.allow_backorder",
-                          false
-                        ]
+                        "not": {
+                          "truthy": "$steps.variant.output.allow_backorder"
+                        }
                       }
                     ]
                   }
@@ -11788,10 +11757,7 @@
                   "condition": {
                     "all": [
                       {
-                        "eq": [
-                          "$input.event.payload.record.track_inventory",
-                          true
-                        ]
+                        "truthy": "$input.event.payload.record.track_inventory"
                       },
                       {
                         "lte": [
@@ -13054,7 +13020,7 @@
               "data": {
                 "block": "db.query",
                 "config": {
-                  "sql": "SELECT COUNT(*) AS total, SUM(CASE WHEN orders_count > 1 THEN 1 ELSE 0 END) AS returning\nFROM customers WHERE store_id = ?",
+                  "sql": "SELECT COUNT(*) AS total, SUM(CASE WHEN orders_count > 1 THEN 1 ELSE 0 END) AS returning_customers\nFROM customers WHERE store_id = ?",
                   "params": [
                     "{{ auth.org }}"
                   ]
@@ -15602,6 +15568,294 @@
         "enabled": true,
         "timeout": 60,
         "record_runs": true
+      },
+      {
+        "name": "merchant_inventory",
+        "description": "GET /merchant/inventory: every variant of the active store with cost, stock, reservations, availability and margin. ?low=1 for low stock only.",
+        "definition": {
+          "nodes": [
+            {
+              "id": "http",
+              "position": {
+                "x": 80,
+                "y": 60
+              },
+              "data": {
+                "block": "trigger.http",
+                "config": {}
+              }
+            },
+            {
+              "id": "rows",
+              "position": {
+                "x": 80,
+                "y": 210
+              },
+              "data": {
+                "block": "db.query",
+                "config": {
+                  "sql": "SELECT v.id AS variant_id, v.product_id, p.title AS product, p.status AS product_status, v.title AS variant, v.sku, v.barcode,\n       v.price_minor, v.cost_minor, v.price_minor - COALESCE(v.cost_minor, 0) AS margin_minor,\n       v.stock, v.reserved, v.stock - v.reserved AS available, v.low_stock_threshold, v.track_inventory, v.allow_backorder,\n       CASE WHEN v.track_inventory = ? AND v.stock <= v.low_stock_threshold THEN 1 ELSE 0 END AS is_low\nFROM product_variants v JOIN products p ON p.id = v.product_id\nWHERE v.store_id = ? AND (? = '' OR (v.track_inventory = ? AND v.stock <= v.low_stock_threshold))\nORDER BY p.title, v.position",
+                  "params": [
+                    true,
+                    "{{ auth.org }}",
+                    "{{ input.query.low | default:\"\" }}",
+                    true
+                  ]
+                }
+              }
+            },
+            {
+              "id": "reply",
+              "position": {
+                "x": 80,
+                "y": 360
+              },
+              "data": {
+                "block": "response.return",
+                "config": {
+                  "body": {
+                    "store_id": "{{ auth.org }}",
+                    "variants": "{{ steps.rows.output }}",
+                    "count": "{{ steps.rows.output | length }}"
+                  }
+                }
+              }
+            }
+          ],
+          "edges": [
+            {
+              "id": "http-next-rows",
+              "source": "http",
+              "target": "rows"
+            },
+            {
+              "id": "rows-next-reply",
+              "source": "rows",
+              "target": "reply"
+            }
+          ]
+        },
+        "enabled": true,
+        "timeout": 60,
+        "record_runs": true
+      },
+      {
+        "name": "merchant_order",
+        "description": "GET /merchant/orders/{id}: the full order for the back office: lines, timeline, payments, refunds, customer, risk.",
+        "definition": {
+          "nodes": [
+            {
+              "id": "http",
+              "position": {
+                "x": 80,
+                "y": 60
+              },
+              "data": {
+                "block": "trigger.http",
+                "config": {}
+              }
+            },
+            {
+              "id": "order",
+              "position": {
+                "x": 80,
+                "y": 210
+              },
+              "data": {
+                "block": "db.query",
+                "config": {
+                  "sql": "SELECT * FROM orders WHERE id = ? AND store_id = ?",
+                  "params": [
+                    "{{ input.params.id }}",
+                    "{{ auth.org }}"
+                  ]
+                }
+              }
+            },
+            {
+              "id": "none",
+              "position": {
+                "x": 80,
+                "y": 360
+              },
+              "data": {
+                "block": "control.if",
+                "config": {
+                  "condition": {
+                    "empty": "$steps.order.output"
+                  }
+                }
+              }
+            },
+            {
+              "id": "missing",
+              "position": {
+                "x": 80,
+                "y": 510
+              },
+              "data": {
+                "block": "error.raise",
+                "config": {
+                  "status": 404,
+                  "code": "order_not_found",
+                  "message": "No such order"
+                }
+              }
+            },
+            {
+              "id": "items",
+              "position": {
+                "x": 360,
+                "y": 510
+              },
+              "data": {
+                "block": "db.query",
+                "config": {
+                  "sql": "SELECT * FROM order_items WHERE order_id = ? ORDER BY id",
+                  "params": [
+                    "{{ input.params.id }}"
+                  ]
+                }
+              }
+            },
+            {
+              "id": "events",
+              "position": {
+                "x": 80,
+                "y": 660
+              },
+              "data": {
+                "block": "db.query",
+                "config": {
+                  "sql": "SELECT * FROM order_events WHERE order_id = ? ORDER BY id",
+                  "params": [
+                    "{{ input.params.id }}"
+                  ]
+                }
+              }
+            },
+            {
+              "id": "payments",
+              "position": {
+                "x": 80,
+                "y": 810
+              },
+              "data": {
+                "block": "db.query",
+                "config": {
+                  "sql": "SELECT * FROM payments WHERE order_id = ? ORDER BY id",
+                  "params": [
+                    "{{ input.params.id }}"
+                  ]
+                }
+              }
+            },
+            {
+              "id": "refunds",
+              "position": {
+                "x": 80,
+                "y": 960
+              },
+              "data": {
+                "block": "db.query",
+                "config": {
+                  "sql": "SELECT * FROM refunds WHERE order_id = ? ORDER BY id",
+                  "params": [
+                    "{{ input.params.id }}"
+                  ]
+                }
+              }
+            },
+            {
+              "id": "customer",
+              "position": {
+                "x": 80,
+                "y": 1110
+              },
+              "data": {
+                "block": "db.query",
+                "config": {
+                  "sql": "SELECT * FROM customers WHERE id = ?",
+                  "params": [
+                    "{{ steps.order.output.0.customer_id | default:0 }}"
+                  ]
+                }
+              }
+            },
+            {
+              "id": "reply",
+              "position": {
+                "x": 80,
+                "y": 1260
+              },
+              "data": {
+                "block": "response.return",
+                "config": {
+                  "body": {
+                    "order": "{{ steps.order.output.0 }}",
+                    "items": "{{ steps.items.output }}",
+                    "timeline": "{{ steps.events.output }}",
+                    "payments": "{{ steps.payments.output }}",
+                    "refunds": "{{ steps.refunds.output }}",
+                    "customer": "{{ steps.customer.output.0 }}"
+                  }
+                }
+              }
+            }
+          ],
+          "edges": [
+            {
+              "id": "http-next-order",
+              "source": "http",
+              "target": "order"
+            },
+            {
+              "id": "order-next-none",
+              "source": "order",
+              "target": "none"
+            },
+            {
+              "id": "none-true-missing",
+              "source": "none",
+              "target": "missing",
+              "sourceHandle": "true"
+            },
+            {
+              "id": "none-false-items",
+              "source": "none",
+              "target": "items",
+              "sourceHandle": "false"
+            },
+            {
+              "id": "items-next-events",
+              "source": "items",
+              "target": "events"
+            },
+            {
+              "id": "events-next-payments",
+              "source": "events",
+              "target": "payments"
+            },
+            {
+              "id": "payments-next-refunds",
+              "source": "payments",
+              "target": "refunds"
+            },
+            {
+              "id": "refunds-next-customer",
+              "source": "refunds",
+              "target": "customer"
+            },
+            {
+              "id": "customer-next-reply",
+              "source": "customer",
+              "target": "reply"
+            }
+          ]
+        },
+        "enabled": true,
+        "timeout": 60,
+        "record_runs": true
       }
     ],
     "routes": [
@@ -15904,6 +16158,44 @@
         "handler": "store_dashboard",
         "rate_limit": {},
         "cache_ttl": 30,
+        "tags": [
+          "Merchant"
+        ],
+        "enabled": true
+      },
+      {
+        "method": "GET",
+        "path": "/merchant/inventory",
+        "name": "merchant_inventory",
+        "description": "Full stock view for the active store (?low=1 for low stock).",
+        "policy": "store_member",
+        "input_schema": null,
+        "input_fields": null,
+        "response_schema": null,
+        "transformer": null,
+        "handler_type": "flow",
+        "handler": "merchant_inventory",
+        "rate_limit": {},
+        "cache_ttl": 0,
+        "tags": [
+          "Merchant"
+        ],
+        "enabled": true
+      },
+      {
+        "method": "GET",
+        "path": "/merchant/orders/{id}",
+        "name": "merchant_order",
+        "description": "The full order record for staff.",
+        "policy": "store_member",
+        "input_schema": null,
+        "input_fields": null,
+        "response_schema": null,
+        "transformer": null,
+        "handler_type": "flow",
+        "handler": "merchant_order",
+        "rate_limit": {},
+        "cache_ttl": 0,
         "tags": [
           "Merchant"
         ],

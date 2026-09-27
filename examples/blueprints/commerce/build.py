@@ -168,8 +168,6 @@ SCHEMAS = [
 ]
 
 TRANSFORMERS = [
-    {"name": "public_product", "description": "What shoppers see of a product.",
-     "definition": {"omit": ["view_count", "cart_count", "purchase_count"]}},
     {"name": "public_variant", "description": "What shoppers see of a variant: no cost, no reservations.",
      "definition": {"omit": ["cost_minor", "reserved"]}},
     {"name": "customer_order", "description": "Orders as shoppers see them.",
@@ -265,7 +263,7 @@ RESOURCES = [
         ops(list_="catalog_read", get="catalog_read", create=EDITOR_NEW, update=EDITOR, delete=MANAGER),
         relations=[HM("variants", "product_variants", "product_id"), HM("options", "product_options", "product_id"),
                    HM("images", "product_images", "product_id"), HM("reviews", "reviews", "product_id")],
-        tags=["Catalog"], transformer="public_product", realtime=True),
+        tags=["Catalog"], realtime=True),
     resource("product_options", "Option names per product (Size, Colour).", [
         S, F("product_id", "integer", required=True), F("name", required=True, max_length=40),
         F("values", "array", items={"type": "string"}, default=[]), F("position", "integer", default=0)],
@@ -586,7 +584,7 @@ FLOWS.append(flow("cart_add", "POST /storefront/cart/items: add a variant to a c
     ("qty_new", "control.set", {"values": {"qty": "{{ input.body.quantity | int }}"}}),
     ("available", "math.calculate", {"operation": "subtract", "values": ["{{ steps.variant.output.stock }}", "{{ steps.variant.output.reserved }}"], "digits": 0}),
     ("short", "control.if", {"condition": {"all": [
-        {"eq": ["$steps.variant.output.track_inventory", True]}, {"eq": ["$steps.variant.output.allow_backorder", False]},
+        {"truthy": "$steps.variant.output.track_inventory"}, {"not": {"truthy": "$steps.variant.output.allow_backorder"}},
         {"gt": ["$vars.qty", "$steps.available.output"]}]}}),
     err("no_stock", 409, "insufficient_stock", "Not enough stock for that quantity"),
     ("upsert", "control.if", {"condition": {"truthy": "$steps.line.output.total"}}),
@@ -625,7 +623,7 @@ FLOWS.append(flow("cart_update", "POST /storefront/cart/update: change a line's 
     ("variant", "resource.get", {"resource": "product_variants", "id": "{{ steps.line.output.variant_id }}"}),
     ("available", "math.calculate", {"operation": "subtract", "values": ["{{ steps.variant.output.stock }}", "{{ steps.variant.output.reserved }}"], "digits": 0}),
     ("short", "control.if", {"condition": {"all": [
-        {"eq": ["$steps.variant.output.track_inventory", True]}, {"eq": ["$steps.variant.output.allow_backorder", False]},
+        {"truthy": "$steps.variant.output.track_inventory"}, {"not": {"truthy": "$steps.variant.output.allow_backorder"}},
         {"gt": ["$input.body.quantity", "$steps.available.output"]}]}}),
     err("no_stock", 409, "insufficient_stock", "Not enough stock for that quantity"),
     ("set_qty", "resource.update", {"resource": "cart_items", "id": body("item_id"), "data": {"quantity": body("quantity")}}),
@@ -775,7 +773,7 @@ FROM cart_items ci JOIN product_variants v ON v.id = ci.variant_id WHERE ci.cart
         "variant_title": "{{ item.variant_title }}", "sku": "{{ item.sku }}", "image_url": "{{ item.image_url }}",
         "quantity": "{{ item.quantity }}", "unit_price_minor": "{{ item.unit_price_minor }}", "total_minor": "{{ item.line_total_minor | int }}",
         "cost_minor": "{{ item.cost_minor }}"}}),
-    ("tracked", "control.if", {"condition": {"eq": ["$item.track_inventory", True]}}),
+    ("tracked", "control.if", {"condition": {"truthy": "$item.track_inventory"}}),
     ("reserve_calc", "math.calculate", {"operation": "add", "values": ["{{ item.reserved }}", "{{ item.quantity }}"], "digits": 0}),
     ("reserve", "resource.update", {"resource": "product_variants", "id": "{{ item.variant_id }}", "data": {"reserved": "{{ steps.reserve_calc.output | int }}"}}),
     ("placed", "resource.create", {"resource": "order_events", "data": {
@@ -895,7 +893,7 @@ FLOWS.append(flow("order_paid", "On order.paid: commit stock (reserved → sold,
     ("order", "resource.get", {"resource": "orders", "id": f"{{{{ {P}.order_id }}}}"}),
     ("items", "db.query", {"sql": ORDER_ITEMS_SQL, "params": [f"{{{{ {O}.id }}}}"]}),
     ("each", "control.foreach", {"items": "{{ steps.items.output }}"}),
-    ("tracked", "control.if", {"condition": {"eq": ["$item.track_inventory", True]}}),
+    ("tracked", "control.if", {"condition": {"truthy": "$item.track_inventory"}}),
     ("stock", "math.calculate", {"operation": "subtract", "values": ["{{ item.stock }}", "{{ item.quantity }}"], "digits": 0}),
     ("reserved_raw", "math.calculate", {"operation": "subtract", "values": ["{{ item.reserved }}", "{{ item.quantity }}"], "digits": 0}),
     ("reserved", "math.calculate", {"operation": "max", "values": ["{{ steps.reserved_raw.output }}", 0], "digits": 0}),
@@ -984,7 +982,7 @@ FLOWS.append(flow("cancel_order", "POST /orders/{id}/cancel: cancel an unpaid or
     err("refund_first", 409, "refund_instead", "This order was paid; refund it instead of cancelling"),
     ("items", "db.query", {"sql": ORDER_ITEMS_SQL, "params": [f"{{{{ {O}.id }}}}"]}),
     ("each", "control.foreach", {"items": "{{ steps.items.output }}"}),
-    ("tracked", "control.if", {"condition": {"eq": ["$item.track_inventory", True]}}),
+    ("tracked", "control.if", {"condition": {"truthy": "$item.track_inventory"}}),
     ("less", "math.calculate", {"operation": "subtract", "values": ["{{ item.reserved }}", "{{ item.quantity }}"], "digits": 0}),
     ("floor", "math.calculate", {"operation": "max", "values": ["{{ steps.less.output }}", 0], "digits": 0}),
     ("release", "resource.update", {"resource": "product_variants", "id": "{{ item.variant_id }}", "data": {"reserved": "{{ steps.floor.output | int }}"}}),
@@ -1034,7 +1032,7 @@ FLOWS.append(flow("refund_order", "POST /orders/{id}/refunds: refund part or all
     ("restock", "control.if", {"condition": {"all": [{"eq": ["$input.body.restock", True]}, {"eq": ["$vars.payment_status", "refunded"]}]}}),
     ("items", "db.query", {"sql": ORDER_ITEMS_SQL, "params": [f"{{{{ {O}.id }}}}"]}),
     ("each", "control.foreach", {"items": "{{ steps.items.output }}"}),
-    ("tracked", "control.if", {"condition": {"eq": ["$item.track_inventory", True]}}),
+    ("tracked", "control.if", {"condition": {"truthy": "$item.track_inventory"}}),
     ("back", "math.calculate", {"operation": "add", "values": ["{{ item.stock }}", "{{ item.quantity }}"], "digits": 0}),
     ("put_back", "resource.update", {"resource": "product_variants", "id": "{{ item.variant_id }}", "data": {"stock": "{{ steps.back.output | int }}"}}),
     ("movement", "resource.create", {"resource": "inventory_movements", "data": {"store_id": f"{{{{ {O}.store_id }}}}", "variant_id": "{{ item.variant_id }}",
@@ -1060,7 +1058,7 @@ FLOWS.append(flow("adjust_inventory", "POST /inventory/adjust: change stock with
     own_store("foreign", "variant.output"),
     err("not_yours", 404, "variant_not_found", "No such variant"),
     ("new", "math.calculate", {"operation": "add", "values": ["{{ steps.variant.output.stock }}", body("delta")], "digits": 0}),
-    ("negative", "control.if", {"condition": {"all": [{"lt": ["$steps.new.output", 0]}, {"eq": ["$steps.variant.output.allow_backorder", False]}]}}),
+    ("negative", "control.if", {"condition": {"all": [{"lt": ["$steps.new.output", 0]}, {"not": {"truthy": "$steps.variant.output.allow_backorder"}}]}}),
     err("below_zero", 422, "negative_stock", "Stock can't go below zero for this variant"),
     ("save", "resource.update", {"resource": "product_variants", "id": body("variant_id"), "data": {"stock": "{{ steps.new.output | int }}"}}),
     ("movement", "resource.create", {"resource": "inventory_movements", "data": {"store_id": "{{ steps.variant.output.store_id }}",
@@ -1073,7 +1071,7 @@ FLOWS.append(flow("adjust_inventory", "POST /inventory/adjust: change stock with
 R = "input.event.payload.record"
 FLOWS.append(flow("low_stock_alert", "When a tracked variant falls to its low-stock threshold, alert the store (notification, live, email).", [
     ("changed", "trigger.resource", {"resource": "product_variants", "operations": ["updated"]}),
-    ("low", "control.if", {"condition": {"all": [{"eq": [f"${R}.track_inventory", True]}, {"lte": [f"${R}.stock", f"${R}.low_stock_threshold"]}]}}),
+    ("low", "control.if", {"condition": {"all": [{"truthy": f"${R}.track_inventory"}, {"lte": [f"${R}.stock", f"${R}.low_stock_threshold"]}]}}),
     ("product", "resource.get", {"resource": "products", "id": f"{{{{ {R}.product_id }}}}"}),
     ("notify", "resource.create", {"resource": "notifications", "data": {"store_id": f"{{{{ {R}.store_id }}}}", "kind": "low_stock",
         "title": "Low stock: {{ steps.product.output.title }} ({{ input.event.payload.record.title }})",
@@ -1185,7 +1183,7 @@ WHERE store_id = ? AND track_inventory = ? AND stock <= low_stock_threshold""", 
   SUM(CASE WHEN recovery_status = 'recovered' THEN 1 ELSE 0 END) AS recovered
 FROM abandoned_carts WHERE store_id = ?""", "params": ["{{ auth.org }}"]}),
     ("balance", "db.query", {"sql": "SELECT COALESCE(SUM(amount_minor), 0) AS available_minor FROM ledger_entries WHERE store_id = ?", "params": ["{{ auth.org }}"]}),
-    ("customers", "db.query", {"sql": """SELECT COUNT(*) AS total, SUM(CASE WHEN orders_count > 1 THEN 1 ELSE 0 END) AS returning
+    ("customers", "db.query", {"sql": """SELECT COUNT(*) AS total, SUM(CASE WHEN orders_count > 1 THEN 1 ELSE 0 END) AS returning_customers
 FROM customers WHERE store_id = ?""", "params": ["{{ auth.org }}"]}),
     ("reply", "response.return", {"body": {
         "store_id": "{{ auth.org }}", "date": "{{ steps.today.output }}",
@@ -1388,8 +1386,36 @@ GROUP BY store_id, currency HAVING SUM(amount_minor) > 0""", "params": []}),
 
 SCHEMAS.append({"name": "PosSale", "description": "An in-person sale on an open till.", "fields": [
     F("session_id", "integer", required=True), F("method", required=True, enum=["cash", "pos_card", "mobile_money", "bank_transfer"]),
-    F("email", "email"), F("lines", "array", required=True, items={"type": "object", "fields": [
+    F("email", "email"), F("lines", "array", required=True, items={"name": "line", "type": "object", "fields": [
         F("variant_id", "integer", required=True), F("quantity", "integer", required=True, minimum=1, maximum=999)]})]})
+
+
+FLOWS.append(flow("merchant_inventory", "GET /merchant/inventory: every variant of the active store with cost, stock, reservations, availability and margin. ?low=1 for low stock only.", [
+    ("http", "trigger.http", {}),
+    ("rows", "db.query", {"sql": """SELECT v.id AS variant_id, v.product_id, p.title AS product, p.status AS product_status, v.title AS variant, v.sku, v.barcode,
+       v.price_minor, v.cost_minor, v.price_minor - COALESCE(v.cost_minor, 0) AS margin_minor,
+       v.stock, v.reserved, v.stock - v.reserved AS available, v.low_stock_threshold, v.track_inventory, v.allow_backorder,
+       CASE WHEN v.track_inventory = ? AND v.stock <= v.low_stock_threshold THEN 1 ELSE 0 END AS is_low
+FROM product_variants v JOIN products p ON p.id = v.product_id
+WHERE v.store_id = ? AND (? = '' OR (v.track_inventory = ? AND v.stock <= v.low_stock_threshold))
+ORDER BY p.title, v.position""", "params": [True, "{{ auth.org }}", "{{ input.query.low | default:\"\" }}", True]}),
+    ("reply", "response.return", {"body": {"store_id": "{{ auth.org }}", "variants": "{{ steps.rows.output }}", "count": "{{ steps.rows.output | length }}"}}),
+], [("http", "rows"), ("rows", "reply")]))
+
+FLOWS.append(flow("merchant_order", "GET /merchant/orders/{id}: the full order for the back office: lines, timeline, payments, refunds, customer, risk.", [
+    ("http", "trigger.http", {}),
+    ("order", "db.query", {"sql": "SELECT * FROM orders WHERE id = ? AND store_id = ?", "params": ["{{ input.params.id }}", "{{ auth.org }}"]}),
+    ("none", "control.if", {"condition": {"empty": "$steps.order.output"}}),
+    err("missing", 404, "order_not_found", "No such order"),
+    ("items", "db.query", {"sql": "SELECT * FROM order_items WHERE order_id = ? ORDER BY id", "params": ["{{ input.params.id }}"]}),
+    ("events", "db.query", {"sql": "SELECT * FROM order_events WHERE order_id = ? ORDER BY id", "params": ["{{ input.params.id }}"]}),
+    ("payments", "db.query", {"sql": "SELECT * FROM payments WHERE order_id = ? ORDER BY id", "params": ["{{ input.params.id }}"]}),
+    ("refunds", "db.query", {"sql": "SELECT * FROM refunds WHERE order_id = ? ORDER BY id", "params": ["{{ input.params.id }}"]}),
+    ("customer", "db.query", {"sql": "SELECT * FROM customers WHERE id = ?", "params": ["{{ steps.order.output.0.customer_id | default:0 }}"]}),
+    ("reply", "response.return", {"body": {"order": "{{ steps.order.output.0 }}", "items": "{{ steps.items.output }}", "timeline": "{{ steps.events.output }}",
+        "payments": "{{ steps.payments.output }}", "refunds": "{{ steps.refunds.output }}", "customer": "{{ steps.customer.output.0 }}"}}),
+], [("http", "order"), ("order", "none"), ("none", "missing", "true"), ("none", "items", "false"), ("items", "events"), ("events", "payments"),
+    ("payments", "refunds"), ("refunds", "customer"), ("customer", "reply")]))
 
 
 # ── routes ───────────────────────────────────────────────────────────────────
@@ -1411,6 +1437,8 @@ ROUTES = [
     route("POST", "/storefront/reviews", "submit_review", "Review a product.", "shopper", "submit_review", tags=SHOP, input_schema="ReviewInput", rate={"limit": 10, "window": 60}),
     route("POST", "/merchant/stores", "register_store", "Register the store for your organization.", "store_owner_setup", "register_store", tags=MERCHANT, input_schema="StoreSetup"),
     route("GET", "/merchant/dashboard", "store_dashboard", "Headline numbers for the active store.", "store_member", "store_dashboard", tags=MERCHANT, cache=30),
+    route("GET", "/merchant/inventory", "merchant_inventory", "Full stock view for the active store (?low=1 for low stock).", "store_member", "merchant_inventory", tags=MERCHANT),
+    route("GET", "/merchant/orders/{id}", "merchant_order", "The full order record for staff.", "store_member", "merchant_order", tags=MERCHANT),
     route("POST", "/orders/{id}/mark-paid", "mark_paid", "Record an offline payment.", "store_operator", "mark_paid", tags=MERCHANT, input_schema="MarkPaid"),
     route("POST", "/orders/{id}/fulfil", "fulfil_order", "Ship an order.", "store_operator", "fulfil_order", tags=MERCHANT, input_schema="FulfilInput"),
     route("POST", "/orders/{id}/cancel", "cancel_order", "Cancel an unpaid order.", "store_manager_route", "cancel_order", tags=MERCHANT, input_schema="CancelInput"),

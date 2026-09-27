@@ -285,6 +285,15 @@ def _mentions_record(operand: Any) -> bool:
     return isinstance(operand, str) and (operand == "$record" or operand.startswith("$record."))
 
 
+def _deferred(operand: Any) -> bool:
+    """Operands unknown when a request is first planned: the record, and the
+    submitted body (a gate runs before the body is read). Conditions on them
+    are left for the full check with the record and input in hand."""
+    return _mentions_record(operand) or (
+        isinstance(operand, str) and (operand == "$input" or operand.startswith("$input."))
+    )
+
+
 def partial(condition: Condition, context: Mapping[str, Any]) -> Condition:
     """Evaluate what can be decided without a record.
 
@@ -325,21 +334,21 @@ def partial(condition: Condition, context: Mapping[str, Any]) -> Condition:
             return not result
         return {"not": result}
     if op in BINARY_OPS:
-        if _mentions_record(arg[0]) or _mentions_record(arg[1]):
-            # Pin the non-record side now, so the residual carries a literal.
-            left = arg[0] if _mentions_record(arg[0]) else resolve(arg[0], context)
-            right = arg[1] if _mentions_record(arg[1]) else resolve(arg[1], context)
+        if _deferred(arg[0]) or _deferred(arg[1]):
+            # Pin the known side now, so the residual carries a literal.
+            left = arg[0] if _deferred(arg[0]) else resolve(arg[0], context)
+            right = arg[1] if _deferred(arg[1]) else resolve(arg[1], context)
             return {op: [_literal(left), _literal(right)]}
         return evaluate(condition, context)
     if op in UNARY:
-        if _mentions_record(arg):
+        if _deferred(arg):
             return condition
         return evaluate(condition, context)
     raise PolicyError(f"unknown operator {op!r}")
 
 
 def _literal(value: Any) -> Any:
-    if isinstance(value, str) and value.startswith("$") and not _mentions_record(value):
+    if isinstance(value, str) and value.startswith("$") and not _deferred(value):
         return "$" + value  # escape a resolved value that happens to start with $
     return value
 
@@ -357,13 +366,13 @@ def pushdown(residual: Condition) -> tuple[dict[str, Any], Condition | None]:
     for part in parts:
         if isinstance(part, Mapping) and "eq" in part:
             left, right = part["eq"]
-            if _mentions_record(left) and not _mentions_record(right) and left.count(".") == 1:
+            if _mentions_record(left) and not _deferred(right) and left.count(".") == 1:
                 column = left.split(".", 1)[1]
                 value = resolve(right, {})
                 if column not in filters:
                     filters[column] = value
                     continue
-            if _mentions_record(right) and not _mentions_record(left) and right.count(".") == 1:
+            if _mentions_record(right) and not _deferred(left) and right.count(".") == 1:
                 column = right.split(".", 1)[1]
                 value = resolve(left, {})
                 if column not in filters:

@@ -92,3 +92,27 @@ async def test_transformers():
         validate_transformer({"explode": True})
     with pytest.raises(TransformerError):
         await apply_transformer({}, "unknown")
+
+
+def test_array_items_can_be_unnamed_objects():
+    model = compile_model(
+        "Sale",
+        [{"name": "lines", "type": "array", "items": {"type": "object", "fields": [
+            {"name": "variant_id", "type": "integer", "required": True}]}}],
+    )
+    sale = model(lines=[{"variant_id": 3}])
+    assert sale.lines[0].variant_id == 3
+
+
+def test_one_broken_schema_does_not_take_the_others_down():
+    problems: list[str] = []
+    compiled = compile_schemas(
+        {
+            "Address": [{"name": "city", "type": "string", "required": True}],
+            "Broken": [{"name": "x", "type": "ref", "schema": "Missing"}],
+            "Order": [{"name": "ship_to", "type": "ref", "schema": "Address"}],
+        },
+        problems=problems,
+    )
+    assert set(compiled) == {"Address", "Order"}
+    assert problems and problems[0].startswith("schema Broken:")

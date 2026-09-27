@@ -509,3 +509,38 @@ def test_mime_patterns():
     assert "text/html" not in patterns and "imagex/png" not in patterns
     assert "text/csv" in MimePatterns(["*/*"])
     assert ", ".join(patterns) == "image/*, application/pdf"
+
+
+async def test_input_policies_see_the_body_on_resources_and_routes(acme):
+    """Gates decide before the body is read; `$input` conditions wait for it."""
+    api = acme
+    await api.studio.post(
+        f"{ENV}/policies",
+        json={"name": "small", "condition": {"all": [{"authenticated": True}, {"lte": ["$input.total", 100]}]}},
+    )
+    await api.studio.post(
+        f"{ENV}/policies",
+        json={"name": "few_items", "condition": {"all": [{"authenticated": True}, {"lte": ["$input.items", 5]}]}},
+    )
+    await api.studio.put(
+        f"{ENV}/resources/orders",
+        json={**ORDERS, "operations": {**ORDERS["operations"], "create": {"enabled": True, "policy": "small"}}},
+    )
+    await api.studio.post(
+        f"{ENV}/routes",
+        json={
+            "method": "POST",
+            "path": "/small-quotes",
+            "handler_type": "function",
+            "handler": "quote",
+            "policy": "few_items",
+            "input_fields": [{"name": "items", "type": "integer", "required": True}],
+        },
+    )
+    ada = api.user_headers("acme", "development", user_id="7")
+    assert (await api.http.post("/rest/v1/orders", json={"total": 40}, headers=ada)).status_code == 201
+    assert (await api.http.post("/rest/v1/orders", json={"total": 400}, headers=ada)).status_code == 403
+    assert (await api.http.post("/rest/v1/small-quotes", json={"items": 3}, headers=ada)).status_code == 200
+    assert (await api.http.post("/rest/v1/small-quotes", json={"items": 9}, headers=ada)).status_code == 403
+    anonymous = api.context_headers("acme", "development")
+    assert (await api.http.post("/rest/v1/small-quotes", json={"items": 3}, headers=anonymous)).status_code == 401

@@ -18,11 +18,12 @@ from typing import TYPE_CHECKING, Any
 
 from sillo import HttpContext
 from sillo import json as json_response
+from sillo.auth.exceptions import AuthenticationFailed, PermissionDenied
 from sillo.helpers.strings import pascal_case
 
-from app.compiler.common import cache_key
+from app.compiler.common import PlanGate, cache_key
 from pawabase_kit.flows import FlowError
-from pawabase_kit.policies import PolicyGate, build_policy_context
+from pawabase_kit.policies import build_policy_context
 from pawabase_kit.ratelimit import rate_limit_middleware
 from pawabase_kit.schemas import compile_model
 from pawabase_kit.telemetry import note
@@ -71,7 +72,10 @@ def register_route(app: SilloApp, state: EnvironmentState, route: Any) -> str:
         f"rl:{state.project_ref}:{state.env_name}:route:{route.id}",
         platform.settings.redis_url,
     )
-    gate = PolicyGate(route.policy or "authenticated", engine=state.engine, scope="routes:invoke")
+    policy = route.policy or "authenticated"
+    # The gate decides what it can before the body is read; conditions on
+    # $input are checked in the handler, once the body has been validated.
+    gate = PlanGate(policy, engine=state.engine, scope="routes:invoke")
 
     async def run_handler(ctx: HttpContext, body: Any) -> Any:
         from app.execution import call_function, run_flow
@@ -89,6 +93,12 @@ def register_route(app: SilloApp, state: EnvironmentState, route: Any) -> str:
                 return json_response(
                     cached["body"], status_code=cached["status"], headers=cached["headers"]
                 )
+        decision = await state.engine.check(policy, build_policy_context(ctx, input=payload["body"]))
+        if not decision:
+            user = ctx.scope.get("user")
+            if user is None or not getattr(user, "is_authenticated", False):
+                raise AuthenticationFailed("Authentication required")
+            raise PermissionDenied(decision.reason)
         context = build_policy_context(ctx)
         try:
             request_id = ctx.state.request_id
