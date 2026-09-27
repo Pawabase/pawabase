@@ -130,7 +130,7 @@ function Editor({ project, env, flow, blocks }) {
               deleteKeyCode={["Backspace", "Delete"]}
               fitView
               proOptions={{ hideAttribution: true }}
-              colorMode="dark"
+              colorMode="system"
             >
               <Background gap={22} size={1.5} color="var(--line-2)" />
               <Controls />

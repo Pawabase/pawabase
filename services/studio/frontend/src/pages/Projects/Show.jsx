@@ -1,8 +1,9 @@
 import { Link, router } from "@inertiajs/react";
 import { useState } from "react";
 import Layout from "../../components/Layout";
-import { Badge, Button, Card, Field, Modal, PageHead, Table, useAction, when } from "../../components/ui";
-import { del, patch, post } from "../../lib/api";
+import { Icon } from "../../components/icons";
+import { Badge, Button, Card, Field, Modal, PageHead, Switch, Table, useAction, when } from "../../components/ui";
+import { del, get, patch, post } from "../../lib/api";
 
 export default function ProjectShow({ project, envs }) {
   const [modal, setModal] = useState(null);
@@ -19,6 +20,7 @@ export default function ProjectShow({ project, envs }) {
         description={project.description || `Project ${project.ref}`}
         actions={<>
           <Button onClick={reloadCode} disabled={busy}>Reload code</Button>
+          <Button onClick={() => setModal("export")}><Icon name="braces" />Export blueprint</Button>
           <Button onClick={() => setModal("edit")}>Edit</Button>
           <Button variant="primary" onClick={() => setModal("env")}>New environment</Button>
         </>}
@@ -49,6 +51,7 @@ export default function ProjectShow({ project, envs }) {
       {modal === "env" && <NewEnvironment project={project} envs={envs} onClose={() => setModal(null)} onDone={reload} />}
       {modal === "edit" && <EditProject project={project} onClose={() => setModal(null)} onDone={reload} />}
       {modal === "promote" && <Promote project={project} envs={envs} onClose={() => setModal(null)} />}
+      {modal === "export" && <ExportBlueprint project={project} envs={envs} onClose={() => setModal(null)} />}
     </Layout>
   );
 }
@@ -110,6 +113,49 @@ function Promote({ project, envs, onClose }) {
         ))}
       </div>
       {result && <pre className="code-block">{JSON.stringify(result, null, 2)}</pre>}
+    </Modal>
+  );
+}
+
+function ExportBlueprint({ project, envs, onClose }) {
+  const [env, setEnv] = useState(envs.find((e) => e.is_default)?.name || envs[0]?.name || "");
+  const [withData, setWithData] = useState(false);
+  const [maxRows, setMaxRows] = useState(200);
+  const [run, busy] = useAction();
+  const download = async () => {
+    const doc = await run(
+      () => get(`/projects/${project.ref}/envs/${env}/blueprint`, { params: { data: withData, max_rows: maxRows } }),
+      "Blueprint downloaded",
+    );
+    if (!doc) return;
+    const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `${project.ref}-${env}.blueprint.json`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    onClose();
+  };
+  return (
+    <Modal title="Export a blueprint" onClose={onClose} footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={busy || !env} onClick={download}><Icon name="braces" />Download JSON</Button></>}>
+      <p className="muted" style={{ margin: 0 }}>
+        A blueprint is this system as one JSON file: resources, policies, flows, routes, schemas, transformers, buckets,
+        mail templates, subscriptions, webhooks, inbound hooks, schedules and roles. Share it, and anyone can create a
+        new project from it. A blueprint can only <b>create</b> projects; it never changes a running one.
+      </p>
+      <Field label="Environment">
+        <select value={env} onChange={(e) => setEnv(e.target.value)}>
+          {envs.map((e) => <option key={e.name} value={e.name}>{e.name}</option>)}
+        </select>
+      </Field>
+      <Switch checked={withData} onChange={setWithData} label="Include sample data" hint="Records from each resource, so the new project starts with realistic content." />
+      {withData && (
+        <Field label="Rows per resource" hint="Up to 5,000.">
+          <input type="number" min="1" max="5000" value={maxRows} onChange={(e) => setMaxRows(Number(e.target.value))} style={{ maxWidth: 160 }} />
+        </Field>
+      )}
+      <div className="alert info">Never included: secrets, API keys, webhook signing secrets, OAuth credentials, database/storage/mail settings, users.</div>
+      {withData && <div className="alert warn">Sample data leaves with the file. Don't include personal data you aren't allowed to share.</div>}
     </Modal>
   );
 }

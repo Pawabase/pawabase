@@ -21,7 +21,15 @@ from app.accounts import (
 )
 from app.environment import AuthConfig, load_config
 from app.platform import Akountz
-from app.sessions import log_event, refresh_session, revoke_all, revoke_session, start_session
+from app.sessions import (
+    KEEP,
+    log_event,
+    refresh_session,
+    require_membership,
+    revoke_all,
+    revoke_session,
+    start_session,
+)
 from database.models import AuthUser
 from pawabase_kit.context import require_context
 from pawabase_kit.principal import Principal
@@ -44,6 +52,9 @@ class TokenRequest(BaseModel):
     refresh_token: str | None = None
     mfa_token: str | None = None
     code: str | None = None
+    #: An organization slug the tokens should be issued for. On refresh, switches
+    #: the session's organization (``null`` leaves it); omit to keep it.
+    org: str | None = Field(default=None, max_length=63)
 
 
 class UserUpdate(BaseModel):
@@ -144,7 +155,13 @@ def register(r: Router, akountz: Akountz) -> None:
         if grant == "refresh_token":
             if not body.refresh_token:
                 raise HTTPException(status_code=400, detail="refresh_token is required")
-            return await refresh_session(akountz, config, body.refresh_token, ctx=ctx)
+            return await refresh_session(
+                akountz,
+                config,
+                body.refresh_token,
+                ctx=ctx,
+                org=body.org if "org" in body.model_fields_set else KEEP,
+            )
         if grant == "mfa":
             return await _complete_mfa(ctx, config, body)
         if not body.email or not body.password:
@@ -202,8 +219,9 @@ def register(r: Router, akountz: Akountz) -> None:
         if config.require_email_verification and user.email_verified_at is None:
             raise HTTPException(status_code=403, detail="confirm your email address first")
         if user.mfa_enabled and config.mfa_enabled:
+            await require_membership(config, user, body.org)
             challenge = await links.issue(
-                akountz, config, "mfa", user=user, data={"method": "password"}
+                akountz, config, "mfa", user=user, data={"method": "password", "org": body.org}
             )
             await log_event(config.project, config.env, "mfa_challenge", user=user, ctx=ctx)
             return {
@@ -211,7 +229,7 @@ def register(r: Router, akountz: Akountz) -> None:
                 "mfa_token": challenge,
                 "factors": ["totp", "recovery_code"],
             }
-        return await start_session(akountz, config, user, method="password", ctx=ctx)
+        return await start_session(akountz, config, user, method="password", ctx=ctx, org=body.org)
 
     async def _complete_mfa(ctx: HttpContext, config: AuthConfig, body: TokenRequest):
         if not body.mfa_token or not body.code:
@@ -237,7 +255,10 @@ def register(r: Router, akountz: Akountz) -> None:
             raise HTTPException(status_code=400, detail="the code is not valid")
         await links.consume(akountz, config, "mfa", body.mfa_token)
         method = (row.data or {}).get("method", "password")
-        session = await start_session(akountz, config, user, method=method, ctx=ctx, aal="aal2")
+        org = (row.data or {}).get("org") or body.org
+        session = await start_session(
+            akountz, config, user, method=method, ctx=ctx, aal="aal2", org=org
+        )
         session["mfa_method"] = used
         return session
 

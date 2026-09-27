@@ -251,13 +251,21 @@ class Now(Block):
     category = "data"
     config = [
         {"name": "offset_seconds", "type": "integer", "default": 0},
-        {"name": "format", "type": "string", "enum": ["iso", "unix"], "default": "iso"},
+        {
+            "name": "format",
+            "type": "string",
+            "enum": ["iso", "date", "unix"],
+            "default": "iso",
+            "description": "iso: 2026-09-28T08:00:00+00:00 · date: 2026-09-28 · unix: seconds",
+        },
     ]
 
     async def run(self, config, run):
         moment = datetime.now(UTC) + timedelta(seconds=int(config.get("offset_seconds") or 0))
         if config.get("format") == "unix":
             return BlockResult(output=int(moment.timestamp()))
+        if config.get("format") == "date":
+            return BlockResult(output=moment.date().isoformat())
         return BlockResult(output=moment.isoformat())
 
 

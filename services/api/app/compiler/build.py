@@ -64,7 +64,7 @@ def compile_environment(state: EnvironmentState) -> SilloApp:
         docs=[Atlas(path="/docs")],
     )
     app.state["environment"] = state
-    problems: list[str] = []
+    problems: list[str] = list(state.schema_problems)
 
     async def flow_error(ctx: HttpContext, exc: FlowError):
         status = exc.status if 400 <= exc.status < 600 else 500

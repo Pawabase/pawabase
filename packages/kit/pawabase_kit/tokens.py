@@ -130,8 +130,10 @@ def issue_user_token(
     roles: list[str] | None = None,
     permissions: list[str] | None = None,
     org: str | None = None,
+    org_role: str | None = None,
     aal: str = "aal1",
     extra: dict[str, Any] | None = None,
+    app: dict[str, Any] | None = None,
 ) -> str:
     """Mint a user access token for one project environment.
 
@@ -145,8 +147,12 @@ def issue_user_token(
         ttl: Lifetime in seconds.
         email, roles, permissions, org: Identity claims services can use in
             policies without calling Akountz.
+        org_role: The caller's role in ``org`` (``owner``, ``admin``, ``member``, ``viewer``).
         aal: Authentication assurance level, ``aal2`` after MFA.
-        extra: Additional public claims (``user_metadata``).
+        extra: Additional public claims (``user_metadata``), as ``meta``. Users can
+            edit these, so policies must not trust them.
+        app: Administrator-controlled claims (``app_metadata``), as ``app``. Only
+            admins can change them, so policies may rely on them.
     """
     now = int(time.time())
     payload: dict[str, Any] = {
@@ -165,9 +171,12 @@ def issue_user_token(
         "roles": roles or [],
         "perms": permissions or [],
         "org": org,
+        "org_role": org_role,
     }
     if extra:
         payload["meta"] = extra
+    if app:
+        payload["app"] = app
     return sillo_jwt.encode(payload, derive_env_secret(master, project, env))
 
 

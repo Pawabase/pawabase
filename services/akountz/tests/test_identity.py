@@ -7,7 +7,7 @@ import pytest
 
 from pawabase_kit.clients import ServiceError
 from pawabase_kit.settings import PLATFORM_ENV, PLATFORM_PROJECT
-from pawabase_kit.tokens import verify_user_token
+from pawabase_kit.tokens import peek_claims, verify_user_token
 
 
 @pytest.fixture
@@ -218,3 +218,63 @@ async def test_platform_operator_bootstrap(akz):
         headers=headers,
     )
     assert signup.status_code == 403  # nobody signs up to operate the platform
+
+
+async def test_organization_scoped_tokens_and_app_claims(akz):
+    owner = await akz.signup("ada@example.com")
+    await akz.signup("bob@example.com")
+    owner_h = akz.headers(token=owner["access_token"])
+    for slug in ("acme-inc", "globex"):
+        created = await akz.http.post(
+            "/auth/v1/orgs", json={"slug": slug, "name": slug.title()}, headers=owner_h
+        )
+        assert created.status_code == 201, created.text
+
+    def sign_in(email, **extra):
+        return akz.http.post(
+            "/auth/v1/token",
+            json={"email": email, "password": "correct-horse-1", **extra},
+            headers=akz.headers(),
+        )
+
+    # Signing in for an organization puts it, and the caller's role there, in the token.
+    scoped = (await sign_in("ada@example.com", org="acme-inc")).json()
+    assert scoped["org"] == "acme-inc" and scoped["org_role"] == "owner"
+    claims = peek_claims(scoped["access_token"])
+    assert claims["org"] == "acme-inc" and claims["org_role"] == "owner"
+
+    # Refreshing keeps it; naming another org switches; null leaves every org.
+    kept = (await akz.http.post("/auth/v1/token", json={"grant_type": "refresh_token", "refresh_token": scoped["refresh_token"]}, headers=akz.headers())).json()
+    assert kept["org"] == "acme-inc"
+    switched = (await akz.http.post("/auth/v1/token", json={"grant_type": "refresh_token", "refresh_token": kept["refresh_token"], "org": "globex"}, headers=akz.headers())).json()
+    assert switched["org"] == "globex" and peek_claims(switched["access_token"])["org"] == "globex"
+    left = (await akz.http.post("/auth/v1/token", json={"grant_type": "refresh_token", "refresh_token": switched["refresh_token"], "org": None}, headers=akz.headers())).json()
+    assert left["org"] is None and peek_claims(left["access_token"])["org"] is None
+
+    # Not a member: refused, on sign-in and on switch.
+    assert (await sign_in("bob@example.com", org="acme-inc")).status_code == 403
+    bob = (await sign_in("bob@example.com")).json()
+    refused = await akz.http.post("/auth/v1/token", json={"grant_type": "refresh_token", "refresh_token": bob["refresh_token"], "org": "acme-inc"}, headers=akz.headers())
+    assert refused.status_code == 403
+
+    # A role change in the org applies on the next refresh.
+    invite = await akz.http.post("/auth/v1/orgs/acme-inc/invitations", json={"email": "bob@example.com", "role": "viewer"}, headers=owner_h)
+    assert invite.status_code == 201, invite.text
+    accepted = await akz.http.post("/auth/v1/invitations/accept", json={"token": akz.api.last_token()}, headers=akz.headers(token=bob["access_token"]))
+    assert accepted.status_code in (200, 201), accepted.text
+    bob_scoped = (await sign_in("bob@example.com", org="acme-inc")).json()
+    assert bob_scoped["org_role"] == "viewer"
+    bob_id = bob_scoped["user"]["id"]
+    await akz.http.put(f"/auth/v1/orgs/acme-inc/members/{bob_id}", json={"role": "admin"}, headers=owner_h)
+    promoted = (await akz.http.post("/auth/v1/token", json={"grant_type": "refresh_token", "refresh_token": bob_scoped["refresh_token"]}, headers=akz.headers())).json()
+    assert promoted["org_role"] == "admin"
+
+    # app_metadata is admin-controlled and becomes the "app" claim; user_metadata stays "meta".
+    await akz.admin.patch(
+        f"/admin/v1/projects/acme/envs/development/users/{owner['user']['id']}",
+        json={"app_metadata": {"family_id": "f-12"}},
+    )
+    await akz.http.patch("/auth/v1/user", json={"data": {"family_id": "forged"}}, headers=owner_h)
+    fresh = peek_claims((await sign_in("ada@example.com")).json()["access_token"])
+    assert fresh["app"] == {"family_id": "f-12"}
+    assert fresh["meta"]["family_id"] == "forged"

@@ -12,6 +12,7 @@ from sillo.auth.apikey import generate_api_key
 from sillo.exceptions import HTTPException
 from tortoise.transactions import in_transaction
 
+from app import blueprints
 from app.platform import Platform
 from app.secrets import mask
 from database.models import Environment, Project, ProjectKey, Secret
@@ -35,6 +36,10 @@ class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str = ""
     environments: list[str] = Field(default_factory=lambda: list(DEFAULT_ENVIRONMENTS))
+    blueprint: dict[str, Any] | None = Field(
+        default=None,
+        description="Build the new project from an exported blueprint. Only possible at creation.",
+    )
 
 
 class ProjectUpdate(BaseModel):
@@ -141,7 +146,17 @@ def register(r: Router, platform: Platform) -> None:
     async def create_project(ctx: HttpContext, body: ProjectCreate):
         if await Project.filter(ref=body.ref).exists():
             raise HTTPException(status_code=409, detail=f"project {body.ref!r} already exists")
+        blueprint = None
+        if body.blueprint is not None:
+            try:
+                blueprint = blueprints.parse(body.blueprint)
+            except blueprints.BlueprintError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail={"message": "this is not a valid blueprint", "where": exc.where, "problem": exc.message},
+                ) from exc
         keys: dict[str, dict[str, str]] = {}
+        environments: list[Environment] = []
         async with in_transaction():
             project = await Project.create(
                 ref=body.ref, name=body.name, description=body.description, created_by=_actor(ctx)
@@ -158,6 +173,7 @@ def register(r: Router, platform: Platform) -> None:
                     settings={"public_docs": False},
                 )
                 environment.project = project
+                environments.append(environment)
                 publishable, _ = await create_key(
                     environment, "Default publishable key", "publishable", created_by=_actor(ctx)
                 )
@@ -165,8 +181,28 @@ def register(r: Router, platform: Platform) -> None:
                     environment, "Default secret key", "secret", created_by=_actor(ctx)
                 )
                 keys[name] = {"publishable": publishable, "secret": secret}
-        await audit(ctx, "project.created", project=project.ref, target=project.ref)
-        return created({**dump(project), "environments": list(keys), "keys": keys})
+        report = None
+        if blueprint is not None:
+            try:
+                report = await blueprints.apply(platform, project, environments, blueprint)
+            except blueprints.BlueprintError as exc:
+                # A half-built project is worse than none: remove it and say where it failed.
+                await project.delete()
+                platform.envs.forget(project.ref)
+                raise HTTPException(
+                    status_code=422,
+                    detail={"message": "the blueprint could not be applied", "where": exc.where, "problem": exc.message},
+                ) from exc
+        await audit(
+            ctx,
+            "project.created",
+            project=project.ref,
+            target=project.ref,
+            details={"blueprint": blueprints.summarise(blueprint)} if blueprint else None,
+        )
+        return created(
+            {**dump(project), "environments": list(keys), "keys": keys, "blueprint": report}
+        )
 
     @r.get("/projects/{ref}", auth=OPERATOR, tags=["projects"], summary="Get a project")
     async def get_project_view(ctx: HttpContext, ref: str):
@@ -201,6 +237,32 @@ def register(r: Router, platform: Platform) -> None:
         platform.envs.forget(ref)
         await audit(ctx, "project.deleted", project=ref, target=ref)
         return no_content()
+
+    @r.get(
+        "/projects/{ref}/envs/{env}/blueprint",
+        auth=OPERATOR,
+        tags=["projects"],
+        summary="Export the environment as a blueprint (definitions, roles, optional sample data)",
+    )
+    async def export_blueprint(ctx: HttpContext, ref: str, env: str):
+        environment = await get_environment(ref, env)
+        try:
+            include_data = ctx.query_params.get("data", "false").lower() in ("1", "true", "yes")
+            max_rows = int(ctx.query_params.get("max_rows", 200))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="max_rows must be an integer") from exc
+        document = await blueprints.export_environment(
+            platform, environment, include_data=include_data, max_rows=max_rows
+        )
+        await audit(
+            ctx,
+            "project.blueprint_exported",
+            project=ref,
+            env=env,
+            target=ref,
+            details={"data": include_data, **blueprints.summarise(blueprints.parse(document))},
+        )
+        return document
 
     @r.post(
         "/projects/{ref}/code/reload",

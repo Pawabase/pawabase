@@ -11,10 +11,12 @@ they would accept.
 from __future__ import annotations
 
 import json
+from html import escape as html_escape
 from pathlib import Path
 from typing import Any
 
-from sillo import HttpContext, SilloApp
+from sillo import HttpContext, SilloApp, html
+from sillo.openapi.ui import ATLAS_JS
 from sillo.responses import JSONResponse
 from sillo.static import StaticFiles
 from sillo_inertia import Inertia, back, redirect, render, set_errors
@@ -201,6 +203,57 @@ def register_routes(
             }
 
         return await page(ctx, "Flows/Editor", load)
+
+    # ── API docs ─────────────────────────────────────────────────────────
+    #
+    # The public page at <gateway>/docs/v1/<ref>/<env> exists only while the
+    # environment sets ``public_docs``. Operators get the same document here,
+    # signed in, whatever that setting says, with "try it" aimed at the gateway.
+
+    async def environment_openapi(ctx: HttpContext, ref: str, env: str) -> dict[str, Any]:
+        document = await call(ctx, "GET", f"/projects/{ref}/envs/{env}/openapi")
+        document["servers"] = [{"url": settings.public_gateway_url, "description": f"Gateway · {ref} · {env}"}]
+        return document
+
+    @app.get("/projects/{ref}/{env}/api-docs/openapi.json", exclude_from_schema=True)
+    async def api_docs_spec(ctx: HttpContext, ref: str, env: str):
+        if await signed_in(ctx) is None:
+            return JSONResponse({"detail": "sign in first"}, status_code=401)
+        try:
+            return JSONResponse(await environment_openapi(ctx, ref, env))
+        except ServiceError as exc:
+            return JSONResponse({"detail": str(exc.body)}, status_code=exc.status)
+
+    @app.get("/projects/{ref}/{env}/api-docs", exclude_from_schema=True)
+    async def api_docs(ctx: HttpContext, ref: str, env: str):
+        if await signed_in(ctx) is None:
+            return redirect("/login")
+        try:
+            document = await environment_openapi(ctx, ref, env)
+        except ServiceError as exc:
+            return JSONResponse({"detail": str(exc.body)}, status_code=exc.status)
+        # The spec is embedded rather than fetched by URL: Atlas offers the
+        # page's own origin ("This server", i.e. Studio) as the default target
+        # whenever the spec came from that origin, which would aim every
+        # "try it" request at Studio instead of the gateway.
+        spec = json.dumps(document).replace("</", "<\\/")
+        title = html_escape(f"{document.get('info', {}).get('title', ref)} · {env}")
+        return html(
+            f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{title}</title>
+    <style>html, body {{ margin: 0; padding: 0; height: 100%; }}</style>
+</head>
+<body>
+    <div id="app"></div>
+    <script src="{ATLAS_JS}"></script>
+    <script>Atlas.createApiReference('#app', {{ theme: 'auto', spec: {spec} }});</script>
+</body>
+</html>"""
+        )
 
     @app.get("/projects/{ref}/{env}/{section}", exclude_from_schema=True)
     async def section_page(ctx: HttpContext, ref: str, env: str, section: str):

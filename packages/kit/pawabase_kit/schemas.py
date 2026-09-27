@@ -121,7 +121,8 @@ def _python_type(
         return list[_python_type(items, f"{model_name}Item", registry, mode)]  # type: ignore[misc]
     if kind == "object":
         return compile_model(
-            f"{model_name}{spec['name'].title()}",
+            # Array items are field specs too, but they don't need a name.
+            f"{model_name}{str(spec.get('name') or 'Item').title()}",
             spec.get("fields", []),
             mode=mode,
             registry=registry,
@@ -206,13 +207,29 @@ def compile_model(
 
 
 def compile_schemas(
-    schemas: Mapping[str, Sequence[Mapping[str, Any]]], *, mode: Mode = "any"
+    schemas: Mapping[str, Sequence[Mapping[str, Any]]],
+    *,
+    mode: Mode = "any",
+    problems: list[str] | None = None,
 ) -> dict[str, type[BaseModel]]:
-    """Compile a project's reusable schemas, resolving references between them."""
+    """Compile a project's reusable schemas, resolving references between them.
+
+    With *problems*, a schema that can't be compiled is left out and described
+    there, so one broken schema doesn't take every other schema (and every
+    resource and route that references one) down with it. Without it, the first
+    failure raises.
+    """
     compiled: dict[str, Any] = dict(schemas)
     for name, fields in schemas.items():
-        compiled[name] = compile_model(name, fields, mode=mode, registry=compiled)
-    return compiled
+        try:
+            compiled[name] = compile_model(name, fields, mode=mode, registry=compiled)
+        except (SchemaError, KeyError, TypeError, ValueError) as exc:
+            if problems is None:
+                raise
+            compiled.pop(name, None)
+            problems.append(f"schema {name}: {exc}")
+    # A schema that referenced one compiled later may still hold raw fields.
+    return {name: model for name, model in compiled.items() if not isinstance(model, (list, tuple))}
 
 
 def validate_payload(

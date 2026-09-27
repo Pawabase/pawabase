@@ -118,3 +118,12 @@ def test_partial_pins_dollar_values_safely():
     residual = partial({"eq": ["$record.owner_id", "$auth.user_id"]}, context)
     filters, _ = pushdown(residual)
     assert filters == {"owner_id": "$weird"}
+
+
+def test_input_is_deferred_at_plan_time_and_never_pushed_down():
+    condition = {"all": [{"authenticated": True}, {"eq": ["$input.store_id", "$auth.org"]}]}
+    context = {**ctx(), "auth": {**ctx()["auth"], "org": "shop"}}
+    plan = PolicyEngine().plan(condition, context)  # no body yet: not refused
+    assert plan.allowed and plan.filters == {} and plan.residual is not None
+    assert evaluate(condition, {**context, "input": {"store_id": "shop"}})
+    assert not evaluate(condition, {**context, "input": {"store_id": "other"}})

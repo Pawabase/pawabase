@@ -127,7 +127,7 @@ export default function Layout({ title, crumbs = [], children, full }) {
           {project && env && (
             <div className="sidebar-card">
               <p>Your API is live. Browse the generated docs.</p>
-              <a className="btn sm" href={`${props.gateway_url}/docs/v1/${project.ref}/${env}`} target="_blank" rel="noreferrer">
+              <a className="btn sm" href={`/projects/${project.ref}/${env}/api-docs`} target="_blank" rel="noreferrer" title="Always available to operators. Publish them at /docs/v1 with public_docs in Settings.">
                 <Icon name="external" /> Open API docs
               </a>
             </div>

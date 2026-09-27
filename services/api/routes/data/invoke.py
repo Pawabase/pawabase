@@ -30,8 +30,8 @@ async def _json_body(ctx: HttpContext) -> Any:
         raise HTTPException(status_code=400, detail="the body must be JSON") from exc
 
 
-async def _enforce(ctx: HttpContext, engine: Any, policy: Any) -> dict[str, Any]:
-    context = build_policy_context(ctx)
+async def _enforce(ctx: HttpContext, engine: Any, policy: Any, body: Any = None) -> dict[str, Any]:
+    context = build_policy_context(ctx, input=body)
     decision = await engine.check(policy, context)
     if not decision:
         if not context["auth"]["authenticated"]:
@@ -66,13 +66,14 @@ def register(app: Any, platform: Platform) -> None:
             raise HTTPException(status_code=404, detail=f"no function {name!r}")
         if not context.allows_scope("functions:invoke"):
             raise PermissionDenied("This API key lacks the 'functions:invoke' scope")
-        policy_context = await _enforce(ctx, state.engine, spec.policy)
+        body = await _json_body(ctx)
+        policy_context = await _enforce(ctx, state.engine, spec.policy, body)
         try:
             result = await call_function(
                 platform,
                 state,
                 name,
-                await _json_body(ctx),
+                body,
                 trigger="http",
                 auth=policy_context["auth"],
                 request_id=ctx.headers.get("x-request-id"),
@@ -95,13 +96,14 @@ def register(app: Any, platform: Platform) -> None:
         entry, policy = _flow_http_policy(flow) if flow else (None, None)
         if flow is None or entry is None:
             raise HTTPException(status_code=404, detail=f"no directly invocable flow {name!r}")
-        policy_context = await _enforce(ctx, state.engine, policy)
+        body = await _json_body(ctx)
+        policy_context = await _enforce(ctx, state.engine, policy, body)
         try:
             run = await run_flow(
                 platform,
                 state,
                 name,
-                await _json_body(ctx),
+                body,
                 trigger="http",
                 auth=policy_context["auth"],
                 credential=policy_context["credential"],

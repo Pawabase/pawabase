@@ -67,6 +67,7 @@ class EnvironmentState:
     secret_values: dict[str, str] = field(default_factory=dict)
     engine: PolicyEngine = field(default_factory=PolicyEngine)
     compiled_schemas: dict[str, Any] = field(default_factory=dict)
+    schema_problems: list[str] = field(default_factory=list)
     _compiled: Any = None
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -179,10 +180,9 @@ async def load_state(platform: Platform, environment: Environment) -> Environmen
         except Exception:  # sealed under another master key
             continue
     state.engine = PolicyEngine(state.policies, python=python_policies())
-    try:
-        state.compiled_schemas = compile_schemas(state.schemas)
-    except Exception:  # a broken reusable schema must not take down the environment
-        state.compiled_schemas = {}
+    # A broken schema is skipped and reported; the rest stay usable.
+    state.schema_problems = []
+    state.compiled_schemas = compile_schemas(state.schemas, problems=state.schema_problems)
     return state
 
 

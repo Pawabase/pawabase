@@ -38,7 +38,12 @@ def create_app(
     )
     clients = clients or {
         "api": ServiceClient(
-            settings.api_url, secret=settings.internal_secret, issuer="studio", audience="api"
+            settings.api_url,
+            secret=settings.internal_secret,
+            issuer="studio",
+            audience="api",
+            # Creating a project from a blueprint builds every environment in one call.
+            timeout=120.0,
         ),
         "akountz": ServiceClient(
             settings.akountz_url,
