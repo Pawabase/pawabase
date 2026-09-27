@@ -55,7 +55,9 @@ class WebhookDelivery(Model):
     """One attempt series to deliver an event to an outbound webhook."""
 
     id = fields.IntField(primary_key=True)
-    endpoint = fields.ForeignKeyField("models.WebhookEndpoint", related_name="deliveries", on_delete=fields.CASCADE)
+    endpoint = fields.ForeignKeyField(
+        "models.WebhookEndpoint", related_name="deliveries", on_delete=fields.CASCADE
+    )
     event_id = fields.CharField(max_length=64, db_index=True)
     event = fields.CharField(max_length=128)
     payload = AnyJSONField(null=True)

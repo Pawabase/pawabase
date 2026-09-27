@@ -44,7 +44,9 @@ class Environment(Model):
     """
 
     id = fields.IntField(primary_key=True)
-    project = fields.ForeignKeyField("models.Project", related_name="environments", on_delete=fields.CASCADE)
+    project = fields.ForeignKeyField(
+        "models.Project", related_name="environments", on_delete=fields.CASCADE
+    )
     name = fields.CharField(max_length=63)
     is_default = fields.BooleanField(default=False)
     infra = AnyJSONField(default=dict)
@@ -72,7 +74,9 @@ class ProjectKey(Model):
     """
 
     id = fields.UUIDField(primary_key=True)
-    environment = fields.ForeignKeyField("models.Environment", related_name="keys", on_delete=fields.CASCADE)
+    environment = fields.ForeignKeyField(
+        "models.Environment", related_name="keys", on_delete=fields.CASCADE
+    )
     name = fields.CharField(max_length=200)
     role = fields.CharField(max_length=20, default="publishable")
     prefix = fields.CharField(max_length=24)
@@ -92,7 +96,9 @@ class Secret(Model):
     """An encrypted configuration value. Its plaintext never leaves the API."""
 
     id = fields.IntField(primary_key=True)
-    environment = fields.ForeignKeyField("models.Environment", related_name="secrets", on_delete=fields.CASCADE)
+    environment = fields.ForeignKeyField(
+        "models.Environment", related_name="secrets", on_delete=fields.CASCADE
+    )
     name = fields.CharField(max_length=128)
     ciphertext = fields.TextField()
     description = fields.TextField(default="")

@@ -5,5 +5,8 @@ async def test_boot_and_projects(api):
     assert set(created["keys"]) == {"development", "production"}
     listing = await api.studio.get("/platform/v1/projects")
     assert listing["data"][0]["ref"] == "acme"
-    policy = await api.studio.post("/platform/v1/projects/acme/envs/development/policies", json={"name": "editors", "condition": {"role": "editor"}})
+    policy = await api.studio.post(
+        "/platform/v1/projects/acme/envs/development/policies",
+        json={"name": "editors", "condition": {"role": "editor"}},
+    )
     assert policy["name"] == "editors"

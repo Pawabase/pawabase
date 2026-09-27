@@ -7,10 +7,9 @@ through here, and Angula reads realtime channel rules from here.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
-from pawabase_kit.service import SERVICE_ONLY
 from pydantic import BaseModel, Field
 from sillo import HttpContext, Router, accepted
 from sillo.auth.apikey import hash_api_key
@@ -18,6 +17,7 @@ from sillo.exceptions import HTTPException
 
 from app.platform import Platform
 from database.models import Environment, PolicyDef, ProjectKey
+from pawabase_kit.service import SERVICE_ONLY
 
 
 class ResolveBody(BaseModel):
@@ -52,9 +52,17 @@ def register(app: Any, platform: Platform) -> None:
 
     @r.post("/keys/resolve", auth=SERVICE_ONLY, request_model=ResolveBody)
     async def resolve_key(ctx: HttpContext, body: ResolveBody):
-        key = await ProjectKey.filter(key_hash=hash_api_key(body.key)).select_related("environment__project").first()
-        now = datetime.now(timezone.utc)
-        if key is None or key.revoked_at is not None or (key.expires_at is not None and key.expires_at <= now):
+        key = (
+            await ProjectKey.filter(key_hash=hash_api_key(body.key))
+            .select_related("environment__project")
+            .first()
+        )
+        now = datetime.now(UTC)
+        if (
+            key is None
+            or key.revoked_at is not None
+            or (key.expires_at is not None and key.expires_at <= now)
+        ):
             raise HTTPException(status_code=401, detail="invalid API key")
         if key.last_used_at is None or now - key.last_used_at > USAGE_WRITE_INTERVAL:
             await ProjectKey.filter(id=key.id).update(last_used_at=now, use_count=key.use_count + 1)
@@ -75,9 +83,17 @@ def register(app: Any, platform: Platform) -> None:
         config = dict(state.environment.auth or {})
         providers = {}
         for name, provider in (config.get("providers") or {}).items():
-            providers[name] = {key: platform.resolve_value(state, value) for key, value in (provider or {}).items()}
+            providers[name] = {
+                key: platform.resolve_value(state, value) for key, value in (provider or {}).items()
+            }
         config["providers"] = providers
-        return {"project": project, "env": env, "project_name": state.project_name, "auth": config, "public_url": platform.settings.public_url}
+        return {
+            "project": project,
+            "env": env,
+            "project_name": state.project_name,
+            "auth": config,
+            "public_url": platform.settings.public_url,
+        }
 
     @r.get("/environments/{project}/{env}/realtime", auth=SERVICE_ONLY)
     async def realtime_config(ctx: HttpContext, project: str, env: str):
@@ -90,13 +106,22 @@ def register(app: Any, platform: Platform) -> None:
             if resource.realtime:
                 # Resource channels follow the resource's own read policy.
                 read = (resource.operations or {}).get("list") or {}
-                channels.append({"pattern": f"resource:{resource.name}", "subscribe": read.get("policy") or "authenticated", "publish": "service", "presence": False})
+                channels.append(
+                    {
+                        "pattern": f"resource:{resource.name}",
+                        "subscribe": read.get("policy") or "authenticated",
+                        "publish": "service",
+                        "presence": False,
+                    }
+                )
         return {
             "version": environment.version,
             "channels": channels,
             "allow_client_publish": realtime.get("allow_client_publish", True),
             "default_policy": realtime.get("default_policy", "authenticated"),
-            "policies": {p.name: {"condition": p.condition, "description": p.description} for p in policies},
+            "policies": {
+                p.name: {"condition": p.condition, "description": p.description} for p in policies
+            },
         }
 
     @r.post("/mail", auth=SERVICE_ONLY, request_model=MailBody)
@@ -105,8 +130,17 @@ def register(app: Any, platform: Platform) -> None:
 
         await platform.state(body.project, body.env)
         job_id = await platform.dispatch(
-            SendMailJob, project=body.project, env=body.env, target=",".join(body.to), source=body.source,
-            to=body.to, subject=body.subject, text=body.text, html=body.html, template=body.template, data=body.data,
+            SendMailJob,
+            project=body.project,
+            env=body.env,
+            target=",".join(body.to),
+            source=body.source,
+            to=body.to,
+            subject=body.subject,
+            text=body.text,
+            html=body.html,
+            template=body.template,
+            data=body.data,
         )
         return accepted({"job_id": job_id})
 
@@ -119,6 +153,8 @@ def register(app: Any, platform: Platform) -> None:
     @r.get("/environments", auth=SERVICE_ONLY)
     async def environments(ctx: HttpContext):
         rows = await Environment.all().select_related("project")
-        return {"data": [{"project": e.project.ref, "env": e.name, "version": e.version} for e in rows]}
+        return {
+            "data": [{"project": e.project.ref, "env": e.name, "version": e.version} for e in rows]
+        }
 
     app.mount_router(r)

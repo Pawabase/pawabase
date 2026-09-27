@@ -17,8 +17,6 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from pawabase_kit.auth import OperatorBackend, ProjectUserBackend
-from pawabase_kit.service import create_service
 from sillo import SilloApp
 from sillo.record import Record
 
@@ -26,11 +24,15 @@ from app.config import ApiSettings
 from app.dispatch import DataPlaneDispatcher
 from app.platform import Platform
 from database.config import MODEL_MODULES, database_config
+from pawabase_kit.auth import OperatorBackend, ProjectUserBackend
+from pawabase_kit.service import create_service
 
 logger = logging.getLogger("pawabase.api")
 
 
-def create_app(settings: ApiSettings | None = None, *, platform: Platform | None = None) -> SilloApp:
+def create_app(
+    settings: ApiSettings | None = None, *, platform: Platform | None = None
+) -> SilloApp:
     settings = settings or ApiSettings()
     platform = platform or Platform(settings)
 
@@ -39,11 +41,15 @@ def create_app(settings: ApiSettings | None = None, *, platform: Platform | None
         settings,
         title="Pawabase API",
         description="The Pawabase platform API: projects, resources, flows, events, jobs, storage and the management plane.",
-        backends=[OperatorBackend(settings.jwt_master_secret), ProjectUserBackend(settings.jwt_master_secret)],
+        backends=[
+            OperatorBackend(settings.jwt_master_secret),
+            ProjectUserBackend(settings.jwt_master_secret),
+        ],
         inner=[DataPlaneDispatcher(platform)],
         installables=[Record(database_config(settings), tuple(MODEL_MODULES))],
     )
     app.state["platform"] = platform
+    platform.app = app
 
     @app.on_startup
     async def start_platform() -> None:

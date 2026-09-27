@@ -12,16 +12,23 @@ import time
 from collections.abc import AsyncIterator
 from typing import Any
 
-from pawabase_kit.context import require_context
-from pawabase_kit.policies import credential_context
 from pydantic import BaseModel, Field
 from sillo import HttpContext, Router, created, no_content, stream
 from sillo import json as json_response
 from sillo.exceptions import HTTPException
-from sillo.storage import FileNotFound, PolicyRefused, SignatureInvalid, StorageError, UnsafeKey, stream_upload
+from sillo.storage import (
+    FileNotFound,
+    PolicyRefused,
+    SignatureInvalid,
+    StorageError,
+    UnsafeKey,
+    stream_upload,
+)
 from sillo.storage.routes import GUARDS, INLINE, _quote
 
 from app.platform import Platform
+from pawabase_kit.context import require_context
+from pawabase_kit.policies import credential_context
 
 
 class SignRequest(BaseModel):
@@ -54,7 +61,9 @@ async def _serve(held: Any, key: str, *, user: Any, signed: bool):
         "cache-control": "private, max-age=0, must-revalidate",
         **dict(GUARDS),
     }
-    return stream(held.get(key, user=user, signed=signed), content_type=info.content_type, headers=headers)
+    return stream(
+        held.get(key, user=user, signed=signed), content_type=info.content_type, headers=headers
+    )
 
 
 async def _body_stream(ctx: HttpContext) -> tuple[AsyncIterator[bytes], str]:
@@ -89,7 +98,12 @@ def register(app: Any, platform: Platform) -> None:
     @r.get("/buckets", summary="Buckets in this environment")
     async def buckets(ctx: HttpContext):
         state = await platform.state_for(require_context(ctx))
-        return {"data": [{"name": b.name, "public": b.public, "accepts": b.accepts, "max_bytes": b.max_bytes} for b in state.buckets.values()]}
+        return {
+            "data": [
+                {"name": b.name, "public": b.public, "accepts": b.accepts, "max_bytes": b.max_bytes}
+                for b in state.buckets.values()
+            ]
+        }
 
     @r.get("/object/{bucket}/{key:path}", summary="Download an object")
     async def download(ctx: HttpContext, bucket: str, key: str):
@@ -102,13 +116,32 @@ def register(app: Any, platform: Platform) -> None:
         try:
             stored = await held.put(key, body, content_type=declared, user=_user(ctx))
         except PolicyRefused as exc:
-            raise HTTPException(status_code=403, detail="the bucket's policy refused this upload") from exc
+            raise HTTPException(
+                status_code=403, detail="the bucket's policy refused this upload"
+            ) from exc
         except (UnsafeKey, StorageError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return created({"bucket": bucket, "key": stored.key, "size": stored.size, "content_type": stored.content_type, "etag": stored.etag})
+        return created(
+            {
+                "bucket": bucket,
+                "key": stored.key,
+                "size": stored.size,
+                "content_type": stored.content_type,
+                "etag": stored.etag,
+            }
+        )
 
-    r.put("/object/{bucket}/{key:path}", handler=upload, summary="Upload an object (raw body or multipart 'file')")
-    r.post("/object/{bucket}/{key:path}", handler=upload, summary="Upload an object (multipart 'file')", exclude_from_schema=True)
+    r.put(
+        "/object/{bucket}/{key:path}",
+        handler=upload,
+        summary="Upload an object (raw body or multipart 'file')",
+    )
+    r.post(
+        "/object/{bucket}/{key:path}",
+        handler=upload,
+        summary="Upload an object (multipart 'file')",
+        exclude_from_schema=True,
+    )
 
     @r.delete("/object/{bucket}/{key:path}", summary="Delete an object")
     async def delete(ctx: HttpContext, bucket: str, key: str):
@@ -126,11 +159,26 @@ def register(app: Any, platform: Platform) -> None:
         _, held = await bucket_for(ctx, bucket)
         q = ctx.query_params
         try:
-            page = await held.page(q.get("prefix", ""), cursor=q.get("cursor", ""), limit=min(int(q.get("limit", 100)), 1000), user=_user(ctx))
+            page = await held.page(
+                q.get("prefix", ""),
+                cursor=q.get("cursor", ""),
+                limit=min(int(q.get("limit", 100)), 1000),
+                user=_user(ctx),
+            )
         except PolicyRefused as exc:
-            raise HTTPException(status_code=403, detail="the bucket's policy refused this listing") from exc
+            raise HTTPException(
+                status_code=403, detail="the bucket's policy refused this listing"
+            ) from exc
         return {
-            "files": [{"key": f.key, "size": f.size, "content_type": f.content_type, "modified": f.modified} for f in page.files],
+            "files": [
+                {
+                    "key": f.key,
+                    "size": f.size,
+                    "content_type": f.content_type,
+                    "modified": f.modified,
+                }
+                for f in page.files
+            ],
             "prefixes": list(page.prefixes),
             "cursor": page.cursor,
         }
@@ -144,9 +192,17 @@ def register(app: Any, platform: Platform) -> None:
         if not held.policy.allows(action, key, _user(ctx)):
             raise HTTPException(status_code=403, detail="you may not grant access you do not have")
         try:
-            url = held.signed_url(key, method=body.method, expires_in=body.expires_in, content_type=body.content_type, max_bytes=body.max_bytes)
+            url = held.signed_url(
+                key,
+                method=body.method,
+                expires_in=body.expires_in,
+                content_type=body.content_type,
+                max_bytes=body.max_bytes,
+            )
         except PolicyRefused as exc:
-            raise HTTPException(status_code=403, detail="this bucket does not issue signed URLs for that") from exc
+            raise HTTPException(
+                status_code=403, detail="this bucket does not issue signed URLs for that"
+            ) from exc
         except UnsafeKey as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"url": url, "expires_at": int(time.time()) + body.expires_in, "method": body.method}
@@ -159,22 +215,45 @@ def register(app: Any, platform: Platform) -> None:
         token = ctx.query_params.get("token", "")
         method = ctx.scope["method"]
         try:
-            grant = platform.storage.signer(state, bucket).verify(token, key=key, method="GET" if method == "HEAD" else method)
+            grant = platform.storage.signer(state, bucket).verify(
+                token, key=key, method="GET" if method == "HEAD" else method
+            )
         except SignatureInvalid as exc:
             raise _not_found() from exc
         if method in ("GET", "HEAD"):
             return await _serve(held, key, user=None, signed=True)
         body, declared = await _body_stream(ctx)
         if grant.content_type and declared.split(";")[0].strip() != grant.content_type:
-            raise HTTPException(status_code=415, detail=f"this URL accepts {grant.content_type} only")
+            raise HTTPException(
+                status_code=415, detail=f"this URL accepts {grant.content_type} only"
+            )
         try:
-            stored = await held.put(key, _limited(body, grant.max_bytes), content_type=declared, signed=True)
+            stored = await held.put(
+                key, _limited(body, grant.max_bytes), content_type=declared, signed=True
+            )
         except (UnsafeKey, StorageError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return created({"bucket": bucket, "key": stored.key, "size": stored.size, "content_type": stored.content_type})
+        return created(
+            {
+                "bucket": bucket,
+                "key": stored.key,
+                "size": stored.size,
+                "content_type": stored.content_type,
+            }
+        )
 
-    r.get("/signed/{project}/{env}/{bucket}/{key:path}", handler=signed, summary="Fetch through a signed URL", exclude_from_schema=True)
-    r.put("/signed/{project}/{env}/{bucket}/{key:path}", handler=signed, summary="Upload through a signed URL", exclude_from_schema=True)
+    r.get(
+        "/signed/{project}/{env}/{bucket}/{key:path}",
+        handler=signed,
+        summary="Fetch through a signed URL",
+        exclude_from_schema=True,
+    )
+    r.put(
+        "/signed/{project}/{env}/{bucket}/{key:path}",
+        handler=signed,
+        summary="Upload through a signed URL",
+        exclude_from_schema=True,
+    )
     app.mount_router(r)
 
 

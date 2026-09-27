@@ -13,16 +13,24 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from pawabase_kit.context import SCOPE_KEY
-
 from app.compiler.build import REST_PREFIX
+from pawabase_kit.context import SCOPE_KEY
 
 FORWARDED_KEYS = ("user", "auth", "auth_scheme", "route", "pawabase.policy", "pawabase.plan")
 
 
 async def _send_json(send, status: int, body: dict[str, Any]) -> None:
     payload = json.dumps(body).encode()
-    await send({"type": "http.response.start", "status": status, "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(payload)).encode())]})
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(payload)).encode()),
+            ],
+        }
+    )
     await send({"type": "http.response.body", "body": payload})
 
 
@@ -33,19 +41,30 @@ class DataPlaneDispatcher:
 
     async def __call__(self, scope, receive, send):
         path = scope.get("path", "")
-        if scope["type"] != "http" or not (path == REST_PREFIX or path.startswith(REST_PREFIX + "/")):
+        if scope["type"] != "http" or not (
+            path == REST_PREFIX or path.startswith(REST_PREFIX + "/")
+        ):
             await self.app(scope, receive, send)
             return
         context = scope.get(SCOPE_KEY)
         if context is None:
-            await _send_json(send, 401, {"error": "missing_api_key", "message": "Send a project API key in the apikey header."})
+            await _send_json(
+                send,
+                401,
+                {
+                    "error": "missing_api_key",
+                    "message": "Send a project API key in the apikey header.",
+                },
+            )
             return
         from sillo.exceptions import HTTPException
 
         try:
             state = await self.platform.state_for(context)
         except HTTPException as exc:
-            await _send_json(send, exc.status_code, {"error": "unknown_environment", "message": str(exc.detail)})
+            await _send_json(
+                send, exc.status_code, {"error": "unknown_environment", "message": str(exc.detail)}
+            )
             return
         compiled = await state.compiled()
         inner = dict(scope)

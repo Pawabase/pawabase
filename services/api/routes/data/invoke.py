@@ -4,10 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from pawabase_kit.context import require_context
-from pawabase_kit.flows import FlowError
-from pawabase_kit.functions import get_function
-from pawabase_kit.policies import build_policy_context
 from sillo import HttpContext, Router
 from sillo import json as json_response
 from sillo.auth.exceptions import AuthenticationFailed, PermissionDenied
@@ -16,6 +12,10 @@ from sillo.exceptions import HTTPException
 from app.compiler.common import error_body
 from app.execution import NotFound, call_function, run_flow
 from app.platform import Platform
+from pawabase_kit.context import require_context
+from pawabase_kit.flows import FlowError
+from pawabase_kit.functions import get_function
+from pawabase_kit.policies import build_policy_context
 
 
 async def _json_body(ctx: HttpContext) -> Any:
@@ -68,9 +68,19 @@ def register(app: Any, platform: Platform) -> None:
             raise PermissionDenied("This API key lacks the 'functions:invoke' scope")
         policy_context = await _enforce(ctx, state.engine, spec.policy)
         try:
-            result = await call_function(platform, state, name, await _json_body(ctx), trigger="http", auth=policy_context["auth"], request_id=ctx.headers.get("x-request-id"))
+            result = await call_function(
+                platform,
+                state,
+                name,
+                await _json_body(ctx),
+                trigger="http",
+                auth=policy_context["auth"],
+                request_id=ctx.headers.get("x-request-id"),
+            )
         except FlowError as exc:
-            return json_response(error_body(exc.code, exc.message, exc.details), status_code=exc.status)
+            return json_response(
+                error_body(exc.code, exc.message, exc.details), status_code=exc.status
+            )
         return {"data": result}
 
     app.mount_router(r)
@@ -87,14 +97,35 @@ def register(app: Any, platform: Platform) -> None:
             raise HTTPException(status_code=404, detail=f"no directly invocable flow {name!r}")
         policy_context = await _enforce(ctx, state.engine, policy)
         try:
-            run = await run_flow(platform, state, name, await _json_body(ctx), trigger="http", auth=policy_context["auth"], credential=policy_context["credential"], entry=entry, request_id=ctx.headers.get("x-request-id"))
+            run = await run_flow(
+                platform,
+                state,
+                name,
+                await _json_body(ctx),
+                trigger="http",
+                auth=policy_context["auth"],
+                credential=policy_context["credential"],
+                entry=entry,
+                request_id=ctx.headers.get("x-request-id"),
+            )
         except NotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except FlowError as exc:
-            code = (exc.details or {}).get("code", "error") if exc.code == "raised" and isinstance(exc.details, dict) else exc.code
-            return json_response(error_body(code, exc.message, None if exc.code == "raised" else exc.details), status_code=exc.status)
+            code = (
+                (exc.details or {}).get("code", "error")
+                if exc.code == "raised" and isinstance(exc.details, dict)
+                else exc.code
+            )
+            return json_response(
+                error_body(code, exc.message, None if exc.code == "raised" else exc.details),
+                status_code=exc.status,
+            )
         if run.response is not None:
-            return json_response(run.response.body, status_code=run.response.status, headers=run.response.headers or None)
+            return json_response(
+                run.response.body,
+                status_code=run.response.status,
+                headers=run.response.headers or None,
+            )
         return {"data": run.result()}
 
     app.mount_router(f)

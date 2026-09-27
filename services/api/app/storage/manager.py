@@ -12,11 +12,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from pawabase_kit.policies import PolicyStorage
-from pawabase_kit.telemetry import note
 from sillo.storage import Bucket, LocalDriver, MemoryDriver
 from sillo.storage.base import Action, StorageEvent
 from sillo.storage.signing import Signer
+
+from pawabase_kit.policies import PolicyStorage
+from pawabase_kit.telemetry import note
 
 from .s3 import S3Driver
 
@@ -50,7 +51,9 @@ class StorageManager:
         signer = self._signers.get(key)
         if signer is None:
             secret = f"{self.platform.settings.internal_secret}:storage:{state.project_ref}:{state.env_name}"
-            signer = self._signers[key] = Signer(secret, f"{state.project_ref}/{state.env_name}/{bucket}")
+            signer = self._signers[key] = Signer(
+                secret, f"{state.project_ref}/{state.env_name}/{bucket}"
+            )
         return signer
 
     def driver(self, state: EnvironmentState, bucket: str) -> Any:
@@ -65,7 +68,9 @@ class StorageManager:
             driver = MemoryDriver()
         elif kind == "s3":
             base_prefix = str(config.get("prefix") or "").strip("/")
-            prefix = "/".join(part for part in (base_prefix, state.project_ref, state.env_name, bucket) if part)
+            prefix = "/".join(
+                part for part in (base_prefix, state.project_ref, state.env_name, bucket) if part
+            )
             driver = S3Driver(
                 bucket=config.get("bucket", ""),
                 endpoint=config.get("endpoint", ""),
@@ -98,12 +103,19 @@ class StorageManager:
                     name,
                     project=project,
                     env=env,
-                    payload={"bucket": event.bucket, "key": event.key, "size": event.size, "driver": event.driver},
+                    payload={
+                        "bucket": event.bucket,
+                        "key": event.key,
+                        "size": event.size,
+                        "driver": event.driver,
+                    },
                 )
 
         return listener
 
-    def bucket(self, state: EnvironmentState, name: str, *, credential: dict[str, Any] | None = None) -> Bucket:
+    def bucket(
+        self, state: EnvironmentState, name: str, *, credential: dict[str, Any] | None = None
+    ) -> Bucket:
         """A Sillo bucket for this request, with its policy bound to *credential*."""
         model: BucketModel | None = state.buckets.get(name)
         if model is None:
@@ -122,7 +134,9 @@ class StorageManager:
         max_bytes = int(model.max_bytes or self.platform.settings.max_upload_bytes)
         driver = self.driver(state, name)
         # Sillo buckets name themselves in storage events; keep the Pawabase name.
-        return Bucket(name, driver, policy=policy, max_bytes=max_bytes, accepts=tuple(model.accepts or ()))
+        return Bucket(
+            name, driver, policy=policy, max_bytes=max_bytes, accepts=tuple(model.accepts or ())
+        )
 
     async def close(self) -> None:
         for driver in self._drivers.values():

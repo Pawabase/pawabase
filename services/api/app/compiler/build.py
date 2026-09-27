@@ -12,10 +12,6 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from pawabase_kit.auth import ProjectUserBackend
-from pawabase_kit.flows import FlowError
-from pawabase_kit.principal import Principal
-from pawabase_kit.transformers import TransformerError
 from pydantic import ValidationError
 from sillo import HttpContext, SilloApp
 from sillo import json as json_response
@@ -27,6 +23,10 @@ from app.compiler.routes import register_route
 from app.data.source import DataSourceError
 from app.data.sql import SqlError
 from app.execution import NotFound
+from pawabase_kit.auth import ProjectUserBackend
+from pawabase_kit.flows import FlowError
+from pawabase_kit.principal import Principal
+from pawabase_kit.transformers import TransformerError
 
 if TYPE_CHECKING:
     from app.state import EnvironmentState
@@ -69,7 +69,14 @@ def compile_environment(state: EnvironmentState) -> SilloApp:
     async def flow_error(ctx: HttpContext, exc: FlowError):
         status = exc.status if 400 <= exc.status < 600 else 500
         details = exc.details if isinstance(exc.details, (dict, list)) else None
-        return json_response(error_body(exc.code if exc.code != "raised" else (details or {}).get("code", "error"), exc.message, details if exc.code != "raised" else None), status_code=status)
+        return json_response(
+            error_body(
+                exc.code if exc.code != "raised" else (details or {}).get("code", "error"),
+                exc.message,
+                details if exc.code != "raised" else None,
+            ),
+            status_code=status,
+        )
 
     async def sql_error(ctx: HttpContext, exc: SqlError):
         return json_response(error_body("bad_request", str(exc)), status_code=400)
@@ -81,7 +88,10 @@ def compile_environment(state: EnvironmentState) -> SilloApp:
         return json_response(error_body("database_unavailable", str(exc)), status_code=503)
 
     async def invalid(ctx: HttpContext, exc: ValidationError):
-        return json_response(error_body("invalid", "validation failed", json.loads(exc.json(include_url=False))), status_code=422)
+        return json_response(
+            error_body("invalid", "validation failed", json.loads(exc.json(include_url=False))),
+            status_code=422,
+        )
 
     async def transformer_error(ctx: HttpContext, exc: TransformerError):
         return json_response(error_body("transformer_error", str(exc)), status_code=500)

@@ -20,7 +20,7 @@ import logging
 import os
 import signal
 import socket
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sillo.work.scheduler import CronTrigger, IntervalTrigger, SchedulerManager
@@ -94,11 +94,17 @@ class PlatformScheduler:
             if key in self._registered:
                 continue
             try:
-                trigger = CronTrigger(spec["cron"]) if spec.get("cron") else IntervalTrigger(float(spec["every"]))
+                trigger = (
+                    CronTrigger(spec["cron"])
+                    if spec.get("cron")
+                    else IntervalTrigger(float(spec["every"]))
+                )
             except Exception as exc:
                 logger.warning("schedule %s has an invalid trigger: %s", spec["name"], exc)
                 continue
-            job = self.manager.schedule(self.fire, trigger, name=spec["name"], kwargs={"spec": spec}, coalesce=True)
+            job = self.manager.schedule(
+                self.fire, trigger, name=spec["name"], kwargs={"spec": spec}, coalesce=True
+            )
             self._registered[key] = job.id
 
     # ── firing ───────────────────────────────────────────────────────────
@@ -112,19 +118,50 @@ class PlatformScheduler:
         status = "queued"
         try:
             if spec["kind"] == "flow":
-                await platform.dispatch(RunFlowJob, project=project, env=env, target=spec["flow"], source="schedule",
-                                        flow=spec["flow"], input={"scheduled_at": _now()}, trigger="schedule", entry=spec["node"],
-                                        auth={"authenticated": False, "kind": "system"})
+                await platform.dispatch(
+                    RunFlowJob,
+                    project=project,
+                    env=env,
+                    target=spec["flow"],
+                    source="schedule",
+                    flow=spec["flow"],
+                    input={"scheduled_at": _now()},
+                    trigger="schedule",
+                    entry=spec["node"],
+                    auth={"authenticated": False, "kind": "system"},
+                )
             elif spec["target_type"] == "flow":
-                await platform.dispatch(RunFlowJob, project=project, env=env, target=spec["target"], source="schedule",
-                                        flow=spec["target"], input=spec.get("payload") or {"scheduled_at": _now()}, trigger="schedule",
-                                        auth={"authenticated": False, "kind": "system"})
+                await platform.dispatch(
+                    RunFlowJob,
+                    project=project,
+                    env=env,
+                    target=spec["target"],
+                    source="schedule",
+                    flow=spec["target"],
+                    input=spec.get("payload") or {"scheduled_at": _now()},
+                    trigger="schedule",
+                    auth={"authenticated": False, "kind": "system"},
+                )
             elif spec["target_type"] == "function":
-                await platform.dispatch(RunFunctionJob, project=project, env=env, target=spec["target"], source="schedule",
-                                        function=spec["target"], input=spec.get("payload") or {"scheduled_at": _now()}, trigger="schedule",
-                                        auth={"authenticated": False, "kind": "system"})
+                await platform.dispatch(
+                    RunFunctionJob,
+                    project=project,
+                    env=env,
+                    target=spec["target"],
+                    source="schedule",
+                    function=spec["target"],
+                    input=spec.get("payload") or {"scheduled_at": _now()},
+                    trigger="schedule",
+                    auth={"authenticated": False, "kind": "system"},
+                )
             elif spec["target_type"] == "event":
-                await platform.bus.emit(spec["target"], project=project, env=env, payload=spec.get("payload"), actor="scheduler")
+                await platform.bus.emit(
+                    spec["target"],
+                    project=project,
+                    env=env,
+                    payload=spec.get("payload"),
+                    actor="scheduler",
+                )
                 status = "emitted"
         except Exception:
             logger.exception("schedule %s failed to fire", spec["name"])
@@ -132,7 +169,7 @@ class PlatformScheduler:
         if spec["kind"] == "schedule":
             schedule = await Schedule.get_or_none(id=spec["id"])
             if schedule is not None:
-                schedule.last_run_at = datetime.now(timezone.utc)
+                schedule.last_run_at = datetime.now(UTC)
                 schedule.last_status = status
                 schedule.run_count += 1
                 await schedule.save(update_fields=["last_run_at", "last_status", "run_count"])
@@ -162,26 +199,34 @@ class PlatformScheduler:
     def describe(self) -> list[dict[str, Any]]:
         jobs = []
         for job in self.manager.list():
-            jobs.append({
-                "id": job.id,
-                "name": job.name,
-                "status": getattr(job.status, "value", str(job.status)),
-                "next_run_time": job.next_run_time,
-                "runs": job._runs,
-                "errors": job._errors,
-            })
+            jobs.append(
+                {
+                    "id": job.id,
+                    "name": job.name,
+                    "status": getattr(job.status, "value", str(job.status)),
+                    "next_run_time": job.next_run_time,
+                    "runs": job._runs,
+                    "errors": job._errors,
+                }
+            )
         return jobs
 
 
 def _key(spec: dict[str, Any]) -> str:
-    parts = [spec["kind"], spec["project"], spec["env"], str(spec.get("cron")), str(spec.get("every"))]
+    parts = [
+        spec["kind"],
+        spec["project"],
+        spec["env"],
+        str(spec.get("cron")),
+        str(spec.get("every")),
+    ]
     parts += [str(spec.get(k)) for k in ("id", "target_type", "target", "flow", "node")]
     parts.append(repr(spec.get("payload")))
     return "|".join(parts)
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 async def main(**overrides: Any) -> None:
@@ -207,19 +252,26 @@ async def main(**overrides: Any) -> None:
         except NotImplementedError:
             pass
     name = f"scheduler:{socket.gethostname()}:{os.getpid()}"
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     logger.info("scheduler %s running", name)
     try:
         while not stop.is_set():
             stats = scheduler.manager.stats
             await WorkerHeartbeat.update_or_create(
                 name=name,
-                defaults={"kind": "scheduler", "queues": [], "status": "running", "started_at": started,
-                          "last_seen": datetime.now(timezone.utc), "processed": stats.runs_total, "concurrency": stats.jobs_active},
+                defaults={
+                    "kind": "scheduler",
+                    "queues": [],
+                    "status": "running",
+                    "started_at": started,
+                    "last_seen": datetime.now(UTC),
+                    "processed": stats.runs_total,
+                    "concurrency": stats.jobs_active,
+                },
             )
             try:
                 await asyncio.wait_for(stop.wait(), timeout=10)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
     finally:
         await WorkerHeartbeat.filter(name=name).update(status="stopped")

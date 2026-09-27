@@ -17,19 +17,18 @@ import asyncio
 import json
 import time
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-from pawabase_kit.flows import BaseRuntime, FlowError, NotAvailable
-from pawabase_kit.functions import FunctionContext, get_function
-from pawabase_kit.policies.engine import evaluate
-from pawabase_kit.telemetry import note
 from sillo.storage import chunks, collect
 
 from app.data.inspect import is_read_only
 from app.data.store import Filter
 from app.platform import Platform
 from app.state import EnvironmentState
+from pawabase_kit.flows import BaseRuntime, FlowError, NotAvailable
+from pawabase_kit.functions import FunctionContext, get_function
+from pawabase_kit.policies.engine import evaluate
 
 
 class ApiRuntime(BaseRuntime):
@@ -58,7 +57,9 @@ class ApiRuntime(BaseRuntime):
 
         store = await self.state.store(resource)
         parsed = [Filter(column, "eq", value) for column, value in (filters or {}).items()]
-        rows, total = await store.list(filters=parsed, sort=parse_sort(sort, store.spec), limit=limit, offset=offset)
+        rows, total = await store.list(
+            filters=parsed, sort=parse_sort(sort, store.spec), limit=limit, offset=offset
+        )
         return {"data": rows, "total": total, "limit": limit, "offset": offset}
 
     async def resource_get(self, resource, record_id):
@@ -69,7 +70,15 @@ class ApiRuntime(BaseRuntime):
 
         store = await self.state.store(resource)
         record = await store.create(dict(data))
-        await after_write(self.platform, self.state, resource, "created", record, actor=self.auth.get("user_id"), request_id=self.request_id)
+        await after_write(
+            self.platform,
+            self.state,
+            resource,
+            "created",
+            record,
+            actor=self.auth.get("user_id"),
+            request_id=self.request_id,
+        )
         return record
 
     async def resource_update(self, resource, record_id, data):
@@ -78,7 +87,15 @@ class ApiRuntime(BaseRuntime):
         store = await self.state.store(resource)
         record = await store.update(record_id, dict(data))
         if record is not None:
-            await after_write(self.platform, self.state, resource, "updated", record, actor=self.auth.get("user_id"), request_id=self.request_id)
+            await after_write(
+                self.platform,
+                self.state,
+                resource,
+                "updated",
+                record,
+                actor=self.auth.get("user_id"),
+                request_id=self.request_id,
+            )
         return record
 
     async def resource_delete(self, resource, record_id):
@@ -88,14 +105,28 @@ class ApiRuntime(BaseRuntime):
         existing = await store.get(record_id)
         deleted = await store.delete(record_id)
         if deleted and existing is not None:
-            await after_write(self.platform, self.state, resource, "deleted", existing, actor=self.auth.get("user_id"), request_id=self.request_id)
+            await after_write(
+                self.platform,
+                self.state,
+                resource,
+                "deleted",
+                existing,
+                actor=self.auth.get("user_id"),
+                request_id=self.request_id,
+            )
         return deleted
 
     async def db_query(self, sql, params=None):
         if not is_read_only(sql):
-            raise FlowError("db.query only runs single read-only statements; use resource blocks or a transaction to write", status=400, code="write_refused")
+            raise FlowError(
+                "db.query only runs single read-only statements; use resource blocks or a transaction to write",
+                status=400,
+                code="write_refused",
+            )
         source = await self.state.source()
-        return await asyncio.wait_for(source.fetch(sql, list(params or [])), timeout=self.platform.settings.query_timeout)
+        return await asyncio.wait_for(
+            source.fetch(sql, list(params or [])), timeout=self.platform.settings.query_timeout
+        )
 
     async def db_transaction(self, operations):
         from app.resources import after_write
@@ -111,9 +142,15 @@ class ApiRuntime(BaseRuntime):
                     record = await store.create(operation.get("data") or {}, client=client)
                     effects.append((operation["resource"], "created", record))
                 elif op == "update":
-                    record = await store.update(operation["id"], operation.get("data") or {}, client=client)
+                    record = await store.update(
+                        operation["id"], operation.get("data") or {}, client=client
+                    )
                     if record is None:
-                        raise FlowError(f"{operation['resource']} {operation['id']} not found", status=404, code="not_found")
+                        raise FlowError(
+                            f"{operation['resource']} {operation['id']} not found",
+                            status=404,
+                            code="not_found",
+                        )
                     effects.append((operation["resource"], "updated", record))
                 elif op == "delete":
                     record = await store.delete(operation["id"], client=client)
@@ -121,7 +158,15 @@ class ApiRuntime(BaseRuntime):
                     raise FlowError(f"unknown transaction operation {op!r}", code="bad_config")
                 results.append(record)
         for resource, change, record in effects:  # only once committed
-            await after_write(self.platform, self.state, resource, change, record, actor=self.auth.get("user_id"), request_id=self.request_id)
+            await after_write(
+                self.platform,
+                self.state,
+                resource,
+                change,
+                record,
+                actor=self.auth.get("user_id"),
+                request_id=self.request_id,
+            )
         return results
 
     # ── cache ────────────────────────────────────────────────────────────
@@ -141,7 +186,9 @@ class ApiRuntime(BaseRuntime):
     # ── events, jobs, realtime ───────────────────────────────────────────
 
     async def emit(self, name, payload):
-        return await self.platform.emit(self.state, name, payload, actor=self.auth.get("user_id"), request_id=self.request_id)
+        return await self.platform.emit(
+            self.state, name, payload, actor=self.auth.get("user_id"), request_id=self.request_id
+        )
 
     async def dispatch_flow(self, flow, input, *, delay=0, queue=None):
         from app.jobs.flows import RunFlowJob
@@ -149,8 +196,16 @@ class ApiRuntime(BaseRuntime):
         if flow not in self.state.flows:
             raise FlowError(f"no flow {flow!r}", code="unknown_flow")
         return await self.platform.dispatch(
-            RunFlowJob, project=self.state.project_ref, env=self.state.env_name, queue=queue, delay=delay, target=flow,
-            flow=flow, input=input, trigger="job", auth=self.auth,
+            RunFlowJob,
+            project=self.state.project_ref,
+            env=self.state.env_name,
+            queue=queue,
+            delay=delay,
+            target=flow,
+            flow=flow,
+            input=input,
+            trigger="job",
+            auth=self.auth,
         )
 
     async def dispatch_function(self, function, input, *, delay=0, queue=None):
@@ -159,8 +214,16 @@ class ApiRuntime(BaseRuntime):
         if get_function(self.state.project_ref, function) is None:
             raise FlowError(f"no function {function!r}", code="unknown_function")
         return await self.platform.dispatch(
-            RunFunctionJob, project=self.state.project_ref, env=self.state.env_name, queue=queue, delay=delay, target=function,
-            function=function, input=input, trigger="job", auth=self.auth,
+            RunFunctionJob,
+            project=self.state.project_ref,
+            env=self.state.env_name,
+            queue=queue,
+            delay=delay,
+            target=function,
+            function=function,
+            input=input,
+            trigger="job",
+            auth=self.auth,
         )
 
     async def publish(self, channel, event, payload):
@@ -169,11 +232,20 @@ class ApiRuntime(BaseRuntime):
     # ── storage and mail ─────────────────────────────────────────────────
 
     def _bucket(self, bucket):
-        return self.platform.storage.bucket(self.state, bucket, credential={"is_service": True, "role": "service", "scopes": []})
+        return self.platform.storage.bucket(
+            self.state, bucket, credential={"is_service": True, "role": "service", "scopes": []}
+        )
 
     async def storage_put(self, bucket, key, content, content_type=""):
-        stored = await self._bucket(bucket).put(key, chunks(content), content_type=content_type, signed=True)
-        return {"bucket": bucket, "key": stored.key, "size": stored.size, "content_type": stored.content_type}
+        stored = await self._bucket(bucket).put(
+            key, chunks(content), content_type=content_type, signed=True
+        )
+        return {
+            "bucket": bucket,
+            "key": stored.key,
+            "size": stored.size,
+            "content_type": stored.content_type,
+        }
 
     async def storage_read(self, bucket, key, limit=1_048_576):
         return await collect(self._bucket(bucket).get(key, signed=True), limit=limit)
@@ -188,22 +260,47 @@ class ApiRuntime(BaseRuntime):
         from app.jobs.mail import SendMailJob
 
         job_id = await self.platform.dispatch(
-            SendMailJob, project=self.state.project_ref, env=self.state.env_name, target=",".join(to),
-            to=list(to), subject=subject, text=text, html=html, template=template, data=dict(data or {}),
+            SendMailJob,
+            project=self.state.project_ref,
+            env=self.state.env_name,
+            target=",".join(to),
+            to=list(to),
+            subject=subject,
+            text=text,
+            html=html,
+            template=template,
+            data=dict(data or {}),
         )
         return {"queued": True, "job_id": job_id}
 
     # ── outbound ─────────────────────────────────────────────────────────
 
-    async def http_request(self, method, url, *, headers=None, json=None, params=None, timeout=30.0, retries=0):
+    async def http_request(
+        self, method, url, *, headers=None, json=None, params=None, timeout=30.0, retries=0
+    ):
         from app.outbound import request_with_retries
 
-        return await request_with_retries(self.platform.outbound, method, url, headers=headers, json_body=json, params=params, timeout=timeout, retries=retries)
+        return await request_with_retries(
+            self.platform.outbound,
+            method,
+            url,
+            headers=headers,
+            json_body=json,
+            params=params,
+            timeout=timeout,
+            retries=retries,
+        )
 
     async def webhook_send(self, event, payload):
         from app.webhooks import queue_deliveries
 
-        return await queue_deliveries(self.platform, self.state, event_id=f"manual-{int(time.time() * 1000)}", event=event, payload=payload)
+        return await queue_deliveries(
+            self.platform,
+            self.state,
+            event_id=f"manual-{int(time.time() * 1000)}",
+            event=event,
+            payload=payload,
+        )
 
     # ── platform ─────────────────────────────────────────────────────────
 
@@ -215,13 +312,23 @@ class ApiRuntime(BaseRuntime):
             raise FlowError("function calls are nested too deeply", code="too_deep")
         from app.execution import call_function
 
-        return await call_function(self.platform, self.state, name, input, trigger="flow", auth=self.auth, depth=self.depth + 1)
+        return await call_function(
+            self.platform,
+            self.state,
+            name,
+            input,
+            trigger="flow",
+            auth=self.auth,
+            depth=self.depth + 1,
+        )
 
     async def identity_user(self, user_id):
         from pawabase_kit.clients import ServiceError
         from pawabase_kit.context import PlatformContext
 
-        context = PlatformContext(project=self.state.project_ref, env=self.state.env_name, role="service")
+        context = PlatformContext(
+            project=self.state.project_ref, env=self.state.env_name, role="service"
+        )
         try:
             return await self.platform.akountz.get(f"/admin/v1/users/{user_id}", context=context)
         except ServiceError as exc:
@@ -234,7 +341,9 @@ class ApiRuntime(BaseRuntime):
         return decision.allowed
 
     async def log(self, level, message, data=None):
-        self.logs.append({"level": level, "message": message, "data": data, "at": datetime.now(timezone.utc).isoformat()})
+        self.logs.append(
+            {"level": level, "message": message, "data": data, "at": datetime.now(UTC).isoformat()}
+        )
 
     async def metric(self, name, value=1.0, tags=None):
         from app.metrics import increment
@@ -242,7 +351,9 @@ class ApiRuntime(BaseRuntime):
         await increment(self.state.project_ref, self.state.env_name, name, value, tags or {})
 
 
-def function_context(runtime: ApiRuntime, input: Any, trigger: str, request: Mapping[str, Any] | None = None) -> FunctionContext:
+def function_context(
+    runtime: ApiRuntime, input: Any, trigger: str, request: Mapping[str, Any] | None = None
+) -> FunctionContext:
     return FunctionContext(
         request=request,
         input=input,

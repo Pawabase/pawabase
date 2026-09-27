@@ -16,16 +16,16 @@ import inspect
 import re
 from typing import TYPE_CHECKING, Any
 
-from pawabase_kit.flows import FlowError
-from pawabase_kit.policies import PolicyGate, build_policy_context
-from pawabase_kit.schemas import compile_model
-from pawabase_kit.telemetry import note
-from pawabase_kit.transformers import apply_transformer
 from sillo import HttpContext
 from sillo import json as json_response
 from sillo.helpers.strings import pascal_case
 
 from app.compiler.common import cache_key, rate_limit_middleware
+from pawabase_kit.flows import FlowError
+from pawabase_kit.policies import PolicyGate, build_policy_context
+from pawabase_kit.schemas import compile_model
+from pawabase_kit.telemetry import note
+from pawabase_kit.transformers import apply_transformer
 
 if TYPE_CHECKING:
     from sillo import SilloApp
@@ -36,7 +36,11 @@ METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 
 
 def _model_name(route: Any, suffix: str) -> str:
-    base = pascal_case(route.name or route.path.strip("/").replace("/", "_").replace("{", "").replace("}", "") or "root")
+    base = pascal_case(
+        route.name
+        or route.path.strip("/").replace("/", "_").replace("{", "").replace("}", "")
+        or "root"
+    )
     return f"{base}{suffix}"
 
 
@@ -48,11 +52,24 @@ def register_route(app: SilloApp, state: EnvironmentState, route: Any) -> str:
     request_model = None
     if method in ("POST", "PUT", "PATCH"):
         if route.input_fields:
-            request_model = compile_model(_model_name(route, "Input"), route.input_fields, mode="create", registry=state.compiled_schemas)
+            request_model = compile_model(
+                _model_name(route, "Input"),
+                route.input_fields,
+                mode="create",
+                registry=state.compiled_schemas,
+            )
         elif route.input_schema:
             request_model = state.compiled_schemas.get(route.input_schema)
-    response_model = state.compiled_schemas.get(route.response_schema) if route.response_schema and not route.transformer else None
-    limits = rate_limit_middleware(route.rate_limit, f"rl:{state.project_ref}:{state.env_name}:route:{route.id}", platform.settings.redis_url)
+    response_model = (
+        state.compiled_schemas.get(route.response_schema)
+        if route.response_schema and not route.transformer
+        else None
+    )
+    limits = rate_limit_middleware(
+        route.rate_limit,
+        f"rl:{state.project_ref}:{state.env_name}:route:{route.id}",
+        platform.settings.redis_url,
+    )
     gate = PolicyGate(route.policy or "authenticated", engine=state.engine, scope="routes:invoke")
 
     async def run_handler(ctx: HttpContext, body: Any) -> Any:
@@ -68,7 +85,9 @@ def register_route(app: SilloApp, state: EnvironmentState, route: Any) -> str:
             key = f"route:{route.id}:{cache_key(ctx, payload)}"
             cached = await platform.cache_get(state, key)
             if cached is not None:
-                return json_response(cached["body"], status_code=cached["status"], headers=cached["headers"])
+                return json_response(
+                    cached["body"], status_code=cached["status"], headers=cached["headers"]
+                )
         context = build_policy_context(ctx)
         try:
             request_id = ctx.state.request_id
@@ -77,26 +96,62 @@ def register_route(app: SilloApp, state: EnvironmentState, route: Any) -> str:
         status, headers = 200, {}
         if route.handler_type == "function":
             body_value = payload["body"]
-            function_input = {**payload["params"], **body_value} if isinstance(body_value, dict) else (body_value if body_value is not None else dict(payload["params"]))
-            result = await call_function(platform, state, route.handler, function_input, trigger="http", auth=context["auth"], request_id=request_id, request=payload)
+            function_input = (
+                {**payload["params"], **body_value}
+                if isinstance(body_value, dict)
+                else (body_value if body_value is not None else dict(payload["params"]))
+            )
+            result = await call_function(
+                platform,
+                state,
+                route.handler,
+                function_input,
+                trigger="http",
+                auth=context["auth"],
+                request_id=request_id,
+                request=payload,
+            )
         else:
             entry = _http_entry(state, route)
             run = await run_flow(
-                platform, state, route.handler, payload, trigger="http", auth=context["auth"],
-                credential=context["credential"], request_id=request_id, entry=entry,
+                platform,
+                state,
+                route.handler,
+                payload,
+                trigger="http",
+                auth=context["auth"],
+                credential=context["credential"],
+                request_id=request_id,
+                entry=entry,
             )
             if run.response is not None:
-                status, headers, result = run.response.status, run.response.headers, run.response.body
+                status, headers, result = (
+                    run.response.status,
+                    run.response.headers,
+                    run.response.body,
+                )
             else:
                 result = run.result()
         note("handler", f"{route.handler_type}:{route.handler}")
         if route.transformer:
-            result = await apply_transformer(result, route.transformer, context=context, registry=state.transformers)
+            result = await apply_transformer(
+                result, route.transformer, context=context, registry=state.transformers
+            )
         if key and status < 400:
-            await platform.cache_set(state, key, {"body": result, "status": status, "headers": headers}, ttl=route.cache_ttl)
+            await platform.cache_set(
+                state,
+                key,
+                {"body": result, "status": status, "headers": headers},
+                ttl=route.cache_ttl,
+            )
         return json_response(result, status_code=status, headers=headers or None)
 
-    handler = _make_handler(route.path, run_handler, with_body=request_model is not None, reads_json=method in ("POST", "PUT", "PATCH"))
+    handler = _make_handler(
+        route.path,
+        run_handler,
+        with_body=request_model is not None,
+        reads_json=method in ("POST", "PUT", "PATCH"),
+    )
 
     getattr(app, method.lower())(
         route.path,
@@ -135,8 +190,13 @@ def _make_handler(path: str, run_handler: Any, *, with_body: bool, reads_json: b
                 body = None
         return await run_handler(ctx, body)
 
-    parameters = [inspect.Parameter("ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=HttpContext)]
-    parameters += [inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=str) for name in names]
+    parameters = [
+        inspect.Parameter("ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=HttpContext)
+    ]
+    parameters += [
+        inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=str)
+        for name in names
+    ]
     if with_body:
         parameters.append(inspect.Parameter("body", inspect.Parameter.POSITIONAL_OR_KEYWORD))
     handler.__signature__ = inspect.Signature(parameters)  # type: ignore[attr-defined]
@@ -151,7 +211,9 @@ def _http_entry(state: EnvironmentState, route: Any) -> str | None:
     """
     flow = state.flows.get(route.handler)
     if flow is None:
-        raise FlowError(f"route handler flow {route.handler!r} does not exist", status=500, code="missing_flow")
+        raise FlowError(
+            f"route handler flow {route.handler!r} does not exist", status=500, code="missing_flow"
+        )
     first = None
     for node in flow.definition.get("nodes", []):
         data = node.get("data") or {}
@@ -160,6 +222,9 @@ def _http_entry(state: EnvironmentState, route: Any) -> str | None:
         config = data.get("config") or {}
         if first is None:
             first = node["id"]
-        if config.get("path") == route.path and (config.get("method") or "POST").upper() == route.method.upper():
+        if (
+            config.get("path") == route.path
+            and (config.get("method") or "POST").upper() == route.method.upper()
+        ):
             return node["id"]
     return first

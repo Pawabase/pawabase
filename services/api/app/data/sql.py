@@ -121,7 +121,14 @@ def column_definition(dialect: str, spec: Mapping[str, Any]) -> str:
     return " ".join(parts)
 
 
-def create_table_sql(dialect: str, table: str, primary_key: str, id_type: str, fields: list[Mapping[str, Any]], timestamps: bool) -> str:
+def create_table_sql(
+    dialect: str,
+    table: str,
+    primary_key: str,
+    id_type: str,
+    fields: list[Mapping[str, Any]],
+    timestamps: bool,
+) -> str:
     columns = [primary_key_column(dialect, primary_key, id_type)]
     for spec in fields:
         if spec["name"] in (primary_key, *(TIMESTAMP_FIELDS if timestamps else ())):
@@ -157,13 +164,17 @@ def encode_value(dialect: str, spec: Mapping[str, Any] | None, value: Any) -> An
     if kind == "boolean":
         return int(bool(value)) if dialect == "sqlite" else bool(value)
     if kind == "datetime":
-        moment = value if isinstance(value, dt.datetime) else dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        moment = (
+            value
+            if isinstance(value, dt.datetime)
+            else dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        )
         if moment.tzinfo is None:
-            moment = moment.replace(tzinfo=dt.timezone.utc)
+            moment = moment.replace(tzinfo=dt.UTC)
         if dialect == "sqlite":
             return moment.isoformat()
         if dialect == "mysql":
-            return moment.astimezone(dt.timezone.utc).replace(tzinfo=None)
+            return moment.astimezone(dt.UTC).replace(tzinfo=None)
         return moment
     if kind == "date":
         day = value if isinstance(value, dt.date) else dt.date.fromisoformat(str(value))
@@ -199,4 +210,4 @@ def decode_value(spec: Mapping[str, Any] | None, value: Any) -> Any:
 
 
 def now_value(dialect: str) -> Any:
-    return encode_value(dialect, {"type": "datetime"}, dt.datetime.now(dt.timezone.utc))
+    return encode_value(dialect, {"type": "datetime"}, dt.datetime.now(dt.UTC))

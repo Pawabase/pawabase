@@ -92,31 +92,69 @@ class S3Driver(Driver):
         key = _sign(key, "s3")
         return _sign(key, "aws4_request")
 
-    def _headers(self, method: str, url: str, path: str, query: dict[str, str] | None = None, *, payload_hash: str = EMPTY_SHA256, extra: dict[str, str] | None = None) -> dict[str, str]:
-        now = dt.datetime.now(dt.timezone.utc)
+    def _headers(
+        self,
+        method: str,
+        url: str,
+        path: str,
+        query: dict[str, str] | None = None,
+        *,
+        payload_hash: str = EMPTY_SHA256,
+        extra: dict[str, str] | None = None,
+    ) -> dict[str, str]:
+        now = dt.datetime.now(dt.UTC)
         stamp = now.strftime("%Y%m%dT%H%M%SZ")
         day = now.strftime("%Y%m%d")
         host = urlparse(url).netloc
-        headers = {"host": host, "x-amz-date": stamp, "x-amz-content-sha256": payload_hash, **{k.lower(): v for k, v in (extra or {}).items()}}
+        headers = {
+            "host": host,
+            "x-amz-date": stamp,
+            "x-amz-content-sha256": payload_hash,
+            **{k.lower(): v for k, v in (extra or {}).items()},
+        }
         signed = ";".join(sorted(headers))
         canonical_headers = "".join(f"{name}:{headers[name].strip()}\n" for name in sorted(headers))
         canonical_query = urlencode(sorted((query or {}).items()), quote_via=quote, safe="~")
-        canonical = "\n".join([method, path, canonical_query, canonical_headers, signed, payload_hash])
+        canonical = "\n".join(
+            [method, path, canonical_query, canonical_headers, signed, payload_hash]
+        )
         scope = f"{day}/{self.region}/s3/aws4_request"
-        to_sign = "\n".join(["AWS4-HMAC-SHA256", stamp, scope, hashlib.sha256(canonical.encode()).hexdigest()])
+        to_sign = "\n".join(
+            ["AWS4-HMAC-SHA256", stamp, scope, hashlib.sha256(canonical.encode()).hexdigest()]
+        )
         signature = hmac.new(self._signing_key(day), to_sign.encode(), hashlib.sha256).hexdigest()
-        headers["authorization"] = f"AWS4-HMAC-SHA256 Credential={self.access_key}/{scope}, SignedHeaders={signed}, Signature={signature}"
+        headers["authorization"] = (
+            f"AWS4-HMAC-SHA256 Credential={self.access_key}/{scope}, SignedHeaders={signed}, Signature={signature}"
+        )
         headers.pop("host")
         return headers
 
-    async def _request(self, method: str, key: str = "", *, query: dict[str, str] | None = None, content: Any = None, payload_hash: str = EMPTY_SHA256, extra: dict[str, str] | None = None) -> httpx.Response:
+    async def _request(
+        self,
+        method: str,
+        key: str = "",
+        *,
+        query: dict[str, str] | None = None,
+        content: Any = None,
+        payload_hash: str = EMPTY_SHA256,
+        extra: dict[str, str] | None = None,
+    ) -> httpx.Response:
         url, path = self._url(key)
         headers = self._headers(method, url, path, query, payload_hash=payload_hash, extra=extra)
-        return await self._client.request(method, url, params=query, content=content, headers=headers)
+        return await self._client.request(
+            method, url, params=query, content=content, headers=headers
+        )
 
     # ── the contract ─────────────────────────────────────────────────────
 
-    async def write(self, key: str, stream: AsyncIterator[bytes], *, content_type: str = "", declared_type: str = "") -> Stored:
+    async def write(
+        self,
+        key: str,
+        stream: AsyncIterator[bytes],
+        *,
+        content_type: str = "",
+        declared_type: str = "",
+    ) -> Stored:
         # S3 needs the length and digest before the body. Spool to disk (never
         # memory) while hashing, then send the file.
         digest = hashlib.sha256()
@@ -131,9 +169,13 @@ class S3Driver(Driver):
             extra = {"content-type": resolved, "content-length": str(size)}
             if declared_type:
                 extra["x-amz-meta-declared-type"] = declared_type
-            response = await self._request("PUT", key, content=spool.read(), payload_hash=digest.hexdigest(), extra=extra)
+            response = await self._request(
+                "PUT", key, content=spool.read(), payload_hash=digest.hexdigest(), extra=extra
+            )
         if response.status_code >= 300:
-            raise StorageError(f"s3 refused the write ({response.status_code}): {response.text[:200]}")
+            raise StorageError(
+                f"s3 refused the write ({response.status_code}): {response.text[:200]}"
+            )
         return Stored(key, size, resolved, response.headers.get("etag", "").strip('"'))
 
     async def read(self, key: str) -> AsyncIterator[bytes]:
@@ -157,7 +199,11 @@ class S3Driver(Driver):
         timestamp = 0.0
         if modified:
             try:
-                timestamp = dt.datetime.strptime(modified, "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=dt.timezone.utc).timestamp()
+                timestamp = (
+                    dt.datetime.strptime(modified, "%a, %d %b %Y %H:%M:%S %Z")
+                    .replace(tzinfo=dt.UTC)
+                    .timestamp()
+                )
             except ValueError:
                 timestamp = 0.0
         return FileInfo(
@@ -178,7 +224,12 @@ class S3Driver(Driver):
         return True
 
     async def page(self, prefix: str = "", *, cursor: str = "", limit: int = 100) -> Page:
-        query = {"list-type": "2", "prefix": self.prefix + prefix, "delimiter": "/", "max-keys": str(max(1, min(limit, 1000)))}
+        query = {
+            "list-type": "2",
+            "prefix": self.prefix + prefix,
+            "delimiter": "/",
+            "max-keys": str(max(1, min(limit, 1000))),
+        }
         if cursor:
             query["continuation-token"] = cursor
         response = await self._request("GET", "", query=query)
@@ -194,22 +245,43 @@ class S3Driver(Driver):
                 timestamp = dt.datetime.fromisoformat(modified.replace("Z", "+00:00")).timestamp()
             except ValueError:
                 timestamp = 0.0
-            files.append(FileInfo(key=key, size=int(item.findtext(f"{NS}Size", "0")), modified=timestamp, etag=item.findtext(f"{NS}ETag", "").strip('"')))
-        prefixes = tuple(p.findtext(f"{NS}Prefix", "")[strip:] for p in root.findall(f"{NS}CommonPrefixes"))
-        next_cursor = root.findtext(f"{NS}NextContinuationToken", "") if root.findtext(f"{NS}IsTruncated") == "true" else ""
+            files.append(
+                FileInfo(
+                    key=key,
+                    size=int(item.findtext(f"{NS}Size", "0")),
+                    modified=timestamp,
+                    etag=item.findtext(f"{NS}ETag", "").strip('"'),
+                )
+            )
+        prefixes = tuple(
+            p.findtext(f"{NS}Prefix", "")[strip:] for p in root.findall(f"{NS}CommonPrefixes")
+        )
+        next_cursor = (
+            root.findtext(f"{NS}NextContinuationToken", "")
+            if root.findtext(f"{NS}IsTruncated") == "true"
+            else ""
+        )
         return Page(files=tuple(files), prefixes=prefixes, cursor=next_cursor)
 
     async def close(self) -> None:
         await self._client.aclose()
 
-    def signed_url(self, key: str, *, method: str = "GET", expires_in: int = 300, content_type: str = "", max_bytes: int = 0) -> str:
+    def signed_url(
+        self,
+        key: str,
+        *,
+        method: str = "GET",
+        expires_in: int = 300,
+        content_type: str = "",
+        max_bytes: int = 0,
+    ) -> str:
         """A presigned S3 URL (SigV4 query signing).
 
         S3 presigned URLs cannot bound the upload size, so uploads that must be
         size-limited go through Pawabase's own signed upload route instead.
         """
         url, path = self._url(key)
-        now = dt.datetime.now(dt.timezone.utc)
+        now = dt.datetime.now(dt.UTC)
         stamp = now.strftime("%Y%m%dT%H%M%SZ")
         day = now.strftime("%Y%m%d")
         scope = f"{day}/{self.region}/s3/aws4_request"
@@ -228,8 +300,19 @@ class S3Driver(Driver):
         canonical_headers = f"host:{host}\n"
         if signed_headers == "content-type;host":
             canonical_headers = f"content-type:{content_type}\nhost:{host}\n"
-        canonical = "\n".join([method.upper(), path, canonical_query, canonical_headers, signed_headers, "UNSIGNED-PAYLOAD"])
-        to_sign = "\n".join(["AWS4-HMAC-SHA256", stamp, scope, hashlib.sha256(canonical.encode()).hexdigest()])
+        canonical = "\n".join(
+            [
+                method.upper(),
+                path,
+                canonical_query,
+                canonical_headers,
+                signed_headers,
+                "UNSIGNED-PAYLOAD",
+            ]
+        )
+        to_sign = "\n".join(
+            ["AWS4-HMAC-SHA256", stamp, scope, hashlib.sha256(canonical.encode()).hexdigest()]
+        )
         signature = hmac.new(self._signing_key(day), to_sign.encode(), hashlib.sha256).hexdigest()
         return f"{url}?{canonical_query}&X-Amz-Signature={signature}"
 

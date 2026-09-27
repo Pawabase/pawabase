@@ -7,15 +7,15 @@ import time
 from collections.abc import Mapping
 from typing import Any
 
-from pawabase_kit.flows import FlowError, FlowRun
-from pawabase_kit.functions import get_function
-from pawabase_kit.schemas import validate_payload
 from pydantic import ValidationError
 
 from app.platform import Platform, json_safe
 from app.runtime import ApiRuntime, function_context
 from app.state import EnvironmentState
 from database.models import FlowRun as FlowRunRecord
+from pawabase_kit.flows import FlowError, FlowRun
+from pawabase_kit.functions import get_function
+from pawabase_kit.schemas import validate_payload
 
 
 class NotFound(LookupError):
@@ -107,10 +107,17 @@ async def call_function(
         except ValidationError as exc:
             import json
 
-            raise FlowError("invalid function input", status=422, code="invalid", details=json.loads(exc.json(include_url=False))) from exc
+            raise FlowError(
+                "invalid function input",
+                status=422,
+                code="invalid",
+                details=json.loads(exc.json(include_url=False)),
+            ) from exc
     runtime = ApiRuntime(platform, state, auth=auth, request_id=request_id, depth=depth)
     context = function_context(runtime, input, trigger, request)
     try:
         return await asyncio.wait_for(spec.handler(context), timeout=spec.timeout)
-    except asyncio.TimeoutError as exc:
-        raise FlowError(f"function {name!r} exceeded {spec.timeout}s", status=504, code="timeout") from exc
+    except TimeoutError as exc:
+        raise FlowError(
+            f"function {name!r} exceeded {spec.timeout}s", status=504, code="timeout"
+        ) from exc

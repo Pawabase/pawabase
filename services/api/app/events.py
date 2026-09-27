@@ -20,8 +20,6 @@ import fnmatch
 import logging
 from typing import Any
 
-from pawabase_kit.events import PlatformEvent
-from pawabase_kit.templating import render
 from sillo.exceptions import HTTPException
 
 from app.platform import Platform
@@ -29,6 +27,8 @@ from app.runtime import matches_condition
 from app.state import EnvironmentState
 from app.webhooks import endpoint_matches, queue_deliveries
 from database.models import EventLog
+from pawabase_kit.events import PlatformEvent
+from pawabase_kit.templating import render
 
 logger = logging.getLogger("pawabase.events")
 
@@ -43,7 +43,11 @@ def flow_event_entries(state: EnvironmentState, event: PlatformEvent) -> list[tu
             data = node.get("data") or {}
             block = data.get("block")
             config = data.get("config") or {}
-            if block == "trigger.event" and config.get("event") and fnmatch.fnmatchcase(event.name, config["event"]):
+            if (
+                block == "trigger.event"
+                and config.get("event")
+                and fnmatch.fnmatchcase(event.name, config["event"])
+            ):
                 matches.append((flow.name, node["id"]))
             elif block == "trigger.resource" and config.get("resource"):
                 resource, _, change = event.name.rpartition(".")
@@ -66,7 +70,9 @@ class EventProcessor:
         try:
             state = await self.platform.state(event.project, event.env)
         except HTTPException:
-            logger.warning("event %s for unknown environment %s/%s", event.name, event.project, event.env)
+            logger.warning(
+                "event %s for unknown environment %s/%s", event.name, event.project, event.env
+            )
             return []
         if await EventLog.filter(event_id=event.id).exists():
             return []  # at-least-once delivery: this one was already handled
@@ -114,25 +120,74 @@ class EventProcessor:
             if not matches_condition(subscription.condition, condition_context):
                 continue
             if subscription.target_type == "flow":
-                await attempt("flow", subscription.target, lambda s=subscription: platform.dispatch(
-                    RunFlowJob, project=state.project_ref, env=state.env_name, target=s.target, source="event",
-                    flow=s.target, input=event_input, trigger="event", auth={"authenticated": False, "kind": "system"},
-                ))
+                await attempt(
+                    "flow",
+                    subscription.target,
+                    lambda s=subscription: platform.dispatch(
+                        RunFlowJob,
+                        project=state.project_ref,
+                        env=state.env_name,
+                        target=s.target,
+                        source="event",
+                        flow=s.target,
+                        input=event_input,
+                        trigger="event",
+                        auth={"authenticated": False, "kind": "system"},
+                    ),
+                )
             elif subscription.target_type == "function":
-                await attempt("function", subscription.target, lambda s=subscription: platform.dispatch(
-                    RunFunctionJob, project=state.project_ref, env=state.env_name, target=s.target, source="event",
-                    function=s.target, input=event_input, trigger="event", auth={"authenticated": False, "kind": "system"},
-                ))
+                await attempt(
+                    "function",
+                    subscription.target,
+                    lambda s=subscription: platform.dispatch(
+                        RunFunctionJob,
+                        project=state.project_ref,
+                        env=state.env_name,
+                        target=s.target,
+                        source="event",
+                        function=s.target,
+                        input=event_input,
+                        trigger="event",
+                        auth={"authenticated": False, "kind": "system"},
+                    ),
+                )
             elif subscription.target_type == "realtime":
-                channel = str(render(subscription.target or f"events:{event.name}", condition_context))
-                await attempt("realtime", channel, lambda c=channel: platform.publish(state, c, event.name, event.payload))
+                channel = str(
+                    render(subscription.target or f"events:{event.name}", condition_context)
+                )
+                await attempt(
+                    "realtime",
+                    channel,
+                    lambda c=channel: platform.publish(state, c, event.name, event.payload),
+                )
 
         for flow_name, node_id in flow_event_entries(state, event):
-            await attempt("flow", flow_name, lambda f=flow_name, n=node_id: platform.dispatch(
-                RunFlowJob, project=state.project_ref, env=state.env_name, target=f, source="event",
-                flow=f, input=event_input, trigger="event", entry=n, auth={"authenticated": False, "kind": "system"},
-            ))
+            await attempt(
+                "flow",
+                flow_name,
+                lambda f=flow_name, n=node_id: platform.dispatch(
+                    RunFlowJob,
+                    project=state.project_ref,
+                    env=state.env_name,
+                    target=f,
+                    source="event",
+                    flow=f,
+                    input=event_input,
+                    trigger="event",
+                    entry=n,
+                    auth={"authenticated": False, "kind": "system"},
+                ),
+            )
 
-        if any(endpoint.enabled and endpoint_matches(endpoint.events, event.name) for endpoint in state.webhooks):
-            await attempt("webhook", "endpoints", lambda: queue_deliveries(platform, state, event_id=event.id, event=event.name, payload=event.payload))
+        if any(
+            endpoint.enabled and endpoint_matches(endpoint.events, event.name)
+            for endpoint in state.webhooks
+        ):
+            await attempt(
+                "webhook",
+                "endpoints",
+                lambda: queue_deliveries(
+                    platform, state, event_id=event.id, event=event.name, payload=event.payload
+                ),
+            )
         return consumers

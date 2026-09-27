@@ -1,4 +1,7 @@
 import pytest
+from sillo import HttpContext
+from sillo.testclient import AsyncTestClient
+
 from pawabase_kit.auth import ProjectUserBackend
 from pawabase_kit.clients import ServiceClient, ServiceError
 from pawabase_kit.context import CONTEXT_HEADER, PlatformContext, current_context
@@ -14,8 +17,6 @@ from pawabase_kit.tokens import (
     verify_context_token,
     verify_service_token,
 )
-from sillo import HttpContext
-from sillo.testclient import AsyncTestClient
 
 SETTINGS = PlatformSettings(_env_file=None)
 CTX = PlatformContext(project="acme", env="dev", role="anon", key_id="k1")

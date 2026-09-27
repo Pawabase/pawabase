@@ -15,10 +15,6 @@ import secrets as token_source
 from collections.abc import Awaitable, Callable
 from typing import Any, Literal
 
-from pawabase_kit.flows import validate_flow
-from pawabase_kit.policies import PolicyEngine, PolicyError, validate_condition
-from pawabase_kit.schemas import SchemaError, validate_fields
-from pawabase_kit.transformers import TransformerError, validate_transformer
 from pydantic import BaseModel, Field
 from sillo import HttpContext, Router, created, no_content
 from sillo.exceptions import HTTPException
@@ -38,6 +34,10 @@ from database.models import (
     TransformerDef,
     WebhookEndpoint,
 )
+from pawabase_kit.flows import validate_flow
+from pawabase_kit.policies import PolicyEngine, PolicyError, validate_condition
+from pawabase_kit.schemas import SchemaError, validate_fields
+from pawabase_kit.transformers import TransformerError, validate_transformer
 from routes.common import NAME_PATTERN, OPERATOR, changed, dump, get_environment
 
 RESERVED_RESOURCE_NAMES = {"docs", "openapi.json", "x", "rpc", "health", "internal", "platform"}
@@ -81,7 +81,9 @@ class ResourceBody(BaseModel):
     primary_key: str = Field(default="id", pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
     id_type: Literal["integer", "uuid"] = "integer"
     fields: list[dict[str, Any]] = Field(default_factory=list)
-    operations: dict[Literal["list", "get", "create", "update", "delete"], OperationSettings] = Field(default_factory=dict)
+    operations: dict[Literal["list", "get", "create", "update", "delete"], OperationSettings] = (
+        Field(default_factory=dict)
+    )
     relations: list[dict[str, Any]] = Field(default_factory=list)
     transformer: Any = None
     cache_ttl: int = Field(default=0, ge=0, le=86400)
@@ -262,20 +264,27 @@ async def validate_route(platform, ref, env, body: RouteBody) -> dict[str, Any]:
             validate_fields(body.input_fields)
         except SchemaError as exc:
             raise _invalid(f"input_fields: {exc}") from exc
-    for label, schema in (("input_schema", body.input_schema), ("response_schema", body.response_schema)):
+    for label, schema in (
+        ("input_schema", body.input_schema),
+        ("response_schema", body.response_schema),
+    ):
         if schema and schema not in state.schemas:
             raise _invalid(f"{label}: no schema {schema!r}")
     from app.compiler.build import shadows_resource
 
     if shadows_resource(body.path, state.resources):
-        raise _invalid("the path would shadow a resource's own routes (/<resource> or /<resource>/{id})")
+        raise _invalid(
+            "the path would shadow a resource's own routes (/<resource> or /<resource>/{id})"
+        )
     return body.model_dump()
 
 
 async def validate_flow_body(platform, ref, env, body: FlowBody) -> dict[str, Any]:
     problems = validate_flow(body.definition)
     if problems:
-        raise HTTPException(status_code=422, detail={"message": "the flow cannot run", "problems": problems})
+        raise HTTPException(
+            status_code=422, detail={"message": "the flow cannot run", "problems": problems}
+        )
     return body.model_dump()
 
 
@@ -355,16 +364,50 @@ def secret_free(item: Any) -> dict[str, Any]:
 
 KINDS: list[dict[str, Any]] = [
     {"path": "schemas", "model": SchemaDef, "body": SchemaBody, "validate": validate_schema},
-    {"path": "transformers", "model": TransformerDef, "body": TransformerBody, "validate": validate_transformer_body},
+    {
+        "path": "transformers",
+        "model": TransformerDef,
+        "body": TransformerBody,
+        "validate": validate_transformer_body,
+    },
     {"path": "policies", "model": PolicyDef, "body": PolicyBody, "validate": validate_policy},
     {"path": "resources", "model": Resource, "body": ResourceBody, "validate": validate_resource},
-    {"path": "routes", "model": RouteDef, "body": RouteBody, "validate": validate_route, "key": "id"},
+    {
+        "path": "routes",
+        "model": RouteDef,
+        "body": RouteBody,
+        "validate": validate_route,
+        "key": "id",
+    },
     {"path": "flows", "model": Flow, "body": FlowBody, "validate": validate_flow_body},
     {"path": "buckets", "model": Bucket, "body": BucketBody, "validate": validate_bucket},
-    {"path": "mail-templates", "model": MailTemplate, "body": MailTemplateBody, "validate": validate_mail_template},
-    {"path": "subscriptions", "model": EventSubscription, "body": SubscriptionBody, "validate": validate_subscription},
-    {"path": "webhooks", "model": WebhookEndpoint, "body": WebhookBody, "validate": validate_webhook, "view": secret_free},
-    {"path": "inbound-hooks", "model": InboundHook, "body": InboundHookBody, "validate": validate_inbound, "view": secret_free, "key": "slug"},
+    {
+        "path": "mail-templates",
+        "model": MailTemplate,
+        "body": MailTemplateBody,
+        "validate": validate_mail_template,
+    },
+    {
+        "path": "subscriptions",
+        "model": EventSubscription,
+        "body": SubscriptionBody,
+        "validate": validate_subscription,
+    },
+    {
+        "path": "webhooks",
+        "model": WebhookEndpoint,
+        "body": WebhookBody,
+        "validate": validate_webhook,
+        "view": secret_free,
+    },
+    {
+        "path": "inbound-hooks",
+        "model": InboundHook,
+        "body": InboundHookBody,
+        "validate": validate_inbound,
+        "view": secret_free,
+        "key": "slug",
+    },
     {"path": "schedules", "model": Schedule, "body": ScheduleBody, "validate": validate_schedule},
 ]
 
@@ -398,7 +441,15 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
         environment = await get_environment(ref, env)
         data = await validate(platform, ref, env, body)
         reveal = data.pop("_reveal", {})
-        natural = {"slug": data["slug"]} if key_field == "slug" else ({"method": data["method"], "path": data["path"]} if model is RouteDef else {"name": data["name"]})
+        natural = (
+            {"slug": data["slug"]}
+            if key_field == "slug"
+            else (
+                {"method": data["method"], "path": data["path"]}
+                if model is RouteDef
+                else {"name": data["name"]}
+            )
+        )
         if await model.filter(environment=environment, **natural).exists():
             raise HTTPException(status_code=409, detail=f"{path[:-1]} already exists")
         item = await model.create(environment=environment, **data)
@@ -431,11 +482,48 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
         await changed(ctx, environment, f"{path}.deleted", key)
         return no_content()
 
-    r.get(base, handler=list_items, auth=OPERATOR, tags=[tag], name=f"{path}.list", summary=f"List {tag}")
-    r.post(base, handler=create_item, auth=OPERATOR, tags=[tag], name=f"{path}.create", request_model=body_model, summary=f"Create {tag[:-1]}")
-    r.get(f"{base}/{{key}}", handler=get_item, auth=OPERATOR, tags=[tag], name=f"{path}.get", summary=f"Get {tag[:-1]}")
-    r.put(f"{base}/{{key}}", handler=replace_item, auth=OPERATOR, tags=[tag], name=f"{path}.replace", request_model=body_model, summary=f"Replace {tag[:-1]}")
-    r.delete(f"{base}/{{key}}", handler=delete_item, auth=OPERATOR, tags=[tag], name=f"{path}.delete", summary=f"Delete {tag[:-1]}")
+    r.get(
+        base,
+        handler=list_items,
+        auth=OPERATOR,
+        tags=[tag],
+        name=f"{path}.list",
+        summary=f"List {tag}",
+    )
+    r.post(
+        base,
+        handler=create_item,
+        auth=OPERATOR,
+        tags=[tag],
+        name=f"{path}.create",
+        request_model=body_model,
+        summary=f"Create {tag[:-1]}",
+    )
+    r.get(
+        f"{base}/{{key}}",
+        handler=get_item,
+        auth=OPERATOR,
+        tags=[tag],
+        name=f"{path}.get",
+        summary=f"Get {tag[:-1]}",
+    )
+    r.put(
+        f"{base}/{{key}}",
+        handler=replace_item,
+        auth=OPERATOR,
+        tags=[tag],
+        name=f"{path}.replace",
+        request_model=body_model,
+        summary=f"Replace {tag[:-1]}",
+    )
+    r.delete(
+        f"{base}/{{key}}",
+        handler=delete_item,
+        auth=OPERATOR,
+        tags=[tag],
+        name=f"{path}.delete",
+        summary=f"Delete {tag[:-1]}",
+    )
 
 
 def register(r: Router, platform: Platform) -> None:

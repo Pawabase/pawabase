@@ -13,8 +13,6 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from pawabase_kit.policies import Policy, PolicyEngine, python_policies
-from pawabase_kit.schemas import compile_schemas
 from sillo.exceptions import HTTPException
 from tortoise.expressions import F
 
@@ -36,6 +34,8 @@ from database.models import (
     TransformerDef,
     WebhookEndpoint,
 )
+from pawabase_kit.policies import Policy, PolicyEngine, python_policies
+from pawabase_kit.schemas import compile_schemas
 
 if TYPE_CHECKING:
     from app.platform import Platform
@@ -88,10 +88,14 @@ class EnvironmentState:
         configured = self.infra.get("database_url")
         if configured:
             return self.platform.resolve_value(self, configured)
-        return self.platform.settings.default_data_url.format(project=self.project_ref, env=self.env_name)
+        return self.platform.settings.default_data_url.format(
+            project=self.project_ref, env=self.env_name
+        )
 
     async def source(self) -> DataSource:
-        return await self.platform.sources.get(self.database_url(), alias=f"{self.project_ref}:{self.env_name}")
+        return await self.platform.sources.get(
+            self.database_url(), alias=f"{self.project_ref}:{self.env_name}"
+        )
 
     def spec(self, name: str) -> ResourceSpec:
         spec = self.specs.get(name)
@@ -191,7 +195,11 @@ class EnvironmentCache:
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
 
     async def get(self, project: str, env: str) -> EnvironmentState:
-        environment = await Environment.filter(project__ref=project, name=env).select_related("project").first()
+        environment = (
+            await Environment.filter(project__ref=project, name=env)
+            .select_related("project")
+            .first()
+        )
         if environment is None:
             raise HTTPException(status_code=404, detail=f"no environment {project}/{env}")
         key = (project, env)

@@ -1,0 +1,19 @@
+# Sillo gaps found while building Pawabase
+
+Pawabase is built Sillo-first. Where Sillo 1.0.0 fell short, Pawabase worked around it and
+recorded the gap here, so each item can be fixed upstream in `sillohq/core`.
+
+| # | Area | What happens | Pawabase workaround |
+|---|---|---|---|
+| 1 | `sillo.http.client.HTTPClient` middleware | `MiddlewareChain.run` passes `httpx.AsyncClient.send` (a coroutine) as the final `next_call`, and middlewares iterate it with `async for`, which raises `TypeError: 'async for' requires an object with __aiter__`. Any configured middleware breaks every request. | No client middlewares are used. |
+| 2 | `HTTPClient` without `base_url` | `base_url=""` becomes `None` and `httpx.AsyncClient(base_url=None)` raises `TypeError`. The client cannot be used for absolute URLs without a dummy base. | Internal clients always pass a base URL. |
+| 3 | `HTTPClient` status codes | On success only the decoded body is returned. There is no public way to read the status or headers, which webhook delivery and flow HTTP calls need. | Outbound third-party calls use `httpx` directly (`app/outbound.py`), with Sillo's `async_retry` for backoff. |
+| 4 | S3 storage driver | The docs and the `storage-s3` extra describe an `s3` driver, but `sillo/storage/drivers/` ships only `local` and `memory`, and `_build` raises for `driver="s3"`. | `app/storage/s3.py` implements Sillo's `Driver` contract with SigV4. |
+| 5 | `QueueWorker` retries and acks | The docs say failed jobs are re-queued after `retry_after()` up to `max_tries()`, and that `failed()` runs at the end. The worker does neither: it logs to the failed repository and does not `ack`, so a `RedisConnection` redelivers the job forever after the visibility timeout. | `PawabaseJob` retries inside the attempt with `QRetryMiddleware`, then settles: it records the failure, calls `failed()` and returns so the worker acks. |
+| 6 | Cache miss value | `BaseCache.get` returns the private `_MISSING` sentinel on a miss instead of `None`, and the sentinel is not exported. | `Platform.cache_get` normalises it. |
+| 7 | Route-level `middleware=` | Route middleware must be `(ctx, call_next)` style, so application middleware such as `RateLimit` cannot be attached to one route. | `RouteRateLimit` wraps `RateLimitMiddleware.check()`. |
+| 8 | `Model.get_or_none` | Sillo's `get_or_none` is a coroutine, so the Tortoise idiom `get_or_none(...).select_related(...)` breaks. | Use `filter(...).select_related(...).first()`. |
+| 9 | `Model.to_dict()` on unfetched relations | `to_dict()` walks relations, which are un-awaited coroutines on a fresh instance, and the encoder fails with "Content is not JSON serializable". | Pawabase serialises from `_meta.fields_db_projection`. |
+| 10 | Tortoise `JSONField` with a bare string | A `str` is treated as pre-encoded JSON, so storing `"authenticated"` fails. | `database.fields.AnyJSONField`. (This one is Tortoise's behaviour, surfaced through Sillo Record.) |
+| 11 | Test client lifespan | `AsyncTestClient` used as an async context manager in a pytest-asyncio fixture fails at teardown ("exit cancel scope in a different task"). | Test fixtures drive `app._startup()` / `app._shutdown()` directly. A public helper would help. |
+| 12 | Locks | The Pawabase spec lists locks among the Sillo capabilities to use, but Sillo 1.0 has no lock primitive, so exactly one scheduler process must run. | Documented; the scheduler runs as a single replica. |

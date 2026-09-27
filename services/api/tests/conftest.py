@@ -32,17 +32,33 @@ class Api:
     settings: Any
     platform: Any
 
-    def context_headers(self, project: str, env: str, role: str = "anon", scopes=()) -> dict[str, str]:
+    def context_headers(
+        self, project: str, env: str, role: str = "anon", scopes=()
+    ) -> dict[str, str]:
         from pawabase_kit.context import CONTEXT_HEADER, PlatformContext
         from pawabase_kit.tokens import issue_context_token
 
-        context = PlatformContext(project=project, env=env, role=role, key_id="test", scopes=tuple(scopes))
+        context = PlatformContext(
+            project=project, env=env, role=role, key_id="test", scopes=tuple(scopes)
+        )
         return {CONTEXT_HEADER: issue_context_token(self.settings.internal_secret, context)}
 
-    def user_headers(self, project: str, env: str, user_id: str = "1", roles=(), perms=(), email=None) -> dict[str, str]:
+    def user_headers(
+        self, project: str, env: str, user_id: str = "1", roles=(), perms=(), email=None
+    ) -> dict[str, str]:
         from pawabase_kit.tokens import issue_user_token
 
-        token = issue_user_token(self.settings.jwt_master_secret, project=project, env=env, user_id=user_id, jti=f"j{user_id}", session_id="s", roles=list(roles), permissions=list(perms), email=email)
+        token = issue_user_token(
+            self.settings.jwt_master_secret,
+            project=project,
+            env=env,
+            user_id=user_id,
+            jti=f"j{user_id}",
+            session_id="s",
+            roles=list(roles),
+            permissions=list(perms),
+            email=email,
+        )
         return {**self.context_headers(project, env), "Authorization": f"Bearer {token}"}
 
     async def drain(self, timeout: float = 5.0) -> None:
@@ -64,10 +80,10 @@ class Api:
 
 @pytest.fixture
 async def api(settings):
-    from pawabase_kit.clients import ServiceClient
     from sillo.testclient import AsyncTestClient
 
     from app.bootstrap import create_app
+    from pawabase_kit.clients import ServiceClient
 
     app = create_app(settings)
     # The lifespan is driven directly rather than through the client's context
@@ -75,9 +91,13 @@ async def api(settings):
     # tasks, which anyio's cancel scopes refuse.
     await app._startup()
     http = AsyncTestClient(app, base_url="http://api.test")
-    studio = ServiceClient("http://api.test", secret=settings.internal_secret, issuer="studio", audience="api", app=app)
+    studio = ServiceClient(
+        "http://api.test", secret=settings.internal_secret, issuer="studio", audience="api", app=app
+    )
     try:
-        yield Api(app=app, http=http, studio=studio, settings=settings, platform=app.state["platform"])
+        yield Api(
+            app=app, http=http, studio=studio, settings=settings, platform=app.state["platform"]
+        )
     finally:
         await studio.close()
         await http.aclose()

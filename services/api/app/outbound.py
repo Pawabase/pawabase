@@ -51,12 +51,36 @@ def check_target(url: str, *, allow_private: bool = False) -> None:
         raise OutboundRefused(f"cannot resolve {parsed.hostname}") from exc
     for info in infos:
         address = ipaddress.ip_address(info[4][0])
-        if address.is_private or address.is_loopback or address.is_link_local or address.is_reserved or address.is_multicast:
+        if (
+            address.is_private
+            or address.is_loopback
+            or address.is_link_local
+            or address.is_reserved
+            or address.is_multicast
+        ):
             raise OutboundRefused(f"{parsed.hostname} resolves to a private address")
 
 
-async def request_once(client: httpx.AsyncClient, method: str, url: str, *, headers: Mapping[str, str] | None = None, json_body: Any = None, content: bytes | None = None, params: Mapping[str, Any] | None = None, timeout: float = 30.0) -> dict[str, Any]:
-    async with client.stream(method.upper(), url, headers=dict(headers or {}), json=json_body if content is None else None, content=content, params=params, timeout=timeout) as response:
+async def request_once(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    *,
+    headers: Mapping[str, str] | None = None,
+    json_body: Any = None,
+    content: bytes | None = None,
+    params: Mapping[str, Any] | None = None,
+    timeout: float = 30.0,
+) -> dict[str, Any]:
+    async with client.stream(
+        method.upper(),
+        url,
+        headers=dict(headers or {}),
+        json=json_body if content is None else None,
+        content=content,
+        params=params,
+        timeout=timeout,
+    ) as response:
         body = b""
         async for chunk in response.aiter_bytes():
             body += chunk
@@ -65,18 +89,41 @@ async def request_once(client: httpx.AsyncClient, method: str, url: str, *, head
                 break
     text = body.decode("utf-8", "replace")
     try:
-        parsed: Any = response.json() if text and "json" in response.headers.get("content-type", "") else text
+        parsed: Any = (
+            response.json() if text and "json" in response.headers.get("content-type", "") else text
+        )
     except ValueError:
         parsed = text
     return {"status": response.status_code, "headers": dict(response.headers), "body": parsed}
 
 
-async def request_with_retries(client: httpx.AsyncClient, method: str, url: str, *, headers=None, json_body=None, content=None, params=None, timeout: float = 30.0, retries: int = 0, allow_private: bool = False) -> dict[str, Any]:
+async def request_with_retries(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    *,
+    headers=None,
+    json_body=None,
+    content=None,
+    params=None,
+    timeout: float = 30.0,
+    retries: int = 0,
+    allow_private: bool = False,
+) -> dict[str, Any]:
     """One request, retried with Sillo's backoff on transient failures."""
     check_target(url, allow_private=allow_private)
 
     async def attempt() -> dict[str, Any]:
-        response = await request_once(client, method, url, headers=headers, json_body=json_body, content=content, params=params, timeout=timeout)
+        response = await request_once(
+            client,
+            method,
+            url,
+            headers=headers,
+            json_body=json_body,
+            content=content,
+            params=params,
+            timeout=timeout,
+        )
         if response["status"] in RETRYABLE_STATUSES and retries:
             raise _Retryable(response)
         return response
@@ -84,7 +131,13 @@ async def request_with_retries(client: httpx.AsyncClient, method: str, url: str,
     if not retries:
         return await attempt()
     try:
-        return await async_retry(attempt, max_attempts=retries + 1, base_delay=0.5, max_delay=10.0, retryable_exceptions=(_Retryable, httpx.TransportError))
+        return await async_retry(
+            attempt,
+            max_attempts=retries + 1,
+            base_delay=0.5,
+            max_delay=10.0,
+            retryable_exceptions=(_Retryable, httpx.TransportError),
+        )
     except Exception as exc:
         last = getattr(exc, "__cause__", None) or exc
         if isinstance(last, _Retryable):

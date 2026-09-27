@@ -12,7 +12,7 @@ import logging
 import os
 import signal
 import socket
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sillo.work.queue import ConnectionManager, PayloadSerializer, QueueWorker, WorkerOptions
@@ -28,7 +28,9 @@ def worker_queues() -> list[str]:
     return PLATFORM_QUEUES + [q for q in extra if q not in PLATFORM_QUEUES]
 
 
-def build_worker(platform: Platform, *, queues: list[str] | None = None, concurrency: int = 4, sleep: float = 1.0) -> QueueWorker:
+def build_worker(
+    platform: Platform, *, queues: list[str] | None = None, concurrency: int = 4, sleep: float = 1.0
+) -> QueueWorker:
     import app.jobs  # noqa: F401  (every job class must be importable by name)
 
     queues = queues or worker_queues()
@@ -68,14 +70,14 @@ def start_inline_worker(platform: Platform) -> InlineWorker:
 async def heartbeat(name: str, queues: list[str], worker: QueueWorker, stop: asyncio.Event) -> None:
     from database.models import WorkerHeartbeat
 
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     while not stop.is_set():
         await WorkerHeartbeat.update_or_create(
             name=name,
             defaults={
                 "queues": queues,
                 "started_at": started,
-                "last_seen": datetime.now(timezone.utc),
+                "last_seen": datetime.now(UTC),
                 "processed": worker._jobs_processed,
                 "concurrency": worker.options.concurrency,
                 "status": "paused" if worker._paused else "running",
@@ -83,9 +85,9 @@ async def heartbeat(name: str, queues: list[str], worker: QueueWorker, stop: asy
         )
         try:
             await asyncio.wait_for(stop.wait(), timeout=10)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
-    await WorkerHeartbeat.filter(name=name).update(status="stopped", last_seen=datetime.now(timezone.utc))
+    await WorkerHeartbeat.filter(name=name).update(status="stopped", last_seen=datetime.now(UTC))
 
 
 async def main(**overrides: Any) -> None:

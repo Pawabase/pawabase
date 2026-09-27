@@ -15,19 +15,30 @@ POSTS = {
     ],
     "owner_field": "owner_id",
     "operations": {
-        "list": {"enabled": True, "policy": {"any": [{"eq": ["$record.status", "live"]}, {"owner": "owner_id"}]}},
-        "get": {"enabled": True, "policy": {"any": [{"eq": ["$record.status", "live"]}, {"owner": "owner_id"}]}},
+        "list": {
+            "enabled": True,
+            "policy": {"any": [{"eq": ["$record.status", "live"]}, {"owner": "owner_id"}]},
+        },
+        "get": {
+            "enabled": True,
+            "policy": {"any": [{"eq": ["$record.status", "live"]}, {"owner": "owner_id"}]},
+        },
         "create": {"enabled": True, "policy": "authenticated"},
         "update": {"enabled": True, "policy": "owner"},
         "delete": {"enabled": True, "policy": "owner"},
     },
-    "relations": [{"name": "comments", "resource": "comments", "field": "post_id", "type": "has_many"}],
+    "relations": [
+        {"name": "comments", "resource": "comments", "field": "post_id", "type": "has_many"}
+    ],
     "cache_ttl": 30,
 }
 
 COMMENTS = {
     "name": "comments",
-    "fields": [{"name": "post_id", "type": "integer", "required": True, "indexed": True}, {"name": "text", "type": "string", "required": True}],
+    "fields": [
+        {"name": "post_id", "type": "integer", "required": True, "indexed": True},
+        {"name": "text", "type": "string", "required": True},
+    ],
     "operations": {"list": {"enabled": True, "policy": "public"}},
     "relations": [{"name": "post", "resource": "posts", "field": "post_id"}],
 }
@@ -56,12 +67,18 @@ async def test_crud_with_owner_policies(acme):
     invalid = await api.http.post("/rest/v1/posts", json={"body": "no title"}, headers=ada)
     assert invalid.status_code == 422
 
-    draft = await api.http.post("/rest/v1/posts", json={"title": "Ada's draft", "tags": ["a"]}, headers=ada)
+    draft = await api.http.post(
+        "/rest/v1/posts", json={"title": "Ada's draft", "tags": ["a"]}, headers=ada
+    )
     assert draft.status_code == 201, draft.text
     draft = draft.json()
     assert draft["owner_id"] == "1" and draft["status"] == "draft" and draft["tags"] == ["a"]
 
-    live = (await api.http.post("/rest/v1/posts", json={"title": "Bob live", "status": "live"}, headers=bob)).json()
+    live = (
+        await api.http.post(
+            "/rest/v1/posts", json={"title": "Bob live", "status": "live"}, headers=bob
+        )
+    ).json()
 
     # Anonymous callers see only live posts; Ada sees live posts and her own drafts.
     anon_list = (await api.http.get("/rest/v1/posts", headers=anon)).json()
@@ -71,10 +88,14 @@ async def test_crud_with_owner_policies(acme):
 
     # Bob cannot read, edit or delete Ada's draft; it is simply not there for him.
     assert (await api.http.get(f"/rest/v1/posts/{draft['id']}", headers=bob)).status_code == 404
-    assert (await api.http.patch(f"/rest/v1/posts/{draft['id']}", json={"title": "hacked"}, headers=bob)).status_code == 403
+    assert (
+        await api.http.patch(f"/rest/v1/posts/{draft['id']}", json={"title": "hacked"}, headers=bob)
+    ).status_code == 403
     assert (await api.http.delete(f"/rest/v1/posts/{draft['id']}", headers=bob)).status_code == 403
 
-    updated = await api.http.patch(f"/rest/v1/posts/{draft['id']}", json={"status": "live", "views": 3}, headers=ada)
+    updated = await api.http.patch(
+        f"/rest/v1/posts/{draft['id']}", json={"status": "live", "views": 3}, headers=ada
+    )
     assert updated.status_code == 200 and updated.json()["status"] == "live"
 
     filtered = (await api.http.get("/rest/v1/posts?filter[views]=gte.1", headers=anon)).json()
@@ -87,8 +108,12 @@ async def test_crud_with_owner_policies(acme):
     everything = (await api.http.get("/rest/v1/posts", headers=service)).json()
     assert everything["total"] == 2
 
-    await api.studio.post(f"{ENV}/resources/comments/records", json={"post_id": live["id"], "text": "nice"})
-    expanded = (await api.http.get(f"/rest/v1/posts/{live['id']}?expand=comments", headers=anon)).json()
+    await api.studio.post(
+        f"{ENV}/resources/comments/records", json={"post_id": live["id"], "text": "nice"}
+    )
+    expanded = (
+        await api.http.get(f"/rest/v1/posts/{live['id']}?expand=comments", headers=anon)
+    ).json()
     assert [c["text"] for c in expanded["comments"]] == ["nice"]
     comments = (await api.http.get("/rest/v1/comments?expand=post", headers=anon)).json()
     assert comments["data"][0]["post"]["title"] == "Bob live"
@@ -106,7 +131,9 @@ async def test_events_and_cache_invalidation(acme):
     first = (await api.http.get("/rest/v1/posts", headers=anon)).json()
     await api.http.post("/rest/v1/posts", json={"title": "two", "status": "live"}, headers=ada)
     second = (await api.http.get("/rest/v1/posts", headers=anon)).json()
-    assert len(first["data"]) == 1 and len(second["data"]) == 2  # the write invalidated the cached list
+    assert (
+        len(first["data"]) == 1 and len(second["data"]) == 2
+    )  # the write invalidated the cached list
     await api.drain()
     names = [e.name for e in await EventLog.all()]
     assert names.count("posts.created") == 2
@@ -117,7 +144,9 @@ async def test_openapi_and_docs(acme):
     anon = api.context_headers("acme", "development")
     document = (await api.http.get("/rest/v1/openapi.json", headers=anon)).json()
     assert "/rest/v1/posts" in document["paths"] and "/rest/v1/posts/{id}" in document["paths"]
-    create_schema = document["paths"]["/rest/v1/posts"]["post"]["requestBody"]["content"]["application/json"]["schema"]
+    create_schema = document["paths"]["/rest/v1/posts"]["post"]["requestBody"]["content"][
+        "application/json"
+    ]["schema"]
     assert create_schema["title"] == "PostsCreate" and create_schema["required"] == ["title"]
     docs = await api.http.get("/rest/v1/docs", headers=anon)
     assert docs.status_code == 200 and "atlas" in docs.text.lower()
@@ -127,4 +156,6 @@ async def test_scoped_keys(acme):
     api = acme
     read_only = api.context_headers("acme", "development", role="service", scopes=["resource:read"])
     assert (await api.http.get("/rest/v1/posts", headers=read_only)).status_code == 200
-    assert (await api.http.post("/rest/v1/posts", json={"title": "x"}, headers=read_only)).status_code == 403
+    assert (
+        await api.http.post("/rest/v1/posts", json={"title": "x"}, headers=read_only)
+    ).status_code == 403

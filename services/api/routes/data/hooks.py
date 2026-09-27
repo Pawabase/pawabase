@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hmac
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sillo import HttpContext, Router, accepted, html
@@ -47,14 +47,30 @@ def register(app: Any, platform: Platform) -> None:
             payload: Any = json.loads(body) if body else None
         except ValueError:
             payload = {"raw": body.decode("utf-8", "replace")}
-        await InboundHook.filter(id=hook.id).update(received=hook.received + 1, last_received_at=datetime.now(timezone.utc))
-        headers = {k: v for k, v in ctx.headers.items() if k.lower().startswith(("x-", "user-agent", "content-type")) and k.lower() != hook.signature_header.lower()}
+        await InboundHook.filter(id=hook.id).update(
+            received=hook.received + 1, last_received_at=datetime.now(UTC)
+        )
+        headers = {
+            k: v
+            for k, v in ctx.headers.items()
+            if k.lower().startswith(("x-", "user-agent", "content-type"))
+            and k.lower() != hook.signature_header.lower()
+        }
         envelope = {"hook": slug, "headers": headers, "body": payload}
         if hook.target_type == "flow":
             from app.jobs.flows import RunFlowJob
 
-            job_id = await platform.dispatch(RunFlowJob, project=project, env=env, target=hook.target, source="webhook",
-                                             flow=hook.target, input=envelope, trigger="webhook", auth={"authenticated": False, "kind": "webhook"})
+            job_id = await platform.dispatch(
+                RunFlowJob,
+                project=project,
+                env=env,
+                target=hook.target,
+                source="webhook",
+                flow=hook.target,
+                input=envelope,
+                trigger="webhook",
+                auth={"authenticated": False, "kind": "webhook"},
+            )
             return accepted({"accepted": True, "job_id": job_id})
         event_id = await platform.emit(state, hook.target, envelope, actor=f"hook:{slug}")
         return accepted({"accepted": True, "event_id": event_id})
@@ -75,7 +91,9 @@ def register(app: Any, platform: Platform) -> None:
 
         state = await public_state(project, env)
         compiled = await state.compiled()
-        return BaseResponse(body=compiled.build_openapi(REST_PREFIX), content_type="application/json")
+        return BaseResponse(
+            body=compiled.build_openapi(REST_PREFIX), content_type="application/json"
+        )
 
     @d.get("/{project}/{env}")
     async def public_docs(ctx: HttpContext, project: str, env: str):

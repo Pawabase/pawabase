@@ -37,10 +37,23 @@ KINDS: dict[str, tuple[Any, tuple[str, ...]]] = {
     "schedules": (Schedule, ("name",)),
 }
 
-SKIP = {"id", "environment_id", "created_at", "updated_at", "deleted_at", "received", "last_received_at", "last_run_at", "last_status", "run_count"}
+SKIP = {
+    "id",
+    "environment_id",
+    "created_at",
+    "updated_at",
+    "deleted_at",
+    "received",
+    "last_received_at",
+    "last_run_at",
+    "last_status",
+    "run_count",
+}
 
 
-async def copy_definitions(source: Environment, target: Environment, *, include: list[str] | None = None) -> dict[str, int]:
+async def copy_definitions(
+    source: Environment, target: Environment, *, include: list[str] | None = None
+) -> dict[str, int]:
     """Upsert *source*'s definitions into *target*. Returns counts per kind."""
     counts: dict[str, int] = {}
     for kind, (model, natural) in KINDS.items():
@@ -48,7 +61,11 @@ async def copy_definitions(source: Environment, target: Environment, *, include:
             continue
         count = 0
         for item in await model.filter(environment_id=source.id):
-            values = {name: getattr(item, name) for name in model._meta.fields_map if name not in SKIP and name != "environment"}
+            values = {
+                name: getattr(item, name)
+                for name in model._meta.fields_map
+                if name not in SKIP and name != "environment"
+            }
             lookup = {name: values.pop(name) for name in natural}
             await model.update_or_create(defaults=values, environment_id=target.id, **lookup)
             count += 1

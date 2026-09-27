@@ -13,15 +13,10 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import httpx
-from pawabase_kit.clients import ServiceClient
-from pawabase_kit.context import PlatformContext
-from pawabase_kit.events import EventBus
-from pawabase_kit.functions import ProjectCode, load_project_code
-from pawabase_kit.telemetry import note
 from sillo.cache import BaseCache, MemoryCache
 from sillo.cache import base as cache_base
 
@@ -31,6 +26,11 @@ from app.mail import MailManager
 from app.secrets import SecretBox, is_reference, reference_name
 from app.state import EnvironmentCache, EnvironmentState
 from app.storage.manager import StorageManager
+from pawabase_kit.clients import ServiceClient
+from pawabase_kit.context import PlatformContext
+from pawabase_kit.events import EventBus
+from pawabase_kit.functions import ProjectCode, load_project_code
+from pawabase_kit.telemetry import note
 
 if TYPE_CHECKING:
     from sillo.work.queue import QueueConnection
@@ -53,7 +53,14 @@ def get_platform() -> Platform:
 class Platform:
     """Shared services for one API process."""
 
-    def __init__(self, settings: ApiSettings, *, cache: BaseCache | None = None, queue: QueueConnection | None = None, bus: EventBus | None = None) -> None:
+    def __init__(
+        self,
+        settings: ApiSettings,
+        *,
+        cache: BaseCache | None = None,
+        queue: QueueConnection | None = None,
+        bus: EventBus | None = None,
+    ) -> None:
         self.settings = settings
         self.box = SecretBox(settings.master_key)
         self.sources = DataSourcePool()
@@ -63,11 +70,19 @@ class Platform:
         self.bus = bus or EventBus.from_url(settings.redis_url or None, source="api")
         self.cache = cache or self._build_cache()
         self.queue = queue or self._build_queue()
-        self.angula = ServiceClient(settings.angula_url, secret=settings.internal_secret, issuer="api", audience="angula")
-        self.akountz = ServiceClient(settings.akountz_url, secret=settings.internal_secret, issuer="api", audience="akountz")
-        self.outbound = httpx.AsyncClient(timeout=30.0, follow_redirects=False, headers={"user-agent": "Pawabase/0.1"})
+        self.angula = ServiceClient(
+            settings.angula_url, secret=settings.internal_secret, issuer="api", audience="angula"
+        )
+        self.akountz = ServiceClient(
+            settings.akountz_url, secret=settings.internal_secret, issuer="api", audience="akountz"
+        )
+        self.outbound = httpx.AsyncClient(
+            timeout=30.0, follow_redirects=False, headers={"user-agent": "Pawabase/0.1"}
+        )
         self.code: dict[str, ProjectCode] = {}
-        self.started_at = datetime.now(timezone.utc)
+        self.app: Any = None
+        self.app: Any = None
+        self.started_at = datetime.now(UTC)
 
     # ── construction ─────────────────────────────────────────────────────
 
@@ -149,8 +164,21 @@ class Platform:
         note("cache", "hit" if value is not None else "miss", append=True)
         return value
 
-    async def cache_set(self, state: EnvironmentState, key: str, value: Any, *, ttl: int | None = None, tags: list[str] | None = None) -> None:
-        await self.cache.set(self.cache_key(state, key), value, ttl=ttl, tags=[self.cache_tag(state, t) for t in tags or []])
+    async def cache_set(
+        self,
+        state: EnvironmentState,
+        key: str,
+        value: Any,
+        *,
+        ttl: int | None = None,
+        tags: list[str] | None = None,
+    ) -> None:
+        await self.cache.set(
+            self.cache_key(state, key),
+            value,
+            ttl=ttl,
+            tags=[self.cache_tag(state, t) for t in tags or []],
+        )
 
     async def cache_invalidate(self, state: EnvironmentState, tags: list[str]) -> int:
         if not tags:
@@ -175,9 +203,16 @@ class Platform:
         from database.models import JobRun
 
         queue_name = queue or job.queue
-        payload = json.dumps({"job": job.job_reference(), "args": [], "kwargs": {"project": project, "env": env, **kwargs}}, default=str)
+        payload = json.dumps(
+            {
+                "job": job.job_reference(),
+                "args": [],
+                "kwargs": {"project": project, "env": env, **kwargs},
+            },
+            default=str,
+        )
         job_id = await self.queue.push(queue_name, payload, delay=int(delay or 0))
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         await JobRun.update_or_create(
             id=job_id,
             defaults={
@@ -190,7 +225,9 @@ class Platform:
                 "status": "delayed" if delay else "queued",
                 "max_attempts": getattr(job, "tries", 1),
                 "payload": _truncate(kwargs),
-                "available_at": now if not delay else datetime.fromtimestamp(now.timestamp() + delay, timezone.utc),
+                "available_at": now
+                if not delay
+                else datetime.fromtimestamp(now.timestamp() + delay, UTC),
             },
         )
         note("jobs", f"{job.__name__}:{job_id}", append=True)
@@ -198,17 +235,38 @@ class Platform:
 
     # ── events ───────────────────────────────────────────────────────────
 
-    async def emit(self, state: EnvironmentState, name: str, payload: Any, *, actor: str | None = None, request_id: str | None = None) -> str:
+    async def emit(
+        self,
+        state: EnvironmentState,
+        name: str,
+        payload: Any,
+        *,
+        actor: str | None = None,
+        request_id: str | None = None,
+    ) -> str:
         note("events", name, append=True)
-        return await self.bus.emit(name, project=state.project_ref, env=state.env_name, payload=payload, actor=actor, request_id=request_id)
+        return await self.bus.emit(
+            name,
+            project=state.project_ref,
+            env=state.env_name,
+            payload=payload,
+            actor=actor,
+            request_id=request_id,
+        )
 
     # ── realtime ─────────────────────────────────────────────────────────
 
-    async def publish(self, state: EnvironmentState, channel: str, event: str, payload: Any) -> dict[str, Any]:
+    async def publish(
+        self, state: EnvironmentState, channel: str, event: str, payload: Any
+    ) -> dict[str, Any]:
         """Publish through Angula, the realtime service."""
         context = PlatformContext(project=state.project_ref, env=state.env_name, role="service")
         note("realtime", channel, append=True)
-        return await self.angula.post("/internal/v1/publish", json={"channel": channel, "event": event, "payload": payload}, context=context)
+        return await self.angula.post(
+            "/internal/v1/publish",
+            json={"channel": channel, "event": event, "payload": payload},
+            context=context,
+        )
 
 
 def _truncate(value: Any, limit: int = 4000) -> Any:

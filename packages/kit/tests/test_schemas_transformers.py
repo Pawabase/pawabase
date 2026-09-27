@@ -1,4 +1,6 @@
 import pytest
+from pydantic import ValidationError
+
 from pawabase_kit.schemas import SchemaError, compile_model, compile_schemas, validate_payload
 from pawabase_kit.templating import render
 from pawabase_kit.transformers import (
@@ -7,7 +9,6 @@ from pawabase_kit.transformers import (
     transformer,
     validate_transformer,
 )
-from pydantic import ValidationError
 
 FIELDS = [
     {"name": "title", "type": "string", "required": True, "max_length": 10},

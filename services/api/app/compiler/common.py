@@ -6,12 +6,13 @@ import hashlib
 import json
 from typing import Any
 
-from pawabase_kit.policies import PolicyGate, build_policy_context
-from pawabase_kit.telemetry import note
 from sillo import json as json_response
 from sillo.auth.exceptions import AuthenticationFailed, PermissionDenied
 from sillo.middleware.base import BaseMiddleware
 from sillo.security import RateLimitConfig, RateLimitMiddleware
+
+from pawabase_kit.policies import PolicyGate, build_policy_context
+from pawabase_kit.telemetry import note
 
 PLAN_SCOPE_KEY = "pawabase.plan"
 
@@ -27,7 +28,15 @@ class RouteRateLimit(BaseMiddleware):
 
     def __init__(self, *, limit: int, window: int, namespace: str, backend: Any = "memory") -> None:
         super().__init__()
-        self.limiter = RateLimitMiddleware(RateLimitConfig(limit=limit, window=window, namespace=namespace, backend=backend, key_func=_client_key))
+        self.limiter = RateLimitMiddleware(
+            RateLimitConfig(
+                limit=limit,
+                window=window,
+                namespace=namespace,
+                backend=backend,
+                key_func=_client_key,
+            )
+        )
 
     async def dispatch(self, ctx, call_next):
         result = await self.limiter.check(ctx)
@@ -35,9 +44,17 @@ class RouteRateLimit(BaseMiddleware):
             retry_after = max(int(result.retry_after), 1)
             note("rate_limited", True)
             return json_response(
-                {"error": "rate_limit_exceeded", "message": "Too many requests. Slow down and retry later.", "retry_after": retry_after},
+                {
+                    "error": "rate_limit_exceeded",
+                    "message": "Too many requests. Slow down and retry later.",
+                    "retry_after": retry_after,
+                },
                 status_code=429,
-                headers={"Retry-After": str(retry_after), "X-RateLimit-Limit": str(result.limit), "X-RateLimit-Remaining": "0"},
+                headers={
+                    "Retry-After": str(retry_after),
+                    "X-RateLimit-Limit": str(result.limit),
+                    "X-RateLimit-Remaining": "0",
+                },
             )
         response = await call_next()
         if result is not None and response is not None and hasattr(response, "headers"):
@@ -61,7 +78,9 @@ def _client_key(ctx) -> str:
     return f"ip:{client[0] if client else 'unknown'}"
 
 
-def rate_limit_middleware(settings: dict[str, Any] | None, namespace: str, redis_url: str) -> list[Any]:
+def rate_limit_middleware(
+    settings: dict[str, Any] | None, namespace: str, redis_url: str
+) -> list[Any]:
     if not settings or not settings.get("limit"):
         return []
     backend: Any = "memory"
@@ -69,7 +88,14 @@ def rate_limit_middleware(settings: dict[str, Any] | None, namespace: str, redis
         from sillo.security import RedisBackend
 
         backend = RedisBackend(url=redis_url)
-    return [RouteRateLimit(limit=int(settings["limit"]), window=int(settings.get("window", 60)), namespace=namespace, backend=backend)]
+    return [
+        RouteRateLimit(
+            limit=int(settings["limit"]),
+            window=int(settings.get("window", 60)),
+            namespace=namespace,
+            backend=backend,
+        )
+    ]
 
 
 class PlanGate(PolicyGate):
@@ -87,7 +113,11 @@ class PlanGate(PolicyGate):
         from pawabase_kit.context import current_context
 
         platform = current_context(ctx)
-        if self.scope_required and platform is not None and not platform.allows_scope(self.scope_required):
+        if (
+            self.scope_required
+            and platform is not None
+            and not platform.allows_scope(self.scope_required)
+        ):
             raise PermissionDenied(f"This API key lacks the {self.scope_required!r} scope")
         engine = self._engine(ctx)
         plan = engine.plan(self.policy, build_policy_context(ctx))
@@ -104,7 +134,9 @@ class PlanGate(PolicyGate):
 def cache_key(ctx, *parts: Any) -> str:
     """A cache key that includes the caller, so cached reads never cross users."""
     user = ctx.scope.get("user")
-    identity = user.identity if user is not None and getattr(user, "is_authenticated", False) else "anon"
+    identity = (
+        user.identity if user is not None and getattr(user, "is_authenticated", False) else "anon"
+    )
     from pawabase_kit.context import current_context
 
     platform = current_context(ctx)

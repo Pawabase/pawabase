@@ -13,7 +13,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from pypika_tortoise import Order, Parameter, Table
+from pypika_tortoise import Order, Table
 from pypika_tortoise.functions import Count, Star
 
 from . import inspect as db_inspect
@@ -31,7 +31,20 @@ from .sql import (
 )
 
 MAX_PAGE_SIZE = 200
-FILTER_OPERATORS = ("eq", "neq", "gt", "gte", "lt", "lte", "like", "ilike", "in", "nin", "is", "isnot")
+FILTER_OPERATORS = (
+    "eq",
+    "neq",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    "like",
+    "ilike",
+    "in",
+    "nin",
+    "is",
+    "isnot",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,7 +72,10 @@ class ResourceSpec:
         check_identifier(self.primary_key)
         self.field_map = {spec["name"]: spec for spec in self.fields}
         if self.primary_key not in self.field_map:
-            self.field_map[self.primary_key] = {"name": self.primary_key, "type": "uuid" if self.id_type == "uuid" else "integer"}
+            self.field_map[self.primary_key] = {
+                "name": self.primary_key,
+                "type": "uuid" if self.id_type == "uuid" else "integer",
+            }
         if self.timestamps:
             for name in TIMESTAMP_FIELDS:
                 self.field_map.setdefault(name, {"name": name, "type": "datetime"})
@@ -86,7 +102,11 @@ class ResourceSpec:
     def writable(self) -> set[str]:
         """Columns a client may write (not the key, timestamps or read-only fields)."""
         blocked = {self.primary_key, *TIMESTAMP_FIELDS}
-        return {name for name, spec in self.field_map.items() if name not in blocked and not spec.get("read_only")}
+        return {
+            name
+            for name, spec in self.field_map.items()
+            if name not in blocked and not spec.get("read_only")
+        }
 
 
 class ResourceStore:
@@ -114,17 +134,34 @@ class ResourceStore:
         statements: list[str] = []
         tables = await db_inspect.list_tables(self.source)
         if spec.table not in tables:
-            statements.append(create_table_sql(dialect, spec.table, spec.primary_key, spec.id_type, spec.fields, spec.timestamps))
+            statements.append(
+                create_table_sql(
+                    dialect,
+                    spec.table,
+                    spec.primary_key,
+                    spec.id_type,
+                    spec.fields,
+                    spec.timestamps,
+                )
+            )
             if spec.owner_field and spec.owner_field not in {f["name"] for f in spec.fields}:
-                statements.append(add_column_sql(dialect, spec.table, spec.field_map[spec.owner_field]))
+                statements.append(
+                    add_column_sql(dialect, spec.table, spec.field_map[spec.owner_field])
+                )
         else:
-            existing = {column["name"] for column in await db_inspect.list_columns(self.source, spec.table)}
+            existing = {
+                column["name"] for column in await db_inspect.list_columns(self.source, spec.table)
+            }
             for name, column in spec.field_map.items():
                 if name not in existing:
                     statements.append(add_column_sql(dialect, spec.table, column))
         for column in spec.fields:
             if column.get("indexed") or column.get("unique"):
-                statements.append(create_index_sql(dialect, spec.table, column["name"], unique=bool(column.get("unique"))))
+                statements.append(
+                    create_index_sql(
+                        dialect, spec.table, column["name"], unique=bool(column.get("unique"))
+                    )
+                )
         if spec.owner_field:
             statements.append(create_index_sql(dialect, spec.table, spec.owner_field))
         for statement in statements:
@@ -145,7 +182,9 @@ class ResourceStore:
         column = self._column(item.column)
         op = item.op
         if op in ("in", "nin"):
-            values = item.value if isinstance(item.value, (list, tuple)) else str(item.value).split(",")
+            values = (
+                item.value if isinstance(item.value, (list, tuple)) else str(item.value).split(",")
+            )
             encoded = [self._encode(item.column, v) for v in values]
             return column.isin(encoded) if op == "in" else column.notin(encoded)
         if op in ("is", "isnot"):
@@ -156,7 +195,11 @@ class ResourceStore:
                 encoded = self._encode(item.column, value == "true")
                 return column == encoded if op == "is" else column != encoded
             raise SqlError("is/isnot take null, true or false")
-        value = self._encode(item.column, item.value) if op not in ("like", "ilike") else str(item.value).replace("*", "%")
+        value = (
+            self._encode(item.column, item.value)
+            if op not in ("like", "ilike")
+            else str(item.value).replace("*", "%")
+        )
         if op == "eq":
             return column == value
         if op == "neq":
@@ -181,7 +224,9 @@ class ResourceStore:
         return query
 
     def _decode(self, row: Mapping[str, Any]) -> dict[str, Any]:
-        return {name: decode_value(self.spec.field_map.get(name), value) for name, value in row.items()}
+        return {
+            name: decode_value(self.spec.field_map.get(name), value) for name, value in row.items()
+        }
 
     async def list(
         self,
@@ -205,26 +250,34 @@ class ResourceStore:
         columns = [self._column(name) for name in select] if select else [Star()]
         query = self._where(qc.from_(self.table).select(*columns), filters)
         for column, descending in sort or [(self.spec.primary_key, False)]:
-            query = query.orderby(self._column(column), order=Order.desc if descending else Order.asc)
+            query = query.orderby(
+                self._column(column), order=Order.desc if descending else Order.asc
+            )
         query = query.limit(limit).offset(offset)
         sql, params = query.get_parameterized_sql()
         rows = [self._decode(row) for row in await self.source.fetch(sql, params)]
         total = None
         if count:
-            count_query = self._where(qc.from_(self.table).select(Count(Star()).as_("total")), filters)
+            count_query = self._where(
+                qc.from_(self.table).select(Count(Star()).as_("total")), filters
+            )
             sql, params = count_query.get_parameterized_sql()
             result = await self.source.fetch(sql, params)
             total = int(result[0]["total"]) if result else 0
         return rows, total
 
     async def get(self, record_id: Any) -> dict[str, Any] | None:
-        rows, _ = await self.list(filters=[Filter(self.spec.primary_key, "eq", record_id)], limit=1, count=False)
+        rows, _ = await self.list(
+            filters=[Filter(self.spec.primary_key, "eq", record_id)], limit=1, count=False
+        )
         return rows[0] if rows else None
 
     async def get_many(self, column: str, values: Sequence[Any]) -> list[dict[str, Any]]:
         if not values:
             return []
-        rows, _ = await self.list(filters=[Filter(column, "in", list(values))], limit=MAX_PAGE_SIZE, count=False)
+        rows, _ = await self.list(
+            filters=[Filter(column, "in", list(values))], limit=MAX_PAGE_SIZE, count=False
+        )
         return rows
 
     # ── writes ───────────────────────────────────────────────────────────
@@ -262,12 +315,22 @@ class ResourceStore:
 
     async def _get_with(self, runner: Any, record_id: Any) -> dict[str, Any] | None:
         qc = self.source.query_class
-        query = qc.from_(self.table).select(Star()).where(self._column(self.spec.primary_key) == self._encode(self.spec.primary_key, record_id)).limit(1)
+        query = (
+            qc.from_(self.table)
+            .select(Star())
+            .where(
+                self._column(self.spec.primary_key)
+                == self._encode(self.spec.primary_key, record_id)
+            )
+            .limit(1)
+        )
         sql, params = query.get_parameterized_sql()
         rows = await runner.execute_query_dict(sql, params)
         return self._decode(rows[0]) if rows else None
 
-    async def update(self, record_id: Any, data: Mapping[str, Any], *, client: Any = None) -> dict[str, Any] | None:
+    async def update(
+        self, record_id: Any, data: Mapping[str, Any], *, client: Any = None
+    ) -> dict[str, Any] | None:
         values = self._clean(data)
         values.pop(self.spec.primary_key, None)
         if self.spec.timestamps:
@@ -278,14 +341,24 @@ class ResourceStore:
             query = qc.update(self.table)
             for key, value in values.items():
                 query = query.set(self.table.field(key), value)
-            query = query.where(self._column(self.spec.primary_key) == self._encode(self.spec.primary_key, record_id))
+            query = query.where(
+                self._column(self.spec.primary_key)
+                == self._encode(self.spec.primary_key, record_id)
+            )
             sql, params = query.get_parameterized_sql()
             await runner.execute_query(sql, params)
         return await self._get_with(runner, record_id)
 
     async def delete(self, record_id: Any, *, client: Any = None) -> bool:
         qc = self.source.query_class
-        query = qc.from_(self.table).delete().where(self._column(self.spec.primary_key) == self._encode(self.spec.primary_key, record_id))
+        query = (
+            qc.from_(self.table)
+            .delete()
+            .where(
+                self._column(self.spec.primary_key)
+                == self._encode(self.spec.primary_key, record_id)
+            )
+        )
         sql, params = query.get_parameterized_sql()
         runner = client or self.source.client
         count, _ = await runner.execute_query(sql, params)

@@ -52,12 +52,18 @@ class DataSource:
             if file_path and file_path != ":memory:":
                 Path(file_path).parent.mkdir(parents=True, exist_ok=True)
             module = importlib.import_module(info["engine"])
-            client_class = module.get_client_class(info) if hasattr(module, "get_client_class") else module.client_class
+            client_class = (
+                module.get_client_class(info)
+                if hasattr(module, "get_client_class")
+                else module.client_class
+            )
             client = client_class(connection_name=self.alias, **credentials)
             try:
                 await client.create_connection(with_db=True)
             except Exception as exc:
-                raise DataSourceError(f"could not connect to the environment database: {type(exc).__name__}: {exc}") from exc
+                raise DataSourceError(
+                    f"could not connect to the environment database: {type(exc).__name__}: {exc}"
+                ) from exc
             self.client = client
             self.dialect = dialect_of(client)
             self.query_class = client.query_class
@@ -109,4 +115,7 @@ class DataSourcePool:
         self._sources.clear()
 
     def stats(self) -> list[dict[str, Any]]:
-        return [{"alias": s.alias, "dialect": s.dialect, "connected": s.client is not None} for s in self._sources.values()]
+        return [
+            {"alias": s.alias, "dialect": s.dialect, "connected": s.client is not None}
+            for s in self._sources.values()
+        ]

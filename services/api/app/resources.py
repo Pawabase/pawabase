@@ -22,15 +22,35 @@ def resource_tag(name: str) -> str:
     return f"resource:{name}"
 
 
-async def after_write(platform: Platform, state: EnvironmentState, resource: str, change: str, record: dict[str, Any], *, actor: str | None = None, request_id: str | None = None) -> None:
+async def after_write(
+    platform: Platform,
+    state: EnvironmentState,
+    resource: str,
+    change: str,
+    record: dict[str, Any],
+    *,
+    actor: str | None = None,
+    request_id: str | None = None,
+) -> None:
     definition = state.resources.get(resource)
     await platform.cache_invalidate(state, [resource_tag(resource)])
     if definition is None:
         return
     if definition.events:
-        await platform.emit(state, f"{resource}.{change}", {"resource": resource, "change": change, "record": record}, actor=actor, request_id=request_id)
+        await platform.emit(
+            state,
+            f"{resource}.{change}",
+            {"resource": resource, "change": change, "record": record},
+            actor=actor,
+            request_id=request_id,
+        )
     if definition.realtime:
         try:
-            await platform.publish(state, f"resource:{resource}", change, {"resource": resource, "change": change, "record": record})
+            await platform.publish(
+                state,
+                f"resource:{resource}",
+                change,
+                {"resource": resource, "change": change, "record": record},
+            )
         except Exception as exc:  # realtime is best-effort; the write already happened
             logger.warning("could not publish %s.%s to realtime: %s", resource, change, exc)

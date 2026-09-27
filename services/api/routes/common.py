@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from pawabase_kit.policies import PolicyGate
 from sillo import HttpContext
 from sillo.exceptions import HTTPException
 
 from app.state import bump
 from database.models import AuditEntry, Environment, Project
+from pawabase_kit.policies import PolicyGate
 
 #: Studio (a service token acting for an operator), CLI operators and other
 #: services. Project end users are refused, anonymous callers get a 401.
@@ -35,20 +35,50 @@ async def get_project(ref: str) -> Project:
 
 
 async def get_environment(ref: str, env: str) -> Environment:
-    environment = await Environment.filter(project__ref=ref, name=env).select_related("project").first()
+    environment = (
+        await Environment.filter(project__ref=ref, name=env).select_related("project").first()
+    )
     if environment is None:
         raise HTTPException(status_code=404, detail=f"no environment {ref}/{env}")
     return environment
 
 
-async def audit(ctx: HttpContext, action: str, *, project: str | None = None, env: str | None = None, target: str = "", details: dict[str, Any] | None = None) -> None:
-    await AuditEntry.create(project=project, env=env, actor=actor(ctx), action=action, target=target, details=details or {})
+async def audit(
+    ctx: HttpContext,
+    action: str,
+    *,
+    project: str | None = None,
+    env: str | None = None,
+    target: str = "",
+    details: dict[str, Any] | None = None,
+) -> None:
+    await AuditEntry.create(
+        project=project,
+        env=env,
+        actor=actor(ctx),
+        action=action,
+        target=target,
+        details=details or {},
+    )
 
 
-async def changed(ctx: HttpContext, environment: Environment, action: str, target: str, details: dict[str, Any] | None = None) -> None:
+async def changed(
+    ctx: HttpContext,
+    environment: Environment,
+    action: str,
+    target: str,
+    details: dict[str, Any] | None = None,
+) -> None:
     """A definition changed: bump the version and audit it."""
     await bump(environment.id)
-    await audit(ctx, action, project=environment.project.ref, env=environment.name, target=target, details=details)
+    await audit(
+        ctx,
+        action,
+        project=environment.project.ref,
+        env=environment.name,
+        target=target,
+        details=details,
+    )
 
 
 def page_params(ctx: HttpContext, *, default: int = 50, maximum: int = 500) -> tuple[int, int]:

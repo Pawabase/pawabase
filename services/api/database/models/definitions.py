@@ -25,7 +25,9 @@ class _Definition(Model):
 class SchemaDef(_Definition):
     """A reusable schema: field definitions (see ``pawabase_kit.schemas``)."""
 
-    environment = fields.ForeignKeyField("models.Environment", related_name="schemas", on_delete=fields.CASCADE)
+    environment = fields.ForeignKeyField(
+        "models.Environment", related_name="schemas", on_delete=fields.CASCADE
+    )
     fields_ = AnyJSONField(default=list, source_field="fields")
 
     class Meta:
@@ -37,7 +39,9 @@ class SchemaDef(_Definition):
 class TransformerDef(_Definition):
     """A reusable declarative transformer."""
 
-    environment = fields.ForeignKeyField("models.Environment", related_name="transformers", on_delete=fields.CASCADE)
+    environment = fields.ForeignKeyField(
+        "models.Environment", related_name="transformers", on_delete=fields.CASCADE
+    )
     definition = AnyJSONField(default=dict)
 
     class Meta:
@@ -49,7 +53,9 @@ class TransformerDef(_Definition):
 class PolicyDef(_Definition):
     """A reusable policy condition."""
 
-    environment = fields.ForeignKeyField("models.Environment", related_name="policies", on_delete=fields.CASCADE)
+    environment = fields.ForeignKeyField(
+        "models.Environment", related_name="policies", on_delete=fields.CASCADE
+    )
     condition = AnyJSONField(default=dict)
 
     class Meta:
@@ -78,7 +84,9 @@ class Resource(_Definition):
         owner_field: Set this column to the caller's user id on create.
     """
 
-    environment = fields.ForeignKeyField("models.Environment", related_name="resources", on_delete=fields.CASCADE)
+    environment = fields.ForeignKeyField(
+        "models.Environment", related_name="resources", on_delete=fields.CASCADE
+    )
     table = fields.CharField(max_length=128)
     primary_key = fields.CharField(max_length=64, default="id")
     id_type = fields.CharField(max_length=16, default="integer")
@@ -103,7 +111,9 @@ class Resource(_Definition):
 class RouteDef(_Definition):
     """A custom API route served by a flow or a Python function."""
 
-    environment = fields.ForeignKeyField("models.Environment", related_name="routes", on_delete=fields.CASCADE)
+    environment = fields.ForeignKeyField(
+        "models.Environment", related_name="routes", on_delete=fields.CASCADE
+    )
     method = fields.CharField(max_length=10, default="POST")
     path = fields.CharField(max_length=255)
     policy = AnyJSONField(null=True)
@@ -127,7 +137,9 @@ class RouteDef(_Definition):
 class Flow(_Definition):
     """A visual backend flow (``@xyflow/react`` nodes and edges)."""
 
-    environment = fields.ForeignKeyField("models.Environment", related_name="flows", on_delete=fields.CASCADE)
+    environment = fields.ForeignKeyField(
+        "models.Environment", related_name="flows", on_delete=fields.CASCADE
+    )
     definition = AnyJSONField(default=dict)
     enabled = fields.BooleanField(default=True)
     timeout = fields.FloatField(default=60.0)
@@ -150,7 +162,9 @@ class Bucket(_Definition):
         max_bytes: Largest object (0 is the environment's default).
     """
 
-    environment = fields.ForeignKeyField("models.Environment", related_name="buckets", on_delete=fields.CASCADE)
+    environment = fields.ForeignKeyField(
+        "models.Environment", related_name="buckets", on_delete=fields.CASCADE
+    )
     public = fields.BooleanField(default=False)
     read_policy = AnyJSONField(null=True)
     write_policy = AnyJSONField(null=True)
@@ -167,7 +181,9 @@ class Bucket(_Definition):
 class MailTemplate(_Definition):
     """A stored email template, rendered in Jinja2's sandbox."""
 
-    environment = fields.ForeignKeyField("models.Environment", related_name="mail_templates", on_delete=fields.CASCADE)
+    environment = fields.ForeignKeyField(
+        "models.Environment", related_name="mail_templates", on_delete=fields.CASCADE
+    )
     subject = fields.CharField(max_length=255, default="")
     html = fields.TextField(default="")
     text = fields.TextField(default="")
@@ -189,7 +205,9 @@ class EventSubscription(_Definition):
         condition: Optional condition on ``event`` (``{"eq": ["$event.payload.status", "paid"]}``).
     """
 
-    environment = fields.ForeignKeyField("models.Environment", related_name="subscriptions", on_delete=fields.CASCADE)
+    environment = fields.ForeignKeyField(
+        "models.Environment", related_name="subscriptions", on_delete=fields.CASCADE
+    )
     event = fields.CharField(max_length=128)
     target_type = fields.CharField(max_length=16)
     target = fields.CharField(max_length=255, default="")
@@ -205,7 +223,9 @@ class EventSubscription(_Definition):
 class WebhookEndpoint(_Definition):
     """An outbound webhook: events POSTed, signed, to a URL."""
 
-    environment = fields.ForeignKeyField("models.Environment", related_name="webhooks", on_delete=fields.CASCADE)
+    environment = fields.ForeignKeyField(
+        "models.Environment", related_name="webhooks", on_delete=fields.CASCADE
+    )
     url = fields.CharField(max_length=2048)
     events = AnyJSONField(default=list)
     secret_ciphertext = fields.TextField()
@@ -229,7 +249,9 @@ class InboundHook(_Definition):
         target_type: ``event`` (publish ``target``) or ``flow``.
     """
 
-    environment = fields.ForeignKeyField("models.Environment", related_name="inbound_hooks", on_delete=fields.CASCADE)
+    environment = fields.ForeignKeyField(
+        "models.Environment", related_name="inbound_hooks", on_delete=fields.CASCADE
+    )
     slug = fields.CharField(max_length=128)
     verification = fields.CharField(max_length=20, default="hmac-sha256")
     signature_header = fields.CharField(max_length=128, default="x-signature")
@@ -256,7 +278,9 @@ class Schedule(_Definition):
         payload: Input for the flow or function, or the event payload.
     """
 
-    environment = fields.ForeignKeyField("models.Environment", related_name="schedules", on_delete=fields.CASCADE)
+    environment = fields.ForeignKeyField(
+        "models.Environment", related_name="schedules", on_delete=fields.CASCADE
+    )
     cron = fields.CharField(max_length=64, null=True)
     interval_seconds = fields.IntField(null=True)
     target_type = fields.CharField(max_length=16)

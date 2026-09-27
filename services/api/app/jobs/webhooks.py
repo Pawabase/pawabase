@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.jobs.base import PawabaseJob
@@ -28,12 +28,18 @@ class DeliverWebhookJob(PawabaseJob):
         from app.outbound import check_target
 
         platform, _state = await self.environment()
-        delivery = await WebhookDelivery.get_or_none(id=self.params["delivery_id"]).prefetch_related("endpoint")
+        delivery = (
+            await WebhookDelivery.filter(id=self.params["delivery_id"])
+            .prefetch_related("endpoint")
+            .first()
+        )
         if delivery is None:
             return {"skipped": "delivery no longer exists"}
         endpoint = delivery.endpoint
         secret = platform.box.open(endpoint.secret_ciphertext)
-        body = delivery_body(delivery.event_id, delivery.event, delivery.payload, self.project, self.env)
+        body = delivery_body(
+            delivery.event_id, delivery.event, delivery.payload, self.project, self.env
+        )
         headers = {
             **{str(k): str(v) for k, v in (endpoint.headers or {}).items()},
             "content-type": "application/json",
@@ -44,8 +50,12 @@ class DeliverWebhookJob(PawabaseJob):
         delivery.attempts += 1
         started = time.perf_counter()
         try:
-            check_target(endpoint.url, allow_private=platform.settings.app_env in ("local", "testing"))
-            response = await request_once(platform.outbound, "POST", endpoint.url, headers=headers, content=body, timeout=15.0)
+            check_target(
+                endpoint.url, allow_private=platform.settings.app_env in ("local", "testing")
+            )
+            response = await request_once(
+                platform.outbound, "POST", endpoint.url, headers=headers, content=body, timeout=15.0
+            )
         except OutboundRefused as exc:
             delivery.status, delivery.error = "failed", str(exc)
             await delivery.save()
@@ -60,7 +70,7 @@ class DeliverWebhookJob(PawabaseJob):
         delivery.response_body = str(response["body"])[:2000]
         if 200 <= response["status"] < 300:
             delivery.status, delivery.error = "delivered", None
-            delivery.delivered_at = datetime.now(timezone.utc)
+            delivery.delivered_at = datetime.now(UTC)
             await delivery.save()
             return {"status": response["status"]}
         delivery.status, delivery.error = "retrying", f"HTTP {response['status']}"

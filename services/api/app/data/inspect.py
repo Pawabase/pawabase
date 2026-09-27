@@ -10,7 +10,9 @@ from .sql import check_identifier
 
 async def list_tables(source: DataSource) -> list[str]:
     if source.dialect == "sqlite":
-        rows = await source.fetch("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+        rows = await source.fetch(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        )
     elif source.dialect == "postgres":
         rows = await source.fetch(
             "SELECT table_name AS name FROM information_schema.tables WHERE table_schema = current_schema() AND table_type = 'BASE TABLE' ORDER BY table_name"
@@ -27,7 +29,13 @@ async def list_columns(source: DataSource, table: str) -> list[dict[str, Any]]:
     if source.dialect == "sqlite":
         rows = await source.fetch(f'PRAGMA table_info("{table}")')
         return [
-            {"name": r["name"], "type": r["type"], "nullable": not r["notnull"], "default": r["dflt_value"], "primary_key": bool(r["pk"])}
+            {
+                "name": r["name"],
+                "type": r["type"],
+                "nullable": not r["notnull"],
+                "default": r["dflt_value"],
+                "primary_key": bool(r["pk"]),
+            }
             for r in rows
         ]
     schema = "current_schema()" if source.dialect == "postgres" else "DATABASE()"
@@ -39,7 +47,13 @@ async def list_columns(source: DataSource, table: str) -> list[dict[str, Any]]:
     )
     keys = await _primary_keys(source, table)
     return [
-        {"name": r["name"], "type": r["type"], "nullable": r["nullable"] == "YES", "default": r["dflt"], "primary_key": r["name"] in keys}
+        {
+            "name": r["name"],
+            "type": r["type"],
+            "nullable": r["nullable"] == "YES",
+            "default": r["dflt"],
+            "primary_key": r["name"] in keys,
+        }
         for r in rows
     ]
 
@@ -63,15 +77,34 @@ async def list_indexes(source: DataSource, table: str) -> list[dict[str, Any]]:
         indexes = []
         for row in rows:
             columns = await source.fetch(f'PRAGMA index_info("{row["name"]}")')
-            indexes.append({"name": row["name"], "unique": bool(row["unique"]), "columns": [c["name"] for c in columns]})
+            indexes.append(
+                {
+                    "name": row["name"],
+                    "unique": bool(row["unique"]),
+                    "columns": [c["name"] for c in columns],
+                }
+            )
         return indexes
     if source.dialect == "postgres":
-        rows = await source.fetch("SELECT indexname AS name, indexdef AS definition FROM pg_indexes WHERE schemaname = current_schema() AND tablename = $1", [table])
-        return [{"name": r["name"], "unique": "UNIQUE" in r["definition"], "definition": r["definition"]} for r in rows]
+        rows = await source.fetch(
+            "SELECT indexname AS name, indexdef AS definition FROM pg_indexes WHERE schemaname = current_schema() AND tablename = $1",
+            [table],
+        )
+        return [
+            {
+                "name": r["name"],
+                "unique": "UNIQUE" in r["definition"],
+                "definition": r["definition"],
+            }
+            for r in rows
+        ]
     rows = await source.fetch(f"SHOW INDEX FROM `{table}`")
     grouped: dict[str, dict[str, Any]] = {}
     for row in rows:
-        entry = grouped.setdefault(row["Key_name"], {"name": row["Key_name"], "unique": not row["Non_unique"], "columns": []})
+        entry = grouped.setdefault(
+            row["Key_name"],
+            {"name": row["Key_name"], "unique": not row["Non_unique"], "columns": []},
+        )
         entry["columns"].append(row["Column_name"])
     return list(grouped.values())
 
@@ -80,7 +113,10 @@ async def list_foreign_keys(source: DataSource, table: str) -> list[dict[str, An
     check_identifier(table)
     if source.dialect == "sqlite":
         rows = await source.fetch(f'PRAGMA foreign_key_list("{table}")')
-        return [{"column": r["from"], "references_table": r["table"], "references_column": r["to"]} for r in rows]
+        return [
+            {"column": r["from"], "references_table": r["table"], "references_column": r["to"]}
+            for r in rows
+        ]
     placeholder = "$1" if source.dialect == "postgres" else "%s"
     rows = await source.fetch(
         "SELECT kcu.column_name AS col, ccu.table_name AS ref_table, ccu.column_name AS ref_col "
@@ -90,7 +126,10 @@ async def list_foreign_keys(source: DataSource, table: str) -> list[dict[str, An
         f"WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_name = {placeholder}",
         [table],
     )
-    return [{"column": r["col"], "references_table": r["ref_table"], "references_column": r["ref_col"]} for r in rows]
+    return [
+        {"column": r["col"], "references_table": r["ref_table"], "references_column": r["ref_col"]}
+        for r in rows
+    ]
 
 
 async def describe_table(source: DataSource, table: str) -> dict[str, Any]:
@@ -117,6 +156,16 @@ def is_read_only(sql: str) -> bool:
     lowered = stripped.lower()
     if not lowered.startswith(READ_ONLY_PREFIXES):
         return False
-    forbidden = (" insert ", " update ", " delete ", " drop ", " alter ", " create ", " truncate ", " grant ", " attach ")
+    forbidden = (
+        " insert ",
+        " update ",
+        " delete ",
+        " drop ",
+        " alter ",
+        " create ",
+        " truncate ",
+        " grant ",
+        " attach ",
+    )
     padded = f" {lowered} "
     return not any(word in padded for word in forbidden)

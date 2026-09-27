@@ -38,3 +38,6 @@ extend-exclude = ["**/database/migrations", "**/node_modules"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
 ignore = ["E501", "B008", "SIM105"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "database", "routes", "pawabase_kit"]

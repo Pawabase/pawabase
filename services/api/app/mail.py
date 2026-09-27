@@ -30,7 +30,10 @@ class MailManager:
         self._clients: dict[tuple[str, str, str], MailClient] = {}
 
     def _config(self, state: EnvironmentState) -> MailConfig:
-        raw = {key: self.platform.resolve_value(state, value) for key, value in (state.infra.get("mail") or {}).items()}
+        raw = {
+            key: self.platform.resolve_value(state, value)
+            for key, value in (state.infra.get("mail") or {}).items()
+        }
         configured = bool(raw.get("host"))
         port = int(raw.get("port") or 587)
         use_ssl = bool(raw.get("use_ssl", port == 465))
@@ -55,7 +58,9 @@ class MailManager:
             client = self._clients[key] = MailClient(config)
         return client
 
-    def render(self, state: EnvironmentState, template: str, data: Mapping[str, Any]) -> tuple[str, str | None, str | None]:
+    def render(
+        self, state: EnvironmentState, template: str, data: Mapping[str, Any]
+    ) -> tuple[str, str | None, str | None]:
         stored = state.mail_templates.get(template)
         if stored is None:
             raise KeyError(f"no mail template {template!r}")
@@ -79,11 +84,15 @@ class MailManager:
         if not to:
             raise ValueError("a message needs at least one recipient")
         if template:
-            rendered_subject, rendered_html, rendered_text = self.render(state, template, data or {})
+            rendered_subject, rendered_html, rendered_text = self.render(
+                state, template, data or {}
+            )
             subject = subject or rendered_subject
             html = html or rendered_html
             text = text or rendered_text
-        result = await self.client(state).send_email(to=to, subject=subject, body=text or "", html_body=html)
+        result = await self.client(state).send_email(
+            to=to, subject=subject, body=text or "", html_body=html
+        )
         suppressed = bool((result.provider_response or {}).get("suppressed"))
         await MailLog.create(
             project=state.project_ref,

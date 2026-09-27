@@ -18,10 +18,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from pawabase_kit.policies import build_policy_context
-from pawabase_kit.schemas import compile_model
-from pawabase_kit.telemetry import note
-from pawabase_kit.transformers import apply_transformer
 from pydantic import BaseModel, create_model
 from sillo import HttpContext, Query, no_content
 from sillo import json as json_response
@@ -31,6 +27,10 @@ from sillo.helpers.strings import pascal_case
 from app.compiler.common import PLAN_SCOPE_KEY, PlanGate, cache_key, rate_limit_middleware
 from app.data.store import MAX_PAGE_SIZE, Filter, ResourceSpec, parse_filters, parse_sort
 from app.resources import after_write, resource_tag
+from pawabase_kit.policies import build_policy_context
+from pawabase_kit.schemas import compile_model
+from pawabase_kit.telemetry import note
+from pawabase_kit.transformers import apply_transformer
 
 if TYPE_CHECKING:
     from sillo import SilloApp
@@ -77,11 +77,15 @@ def _request_id(ctx: HttpContext) -> str | None:
 async def _present(state: EnvironmentState, resource: Any, ctx: HttpContext, data: Any) -> Any:
     if resource.transformer:
         context = build_policy_context(ctx)
-        return await apply_transformer(data, resource.transformer, context=context, registry=state.transformers)
+        return await apply_transformer(
+            data, resource.transformer, context=context, registry=state.transformers
+        )
     return data
 
 
-async def _expand(state: EnvironmentState, spec: ResourceSpec, rows: list[dict[str, Any]], names: list[str]) -> None:
+async def _expand(
+    state: EnvironmentState, spec: ResourceSpec, rows: list[dict[str, Any]], names: list[str]
+) -> None:
     """Attach ``belongs_to`` and ``has_many`` relations requested with ``?expand=``."""
     relations = {relation["name"]: relation for relation in spec.relations}
     for name in names:
@@ -90,15 +94,29 @@ async def _expand(state: EnvironmentState, spec: ResourceSpec, rows: list[dict[s
             raise HTTPException(status_code=400, detail=f"{spec.name} has no relation {name!r}")
         target = await state.store(relation["resource"])
         if relation.get("type", "belongs_to") == "belongs_to":
-            ids = sorted({row.get(relation["field"]) for row in rows if row.get(relation["field"]) is not None}, key=str)
-            related = {str(item[target.spec.primary_key]): item for item in await target.get_many(target.spec.primary_key, ids)}
+            ids = sorted(
+                {
+                    row.get(relation["field"])
+                    for row in rows
+                    if row.get(relation["field"]) is not None
+                },
+                key=str,
+            )
+            related = {
+                str(item[target.spec.primary_key]): item
+                for item in await target.get_many(target.spec.primary_key, ids)
+            }
             for row in rows:
                 row[name] = related.get(str(row.get(relation["field"])))
         else:  # has_many: relation["field"] is the foreign key on the target
             ids = [row[spec.primary_key] for row in rows]
             children = await target.get_many(relation["field"], ids)
             for row in rows:
-                row[name] = [child for child in children if str(child.get(relation["field"])) == str(row[spec.primary_key])]
+                row[name] = [
+                    child
+                    for child in children
+                    if str(child.get(relation["field"])) == str(row[spec.primary_key])
+                ]
 
 
 def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> list[str]:
@@ -109,7 +127,19 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
     tags = [resource.name, *(resource.tags or [])]
     registered: list[str] = []
     registry = state.compiled_schemas
-    read_model = compile_model(f"{title}", spec.fields + [{"name": spec.primary_key, "type": "uuid" if spec.id_type == "uuid" else "integer", "read_only": True}], mode="read", registry=registry)
+    read_model = compile_model(
+        f"{title}",
+        spec.fields
+        + [
+            {
+                "name": spec.primary_key,
+                "type": "uuid" if spec.id_type == "uuid" else "integer",
+                "read_only": True,
+            }
+        ],
+        mode="read",
+        registry=registry,
+    )
     namespace = f"rl:{state.project_ref}:{state.env_name}:{resource.name}"
     limits = rate_limit_middleware(resource.rate_limit, namespace, platform.settings.redis_url)
     base = f"/{resource.name}"
@@ -137,7 +167,9 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
             ctx: HttpContext,
             page=Query(1, type=int, ge=1, description="Page number, from 1"),
             per_page=Query(20, type=int, ge=1, le=MAX_PAGE_SIZE, description="Records per page"),
-            sort=Query(None, type=str, description="Comma-separated fields; prefix with - for descending"),
+            sort=Query(
+                None, type=str, description="Comma-separated fields; prefix with - for descending"
+            ),
             select=Query(None, type=str, description="Comma-separated fields to return"),
             expand=Query(None, type=str, description="Comma-separated relations to include"),
         ):
@@ -154,16 +186,35 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
                 cached = await platform.cache_get(state, key)
                 if cached is not None:
                     return cached
-            rows, total = await store.list(filters=filters, sort=parse_sort(sort, spec), limit=per_page, offset=(page - 1) * per_page, select=columns)
+            rows, total = await store.list(
+                filters=filters,
+                sort=parse_sort(sort, spec),
+                limit=per_page,
+                offset=(page - 1) * per_page,
+                select=columns,
+            )
             if plan.residual is not None:
                 context = build_policy_context(ctx)
-                rows = [row for row in rows if await state.engine.row_allowed(plan, {**context, "record": row})]
+                rows = [
+                    row
+                    for row in rows
+                    if await state.engine.row_allowed(plan, {**context, "record": row})
+                ]
                 total = None  # a per-row policy makes the database total unreliable
             if expand:
-                await _expand(state, spec, rows, [name.strip() for name in expand.split(",") if name.strip()])
-            body = {"data": await _present(state, resource, ctx, rows), "page": page, "per_page": per_page, "total": total}
+                await _expand(
+                    state, spec, rows, [name.strip() for name in expand.split(",") if name.strip()]
+                )
+            body = {
+                "data": await _present(state, resource, ctx, rows),
+                "page": page,
+                "per_page": per_page,
+                "total": total,
+            }
             if key:
-                await platform.cache_set(state, key, body, ttl=resource.cache_ttl, tags=[resource_tag(resource.name)])
+                await platform.cache_set(
+                    state, key, body, ttl=resource.cache_ttl, tags=[resource_tag(resource.name)]
+                )
             return body
 
         app.get(
@@ -183,7 +234,11 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
     settings = operation_settings(resource, "get")
     if settings:
 
-        async def get_record(ctx: HttpContext, id: str, expand=Query(None, type=str, description="Comma-separated relations to include")):
+        async def get_record(
+            ctx: HttpContext,
+            id: str,
+            expand=Query(None, type=str, description="Comma-separated relations to include"),
+        ):
             plan = ctx.scope[PLAN_SCOPE_KEY]
             record_id = _coerce_id(spec, id)
             key = None
@@ -196,13 +251,22 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
             record = await store.get(record_id)
             if record is None or any(str(record.get(k)) != str(v) for k, v in plan.filters.items()):
                 raise HTTPException(status_code=404, detail="Not found")
-            if plan.residual is not None and not await state.engine.row_allowed(plan, {**build_policy_context(ctx), "record": record}):
+            if plan.residual is not None and not await state.engine.row_allowed(
+                plan, {**build_policy_context(ctx), "record": record}
+            ):
                 raise HTTPException(status_code=404, detail="Not found")
             if expand:
-                await _expand(state, spec, [record], [name.strip() for name in expand.split(",") if name.strip()])
+                await _expand(
+                    state,
+                    spec,
+                    [record],
+                    [name.strip() for name in expand.split(",") if name.strip()],
+                )
             body = await _present(state, resource, ctx, record)
             if key:
-                await platform.cache_set(state, key, body, ttl=resource.cache_ttl, tags=[resource_tag(resource.name)])
+                await platform.cache_set(
+                    state, key, body, ttl=resource.cache_ttl, tags=[resource_tag(resource.name)]
+                )
             return body
 
         app.get(
@@ -220,7 +284,9 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
     # ── create ───────────────────────────────────────────────────────────
     settings = operation_settings(resource, "create")
     if settings:
-        create_model_ = compile_model(f"{title}Create", spec.fields, mode="create", registry=registry)
+        create_model_ = compile_model(
+            f"{title}Create", spec.fields, mode="create", registry=registry
+        )
         policy = settings.get("policy") or DEFAULT_POLICY
 
         async def create_record(ctx: HttpContext, body):
@@ -233,12 +299,22 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
                     data[resource.owner_field] = actor
                 elif not _is_service(ctx):
                     raise HTTPException(status_code=401, detail="Authentication required")
-            decision = await state.engine.check(policy, build_policy_context(ctx, record=data, input=data))
+            decision = await state.engine.check(
+                policy, build_policy_context(ctx, record=data, input=data)
+            )
             if not decision:
                 raise HTTPException(status_code=403, detail=decision.reason)
             store = await state.store(resource.name)
             record = await store.create(data)
-            await after_write(platform, state, resource.name, "created", record, actor=_auth_actor(ctx), request_id=_request_id(ctx))
+            await after_write(
+                platform,
+                state,
+                resource.name,
+                "created",
+                record,
+                actor=_auth_actor(ctx),
+                request_id=_request_id(ctx),
+            )
             note("resource", f"{resource.name}.created")
             return json_response(await _present(state, resource, ctx, record), status_code=201)
 
@@ -257,7 +333,9 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
     # ── update ───────────────────────────────────────────────────────────
     settings = operation_settings(resource, "update")
     if settings:
-        update_model = compile_model(f"{title}Update", spec.fields, mode="update", registry=registry)
+        update_model = compile_model(
+            f"{title}Update", spec.fields, mode="update", registry=registry
+        )
         policy = settings.get("policy") or DEFAULT_POLICY
 
         async def update_record(ctx: HttpContext, id: str, body):
@@ -269,11 +347,23 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
             existing = await store.get(record_id)
             if existing is None:
                 raise HTTPException(status_code=404, detail="Not found")
-            decision = await state.engine.check(policy, build_policy_context(ctx, record=existing, input=data))
+            decision = await state.engine.check(
+                policy, build_policy_context(ctx, record=existing, input=data)
+            )
             if not decision:
-                raise HTTPException(status_code=404 if not _auth_actor(ctx) else 403, detail=decision.reason)
+                raise HTTPException(
+                    status_code=404 if not _auth_actor(ctx) else 403, detail=decision.reason
+                )
             record = await store.update(record_id, data)
-            await after_write(platform, state, resource.name, "updated", record, actor=_auth_actor(ctx), request_id=_request_id(ctx))
+            await after_write(
+                platform,
+                state,
+                resource.name,
+                "updated",
+                record,
+                actor=_auth_actor(ctx),
+                request_id=_request_id(ctx),
+            )
             return await _present(state, resource, ctx, record)
 
         for method in ("patch", "put"):
@@ -303,9 +393,19 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
                 raise HTTPException(status_code=404, detail="Not found")
             decision = await state.engine.check(policy, build_policy_context(ctx, record=existing))
             if not decision:
-                raise HTTPException(status_code=404 if not _auth_actor(ctx) else 403, detail=decision.reason)
+                raise HTTPException(
+                    status_code=404 if not _auth_actor(ctx) else 403, detail=decision.reason
+                )
             await store.delete(record_id)
-            await after_write(platform, state, resource.name, "deleted", existing, actor=_auth_actor(ctx), request_id=_request_id(ctx))
+            await after_write(
+                platform,
+                state,
+                resource.name,
+                "deleted",
+                existing,
+                actor=_auth_actor(ctx),
+                request_id=_request_id(ctx),
+            )
             return no_content()
 
         app.delete(
