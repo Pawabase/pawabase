@@ -146,6 +146,9 @@ class SessionInfo(Model):
     env = fields.CharField(max_length=63)
     method = fields.CharField(max_length=32)
     aal = fields.CharField(max_length=8, default="aal1")
+    # The organization (slug) this session's tokens are issued for, if any.
+    # Refreshes keep it; a refresh or sign-in that names another org switches it.
+    org = fields.CharField(max_length=63, null=True)
     ip = fields.CharField(max_length=64, null=True)
     user_agent = fields.CharField(max_length=512, null=True)
     last_refreshed_at = fields.DatetimeField(null=True)

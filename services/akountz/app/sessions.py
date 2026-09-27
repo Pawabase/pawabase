@@ -20,7 +20,7 @@ from app import rbac
 from app.accounts import user_view
 from app.environment import AuthConfig
 from app.platform import Akountz
-from database.models import AuthUser, LoginEvent, SessionInfo
+from database.models import AuthUser, LoginEvent, Membership, Organization, SessionInfo
 from pawabase_kit.tokens import issue_user_token, peek_claims
 
 
@@ -57,8 +57,40 @@ async def log_event(
     )
 
 
+#: ``refresh_session(org=KEEP)`` keeps the session's organization.
+KEEP: Any = object()
+
+
+async def membership_role(config: AuthConfig, user: AuthUser, slug: str | None) -> str | None:
+    """The user's role in organization *slug* of this environment, or None."""
+    if not slug:
+        return None
+    org = await Organization.get_or_none(project=config.project, env=config.env, slug=slug)
+    if org is None:
+        return None
+    member = await Membership.get_or_none(organization=org, user=user)
+    return member.role if member else None
+
+
+async def require_membership(config: AuthConfig, user: AuthUser, slug: str | None) -> str | None:
+    """Validate a requested organization: the slug, or 403 if the user isn't a member."""
+    if not slug:
+        return None
+    if await membership_role(config, user, slug) is None:
+        raise HTTPException(status_code=403, detail="you are not a member of that organization")
+    return slug
+
+
 async def _access_token(
-    akountz: Akountz, config: AuthConfig, user: AuthUser, *, jti: str, family: str, aal: str
+    akountz: Akountz,
+    config: AuthConfig,
+    user: AuthUser,
+    *,
+    jti: str,
+    family: str,
+    aal: str,
+    org: str | None = None,
+    org_role: str | None = None,
 ) -> str:
     return issue_user_token(
         akountz.settings.jwt_master_secret,
@@ -71,17 +103,36 @@ async def _access_token(
         email=user.email,
         roles=await rbac.roles_of(user),
         permissions=await rbac.permissions_of(user),
+        org=org,
+        org_role=org_role,
         aal=aal,
         extra=user.user_metadata or None,
+        app=user.app_metadata or None,
     )
 
 
 async def _response(
-    akountz: Akountz, config: AuthConfig, user: AuthUser, pair: dict[str, Any], aal: str
+    akountz: Akountz,
+    config: AuthConfig,
+    user: AuthUser,
+    pair: dict[str, Any],
+    aal: str,
+    org: str | None = None,
 ) -> dict[str, Any]:
     claims = peek_claims(pair["access_token"]) or {}
+    # The role is read at issue time, so a membership change applies on the next refresh.
+    org_role = await membership_role(config, user, org)
+    if org_role is None:
+        org = None
     access = await _access_token(
-        akountz, config, user, jti=claims.get("jti", ""), family=pair["token_family"], aal=aal
+        akountz,
+        config,
+        user,
+        jti=claims.get("jti", ""),
+        family=pair["token_family"],
+        aal=aal,
+        org=org,
+        org_role=org_role,
     )
     return {
         "access_token": access,
@@ -90,6 +141,8 @@ async def _response(
         "expires_in": config.access_ttl,
         "expires_at": int(datetime.now(UTC).timestamp()) + config.access_ttl,
         "session_id": pair["token_family"],
+        "org": org,
+        "org_role": org_role,
         "user": await user_view(user),
     }
 
@@ -102,7 +155,9 @@ async def start_session(
     method: str,
     ctx: Any = None,
     aal: str = "aal1",
+    org: str | None = None,
 ) -> dict[str, Any]:
+    org = await require_membership(config, user, org)
     pair = await user.issue_token_pair(
         secret=akountz.refresh_secret(config.project, config.env),
         access_expires=timedelta(seconds=config.access_ttl),
@@ -116,6 +171,7 @@ async def start_session(
         env=config.env,
         method=method,
         aal=aal,
+        org=org,
         ip=ip,
         user_agent=agent,
     )
@@ -130,12 +186,19 @@ async def start_session(
         {"user_id": str(user.id), "method": method},
         actor=str(user.id),
     )
-    return await _response(akountz, config, user, pair, aal)
+    return await _response(akountz, config, user, pair, aal, org)
 
 
 async def refresh_session(
-    akountz: Akountz, config: AuthConfig, refresh_token: str, *, ctx: Any = None
+    akountz: Akountz,
+    config: AuthConfig,
+    refresh_token: str,
+    *,
+    ctx: Any = None,
+    org: Any = KEEP,
 ) -> dict[str, Any]:
+    """Rotate a refresh token. ``org`` switches the session's organization
+    (``None`` or ``""`` leaves every organization); omitted, it's kept."""
     claims = peek_claims(refresh_token) or {}
     user = (
         await AuthUser.filter(
@@ -180,12 +243,16 @@ async def refresh_session(
         raise HTTPException(status_code=401, detail="invalid refresh token") from exc
     info = await SessionInfo.get_or_none(family=pair["token_family"])
     aal = info.aal if info else "aal1"
+    active = info.org if info else None
+    if org is not KEEP:
+        active = await require_membership(config, user, org or None)
     if info is not None:
         if info.revoked_at is not None:
             raise HTTPException(status_code=401, detail="the session was revoked")
         info.last_refreshed_at = datetime.now(UTC)
-        await info.save(update_fields=["last_refreshed_at"])
-    return await _response(akountz, config, user, pair, aal)
+        info.org = active
+        await info.save(update_fields=["last_refreshed_at", "org"])
+    return await _response(akountz, config, user, pair, aal, active)
 
 
 async def revoke_session(user: AuthUser, family: str) -> bool:
