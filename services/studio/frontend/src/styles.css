@@ -303,6 +303,7 @@ tr.clickable:hover td { background: var(--sunken); }
 .form-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .form-section-head h3 { font-size: 15px; }
 .form-section-head p { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); }
+.mt-field { margin-top: 10px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
 .form-grid .span { grid-column: 1 / -1; }
 .list-rows { display: flex; flex-direction: column; gap: 8px; }

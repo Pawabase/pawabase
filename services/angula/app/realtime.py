@@ -206,8 +206,11 @@ class Realtime:
         rules = [
             ChannelRule(
                 pattern=rule["pattern"],
-                subscribe=rule.get("subscribe", "authenticated"),
-                publish=rule.get("publish", "authenticated"),
+                # `or` rather than `.get(key, default)`: a rule stored with an
+                # explicit null (Studio's "Default" option, or a hand-edited
+                # settings JSON) must fall back too, not carry a null policy.
+                subscribe=rule.get("subscribe") or "authenticated",
+                publish=rule.get("publish") or "authenticated",
                 presence=bool(rule.get("presence", True)),
                 history=int(rule.get("history", 50)),
             )
@@ -219,7 +222,7 @@ class Realtime:
             rules=rules,
             engine=PolicyEngine(policies),
             allow_client_publish=bool(payload.get("allow_client_publish", True)),
-            default_policy=payload.get("default_policy", "authenticated"),
+            default_policy=payload.get("default_policy") or "authenticated",
         )
 
     async def authorize(

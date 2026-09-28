@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Layout from "../../components/Layout";
-import { Badge, Button, Card, Field, Json, JsonInput, Loading, Modal, PageHead, Table, Tabs, useAction, when } from "../../components/ui";
+import { Icon } from "../../components/icons";
+import { Badge, Button, Card, Field, IconButton, Json, Loading, Modal, PageHead, Section, Segmented, Switch, Table, TagInput, Tabs, useAction, when } from "../../components/ui";
 import { api, del, envPath, patch, post, put, useApi } from "../../lib/api";
 
 const AUTH = { service: "auth" };
@@ -195,19 +196,174 @@ function Events({ base }) {
   );
 }
 
+// Every field Akountz's AuthConfig actually reads (services/akountz/app/environment.py),
+// each with its own control — no raw JSON for an operator to get wrong.
+const AUTH_DEFAULTS = {
+  signup_enabled: true,
+  require_email_verification: false,
+  password_policy: "basic",
+  password_min_length: 8,
+  access_ttl: 900,
+  refresh_ttl: 30 * 24 * 3600,
+  magic_link_enabled: true,
+  mfa_enabled: true,
+  site_url: "",
+  redirect_urls: [],
+  providers: {},
+  default_roles: [],
+  emails: {},
+};
+
+const KNOWN_PROVIDERS = ["google", "github", "discord", "microsoft"];
+const EMAIL_KINDS = [
+  ["verify", "Verify email", "Confirm your email for {project}"],
+  ["recovery", "Password recovery", "Reset your {project} password"],
+  ["magic", "Magic link", "Your {project} sign-in link"],
+  ["invite", "Organization invite", "You are invited to {organization} on {project}"],
+  ["email_change", "Email change", "Confirm your new email for {project}"],
+];
+
 function AuthConfig({ project, env }) {
   const envState = useApi(envPath(project.ref, env));
   const [auth, setAuth] = useState(undefined);
   const [run, busy] = useAction();
+  const value = auth ?? envState.data?.auth ?? {};
+  const dirty = auth !== undefined;
+  const set = (patch) => setAuth({ ...AUTH_DEFAULTS, ...value, ...patch });
+  const field = (key) => value[key] ?? AUTH_DEFAULTS[key];
   return (
-    <Card title="Akountz configuration" actions={<Button variant="primary" size="sm" disabled={busy || auth === undefined} onClick={async () => { if (await run(() => patch(envPath(project.ref, env), { auth }), "Saved")) envState.reload(); }}>Save</Button>}>
+    <Card
+      title="Akountz configuration"
+      actions={<Button variant="primary" size="sm" disabled={busy || !dirty} onClick={async () => { if (await run(() => patch(envPath(project.ref, env), { auth: { ...AUTH_DEFAULTS, ...value } }), "Saved")) { envState.reload(); setAuth(undefined); } }}>Save</Button>}
+    >
       <Loading state={envState}>
-        {(data) => (
-          <Field label="Auth settings (JSON)" hint='Sign-up, password rules, email confirmation, magic links, MFA, token lifetimes, redirect URLs, OAuth providers, e.g. {"providers": {"github": {"client_id": "…", "client_secret": "secret://GITHUB_SECRET"}}}.'>
-            <JsonInput value={auth === undefined ? data.auth || {} : auth} onChange={setAuth} rows={18} />
-          </Field>
+        {() => (
+          <div className="stack lg">
+            <Section title="Sign-up" description="Who can create an account, and whether their email must be confirmed first.">
+              <div className="grid two">
+                <Switch checked={field("signup_enabled")} onChange={(v) => set({ signup_enabled: v })} label="Sign-up enabled" hint="Turn off to invite-only new accounts." />
+                <Switch checked={field("require_email_verification")} onChange={(v) => set({ require_email_verification: v })} label="Require email verification" hint="Unverified users can't sign in until they confirm." />
+              </div>
+              <Field label="Default roles" hint="Granted automatically at sign-up.">
+                <TagInput value={field("default_roles")} onChange={(v) => set({ default_roles: v })} placeholder="customer" />
+              </Field>
+            </Section>
+
+            <Section title="Passwords" description="Password strength and how long sessions last.">
+              <div className="grid two">
+                <Field label="Policy">
+                  <Segmented options={[["basic", "Basic"], ["strict", "Strict"]]} value={field("password_policy")} onChange={(v) => set({ password_policy: v })} />
+                </Field>
+                <Field label="Minimum length" hint="Characters.">
+                  <input type="number" min={6} max={128} value={field("password_min_length")} onChange={(e) => set({ password_min_length: Number(e.target.value) || 8 })} />
+                </Field>
+                <Field label="Access token lifetime" hint="Seconds. How long a bearer token works before it needs refreshing.">
+                  <input type="number" min={60} value={field("access_ttl")} onChange={(e) => set({ access_ttl: Number(e.target.value) || 900 })} />
+                </Field>
+                <Field label="Refresh token lifetime" hint="Seconds. How long a signed-out-of-band session stays resumable.">
+                  <input type="number" min={3600} value={field("refresh_ttl")} onChange={(e) => set({ refresh_ttl: Number(e.target.value) || 2592000 })} />
+                </Field>
+              </div>
+            </Section>
+
+            <Section title="Sign-in methods">
+              <div className="grid two">
+                <Switch checked={field("magic_link_enabled")} onChange={(v) => set({ magic_link_enabled: v })} label="Magic links" hint="Passwordless sign-in by emailed one-time link." />
+                <Switch checked={field("mfa_enabled")} onChange={(v) => set({ mfa_enabled: v })} label="MFA (TOTP)" hint="Let users add an authenticator app for aal2." />
+              </div>
+            </Section>
+
+            <Section title="URLs" description="Where a browser is allowed to land after an OAuth or magic-link redirect.">
+              <Field label="Site URL"><input value={field("site_url")} onChange={(e) => set({ site_url: e.target.value })} placeholder="https://app.example.com" /></Field>
+              <Field label="Additional allowed redirect URLs">
+                <TagInput value={field("redirect_urls")} onChange={(v) => set({ redirect_urls: v })} placeholder="https://staging.example.com/auth/callback" />
+              </Field>
+            </Section>
+
+            <ProvidersSection value={field("providers")} onChange={(providers) => set({ providers })} />
+            <EmailsSection value={field("emails")} onChange={(emails) => set({ emails })} />
+          </div>
         )}
       </Loading>
     </Card>
+  );
+}
+
+function ProvidersSection({ value, onChange }) {
+  const names = Object.keys(value);
+  const [adding, setAdding] = useState("");
+  const update = (name, patch) => onChange({ ...value, [name]: { ...value[name], ...patch } });
+  const remove = (name) => { const next = { ...value }; delete next[name]; onChange(next); };
+  const add = (name) => { if (name && !value[name]) onChange({ ...value, [name]: { client_id: "", client_secret: "", enabled: true } }); setAdding(""); };
+  const options = KNOWN_PROVIDERS.filter((p) => !names.includes(p));
+  return (
+    <Section title="OAuth providers" description="Social sign-in. Reference credentials as secret://NAME rather than pasting them here.">
+      {names.length === 0 && <p className="muted" style={{ margin: 0 }}>No providers configured.</p>}
+      <div className="stack" style={{ gap: 10 }}>
+        {names.map((name) => {
+          const p = value[name];
+          const shipped = KNOWN_PROVIDERS.includes(name);
+          return (
+            <div key={name} className="card sunken" style={{ padding: 14 }}>
+              <div className="row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
+                <b style={{ textTransform: "capitalize" }}>{name}</b>
+                <div className="row">
+                  <Switch size="sm" checked={p.enabled !== false} onChange={(v) => update(name, { enabled: v })} label="Enabled" />
+                  <IconButton icon="trash" label={`Remove ${name}`} onClick={() => remove(name)} />
+                </div>
+              </div>
+              <div className="grid two">
+                <Field label="Client ID"><input value={p.client_id || ""} onChange={(e) => update(name, { client_id: e.target.value })} /></Field>
+                <Field label="Client secret"><input value={p.client_secret || ""} onChange={(e) => update(name, { client_secret: e.target.value })} placeholder="secret://GITHUB_SECRET" /></Field>
+              </div>
+              {!shipped && (
+                <div className="grid two" style={{ marginTop: 10 }}>
+                  <Field label="Authorize endpoint"><input value={p.authorize_endpoint || ""} onChange={(e) => update(name, { authorize_endpoint: e.target.value })} /></Field>
+                  <Field label="Token endpoint"><input value={p.token_endpoint || ""} onChange={(e) => update(name, { token_endpoint: e.target.value })} /></Field>
+                  <Field label="Userinfo endpoint"><input value={p.userinfo_endpoint || ""} onChange={(e) => update(name, { userinfo_endpoint: e.target.value })} /></Field>
+                </div>
+              )}
+              <Field label="Scopes" className="mt-field">
+                <TagInput value={p.scopes || []} onChange={(v) => update(name, { scopes: v })} placeholder="openid" />
+              </Field>
+            </div>
+          );
+        })}
+      </div>
+      <div className="row" style={{ marginTop: 10 }}>
+        {options.length > 0 && (
+          <select value="" onChange={(e) => add(e.target.value)}>
+            <option value="">Add a provider…</option>
+            {options.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        )}
+        <input value={adding} onChange={(e) => setAdding(e.target.value)} placeholder="custom-provider-name" style={{ width: 200 }} />
+        <Button size="sm" disabled={!adding.trim()} onClick={() => add(adding.trim())}><Icon name="plus" />Add</Button>
+      </div>
+    </Section>
+  );
+}
+
+function EmailsSection({ value, onChange }) {
+  const [kind, setKind] = useState(EMAIL_KINDS[0][0]);
+  const override = value[kind] || {};
+  const meta = EMAIL_KINDS.find((k) => k[0] === kind);
+  const set = (patch) => onChange({ ...value, [kind]: { ...override, ...patch } });
+  const reset = () => { const next = { ...value }; delete next[kind]; onChange(next); };
+  return (
+    <Section title="Email templates" description="Subject and body for each auth email. Leave blank to use the built-in default.">
+      <Tabs value={kind} onChange={setKind} tabs={EMAIL_KINDS.map(([v, label]) => ({ value: v, label }))} />
+      <div style={{ marginTop: 12 }}>
+        <Field label="Subject" hint={`Default: “${meta[2]}”. Placeholders: {project} {email} {link}${kind === "invite" ? " {organization} {role}" : ""}.`}>
+          <input value={override.subject || ""} onChange={(e) => set({ subject: e.target.value })} placeholder={meta[2]} />
+        </Field>
+        <Field label="Body" hint="Plain text; a line becomes a paragraph. {link} is turned into a clickable link automatically.">
+          <textarea rows={5} value={override.text || ""} onChange={(e) => set({ text: e.target.value })} />
+        </Field>
+        {(override.subject || override.text) && (
+          <Button size="sm" onClick={reset}>Reset to default</Button>
+        )}
+      </div>
+    </Section>
   );
 }

@@ -255,3 +255,28 @@ def test_environments_are_isolated(realtime_app):
     assert prod.receive_json() == {"type": "pong"}  # nothing from dev arrived first
     dev.close()
     prod.close()
+
+
+def test_build_config_treats_a_stored_null_as_not_set():
+    """Studio's "Default" option (and a hand-edited settings JSON) can store an
+    explicit null for subscribe/publish/default_policy. That must fall back to
+    "authenticated" exactly like an absent key does, never carry a null policy
+    into the engine."""
+    from app.realtime import Realtime
+
+    config = Realtime._build_config(
+        {
+            "version": 1,
+            "default_policy": None,
+            "channels": [
+                {"pattern": "chat:*", "subscribe": None, "publish": None, "presence": True},
+                {"pattern": "vip:*", "subscribe": "role:vip"},  # publish absent entirely
+            ],
+            "policies": {},
+        }
+    )
+    assert config.default_policy == "authenticated"
+    chat = next(r for r in config.rules if r.pattern == "chat:*")
+    assert chat.subscribe == "authenticated" and chat.publish == "authenticated"
+    vip = next(r for r in config.rules if r.pattern == "vip:*")
+    assert vip.subscribe == "role:vip" and vip.publish == "authenticated"
