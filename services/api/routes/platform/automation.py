@@ -272,7 +272,12 @@ def register(r: Router, platform: Platform) -> None:
             produce(name, "service:akountz")
         for name in ("file.uploaded", "file.deleted"):
             produce(name, "service:storage")
-        seen = await EventLog.filter(project=ref, env=env).distinct().values_list("name", "source")
+        # EventLog orders by -id by default, and Tortoise falls back to that
+        # Meta ordering whenever order_by() gets no arguments — an empty list
+        # is still "no ordering given". Postgres then refuses DISTINCT with an
+        # ORDER BY column outside the select list, so order by a column that
+        # actually is selected instead of trying to clear the ordering.
+        seen = await EventLog.filter(project=ref, env=env).order_by("name").distinct().values_list("name", "source")
         for name, source in seen:
             produce(name, f"service:{source}")
 
