@@ -349,13 +349,6 @@ tr.clickable:hover td { background: var(--sunken); }
 .cond-summary { font-size: 12.5px; color: var(--muted); background: var(--sunken); border-radius: var(--r-sm); padding: 8px 12px; }
 
 /* ── modal & sheet ─────────────────────────────────────────────────────── */
-.overlay { position: fixed; inset: 0; background: rgba(20, 17, 32, 0.38); backdrop-filter: blur(3px); display: flex; align-items: flex-start; justify-content: center; padding: 8vh 16px; z-index: 50; overflow: auto; animation: fade 0.15s ease; }
-.modal { background: var(--surface); border-radius: 26px; width: 100%; max-width: 560px; box-shadow: var(--shadow-pop); animation: pop 0.2s cubic-bezier(0.2, 1, 0.3, 1); }
-.modal.wide { max-width: 900px; }
-.modal-head { display: flex; justify-content: space-between; align-items: center; padding: 20px 22px 6px; }
-.modal-head h2 { font-size: 18px; }
-.modal-body { padding: 14px 22px 18px; display: flex; flex-direction: column; gap: 16px; }
-.modal-foot { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 14px 22px 20px; }
 .sheet-overlay { position: fixed; inset: 0; background: rgba(20, 17, 32, 0.32); backdrop-filter: blur(2px); z-index: 50; animation: fade 0.15s ease; }
 .sheet { position: fixed; top: 12px; right: 12px; bottom: 12px; width: min(860px, calc(100vw - 24px)); background: var(--canvas); border-radius: 28px; box-shadow: var(--shadow-pop); z-index: 51; display: flex; flex-direction: column; overflow: clip; animation: slide-in 0.28s cubic-bezier(0.2, 1, 0.3, 1); }
 .sheet-head { display: flex; align-items: center; gap: 14px; padding: 20px 24px 14px; }

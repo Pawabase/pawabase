@@ -22,6 +22,7 @@ from sillo.auth.exceptions import AuthenticationFailed, PermissionDenied
 from sillo.helpers.strings import pascal_case
 
 from app.compiler.common import PlanGate, cache_key
+from app.compiler.errors import FORBIDDEN, UNAUTHENTICATED, UNPROCESSABLE, responses
 from pawabase_kit.flows import FlowError
 from pawabase_kit.policies import build_policy_context
 from pawabase_kit.ratelimit import rate_limit_middleware
@@ -173,6 +174,12 @@ def register_route(app: SilloApp, state: EnvironmentState, route: Any) -> str:
         tags=list(route.tags or ["routes"]),
         request_model=request_model,
         response_model=response_model,
+        # The plan-time gate and the full re-check once the body is read
+        # (both above, in run_handler) can each raise 401 or 403; a route
+        # with a body can also fail validation before either runs.
+        responses=responses(
+            UNAUTHENTICATED, FORBIDDEN, UNPROCESSABLE if request_model else {}
+        ),
         auth=gate,
         middleware=limits,
     )

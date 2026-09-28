@@ -25,6 +25,7 @@ from sillo.exceptions import HTTPException
 from sillo.helpers.strings import pascal_case
 
 from app.compiler.common import PLAN_SCOPE_KEY, PlanGate, cache_key
+from app.compiler.errors import FORBIDDEN, NOT_FOUND, UNAUTHENTICATED, UNPROCESSABLE, responses
 from app.data.store import MAX_PAGE_SIZE, Filter, ResourceSpec, parse_filters, parse_sort
 from app.resources import after_write, resource_tag
 from pawabase_kit.policies import build_policy_context
@@ -270,6 +271,7 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
             tags=tags,
             auth=gate("list", settings),
             response_model=page_model,
+            responses=responses(UNAUTHENTICATED, FORBIDDEN),
             middleware=limits,
         )
         registered.append(f"GET {base}")
@@ -322,6 +324,7 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
             tags=tags,
             auth=gate("get", settings),
             response_model=None if resource.transformer else read_model,
+            responses=responses(UNAUTHENTICATED, FORBIDDEN, NOT_FOUND),
             middleware=limits,
         )
         registered.append(f"GET {item}")
@@ -371,6 +374,14 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
             tags=tags,
             request_model=create_model_,
             auth=gate("create", settings),
+            # 201, not 200 — so this goes through `responses=` rather than
+            # `response_model=`, which always documents its schema under 200.
+            responses=responses(
+                {201: read_model} if not resource.transformer else {},
+                UNAUTHENTICATED,
+                FORBIDDEN,
+                UNPROCESSABLE,
+            ),
             middleware=limits,
         )
         registered.append(f"POST {base}")
@@ -420,6 +431,8 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
                 tags=tags,
                 request_model=update_model,
                 auth=gate("update", settings),
+                response_model=None if resource.transformer else read_model,
+                responses=responses(UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, UNPROCESSABLE),
                 middleware=limits,
                 exclude_from_schema=method == "put",
             )
@@ -460,6 +473,12 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
             summary=f"Delete a {resource.name} record",
             tags=tags,
             auth=gate("delete", settings),
+            responses=responses(
+                {204: {"description": "Deleted. No response body."}},
+                UNAUTHENTICATED,
+                FORBIDDEN,
+                NOT_FOUND,
+            ),
             middleware=limits,
         )
         registered.append(f"DELETE {item}")

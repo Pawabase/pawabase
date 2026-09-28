@@ -109,23 +109,16 @@ export function when(iso) {
   return date.toLocaleString();
 }
 
-export function Modal({ title, onClose, children, footer, wide }) {
-  useEffect(() => {
-    const onKey = (e) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+// Every dialog in Studio is the same right-docked side sheet — Modal is kept
+// as a thin alias over Sheet (rather than rewritten at each call site) so the
+// whole app stays uniform from one definition. `wide` is accepted for
+// backwards compatibility with existing call sites but no longer does
+// anything: Sheet has one generous width for everyone.
+export function Modal({ title, onClose, children, footer }) {
   return (
-    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal ${wide ? "wide" : ""}`}>
-        <div className="modal-head">
-          <h2>{title}</h2>
-          <button type="button" className="icon-btn" style={{ width: 34, height: 34 }} onClick={onClose} aria-label="Close"><Icon name="x" size={18} /></button>
-        </div>
-        <div className="modal-body">{children}</div>
-        {footer && <div className="modal-foot">{footer}</div>}
-      </div>
-    </div>
+    <Sheet title={title} onClose={onClose} footer={footer}>
+      {children}
+    </Sheet>
   );
 }
 
