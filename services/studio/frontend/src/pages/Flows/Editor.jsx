@@ -155,6 +155,8 @@ function Editor({ project, env, flow, blocks }) {
                   onRename={(next) => renameNode(selectedNode.id, next)}
                   onDelete={() => { setNodes((ns) => ns.filter((n) => n.id !== selectedNode.id)); setEdges((es) => es.filter((e) => e.source !== selectedNode.id && e.target !== selectedNode.id)); setSelected(null); setPanel("flow"); }}
                   step={runResult?.trace?.filter((s) => s.node === selectedNode.id)}
+                  nodes={nodes}
+                  edges={edges}
                 />
               )}
               {panel === "run" && !isNew && <RunPanel base={base} name={flow.name} nodes={nodes} result={runResult} onResult={setRunResult} />}
@@ -256,7 +258,8 @@ function FlowSettings({ meta, setMeta, isNew, problems }) {
   );
 }
 
-function NodeInspector({ node, block, onChange, onRename, onDelete, step }) {
+function NodeInspector({ node, block, onChange, onRename, onDelete, step, nodes, edges }) {
+  const { byKey } = useContext(BlocksContext);
   const [id, setId] = useState(node.id);
   if (!block) return <div className="alert error">Unknown block {node.data.block}</div>;
   const config = node.data.config || {};
@@ -280,6 +283,7 @@ function NodeInspector({ node, block, onChange, onRename, onDelete, step }) {
       {(block.config || []).map((spec) => (
         <ConfigField key={`${node.id}-${spec.name}`} spec={spec} value={config[spec.name]} onChange={(v) => setConfig(spec.name, v)} />
       ))}
+      <AvailableVariables nodeId={node.id} nodes={nodes} edges={edges} byKey={byKey} />
       {step?.length > 0 && (
         <div className="stack" style={{ gap: 6 }}>
           <h3>Last run</h3>
@@ -288,6 +292,73 @@ function NodeInspector({ node, block, onChange, onRename, onDelete, step }) {
       )}
       <Button variant="danger" onClick={onDelete}>Remove block</Button>
     </>
+  );
+}
+
+function AvailableVariables({ nodeId, nodes, edges, byKey }) {
+  const getPredecessors = () => {
+    const preds = new Set();
+    const visit = (id) => {
+      for (const e of edges) {
+        if (e.target === id && !preds.has(e.source)) {
+          preds.add(e.source);
+          visit(e.source);
+        }
+      }
+    };
+    visit(nodeId);
+    return Array.from(preds);
+  };
+
+  const predecessors = getPredecessors();
+  const hasTrigger = nodes.some((n) => byKey[n.data.block]?.trigger);
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+  };
+
+  const variables = [
+    hasTrigger && { label: "input", path: "{{ input }}", desc: "Trigger input data" },
+    { label: "auth", path: "{{ auth }}", desc: "Authentication context (user_id, roles, etc.)" },
+    { label: "params", path: "{{ params }}", desc: "URL/route parameters" },
+    ...predecessors.map((id) => ({
+      label: `steps.${id}`,
+      path: `{{ steps.${id}.output }}`,
+      desc: `Output from block "${id}"`,
+    })),
+  ].filter(Boolean);
+
+  if (variables.length === 0) return null;
+
+  return (
+    <div className="stack" style={{ gap: 6, paddingTop: 12, borderTop: "1px solid var(--line-2)" }}>
+      <h3 style={{ marginBottom: 0 }}>Available variables</h3>
+      <div style={{ display: "grid", gap: 6 }}>
+        {variables.map((v) => (
+          <div
+            key={v.label}
+            style={{
+              padding: "8px 10px",
+              backgroundColor: "var(--bg-2)",
+              borderRadius: 4,
+              cursor: "pointer",
+              fontSize: 12,
+              transition: "background-color 0.2s",
+            }}
+            onClick={() => copyToClipboard(v.path)}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-3)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-2)"; }}
+            title={`Click to copy: ${v.path}`}
+          >
+            <div style={{ fontFamily: "monospace", fontSize: 11, color: "var(--accent)" }}>{v.path}</div>
+            <div style={{ color: "var(--text-secondary)", fontSize: 11, marginTop: 2 }}>{v.desc}</div>
+          </div>
+        ))}
+      </div>
+      <div className="hint" style={{ fontSize: 11 }}>
+        Click any variable to copy. Reference nested values with <code>{"{{ steps.id.output.field }}"}</code>.
+      </div>
+    </div>
   );
 }
 
