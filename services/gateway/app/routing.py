@@ -37,6 +37,9 @@ ROUTES: tuple[Upstream, ...] = (
     Upstream("/flows/v1/", "api"),
     Upstream("/hooks/v1/", "api", "none"),
     Upstream("/docs/v1/", "api", "none"),
+    # Liveness check for one project/environment. Requires an apikey (default
+    # "required") so it also proves the key itself resolves for that project.
+    Upstream("/health/v1/", "api"),
     Upstream("/realtime/v1/", "angula"),
     # The management plane authenticates operators itself (bearer tokens).
     Upstream("/platform/v1/", "api", "none"),

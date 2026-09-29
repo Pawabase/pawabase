@@ -22,6 +22,8 @@ from pawabase_kit.service import SERVICE_ONLY
 
 class ResolveBody(BaseModel):
     key: str = Field(min_length=8, max_length=512)
+    project: str | None = None
+    env: str | None = None
 
 
 class MailBody(BaseModel):
@@ -52,11 +54,26 @@ def register(app: Any, platform: Platform) -> None:
 
     @r.post("/keys/resolve", auth=SERVICE_ONLY, request_model=ResolveBody)
     async def resolve_key(ctx: HttpContext, body: ResolveBody):
-        key = (
-            await ProjectKey.filter(key_hash=hash_api_key(body.key))
-            .select_related("environment__project")
-            .first()
+        query = ProjectKey.filter(key_hash=hash_api_key(body.key)).select_related(
+            "environment__project"
         )
+        # When the caller names a project/environment, scope the lookup to it
+        # directly (an indexed join, not a global hash scan) and reject a key
+        # that resolves but belongs elsewhere with a distinct, useful message.
+        if body.project or body.env:
+            scoped = query
+            if body.project:
+                scoped = scoped.filter(environment__project__ref=body.project)
+            if body.env:
+                scoped = scoped.filter(environment__name=body.env)
+            key = await scoped.first()
+            if key is None and await query.first() is not None:
+                raise HTTPException(
+                    status_code=401,
+                    detail=f"this key does not belong to project={body.project!r} env={body.env!r}",
+                )
+        else:
+            key = await query.first()
         now = datetime.now(UTC)
         if (
             key is None

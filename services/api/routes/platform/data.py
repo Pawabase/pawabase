@@ -19,6 +19,7 @@ from app.data import inspect as db_inspect
 from app.data.inspect import is_read_only
 from app.data.sql import SqlError
 from app.data.store import Filter, parse_filters, parse_sort
+from app.openapi_scope import add_apikey_security
 from app.platform import Platform
 from app.resources import after_write
 from routes.common import OPERATOR, actor, audit
@@ -146,7 +147,8 @@ def register(r: Router, platform: Platform) -> None:
         # Operators read the docs whether or not ``public_docs`` publishes them
         # at /docs/v1; that setting only decides what anonymous callers see.
         state = await platform.state(ref, env)
-        return json.loads((await state.compiled()).build_openapi("/rest/v1"))
+        spec = json.loads((await state.compiled()).build_openapi("/rest/v1"))
+        return add_apikey_security(spec)
 
     @r.get(
         f"{base}/resources/{{name}}/openapi",

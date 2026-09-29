@@ -33,11 +33,17 @@ class KeyResolver:
         self.lookups = 0
 
     @staticmethod
-    def _key(raw: str) -> str:
-        return "key:" + hashlib.sha256(raw.encode()).hexdigest()
+    def _key(raw: str, project: str | None, env: str | None) -> str:
+        # Scoping the cache key by project/env too means a key resolved once
+        # for the wrong project (or before it existed) can't shadow a later,
+        # correctly-scoped lookup of the same raw key.
+        scope = f"{project or ''}:{env or ''}"
+        return "key:" + hashlib.sha256(f"{scope}:{raw}".encode()).hexdigest()
 
-    async def resolve(self, raw: str) -> tuple[PlatformContext, dict[str, Any]]:
-        cache_key = self._key(raw)
+    async def resolve(
+        self, raw: str, *, project: str | None = None, env: str | None = None
+    ) -> tuple[PlatformContext, dict[str, Any]]:
+        cache_key = self._key(raw, project, env)
         cached = await self.cache.get(cache_key)
         if cached is not getattr(cache_base, "_MISSING", None) and cached is not None:
             if cached.get("rejected"):
@@ -45,11 +51,15 @@ class KeyResolver:
             return self._context(cached), cached
         self.lookups += 1
         try:
-            info = await self.api.post("/internal/v1/keys/resolve", json={"key": raw})
+            info = await self.api.post(
+                "/internal/v1/keys/resolve", json={"key": raw, "project": project, "env": env}
+            )
         except ServiceError as exc:
             if exc.status in (401, 404, 422):
-                await self.cache.set(cache_key, {"rejected": "invalid API key"}, ttl=NEGATIVE_TTL)
-                raise KeyRejected("invalid API key") from exc
+                detail = exc.body.get("detail") if isinstance(exc.body, dict) else None
+                message = detail or "invalid API key"
+                await self.cache.set(cache_key, {"rejected": message}, ttl=NEGATIVE_TTL)
+                raise KeyRejected(message) from exc
             raise
         await self.cache.set(cache_key, info, ttl=self.ttl)
         return self._context(info), info

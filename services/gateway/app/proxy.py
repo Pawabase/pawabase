@@ -139,14 +139,29 @@ class GatewayProxy:
                 return value
         return None
 
-    @staticmethod
-    def _query_without_key(scope: dict[str, Any]) -> str:
+    @classmethod
+    def _scope(cls, scope: dict[str, Any], headers: dict[str, str]) -> tuple[str | None, str | None]:
+        project = headers.get("x-project-id")
+        env = headers.get("x-environment")
+        for name, value in parse_qsl(scope.get("query_string", b"").decode("latin-1")):
+            if name == "project_id" and value:
+                project = value
+            elif name == "environment" and value:
+                env = value
+        return project, env
+
+    @classmethod
+    def _query_without_key(cls, scope: dict[str, Any]) -> str:
+        # Only the apikey itself is a secret; project_id/environment are kept
+        # so upstream handlers (e.g. the health check) that read them
+        # themselves still see them.
+        dropped = {"apikey"}
         pairs = [
             (k, v)
             for k, v in parse_qsl(
                 scope.get("query_string", b"").decode("latin-1"), keep_blank_values=True
             )
-            if k != "apikey"
+            if k not in dropped
         ]
         return urlencode(pairs)
 
@@ -159,11 +174,12 @@ class GatewayProxy:
             return None, None, ("missing_api_key" if mode == "required" else None)
         if mode == "none":
             return None, None, None
+        project, env = self._scope(scope, headers)
         try:
-            context, info = await self.resolver.resolve(raw)
-        except KeyRejected:
+            context, info = await self.resolver.resolve(raw, project=project, env=env)
+        except KeyRejected as exc:
             self.stats["rejected_keys"] += 1
-            return None, None, "invalid_api_key"
+            return None, None, str(exc) or "invalid_api_key"
         except ServiceError:
             return None, None, "key_service_unavailable"
         return context, info, None
@@ -220,17 +236,21 @@ class GatewayProxy:
         headers = self._headers(scope)
         context, info, error = await self._context(scope, headers, upstream.key)
         if error:
+            KNOWN_CODES = ("missing_api_key", "invalid_api_key", "key_service_unavailable")
             status = 503 if error == "key_service_unavailable" else 401
-            await _json(
-                send,
-                status,
-                {
-                    "error": error,
-                    "message": "Send a valid project API key in the apikey header."
-                    if status == 401
-                    else "Try again shortly.",
-                },
+            # `error` is either a fixed code, or (from KeyRejected) a specific,
+            # user-facing reason such as a project/environment mismatch.
+            code = error if error in KNOWN_CODES else "invalid_api_key"
+            message = (
+                error
+                if code not in ("missing_api_key", "key_service_unavailable") and error != code
+                else {
+                    "missing_api_key": "Send a valid project API key in the apikey header.",
+                    "invalid_api_key": "Send a valid project API key in the apikey header.",
+                    "key_service_unavailable": "Try again shortly.",
+                }[code]
             )
+            await _json(send, status, {"error": code, "message": message})
             return
         if context is not None:
             scope[SCOPE_KEY] = context

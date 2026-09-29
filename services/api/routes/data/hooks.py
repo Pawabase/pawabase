@@ -7,15 +7,17 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-from sillo import HttpContext, Router, accepted, html
+from sillo import HttpContext, Query, Router, accepted, html
 from sillo.exceptions import HTTPException
 from sillo.openapi import Atlas
 from sillo.openapi.ui import DocsContext
 
 from app.compiler.build import REST_PREFIX
+from app.openapi_scope import add_apikey_security
 from app.platform import Platform
 from app.webhooks import verify_plain_hmac, verify_signature
 from database.models import InboundHook
+from pawabase_kit.context import SCOPE_KEY
 
 MAX_HOOK_BYTES = 1024 * 1024
 
@@ -77,6 +79,28 @@ def register(app: Any, platform: Platform) -> None:
 
     app.mount_router(r)
 
+    # Liveness check for one project/environment, named by ?project_id=&environment=
+    # (not path segments, so it lines up with how the gateway itself scopes
+    # apikey resolution). Requires a valid apikey: the gateway must have
+    # resolved it to a context for *this* project/env before the request even
+    # reaches here, so a 200 proves both that the key works and that the
+    # environment loads and compiles.
+    @app.get("/health/v1", tags=["health"])
+    async def env_health(
+        ctx: HttpContext,
+        project_id: str = Query(..., type=str, description="The project's ref, e.g. acme."),
+        environment: str = Query(
+            ..., type=str, description="The environment name, e.g. development or production."
+        ),
+    ):
+        project, env = project_id, environment
+        context = ctx.scope.get(SCOPE_KEY)
+        if context is None or context.project != project or context.env != env:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        state = await platform.state(project, env)
+        await state.compiled()
+        return {"status": "ok", "project": project, "env": env}
+
     d = Router(prefix="/docs/v1", tags=["docs"], exclude_from_schema=True)
 
     async def public_state(project: str, env: str):
@@ -91,8 +115,10 @@ def register(app: Any, platform: Platform) -> None:
 
         state = await public_state(project, env)
         compiled = await state.compiled()
+        spec = json.loads(compiled.build_openapi(REST_PREFIX))
+        spec = add_apikey_security(spec)
         return BaseResponse(
-            body=compiled.build_openapi(REST_PREFIX), content_type="application/json"
+            body=json.dumps(spec).encode(), content_type="application/json"
         )
 
     @d.get("/{project}/{env}")
@@ -100,6 +126,7 @@ def register(app: Any, platform: Platform) -> None:
         state = await public_state(project, env)
         compiled = await state.compiled()
         document = json.loads(compiled.build_openapi(REST_PREFIX))
+        document = add_apikey_security(document)
         info = document.get("info", {})
         page = Atlas(title=f"{state.project_name} API").render(
             DocsContext(

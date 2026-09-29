@@ -1,3 +1,4 @@
+import { usePage } from "@inertiajs/react";
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import { Badge, Button, Card, CopyText, Field, Loading, Modal, PageHead, Table, useAction, when } from "../../components/ui";
@@ -9,6 +10,7 @@ export default function Keys({ project, env }) {
   const [creating, setCreating] = useState(false);
   const [revealed, setRevealed] = useState(null);
   const [run] = useAction();
+  const { gateway_url } = usePage().props;
   return (
     <Layout title="API keys">
       <PageHead
@@ -16,6 +18,7 @@ export default function Keys({ project, env }) {
         description="Clients send a key in the apikey header. Publishable keys act as anon and obey policies; secret keys act as the service and bypass them."
         actions={<Button variant="primary" onClick={() => setCreating(true)}>New key</Button>}
       />
+      <HealthCheck gatewayUrl={gateway_url} projectRef={project.ref} env={env} />
       <Card flush>
         <Loading state={keys} empty="No keys.">
           {(data) => (
@@ -42,6 +45,21 @@ export default function Keys({ project, env }) {
         </Modal>
       )}
     </Layout>
+  );
+}
+
+function HealthCheck({ gatewayUrl, projectRef, env }) {
+  const url = gatewayUrl || "<gateway-url>";
+  const health = `${url}/health/v1?project_id=${projectRef}&environment=${env}`;
+  return (
+    <Card>
+      <h3 style={{ marginTop: 0 }}>Health check</h3>
+      <p className="muted" style={{ fontSize: 12.5, marginTop: -6 }}>
+        Requires a key for this project/environment in the <code>apikey</code> header — a 200 proves the key resolves and the
+        environment is up.
+      </p>
+      <CopyText text={health} />
+    </Card>
   );
 }
 
