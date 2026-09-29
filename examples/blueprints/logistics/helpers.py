@@ -181,9 +181,9 @@ def resource(name, description, fields, operations, *, relations=(), tags=(), ow
 # ── flows ────────────────────────────────────────────────────────────────────
 
 
-def N(id, block, **config):
+def N(node_id, block, **config):
     """A node tuple: ``("load", "resource.get", resource="orders", id="{{ … }}")``."""
-    return (id, block, config)
+    return (node_id, block, config)
 
 
 def E(source, target, handle=None):
@@ -192,6 +192,17 @@ def E(source, target, handle=None):
 
 def flow(name, description, nodes, edges, timeout=120, record=True):
     """nodes: [(id, block, config)]; edges: [(source, target, handle?)] — laid out top-down."""
+    # ``control.if`` only exposes ``true`` and ``false``.  A two-item edge
+    # normally means the block's ``next`` output, but that output does not
+    # exist for an if node.  Treat an omitted handle as the false/fall-through
+    # branch so generated graphs cannot be rejected by the flow validator.
+    block_by_id = {node[0]: node[1] for node in nodes}
+    edges = [
+        (edge[0], edge[1], "false")
+        if len(edge) == 2 and block_by_id.get(edge[0]) == "control.if"
+        else edge
+        for edge in edges
+    ]
     children, indegree = defaultdict(list), defaultdict(int)
     for e in edges:
         children[e[0]].append(e[1])

@@ -219,7 +219,7 @@ RESOURCES = [
         F("matching_round", "integer", default=0),
         F("attempt_count", "integer", default=0),
         ts("next_attempt_ts"),
-        F("collected_ts", "integer"), ts("delivered_ts", "integer"),
+        F("collected_ts", "integer"), ts("delivered_ts"),
         F("proof", "json", description="What the driver collected at the door"),
         F("batch_id", "integer", indexed=True),
         F("route_id", "integer", indexed=True),

@@ -276,7 +276,7 @@ _NODES = [
         "cancellation": {"by": "customer_no_show", "reason": "customer_unavailable",
                          "fee_minor": "{{ steps.svc.output.data.0.cancellation.fee_after_arrival_minor | default: 0 }}",
                          "driver_comp_minor": "{{ steps.svc.output.data.0.cancellation.driver_comp_minor | default: 0 }}",
-                         "ts": "{{ steps.now.output }"}}}),
+                         "ts": "{{ steps.now.output }}"}}),
     N("drv", "resource.list", resource="driver_profiles", filters={"user_id": "{{ auth.user_id }}"}, limit=1),
     N("drv_upd", "resource.update", resource="driver_profiles", id="{{ steps.drv.output.data.0.id }}",
       data={"state": "available"}),
