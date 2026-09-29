@@ -261,6 +261,9 @@ function FlowSettings({ meta, setMeta, isNew, problems }) {
 function NodeInspector({ node, block, onChange, onRename, onDelete, step, nodes, edges }) {
   const { byKey } = useContext(BlocksContext);
   const [id, setId] = useState(node.id);
+  const [focusedField, setFocusedField] = useState(null);
+  const fieldRefs = useRef({});
+
   if (!block) return <div className="alert error">Unknown block {node.data.block}</div>;
   const config = node.data.config || {};
   const setConfig = (name, value) => {
@@ -269,6 +272,22 @@ function NodeInspector({ node, block, onChange, onRename, onDelete, step, nodes,
     else next[name] = value;
     onChange({ config: next });
   };
+
+  const insertVariable = (variable) => {
+    if (!focusedField || !fieldRefs.current[focusedField]) return;
+    const el = fieldRefs.current[focusedField];
+    const start = el.selectionStart || 0;
+    const end = el.selectionEnd || 0;
+    const before = (el.value || "").substring(0, start);
+    const after = (el.value || "").substring(end);
+    const newValue = before + variable + after;
+    setConfig(focusedField, newValue);
+    setTimeout(() => {
+      el.focus();
+      el.setSelectionRange(start + variable.length, start + variable.length);
+    }, 0);
+  };
+
   return (
     <>
       <div>
@@ -281,9 +300,24 @@ function NodeInspector({ node, block, onChange, onRename, onDelete, step, nodes,
       </Field>
       <Field label="Label"><input value={node.data.label || ""} onChange={(e) => onChange({ label: e.target.value })} placeholder={block.title} /></Field>
       {(block.config || []).map((spec) => (
-        <ConfigField key={`${node.id}-${spec.name}`} spec={spec} value={config[spec.name]} onChange={(v) => setConfig(spec.name, v)} />
+        <ConfigField
+          key={`${node.id}-${spec.name}`}
+          spec={spec}
+          value={config[spec.name]}
+          onChange={(v) => setConfig(spec.name, v)}
+          fieldRef={(el) => { if (el) fieldRefs.current[spec.name] = el; }}
+          onFocus={() => setFocusedField(spec.name)}
+          onBlur={() => setFocusedField(null)}
+        />
       ))}
-      <AvailableVariables nodeId={node.id} nodes={nodes} edges={edges} byKey={byKey} />
+      <AvailableVariables
+        nodeId={node.id}
+        nodes={nodes}
+        edges={edges}
+        byKey={byKey}
+        focusedField={focusedField}
+        onInsert={insertVariable}
+      />
       {step?.length > 0 && (
         <div className="stack" style={{ gap: 6 }}>
           <h3>Last run</h3>
@@ -295,27 +329,26 @@ function NodeInspector({ node, block, onChange, onRename, onDelete, step, nodes,
   );
 }
 
-function AvailableVariables({ nodeId, nodes, edges, byKey }) {
+function AvailableVariables({ nodeId, nodes, edges, byKey, focusedField, onInsert }) {
   const getPredecessors = () => {
-    const preds = new Set();
+    const preds = [];
+    const visited = new Set();
     const visit = (id) => {
+      if (visited.has(id)) return;
+      visited.add(id);
       for (const e of edges) {
-        if (e.target === id && !preds.has(e.source)) {
-          preds.add(e.source);
+        if (e.target === id) {
+          preds.push(e.source);
           visit(e.source);
         }
       }
     };
     visit(nodeId);
-    return Array.from(preds);
+    return preds;
   };
 
   const predecessors = getPredecessors();
   const hasTrigger = nodes.some((n) => byKey[n.data.block]?.trigger);
-
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
-  };
 
   const variables = [
     hasTrigger && { label: "input", path: "{{ input }}", desc: "Trigger input data" },
@@ -328,41 +361,46 @@ function AvailableVariables({ nodeId, nodes, edges, byKey }) {
     })),
   ].filter(Boolean);
 
-  if (variables.length === 0) return null;
-
   return (
-    <div className="stack" style={{ gap: 6, paddingTop: 12, borderTop: "1px solid var(--line-2)" }}>
-      <h3 style={{ marginBottom: 0 }}>Available variables</h3>
+    <div style={{ paddingTop: 12, borderTop: "1px solid var(--line-2)", marginTop: 12 }}>
+      <h3 style={{ margin: "0 0 8px 0", fontSize: 14 }}>
+        Available variables
+        {focusedField && <span style={{ fontSize: 12, fontWeight: "normal", color: "var(--text-secondary)", marginLeft: 6 }}>in {focusedField}</span>}
+      </h3>
       <div style={{ display: "grid", gap: 6 }}>
         {variables.map((v) => (
-          <div
+          <button
             key={v.label}
+            onClick={() => focusedField && onInsert(v.path)}
             style={{
-              padding: "8px 10px",
-              backgroundColor: "var(--bg-2)",
-              borderRadius: 4,
-              cursor: "pointer",
+              padding: "10px 12px",
+              backgroundColor: focusedField ? "var(--bg-2)" : "var(--bg-1)",
+              border: focusedField ? "1px solid var(--line-1)" : "1px solid var(--line-2)",
+              borderRadius: 6,
+              cursor: focusedField ? "pointer" : "default",
               fontSize: 12,
-              transition: "background-color 0.2s",
+              transition: "all 0.2s",
+              opacity: focusedField ? 1 : 0.7,
+              textAlign: "left",
+              pointerEvents: focusedField ? "auto" : "none",
             }}
-            onClick={() => copyToClipboard(v.path)}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-3)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-2)"; }}
-            title={`Click to copy: ${v.path}`}
+            onMouseEnter={(e) => { if (focusedField) { e.currentTarget.style.backgroundColor = "var(--bg-3)"; e.currentTarget.style.borderColor = "var(--accent)"; } }}
+            onMouseLeave={(e) => { if (focusedField) { e.currentTarget.style.backgroundColor = "var(--bg-2)"; e.currentTarget.style.borderColor = "var(--line-1)"; } }}
+            title={focusedField ? `Click to insert: ${v.path}` : "Focus a field to insert variables"}
           >
-            <div style={{ fontFamily: "monospace", fontSize: 11, color: "var(--accent)" }}>{v.path}</div>
-            <div style={{ color: "var(--text-secondary)", fontSize: 11, marginTop: 2 }}>{v.desc}</div>
-          </div>
+            <div style={{ fontFamily: "monospace", fontSize: 11, color: "var(--accent)", fontWeight: 500 }}>{v.path}</div>
+            <div style={{ color: "var(--text-secondary)", fontSize: 10, marginTop: 4 }}>{v.desc}</div>
+          </button>
         ))}
       </div>
-      <div className="hint" style={{ fontSize: 11 }}>
-        Click any variable to copy. Reference nested values with <code>{"{{ steps.id.output.field }}"}</code>.
+      <div className="hint" style={{ fontSize: 11, marginTop: 8 }}>
+        {focusedField ? `👈 Click any variable to insert into ${focusedField}` : "👉 Focus a config field to insert variables here"}
       </div>
     </div>
   );
 }
 
-function ConfigField({ spec, value, onChange }) {
+function ConfigField({ spec, value, onChange, fieldRef, onFocus, onBlur }) {
   const label = <span>{spec.name}{spec.required && <span style={{ color: "var(--danger)" }}> *</span>}</span>;
   if (spec.enum) {
     return (
@@ -384,9 +422,9 @@ function ConfigField({ spec, value, onChange }) {
     return <Field label={label} hint={spec.description || "JSON; strings may contain {{ templates }}."}><JsonInput value={value} rows={5} onChange={(v) => onChange(v ?? undefined)} /></Field>;
   }
   if (spec.widget === "code" || spec.type === "text") {
-    return <Field label={label} hint={spec.description}><textarea rows={6} value={value ?? ""} onChange={(e) => onChange(e.target.value)} /></Field>;
+    return <Field label={label} hint={spec.description}><textarea ref={fieldRef} rows={6} value={value ?? ""} onChange={(e) => onChange(e.target.value)} onFocus={onFocus} onBlur={onBlur} /></Field>;
   }
-  return <Field label={label} hint={spec.description}><input value={value ?? ""} onChange={(e) => onChange(e.target.value)} /></Field>;
+  return <Field label={label} hint={spec.description}><input ref={fieldRef} value={value ?? ""} onChange={(e) => onChange(e.target.value)} onFocus={onFocus} onBlur={onBlur} /></Field>;
 }
 
 function RunPanel({ base, name, nodes, result, onResult }) {
