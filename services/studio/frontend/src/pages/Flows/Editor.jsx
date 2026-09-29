@@ -351,51 +351,49 @@ function AvailableVariables({ nodeId, nodes, edges, byKey, focusedField, onInser
   const hasTrigger = nodes.some((n) => byKey[n.data.block]?.trigger);
 
   const variables = [
-    hasTrigger && { label: "input", path: "{{ input }}", desc: "Trigger input data" },
-    { label: "auth", path: "{{ auth }}", desc: "Authentication context (user_id, roles, etc.)" },
-    { label: "params", path: "{{ params }}", desc: "URL/route parameters" },
+    hasTrigger && { label: "input", path: "{{ input }}" },
+    { label: "auth", path: "{{ auth }}" },
+    { label: "params", path: "{{ params }}" },
     ...predecessors.map((id) => ({
       label: `steps.${id}`,
       path: `{{ steps.${id}.output }}`,
-      desc: `Output from block "${id}"`,
     })),
   ].filter(Boolean);
 
   return (
     <div style={{ paddingTop: 12, borderTop: "1px solid var(--line-2)", marginTop: 12 }}>
-      <h3 style={{ margin: "0 0 8px 0", fontSize: 14 }}>
-        Available variables
-        {focusedField && <span style={{ fontSize: 12, fontWeight: "normal", color: "var(--text-secondary)", marginLeft: 6 }}>in {focusedField}</span>}
+      <h3 style={{ margin: "0 0 10px 0", fontSize: 13, fontWeight: 600 }}>
+        Variables {focusedField && <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-secondary)" }}>in {focusedField}</span>}
       </h3>
-      <div style={{ display: "grid", gap: 6 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         {variables.map((v) => (
           <button
             key={v.label}
             onClick={() => focusedField && onInsert(v.path)}
             style={{
-              padding: "10px 12px",
-              backgroundColor: focusedField ? "var(--bg-2)" : "var(--bg-1)",
-              border: focusedField ? "1px solid var(--line-1)" : "1px solid var(--line-2)",
-              borderRadius: 6,
+              padding: "4px 10px",
+              backgroundColor: focusedField ? "var(--accent)" : "var(--bg-2)",
+              color: focusedField ? "white" : "var(--text-primary)",
+              border: "none",
+              borderRadius: 12,
               cursor: focusedField ? "pointer" : "default",
-              fontSize: 12,
+              fontSize: 11,
+              fontFamily: "monospace",
+              fontWeight: 500,
               transition: "all 0.2s",
-              opacity: focusedField ? 1 : 0.7,
-              textAlign: "left",
+              opacity: focusedField ? 1 : 0.6,
+              whiteSpace: "nowrap",
               pointerEvents: focusedField ? "auto" : "none",
             }}
-            onMouseEnter={(e) => { if (focusedField) { e.currentTarget.style.backgroundColor = "var(--bg-3)"; e.currentTarget.style.borderColor = "var(--accent)"; } }}
-            onMouseLeave={(e) => { if (focusedField) { e.currentTarget.style.backgroundColor = "var(--bg-2)"; e.currentTarget.style.borderColor = "var(--line-1)"; } }}
-            title={focusedField ? `Click to insert: ${v.path}` : "Focus a field to insert variables"}
+            onMouseEnter={(e) => { if (focusedField) e.currentTarget.style.opacity = "0.9"; }}
+            onMouseLeave={(e) => { if (focusedField) e.currentTarget.style.opacity = "1"; }}
+            title={focusedField ? `Insert: ${v.path}` : "Focus a field to use variables"}
           >
-            <div style={{ fontFamily: "monospace", fontSize: 11, color: "var(--accent)", fontWeight: 500 }}>{v.path}</div>
-            <div style={{ color: "var(--text-secondary)", fontSize: 10, marginTop: 4 }}>{v.desc}</div>
+            {v.path}
           </button>
         ))}
       </div>
-      <div className="hint" style={{ fontSize: 11, marginTop: 8 }}>
-        {focusedField ? `👈 Click any variable to insert into ${focusedField}` : "👉 Focus a config field to insert variables here"}
-      </div>
+      {!focusedField && <div className="hint" style={{ fontSize: 10, marginTop: 8, color: "var(--text-secondary)" }}>Focus a field to insert variables</div>}
     </div>
   );
 }
