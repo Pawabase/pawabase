@@ -18,7 +18,7 @@ client's numbers are a suggestion.
 from __future__ import annotations
 
 from helpers import (
-    CALC, CHECK, CREATE, DONE, EMIT, FAIL, FOREACH, GET, HTTP, ID_TOKEN, IF, LEDGER, LIST, LOG, MAIL,
+    CALC, CREATE, DONE, EMIT, FAIL, FOREACH, GET, HTTP, ID_TOKEN, IF, LEDGER, LIST, LOG, MAIL,
     METRIC, N, NOW, NOTIFY, OP_CREATE, OP_UPDATE, ORDER_EVENT, PUBLISH, QUERY, REPLY, SECRET, SET,
     TRIGGER_EVENT, TRIGGER_HTTP, TRIGGER_WEBHOOK, TX, UPDATE, WEBHOOK, body, flow, out, param, query, vref,
 )
@@ -32,13 +32,6 @@ _n, _e = [TRIGGER_HTTP("in", "POST", "/storefront/checkout", "public")], []
 _n += [
     SET("vars", store=query("store"), token=body("cart_token"), email=body("email"),
         rate_id=body("rate_id"), idempotency=body("idempotency_key")),
-    CHECK("check", "{{ input.body }}", [
-        {"name": "cart_token", "required": True, "max_length": 64},
-        {"name": "email", "type": "email", "required": True},
-        {"name": "rate_id", "type": "integer", "required": True, "minimum": 1},
-        {"name": "idempotency_key", "max_length": 64},
-    ]),
-    FAIL("bad_request", 422, "bad_request", "Send the basket, an email and a shipping option"),
     LIST("replay", "orders", {"store_id": "{{ vars.store }}", "idempotency_key": "{{ vars.idempotency }}"}, limit=1),
     IF("already", {"truthy": "$steps.replay.output.total"}),
     REPLY("placed_before", {"order": out("replay", "output", "data", "0"), "duplicate": True}),
@@ -53,7 +46,7 @@ _n += [
     FAIL("blank", 409, "empty_cart", "Add something to the basket first"),
 ]
 _e += [
-    ("in", "vars"), ("vars", "check"), ("check", "bad_request", "invalid"), ("check", "replay"),
+    ("in", "vars"), ("vars", "replay"),
     ("replay", "already"), ("already", "placed_before", "true"), ("already", "find", "false"),
     ("find", "found"), ("found", "no_cart", "false"), ("found", "ctx", "true"),
     ("ctx", "empty"), ("empty", "blank", "true"), ("empty", "sg_store", "false"),
@@ -135,7 +128,7 @@ _n += [
                                    "warehouse_id": "{{ steps.place.output.0.warehouse_id }}"}, limit=1),
     IF("tracked", {"truthy": "$item.track_inventory"}),
     CALC("hold_for", "add", ["{{ steps.level.output.data.0.reserved }}", "{{ item.quantity }}"], digits=0),
-    IF("fits", {"lte": [out("hold_for", "output"), "$steps.level.output.data.0.on_hand"]}),
+    IF("fits", {"lte": ["$steps.hold_for.output", "$steps.level.output.data.0.on_hand"]}),
     FAIL("no_stock", 409, "insufficient_stock", "One of those lines sold out while you were checking out"),
     TX("hold", [
         OP_UPDATE("stock_levels", "{{ steps.level.output.data.0.id }}", {"reserved": "{{ steps.hold_for.output }}"}),
@@ -180,7 +173,7 @@ _n += [
     }),
 ]
 _e += [
-    ("tax", "taxed"),
+    ("tax", "net"), ("net", "ship"), ("ship", "taxed"),
     ("taxed", "tax_raw", "true"), ("tax_raw", "tax_minor"), ("tax_minor", "total"),
     ("taxed", "no_tax", "false"), ("no_tax", "total"),
     ("total", "grand"), ("grand", "next_number"), ("next_number", "place"),
@@ -193,6 +186,7 @@ _e += [
     ("tracked", "loose_item", "false"),
 ]
 _n += [
+    IF("live_gateway", {"eq": ["{{ steps.sg_store.output.data.0.gateway_mode }}", "live"]}),
     SECRET("gateway_key", "GATEWAY_API_KEY", as_="api_key"),
     HTTP("intent", "{{ steps.sg_store.output.data.0.gateway_url }}", method="post",
          headers={"Authorization": "Bearer {{ steps.gateway_key.output }}", "Content-Type": "application/json"},
@@ -223,6 +217,8 @@ _n += [
         "reference": "{{ steps.pay_ref.output }}",
         "failure_message": "The gateway did not answer — pay by transfer or on collection",
     }),
+    SET("mode", payment_mode="gateway", pay_url="{{ steps.intent.output.body.checkout_url }}"),
+    SET("mode_offline", payment_mode="offline", pay_url=""),
     UPDATE("cart_done", "carts", "{{ vars.cart_id }}", {"status": "converted", "converted_order_id": "{{ vars.order_id }}"}),
     ORDER_EVENT("timeline", "{{ vars.order_id }}", "{{ vars.store }}", "placed",
                 "Order {{ steps.reference.output }} opened for {{ vars.email }}",
@@ -240,19 +236,20 @@ _n += [
     REPLY("reply", {
         "order": out("place", "output", "0"),
         "payment": out("payment", "output"),
-        "pay_url": "{{ steps.intent.output.body.checkout_url }}",
+        "payment_mode": "{{ vars.payment_mode }}",
+        "pay_url": "{{ vars.pay_url }}",
     }),
-    REPLY("offline_reply", {"order": out("place", "output", "0"), "payment": out("offline_payment", "output"), "pay_url": None}),
 ]
 _e += [
-    ("each", "gateway_key", "done"),
+    ("each", "live_gateway", "done"),
+    ("live_gateway", "gateway_key", "true"), ("live_gateway", "offline_payment", "false"),
     ("gateway_key", "intent"),
     ("intent", "payment", "next"),
     ("intent", "offline_payment", "failed"),
-    ("payment", "cart_done"), ("offline_payment", "cart_done"),
+    ("payment", "mode"), ("offline_payment", "mode_offline"),
+    ("mode", "cart_done"), ("mode_offline", "cart_done"),
     ("cart_done", "timeline"), ("timeline", "announce"), ("announce", "live"),
     ("live", "counter"), ("counter", "reply"),
-    ("offline_payment", "offline_reply"),
 ]
 FLOWS.append(flow(
     "checkout",
@@ -270,7 +267,7 @@ _n += [
     LIST("payment", "payments", {"gateway_reference": "{{ input.event.payload.reference }}"}, limit=1),
     IF("known", {"truthy": "$steps.payment.output.total"}),
     FAIL("unknown_payment", 404, "unknown_payment", "No payment with that reference"),
-    IF("settled", {"eq": [out("payment", "output", "data", "0", "status"), "pending"]}),
+    IF("settled", {"eq": ["$steps.payment.output.data.0.status", "pending"]}),
     DONE("already_seen", {"ignored": True, "reason": "already settled"}),
     N("verdict", "control.switch", value="{{ input.event.payload.status }}",
       cases={"succeeded": "capture", "failed": "decline", "expired": "decline"}),
@@ -386,7 +383,7 @@ _n += [
     ]),
     CALC("available", "subtract", [out("on_hand", "output"), out("held", "output")], digits=0),
     CALC("margin", "subtract", [out("available", "output"), "{{ item.reorder_point }}"], digits=0),
-    IF("low", {"lte": [out("margin", "output"), 0]}),
+    IF("low", {"lte": ["$steps.margin.output", 0]}),
     EMIT("low_stock", "stock.low", {
         "store_id": "{{ steps.order.output.store_id }}", "variant_id": "{{ item.variant_id }}",
         "product_id": "{{ item.product_id }}", "available": "{{ steps.available.output }}",
@@ -426,7 +423,7 @@ _n += [
         "discount_minor": "{{ steps.order.output.discount_minor }}",
         "status": "consumed",
     }),
-    LIST("store", "stores", {"slug": "{{ steps.order.output.store_id }}"}, limit=1),
+    LIST("store", "stores", {"ref": "{{ steps.order.output.store_id }}"}, limit=1),
     IF("loyalty", {"truthy": "$steps.store.output.data.0.loyalty_enabled"}),
     CALC("points_raw", "multiply", ["{{ steps.order.output.total_minor }}",
                                     "{{ steps.store.output.data.0.loyalty_earn_bps }}"], digits=0),
@@ -694,7 +691,7 @@ _n += [
     CALC("left", "subtract", [out("order", "output", "total_minor"), out("order", "output", "refunded_minor")], digits=0),
     IF("fits", {"lte": ["$input.body.amount_minor", "$steps.left.output"]}),
     FAIL("too_much", 422, "over_refund", "That is more than is left to refund on this order"),
-    LIST("store", "stores", {"slug": "{{ steps.order.output.store_id }}"}, limit=1),
+    LIST("store", "stores", {"ref": "{{ steps.order.output.store_id }}"}, limit=1),
     SECRET("gateway_key", "GATEWAY_API_KEY", as_="api_key"),
     ID_TOKEN("ref_ref", kind="token", length=12),
     HTTP("gateway_refund", "{{ steps.store.output.data.0.gateway_url }}/refunds", method="post",
@@ -766,6 +763,7 @@ _n += [
             "actor_id": "{{ auth.user_id }}",
         }),
     ]),
+    SET("keep_as_is", restocked="nothing on the books"),
     MAIL("mail", "{{ steps.order.output.email }}", "refund_issued", {
         "order": "{{ steps.order.output }}",
         "refund": "{{ steps.refund.output.0 }}",
@@ -787,8 +785,8 @@ _e += [
     ("order_state", "lines"), ("order_partial", "lines"), ("lines", "restock"),
     ("restock", "each", "true"), ("each", "on_book", "each"),
     ("on_book", "back", "true"), ("back", "restocked"),
-    ("on_book", "mail", "false"), ("restocked", "mail"),
-    ("restock", "mail", "false"),
+    ("on_book", "keep_as_is", "false"),
+    ("restock", "mail", "false"), ("each", "mail", "done"),
     ("mail", "announce"), ("announce", "hook"), ("hook", "reply"),
 ]
 FLOWS.append(flow(
@@ -858,6 +856,143 @@ FLOWS.append(flow(
     "shipment_scan",
     "Inbound hook carrier-tracking: append the scan, move the shipment, note it on the order, and only say 'it has arrived' when it really has.",
     _n, _e, timeout=30,
+))
+
+
+# ── a customer asks to send something back ──────────────────────────────────
+
+_n, _e = [TRIGGER_HTTP("in", "POST", "/storefront/returns", "authenticated")], []
+_n += [
+    GET("order", "orders", body("order_id")),
+    FAIL("no_order", 404, "no_order", "No such order"),
+    IF("mine", {"any": [
+        {"eq": ["$steps.order.output.user_id", "$auth.user_id"]},
+        {"eq": ["$steps.order.output.email", "$auth.email"]},
+    ]}),
+    FAIL("not_mine", 403, "not_yours", "Only the buyer can start a return for that order"),
+    IF("returnable", {"in": [out("order", "output", "status"), ["paid", "processing", "fulfilled", "closed"]]}),
+    FAIL("cannot", 409, "not_returnable", "This order is not open for returns"),
+    ID_TOKEN("code", kind="token", length=10),
+    CREATE("return", "returns", {
+        "store_id": "{{ steps.order.output.store_id }}",
+        "order_id": "{{ steps.order.output.id }}",
+        "customer_id": "{{ steps.order.output.customer_id }}",
+        "user_id": "{{ auth.user_id }}",
+        "code": "{{ steps.code.output }}",
+        "status": "requested",
+        "kind": "{{ input.body.kind }}",
+        "reason": "{{ input.body.reason }}",
+        "detail": "{{ input.body.detail }}",
+        "requested_value_minor": "{{ input.body.amount_minor }}",
+    }),
+    FOREACH("each", "{{ input.body.items }}"),
+    CREATE("item", "return_items", {
+        "store_id": "{{ steps.order.output.store_id }}",
+        "return_id": "{{ steps.return.output.id }}",
+        "order_id": "{{ steps.order.output.id }}",
+        "order_item_id": "{{ item.order_item_id }}",
+        "variant_id": "{{ item.variant_id }}",
+        "quantity": "{{ item.quantity }}",
+        "condition": "{{ item.condition }}",
+        "note": "{{ item.note }}",
+    }),
+    ORDER_EVENT("timeline", "{{ steps.order.output.id }}", "{{ steps.order.output.store_id }}", "return_requested",
+                "Return {{ steps.code.output }} requested: {{ input.body.reason }}",
+                actor_id="{{ auth.user_id }}", actor_kind="shopper"),
+    NOTIFY("notify", "{{ steps.order.output.store_id }}", "{{ steps.order.output.user_id }}", "return_requested",
+           "Return requested on {{ steps.order.output.reference }}",
+           "{{ input.body.reason }} — awaiting a decision",
+           link="/returns/{{ steps.return.output.id }}", severity="warning"),
+    EMIT("announce", "return.requested", {
+        "return_id": "{{ steps.return.output.id }}", "order_id": "{{ steps.order.output.id }}",
+        "store_id": "{{ steps.order.output.store_id }}", "code": "{{ steps.code.output }}",
+    }),
+    REPLY("reply", {"return": out("return", "output"), "code": "{{ steps.code.output }}"}),
+]
+_e += [
+    ("in", "order"), ("order", "mine"), ("mine", "not_mine", "false"),
+    ("mine", "returnable", "true"), ("returnable", "cannot", "false"),
+    ("returnable", "code", "true"), ("code", "return"), ("return", "each"),
+    ("each", "item", "each"), ("item", "timeline"),
+    ("each", "timeline", "done"),
+    ("timeline", "notify"), ("notify", "announce"), ("announce", "reply"),
+]
+FLOWS.append(flow(
+    "request_return",
+    "POST /storefront/returns: prove the caller bought the order, check it is still returnable, open the return with its lines, and put it in front of staff.",
+    _n, _e, timeout=30,
+))
+
+
+# ── staff decide, then the goods come back to the shelf ──────────────────────
+
+_n, _e = [TRIGGER_HTTP("in", "POST", "/returns/{id}/decision", "fulfilment_staff")], []
+_n += [
+    GET("return", "returns", param("id")),
+    FAIL("no_return", 404, "no_such_return", "No such return"),
+    IF("open", {"eq": [out("return", "output", "status"), "requested"]}),
+    FAIL("decided", 409, "already_decided", "This return has already been decided"),
+    NOW("now"),
+    UPDATE("decision", "returns", "{{ steps.return.output.id }}", {
+        "status": "{{ input.body.decision }}",
+        "approved_value_minor": "{{ input.body.value_minor }}",
+        "reviewed_by": "{{ auth.user_id }}",
+        "reviewed_at": "{{ steps.now.output }}",
+        "staff_note": "{{ input.body.note }}",
+    }),
+    QUERY("lines", "SELECT id, variant_id, warehouse_id, quantity, restocked FROM return_items WHERE return_id = ?",
+          ["{{ steps.return.output.id }}"]),
+    IF("sending_back", {"eq": ["$input.body.decision", "approved"]}),
+    FOREACH("each", "{{ steps.lines.output }}"),
+    QUERY("level", "SELECT id, on_hand FROM stock_levels WHERE store_id = ? AND variant_id = ? AND warehouse_id = ? LIMIT 1",
+          ["{{ steps.return.output.store_id }}", "{{ item.variant_id }}", "{{ item.warehouse_id }}"]),
+    IF("booked", {"truthy": "$steps.level.output.0.id"}),
+    CALC("back", "add", ["{{ steps.level.output.0.on_hand }}", "{{ item.quantity }}"], digits=0),
+    TX("restock", [
+        OP_UPDATE("stock_levels", "{{ steps.level.output.0.id }}", {"on_hand": "{{ steps.back.output }}"}),
+        OP_CREATE("inventory_ledger", {
+            "store_id": "{{ steps.return.output.store_id }}",
+            "warehouse_id": "{{ item.warehouse_id }}",
+            "variant_id": "{{ item.variant_id }}",
+            "delta": "{{ item.quantity }}",
+            "reason": "return_restock",
+            "reference_type": "return",
+            "reference_id": "{{ steps.return.output.id }}",
+            "on_hand_after": "{{ steps.back.output }}",
+            "note": "Goods back on the shelf",
+            "actor_id": "{{ auth.user_id }}",
+        }),
+    ]),
+    UPDATE("marked", "return_items", "{{ item.id }}", {"restocked": True}),
+    GET("rorder", "orders", "{{ steps.return.output.order_id }}"),
+    MAIL("mail", "{{ steps.rorder.output.email }}", "return_decision", {
+        "return": "{{ steps.decision.output }}", "order": "{{ steps.rorder.output }}"}),
+    EMIT("announce", "return.decided", {
+        "return_id": "{{ steps.return.output.id }}", "status": "{{ input.body.decision }}",
+        "store_id": "{{ steps.return.output.store_id }}",
+    }),
+    SET("no_shelf", restocked="nothing to put back"),
+    NOTIFY("notify", "{{ steps.return.output.store_id }}", "{{ steps.return.output.user_id }}", "return_decided",
+           "Return {{ steps.return.output.code }} {{ input.body.decision }}",
+           "{{ input.body.note }}", link="/returns/{{ steps.return.output.id }}",
+           severity="success"),
+    REPLY("reply", out("decision", "output")),
+]
+_e += [
+    ("in", "return"), ("return", "open"), ("open", "decided", "false"), ("open", "now", "true"),
+    ("now", "decision"), ("decision", "lines"), ("lines", "sending_back"),
+    ("sending_back", "each", "true"), ("each", "level", "each"),
+    ("level", "booked"), ("booked", "back", "true"), ("back", "restock"), ("restock", "marked"),
+
+    ("booked", "no_shelf", "false"),
+    ("sending_back", "rorder", "false"), ("each", "rorder", "done"), ("rorder", "mail"),
+    ("mail", "announce"), ("announce", "notify"), ("notify", "reply"),
+]
+FLOWS.append(flow(
+    "decide_return",
+    "POST /returns/{id}/decision: approve or reject a return; approval puts the goods back on the shelf with a ledger row per line, and the "
+    "shopper learns their outcome either way.",
+    _n, _e, timeout=45,
 ))
 
 # __APPEND__

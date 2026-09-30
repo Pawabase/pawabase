@@ -582,6 +582,15 @@ def out(id, *tail):
     return "{{ steps.%s.%s }}" % (id, ".".join(str(part) for part in tail))
 
 
+def sref(step_id, *tail):
+    """``$steps.<id>.<tail>`` — the form a *condition* needs.
+
+    ``out()`` renders a template; a condition compares values, so it needs the
+    lookup path instead. Using one for the other silently compares a string.
+    """
+    return "$steps.%s%s" % (step_id, "".join(".%s" % part for part in tail))
+
+
 def var(name, *tail):
     """``vars.<name>.<tail>`` inside a template."""
     return "{{ vars.%s%s }}" % (name, "".join(".%s" % part for part in tail))

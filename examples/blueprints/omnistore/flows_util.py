@@ -112,7 +112,7 @@ LIMIT 50
 def store_guard(prefix):
     """Stops the run unless ``vars.store`` names an active store."""
     nodes = [
-        LIST(f"{prefix}_store", "stores", {"slug": "{{ vars.store }}"}, limit=1),
+        LIST(f"{prefix}_store", "stores", {"ref": "{{ vars.store }}"}, limit=1),
         IF(f"{prefix}_store_ok", {"truthy": f"$steps.{prefix}_store.output.total"}),
         FAIL(f"{prefix}_no_store", 422, "unknown_store", "No store for this storefront"),
     ]
@@ -184,6 +184,7 @@ def cart_totals(prefix, cart_id="{{ vars.cart_id }}"):
         UPDATE(f"{prefix}_save", "carts", cart_id, {
             "subtotal_minor": f"{{{{ steps.{prefix}_totals.output.0.subtotal_minor }}}}",
             "item_count": f"{{{{ steps.{prefix}_totals.output.0.item_count }}}}",
+            "weight_grams": f"{{{{ steps.{prefix}_totals.output.0.weight_grams }}}}",
         }),
     ]
     edges = [

@@ -55,22 +55,20 @@ STAFF_INVITE = {
 
 CART_ADD = {
     "name": "CartAdd",
-    "description": "Add a variant to a cart, creating the cart when no token is given.",
+    "description": "Add a variant to a cart, opening one when no token is given.",
     "fields": [
-        F("cart_token", max_length=64, description="Omit to start a new cart"),
-        F("store_id", required=True, pattern=SLUG),
-        F("variant_id", "integer", required=True),
+        F("variant_id", "integer", required=True, minimum=1),
         F("quantity", "integer", required=True, minimum=1, maximum=999),
-        F("add_on_ids", "array", items={"type": "integer"}, description="Bundle add-ons"),
+        F("cart_token", max_length=64, description="Omit to start a new cart"),
+        F("email", "email", description="Lets the basket be recovered if it is abandoned"),
     ],
 }
 
 CART_QUANTITY = {
     "name": "CartQuantity",
-    "description": "Change or remove a cart line. Quantity 0 removes it.",
+    "description": "Change a cart line's quantity; 0 removes the line.",
     "fields": [
-        F("cart_token", required=True, max_length=64),
-        F("item_id", "integer", required=True),
+        F("line_id", "integer", required=True, minimum=1),
         F("quantity", "integer", required=True, minimum=0, maximum=999),
     ],
 }
@@ -86,19 +84,18 @@ CART_CODE = {
 
 CHECKOUT = {
     "name": "CheckoutInput",
-    "description": "Turn a cart into an order: prices, stock, tax, shipping and totals.",
+    "description": "Turn a cart into an order: the store prices it, holds the stock and opens payment.",
     "fields": [
         F("cart_token", required=True, max_length=64),
         F("email", "email", required=True),
+        F("rate_id", "integer", required=True, minimum=1, description="The shipping option quoted for this basket"),
+        F("idempotency_key", max_length=64, description="Send the same key to make a retry safe"),
         F("phone", max_length=32),
         F("shipping_address", "ref", schema="Address", required=True),
         F("billing_address", "ref", schema="Address", nullable=True),
-        F("shipping_rate_id", "integer", nullable=True),
-        F("coupon_code", max_length=40),
-        F("gift_card_code", max_length=40),
-        F("loyalty_points", "integer", minimum=0, maximum=1000000, default=0),
-        F("note", "text", max_length=1000),
-        F("accepts_marketing", "boolean", default=False),
+        F("customer_note", "text", max_length=1000),
+        F("utm_source", max_length=80),
+        F("utm_campaign", max_length=80),
     ],
 }
 
@@ -231,29 +228,25 @@ MEDIA_INPUT = {
 
 STOCK_ADJUST = {
     "name": "StockAdjust",
-    "description": "Move stock at one warehouse. Every change is journalled.",
+    "description": "Correct one shelf's count. The ledger records the movement and its reason.",
     "fields": [
-        F("variant_id", "integer", required=True),
-        F("warehouse_id", "integer", required=True),
-        F("delta", "integer", required=True, description="May be negative"),
-        F("reason", required=True, enum=[
-            "purchase_receipt",
-            "damage",
-            "shrinkage",
-            "cycle_count",
-            "manual",
-        ]),
+        F("store_id", required=True, pattern=SLUG),
+        F("variant_id", "integer", required=True, minimum=1),
+        F("warehouse_id", "integer", required=True, minimum=1),
+        F("delta", "integer", required=True, description="Signed: positive received, negative written off"),
+        F("reason", required=True, max_length=40),
         F("note", "text", max_length=500),
     ],
 }
 
 STOCK_TRANSFER = {
     "name": "StockTransfer",
-    "description": "Move stock between two warehouses with a two-phase ledger write.",
+    "description": "Move stock between two warehouses, journalled out of one and into the other.",
     "fields": [
-        F("from_warehouse_id", "integer", required=True),
-        F("to_warehouse_id", "integer", required=True),
-        F("variant_id", "integer", required=True),
+        F("store_id", required=True, pattern=SLUG),
+        F("variant_id", "integer", required=True, minimum=1),
+        F("from_warehouse_id", "integer", required=True, minimum=1),
+        F("to_warehouse_id", "integer", required=True, minimum=1),
         F("quantity", "integer", required=True, minimum=1, maximum=100000),
         F("note", "text", max_length=500),
     ],
@@ -294,18 +287,16 @@ PURCHASE_RECEIPT = {
 
 SHIPMENT_INPUT = {
     "name": "ShipmentInput",
-    "description": "Ship selected order lines, reserving stock from a warehouse.",
+    "description": "The parcel leaving for an order, and where to send the tracking mail.",
     "fields": [
-        F("warehouse_id", "integer", nullable=True),
-        F("carrier", max_length=80),
-        F("tracking_number", max_length=120),
+        F("carrier", required=True, max_length=60),
+        F("service", max_length=60),
+        F("tracking_number", max_length=96),
         F("tracking_url", "url"),
-        money("cost_minor"),
-        F("notify_customer", "boolean", default=True),
-        F("lines", "array", required=True, items={"type": "object", "fields": [
-            F("order_item_id", "integer", required=True),
-            F("quantity", "integer", required=True, minimum=1),
-        ]}),
+        F("label_url", "url"),
+        money("cost_minor", default=0),
+        F("origin", max_length=120, description="Where it was handed over"),
+        F("recipient_name", max_length=120),
     ],
 }
 
@@ -328,52 +319,45 @@ SHIPMENT_STATUS = {
 
 RETURN_REQUEST = {
     "name": "ReturnRequest",
-    "description": "A shopper asks to send items back.",
+    "description": "Ask to send part of an order back.",
     "fields": [
-        F("order_id", "integer", required=True),
-        F("reason", required=True, enum=[
-            "wrong_item",
-            "damaged",
-            "not_as_described",
-            "changed_mind",
-            "late_delivery",
-            "other",
-        ]),
-        F("note", "text", max_length=2000),
-        F("refund_method", enum=["original", "store_credit"], default="original"),
-        F("lines", "array", required=True, items={"type": "object", "fields": [
-            F("order_item_id", "integer", required=True),
-            F("quantity", "integer", required=True, minimum=1),
-        ]}),
+        F("order_id", "integer", required=True, minimum=1),
+        F("kind", enum=["refund", "exchange", "store_credit"], default="refund"),
+        F("reason", required=True, max_length=40),
+        F("detail", "text", max_length=2000),
+        money("amount_minor", default=0, description="What the shopper expects back"),
+        F("items", "array", description="The lines being returned", items={
+            "type": "object",
+            "fields": [
+                {"name": "order_item_id", "type": "integer", "required": True, "minimum": 1},
+                {"name": "variant_id", "type": "integer", "required": True, "minimum": 1},
+                {"name": "quantity", "type": "integer", "required": True, "minimum": 1, "maximum": 999},
+                {"name": "condition", "enum": ["unopened", "opened", "damaged", "defective"],
+                 "default": "unopened"},
+                {"name": "note", "max_length": 500},
+            ],
+        }),
     ],
 }
 
 RETURN_DECISION = {
     "name": "ReturnDecision",
-    "description": "Approve, reject or receive a return.",
+    "description": "Approve or reject a return; approval puts the goods back on the shelf.",
     "fields": [
-        F("status", required=True, enum=["approved", "rejected", "received"]),
+        F("decision", required=True, enum=["approved", "rejected"]),
+        money("value_minor", default=0, description="What the shopper gets back"),
         F("note", "text", max_length=1000),
-        F("restock", "boolean", default=False),
     ],
 }
 
 REFUND_INPUT = {
     "name": "RefundInput",
-    "description": "Refund part or all of an order, optionally restocking the items.",
+    "description": "Refund part or all of a paid order; full refunds can restock it.",
     "fields": [
-        money("amount_minor", required=True),
-        F("reason", required=True, enum=[
-            "customer_request",
-            "damaged",
-            "not_received",
-            "wrong_item",
-            "fraud",
-            "other",
-        ]),
-        F("note", "text", max_length=1000),
-        F("restock", "boolean", default=False),
-        F("return_id", "integer", nullable=True),
+        F("amount_minor", "integer", required=True, minimum=1),
+        F("reason", max_length=200),
+        F("restock", "boolean", default=False, description="The goods are coming back to the shelf"),
+        F("full", "boolean", default=False, description="Refund everything still outstanding"),
     ],
 }
 
@@ -388,28 +372,17 @@ ORDER_NOTE = {
 
 ORDER_CANCEL = {
     "name": "OrderCancel",
-    "description": "Cancel an unpaid or unshipped order.",
+    "description": "Cancel an unpaid order and release the stock it was holding.",
     "fields": [
-        F("reason", required=True, max_length=200),
-        F("restock", "boolean", default=True),
+        F("reason", max_length=200),
     ],
 }
 
 PAYMENT_CAPTURE = {
     "name": "PaymentCapture",
-    "description": "Record a payment taken outside the gateway (transfer, cash, POS).",
+    "description": "Record money that arrived outside the gateway: cash, transfer, or card on collection.",
     "fields": [
-        F("method", required=True, enum=[
-            "card",
-            "bank_transfer",
-            "cash",
-            "pos",
-            "mobile_money",
-            "gift_card",
-            "store_credit",
-        ]),
-        money("amount_minor", required=True),
-        F("reference", max_length=120),
+        F("instrument", max_length=40, description="cash, bank transfer, POS card…"),
         F("note", "text", max_length=500),
     ],
 }
@@ -523,10 +496,10 @@ REVIEW_INPUT = {
 
 REVIEW_MODERATION = {
     "name": "ReviewModeration",
-    "description": "Approve, reject or spam-flag a review.",
+    "description": "Approve, reject or spam a review, optionally with a public reply.",
     "fields": [
-        F("status", required=True, enum=["pending", "approved", "rejected", "spam"]),
-        F("note", "text", max_length=1000),
+        F("status", required=True, enum=["approved", "rejected", "spam"]),
+        F("reply", "text", max_length=2000, description="Shown under the review"),
     ],
 }
 
@@ -562,10 +535,11 @@ TICKET_INPUT = {
 
 TICKET_REPLY = {
     "name": "TicketReply",
-    "description": "Staff answer a ticket, optionally closing it.",
+    "description": "Answer a ticket. An internal note is never mailed to the shopper.",
     "fields": [
-        F("message", "text", required=True, max_length=8000),
-        F("close", "boolean", default=False),
+        F("message", "text", required=True, max_length=5000),
+        F("internal", "boolean", default=False),
+        F("status", enum=["open", "pending", "resolved", "closed"], default="pending"),
     ],
 }
 

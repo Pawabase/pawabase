@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Omni Threads — OmniStore</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="bar">
+  <a class="brand" href="#shop">
+    <span class="dot"></span>
+    <span>Omni<strong>Threads</strong></span>
+  </a>
+  <nav class="tabs" role="tablist">
+    <button class="tab is-active" data-view="shop" role="tab">Shop</button>
+    <button class="tab" data-view="cart" role="tab">Cart <span id="cart-count" class="pill">0</span></button>
+    <button class="tab" data-view="orders" role="tab">Back office</button>
+  </nav>
+  <div class="status" id="status" aria-live="polite"></div>
+</header>
+
+<main>
+  <!-- ── storefront ────────────────────────────────────────────────────── -->
+  <section id="view-shop" class="view is-active">
+    <div class="hero">
+      <h1>Made here, shipped everywhere.</h1>
+      <p>Every price, every stock level and every order on this page comes from
+         the OmniStore blueprint — served by Pawabase, not rendered here.</p>
+    </div>
+    <div id="banners" class="banners"></div>
+    <div id="products" class="grid" aria-busy="true"><p class="muted">Loading the catalog…</p></div>
+  </section>
+
+  <!-- ── cart ──────────────────────────────────────────────────────────── -->
+  <section id="view-cart" class="view">
+    <div class="panel">
+      <h2>Your basket</h2>
+      <div id="cart-lines"></div>
+
+      <form id="coupon-form" class="row">
+        <label for="coupon">Coupon code</label>
+        <input id="coupon" name="code" placeholder="WELCOME15" autocomplete="off">
+        <button type="submit" class="ghost">Apply</button>
+        <button type="button" class="ghost" id="coupon-clear">Remove</button>
+      </form>
+
+      <dl id="quote" class="totals"></dl>
+      <p class="muted" id="quote-note">Choose a shipping destination to see delivery and tax.</p>
+
+      <button id="to-checkout" class="primary" disabled>Checkout</button>
+    </div>
+  </section>
+
+  <!-- ── checkout ──────────────────────────────────────────────────────── -->
+  <section id="view-checkout" class="view">
+    <div class="panel">
+      <h2>Where is it going?</h2>
+      <form id="checkout-form" class="form">
+        <div class="form-grid">
+          <label>First name<input name="first_name" required autocomplete="given-name"></label>
+          <label>Last name<input name="last_name" required autocomplete="family-name"></label>
+          <label class="wide">Address line 1<input name="line1" required autocomplete="address-line1"></label>
+          <label>City<input name="city" required autocomplete="address-level2"></label>
+          <label>Country<input name="country" value="NG" maxlength="2" required autocomplete="country"></label>
+          <label>Phone<input name="phone" autocomplete="tel"></label>
+          <label class="wide">Email<input name="email" type="email" required autocomplete="email"></label>
+          <label class="wide">Note for the shop<textarea name="customer_note" rows="2"></textarea></label>
+        </div>
+        <label class="check"><input type="checkbox" name="save_cart" checked> Keep my basket if payment fails</label>
+        <button class="primary" type="submit" id="place-order">Place the order</button>
+        <p class="muted">Stock is held the moment you place the order; the store packs it from
+           there. This demo store takes payment offline, so nothing is charged here.</p>
+      </form>
+    </div>
+  </section>
+
+  <!-- ── confirmation ──────────────────────────────────────────────────── -->
+  <section id="view-done" class="view">
+    <div class="panel center">
+      <h2>Order placed</h2>
+      <p class="ref" id="order-ref"></p>
+      <p id="order-summary"></p>
+      <button class="primary" id="back-to-shop">Keep shopping</button>
+    </div>
+  </section>
+
+  <!-- ── back office ───────────────────────────────────────────────────── -->
+  <section id="view-orders" class="view">
+    <div class="panel">
+      <h2>Back office</h2>
+      <p class="muted">Staff views need the environment's <strong>secret</strong> key, because
+         orders, stock and customers are not public. Paste the key printed by
+         <code>bootstrap.py</code>; it is kept in this browser only.</p>
+      <form id="key-form" class="row">
+        <label for="secret-key" class="sr-only">Secret key</label>
+        <input id="secret-key" type="password" placeholder="pb_sk_…" autocomplete="off">
+        <button class="ghost" type="submit">Unlock</button>
+        <button class="ghost" type="button" id="key-forget">Forget</button>
+      </form>
+      <p id="key-status" class="muted"></p>
+
+      <div id="office" hidden>
+        <div class="cards" id="dash"></div>
+        <h3>Recent orders</h3>
+        <div id="orders" class="table-wrap"></div>
+        <h3>Running low</h3>
+        <div id="low-stock" class="table-wrap"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<footer class="bar foot">
+  <span>Storefront: <code id="cfg-gateway">—</code> · <code id="cfg-store">—</code></span>
+  <span>Publishable key: <code id="cfg-key">—</code></span>
+</footer>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

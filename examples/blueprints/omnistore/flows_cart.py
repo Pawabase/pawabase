@@ -9,7 +9,7 @@ shopper sees and the total checkout charges cannot drift apart.
 from __future__ import annotations
 
 from helpers import (
-    CALC, CACHE_GET, CACHE_SET, CHECK, CREATE, FAIL, ID_TOKEN, IF, LIST, N, NOW, QUERY, REPLY, SET,
+    CALC, CACHE_GET, CACHE_SET, CREATE, FAIL, ID_TOKEN, IF, LIST, N, NOW, QUERY, REPLY, SET,
     TRIGGER_HTTP, UPDATE, body, flow, out, param, query, vref,
 )
 from flows_util import CART_LINES_SQL, cart_totals, stock_guard, store_guard, variant_guard
@@ -30,18 +30,11 @@ _n, _e = [TRIGGER_HTTP("in", "POST", "/storefront/cart/items", "public")], []
 _n += [
     SET("vars", store=query("store"), variant_id=body("variant_id"), quantity=body("quantity"),
         cart_token=body("cart_token"), email=body("email")),
-    CHECK("check", "{{ input.body }}", [
-        {"name": "variant_id", "type": "integer", "required": True, "minimum": 1},
-        {"name": "quantity", "type": "integer", "required": True, "minimum": 1, "maximum": 999},
-        {"name": "cart_token", "max_length": 64},
-        {"name": "email", "type": "email"},
-    ]),
-    FAIL("bad_request", 422, "bad_request", "Send a variant and a quantity between 1 and 999"),
 ]
-_e += [("in", "vars"), ("vars", "check"), ("check", "bad_request", "invalid")]
+_e += [("in", "vars")]
 _g = [_n, _e]
 frag(_g, store_guard("sg"))
-_e += [("check", "sg_store"), ("sg_store_ok", "tok", "true")]
+_e += [("vars", "sg_store"), ("sg_store_ok", "tok", "true")]
 _n += [
     IF("tok", {"truthy": "$vars.cart_token"}),
     LIST("find_cart", "carts", {"token": "{{ vars.cart_token }}", "store_id": "{{ vars.store }}", "status": "open"}, limit=1),
@@ -117,11 +110,6 @@ FLOWS.append(flow(
 _n, _e = [TRIGGER_HTTP("in", "POST", "/storefront/cart/lines", "public")], []
 _n += [
     SET("vars", store=query("store"), line_id=body("line_id"), quantity=body("quantity")),
-    CHECK("check", "{{ input.body }}", [
-        {"name": "line_id", "type": "integer", "required": True, "minimum": 1},
-        {"name": "quantity", "type": "integer", "required": True, "minimum": 0, "maximum": 999},
-    ]),
-    FAIL("bad_request", 422, "bad_request", "Send the line and the new quantity (0 to drop it)"),
     LIST("find", "cart_items", {"id": "{{ vars.line_id }}", "store_id": "{{ vars.store }}"}, limit=1),
     IF("found", {"truthy": "$steps.find.output.total"}),
     FAIL("no_line", 404, "no_such_line", "That line is not in a basket here"),
@@ -132,8 +120,7 @@ _n += [
     REPLY("dropped", {"removed": True, "line_id": "{{ vars.line_id }}"}),
 ]
 _e += [
-    ("in", "vars"), ("vars", "check"), ("check", "bad_request", "invalid"),
-    ("check", "find"), ("find", "found"), ("found", "no_line", "false"),
+    ("in", "vars"), ("vars", "find"), ("find", "found"), ("found", "no_line", "false"),
     ("found", "ctx", "true"), ("ctx", "clear"), ("clear", "drop", "true"), ("drop", "dropped"),
 ]
 _n += [
@@ -262,4 +249,45 @@ FLOWS.append(flow(
     _n, _e, timeout=15,
 ))
 
-# __APPEND__
+
+# ── a quote before checkout ──────────────────────────────────────────────────
+
+_n, _e = [TRIGGER_HTTP("in", "GET", "/storefront/quote", "public")], []
+_n += [
+    SET("vars", store=query("store"), token=query("cart_token"),
+        country=query("country", "NG"), rate_id=query("rate_id")),
+    LIST("find", "carts", {"token": "{{ vars.token }}", "store_id": "{{ vars.store }}"}, limit=1),
+    IF("found", {"truthy": "$steps.find.output.total"}),
+    FAIL("no_cart", 404, "no_cart", "Nothing to price yet"),
+    LIST("zones", "shipping_zones", {"store_id": "{{ vars.store }}", "is_active": True}, limit=50),
+    QUERY("rates", "SELECT r.id, r.name, r.kind, r.price_minor, r.delivery_estimate, r.free_over_minor "
+                   "FROM shipping_rates r JOIN shipping_zones z ON z.id = r.zone_id "
+                   "WHERE r.store_id = ? AND r.is_active = TRUE ORDER BY r.position",
+          ["{{ vars.store }}"]),
+    QUERY("tax", "SELECT rate_bps FROM tax_rates WHERE store_id = ? AND country = ? AND is_active = TRUE LIMIT 1",
+          ["{{ vars.store }}", "{{ vars.country }}"]),
+    CALC("net", "subtract", ["{{ steps.find.output.data.0.subtotal_minor }}",
+                             "{{ steps.find.output.data.0.discount_minor }}"], digits=0),
+    CALC("tax_raw", "multiply", [out("net", "output"), out("tax", "output", "0", "rate_bps")], digits=0),
+    CALC("tax_minor", "divide", [out("tax_raw", "output"), 10000], digits=0),
+    REPLY("reply", {
+        "subtotal_minor": "{{ steps.find.output.data.0.subtotal_minor }}",
+        "discount_minor": "{{ steps.find.output.data.0.discount_minor }}",
+        "net_minor": out("net", "output"),
+        "tax_minor": out("tax_minor", "output"),
+        "weight_grams": out("find", "output", "data", "0", "weight_grams"),
+        "shipping_options": out("rates", "output"),
+        "zones": out("zones", "output", "data"),
+    }),
+]
+_e += [
+    ("in", "vars"), ("vars", "find"), ("find", "found"), ("found", "no_cart", "false"),
+    ("found", "zones", "true"), ("zones", "rates"), ("rates", "tax"), ("tax", "net"),
+    ("net", "tax_raw"), ("tax_raw", "tax_minor"), ("tax_minor", "reply"),
+]
+FLOWS.append(flow(
+    "cart_quote",
+    "GET /storefront/quote: what this basket would cost — net of its coupon, the shipping options the store offers, and the tax rate for the country "
+    "the shopper says they are in.",
+    _n, _e, timeout=15,
+))

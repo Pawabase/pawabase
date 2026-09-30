@@ -36,6 +36,7 @@ RESOURCES.append(
             F("phone", max_length=32),
             F("timezone", max_length=60, default="Africa/Lagos"),
             F("support_email", "email"),
+            F("owner_user_id", max_length=64, description="Who the store's alerts go to"),
             F("logo_url", "url"),
             F("description", "text", max_length=4000),
             F("order_prefix", max_length=8, default="ORD"),
@@ -271,8 +272,8 @@ RESOURCES.append(
             F("position", "integer", minimum=0, default=0),
         ],
         ops(
-            list_="active_read",
-            get="active_read",
+            list_="public",
+            get="public",
             create="store_editor_create",
             update="store_editor",
             delete="store_editor",

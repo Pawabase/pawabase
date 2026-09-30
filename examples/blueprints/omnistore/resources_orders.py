@@ -125,6 +125,7 @@ RESOURCES.append(
             money("subtotal_minor", default=0, read_only=True),
             money("discount_minor", default=0, read_only=True),
             F("item_count", "integer", minimum=0, default=0, read_only=True),
+            F("weight_grams", "integer", minimum=0, default=0, read_only=True),
             F("coupon_code", max_length=32),
             F("discount_kind", max_length=24),
             F("channel", enum=["web", "mobile", "pos", "api"], default="web"),
