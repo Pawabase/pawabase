@@ -50,6 +50,7 @@ RESOURCES.append(
             F("is_active", "boolean", default=True),
             F("accepts_orders", "boolean", default=True),
             F("gateway_mode", enum=["test", "live"], default="test"),
+            F("gateway_url", "url", description="Where checkout sends a charge request"),
         ],
         ops(
             list_="public",

@@ -81,6 +81,7 @@ class ServiceClient:
         self.timeout = timeout
         self.app = app
         self._http: Any = None
+        self._raw_http: Any = None
 
     async def _client(self) -> Any:
         if self._http is None:
@@ -169,6 +170,54 @@ class ServiceClient:
                 raise ServiceUnavailable(self.audience, str(exc)) from exc
             raise
 
+    async def request_raw(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: Any = None,
+        params: dict[str, Any] | None = None,
+        context: PlatformContext | None = None,
+        operator: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Call a service and preserve status and headers, including error responses.
+
+        This is intended for operator tooling such as an API explorer. Normal
+        service-to-service calls should use :meth:`request` and its exceptions.
+        """
+        kwargs: dict[str, Any] = {
+            "headers": self.headers(context=context, operator=operator, extra=headers)
+        }
+        if json is not None:
+            kwargs["json"] = json
+        if params:
+            kwargs["params"] = {key: value for key, value in params.items() if value is not None}
+        if self.app is not None:
+            client = await self._client()
+            response = await client.request(method, path, **kwargs)
+        else:
+            if self._raw_http is None:
+                from sillo.http.client import HTTPClient
+
+                self._raw_http = HTTPClient(
+                    self.base_url,
+                    default_timeout=self.timeout,
+                    raise_for_status=False,
+                    follow_redirects=False,
+                )
+                await self._raw_http.start()
+            response = await self._raw_http._send(method, path, **kwargs)
+        try:
+            body = response.json()
+        except ValueError:
+            body = response.text
+        return {
+            "status": response.status_code,
+            "headers": dict(response.headers),
+            "body": body,
+        }
+
     def _decode(self, status: int, response: Any) -> Any:
         try:
             body = response.json()
@@ -200,3 +249,6 @@ class ServiceClient:
             else:
                 await self._http.stop()
             self._http = None
+        if self._raw_http is not None:
+            await self._raw_http.stop()
+            self._raw_http = None

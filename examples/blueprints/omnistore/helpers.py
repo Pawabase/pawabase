@@ -289,10 +289,14 @@ def param(name):
 
 
 def query(name, default=None):
-    """A custom route's query parameter, with an optional fallback."""
+    """A custom route's query parameter, with an optional fallback.
+
+    Pawabase templates are path lookups with a small filter set, not Jinja:
+    the fallback must be the ``default`` filter, never an ``or`` expression.
+    """
     if default is None:
         return "{{ input.query.%s }}" % name
-    return "{{ input.query.%s or '%s' }}" % (name, default)
+    return '{{ input.query.%s | default:"%s" }}' % (name, default)
 
 
 def step(*path):
@@ -308,3 +312,282 @@ def payload(field):
 def rec(field):
     """A field of the resource record carried by a resource event."""
     return "{{ input.event.payload.record.%s }}" % field
+
+
+# ── node shortcuts ───────────────────────────────────────────────────────────
+#
+# A node is an ``(id, block, config)`` triple. These builders keep flow bodies
+# readable: a block's config keys appear as keyword arguments, so a reader sees
+# what each step does without opening the registry.
+
+
+def N(node_id, block_key, **config):
+    """A flow node. ``node_id``/``block_key`` stay clear of config keys like ``id``."""
+    return (node_id, block_key, config)
+
+
+def TRIGGER_HTTP(id, method, path, policy):
+    """Starts a run when a custom route is called."""
+    return N(id, "trigger.http", method=method, path=path, policy=policy)
+
+
+def TRIGGER_EVENT(id, event):
+    return N(id, "trigger.event", event=event)
+
+
+def TRIGGER_RESOURCE(id, resource_name, operations=("create", "update")):
+    return N(id, "trigger.resource", resource=resource_name, operations=list(operations))
+
+
+def TRIGGER_SCHEDULE(id, every=None, cron=None):
+    return N(id, "trigger.schedule", every=every, cron=cron)
+
+
+def TRIGGER_WEBHOOK(id, hook):
+    return N(id, "trigger.webhook", hook=hook)
+
+
+def GET(id, resource_name, id_expr):
+    return N(id, "resource.get", resource=resource_name, id=id_expr)
+
+
+def LIST(id, resource_name, filters, limit=20, sort=None):
+    return N(id, "resource.list", resource=resource_name, filters=filters, limit=limit, sort=sort)
+
+
+def CREATE(id, resource_name, data):
+    return N(id, "resource.create", resource=resource_name, data=data)
+
+
+def UPDATE(id, resource_name, id_expr, data):
+    return N(id, "resource.update", resource=resource_name, id=id_expr, data=data)
+
+
+def TX(id, operations):
+    """Every operation in one SQL transaction: all of it commits, or none does."""
+    return N(id, "db.transaction", operations=list(operations))
+
+
+def OP_UPDATE(resource_name, id_expr, data):
+    return {"op": "update", "resource": resource_name, "id": id_expr, "data": data}
+
+
+def OP_CREATE(resource_name, data):
+    return {"op": "create", "resource": resource_name, "data": data}
+
+
+def QUERY(id, sql, params=None):
+    return N(id, "db.query", sql=sql, params=list(params or []))
+
+
+def IF(id, condition):
+    return N(id, "control.if", condition=condition)
+
+
+def SWITCH(id, value, cases):
+    return N(id, "control.switch", value=value, cases=cases)
+
+
+def FOREACH(id, items, concurrency=1):
+    return N(id, "control.foreach", items=items, concurrency=concurrency)
+
+
+def SET(id, **values):
+    """Define ``vars.*`` for later templates — the place to name a value once."""
+    return N(id, "control.set", values=values)
+
+
+def CALC(id, operation, values, digits=0):
+    """Integer-safe arithmetic: add, subtract, multiply, divide, max, min, round."""
+    return N(id, "math.calculate", operation=operation, values=list(values), digits=digits)
+
+
+def NOW(id, offset=0, format="iso"):
+    return N(id, "time.now", offset_seconds=offset, format=format)
+
+
+def ID_TOKEN(id, kind="token", length=24):
+    return N(id, "util.id", kind=kind, length=length)
+
+
+def CHECK(id, value, fields, on_invalid=None):
+    """Validate a payload against a field list; ``invalid`` handle on failure."""
+    config = {"value": value, "fields": fields}
+    if on_invalid:
+        config["on_invalid"] = on_invalid
+    return N(id, "validate.schema", **config)
+
+
+def GUARD(id, policy, record=None, input_=None):
+    """Ask a named policy about a record; ``allowed`` / ``denied`` handles."""
+    config = {"policy": policy}
+    if record is not None:
+        config["record"] = record
+    if input_ is not None:
+        config["input"] = input_
+    return N(id, "policy.check", **config)
+
+
+def REQUIRE(id, role=None, permission=None):
+    return N(id, "auth.require", role=role, permission=permission)
+
+
+def CACHE_GET(id, key):
+    return N(id, "cache.get", key=key)
+
+
+def CACHE_SET(id, key, value, ttl=60, tags=None):
+    return N(id, "cache.set", key=key, value=value, ttl=ttl, **({"tags": list(tags)} if tags else {}))
+
+def PICK(id, value, fields):
+    return N(id, "transform.pick", value=value, fields=list(fields))
+
+
+def TEMPLATE(id, template):
+    return N(id, "transform.template", template=template)
+
+
+def MAIL(id, to, template, data=None, subject=None):
+    config = {"to": to, "template": template}
+    if subject:
+        config["subject"] = subject
+    if data is not None:
+        config["data"] = data
+    return N(id, "mail.send", **config)
+
+
+def NOTIFY(id, store_id, user_id, kind, title, body, link="", severity="info"):
+    """Write a notification row; the staff inbox and app read it live."""
+    return CREATE(
+        id,
+        "notifications",
+        {
+            "store_id": store_id,
+            "user_id": user_id,
+            "kind": kind,
+            "title": title,
+            "body": body,
+            "link": link,
+            "severity": severity,
+        },
+    )
+
+
+def ORDER_EVENT(id, order_id, store_id, kind, message, actor_id=None, actor_kind="system", data=None):
+    """Append to the order's timeline."""
+    return CREATE(
+        id,
+        "order_events",
+        {
+            "store_id": store_id,
+            "order_id": order_id,
+            "kind": kind,
+            "message": message,
+            "actor_id": actor_id,
+            "actor_kind": actor_kind,
+            "data": data or {},
+        },
+    )
+
+
+def LEDGER(id, row, delta, reason, reference_type=None, reference_id=None, actor=None, note=None, kind="staff"):
+    """Journal a stock movement. *row* is a stock_levels row; *delta* is signed."""
+    return CREATE(
+        id,
+        "inventory_ledger",
+        {
+            "store_id": f"{{{{ {row}.store_id }}}}",
+            "warehouse_id": f"{{{{ {row}.warehouse_id }}}}",
+            "variant_id": f"{{{{ {row}.variant_id }}}}",
+            "delta": delta,
+            "reason": reason,
+            "reference_type": reference_type,
+            "reference_id": reference_id,
+            "on_hand_after": f"{{{{ {row}.on_hand }}}}",
+            "reserved_after": f"{{{{ {row}.reserved }}}}",
+            "note": note,
+            "actor_id": actor,
+            "actor_kind": kind,
+        },
+    )
+
+
+def EMIT(id, event, payload):
+    """Publish a platform event: webhooks, subscriptions and other flows hear it."""
+    return N(id, "event.emit", event=event, payload=payload)
+
+
+def PUBLISH(id, channel, event, payload):
+    """Push to a realtime channel the client is subscribed to."""
+    return N(id, "realtime.publish", channel=channel, event=event, payload=payload)
+
+
+def WEBHOOK(id, event, payload):
+    """Send to the store's outbound webhook endpoints (retried with backoff)."""
+    return N(id, "webhook.send", event=event, payload=payload)
+
+
+def HTTP(id, url, method="post", body=None, headers=None, timeout=10, retries=2):
+    return N(id, "http.request", url=url, method=method, body=body or {}, headers=headers or {}, timeout=timeout, retries=retries)
+
+
+def SECRET(id, name, as_="secret"):
+    return N(id, "secret.get", name=name, **{"as": as_})
+
+
+def QUEUE(id, flow_name, input=None, delay=0, queue=None):
+    config = {"flow": flow_name, "delay": delay}
+    if input is not None:
+        config["input"] = input
+    if queue:
+        config["queue"] = queue
+    return N(id, "queue.flow", **config)
+
+
+def METRIC(id, name, value=1, tags=None):
+    return N(id, "metric.increment", name=name, value=value, **({"tags": tags} if tags else {}))
+
+
+def LOG(id, message, level="info", data=None, category="omnistore"):
+    config = {"level": level, "message": message, "category": category}
+    if data is not None:
+        config["data"] = data
+    return N(id, "log.write", **config)
+
+
+def REPLY(id, body, status=200):
+    """End a client-facing run with this body."""
+    return N(id, "response.return", status=status, body=body)
+
+
+def FAIL(id, status, code, message):
+    """End a run by raising an API error."""
+    return N(id, "error.raise", status=status, code=code, message=message)
+
+
+def DONE(id, body=None):
+    """End a background run: nothing to return, but keep the run record."""
+    return N(id, "response.return", status=200, body=body if body is not None else {"ok": True})
+
+
+def chain(edges, seq):
+    """Link a linear run of nodes, in order."""
+    for source, target in zip(seq, seq[1:]):
+        edges.append((source, target))
+    return edges
+
+
+def out(id, *tail):
+    """``steps.<id>.<tail>`` — the commonest template there is."""
+    return "{{ steps.%s.%s }}" % (id, ".".join(str(part) for part in tail))
+
+
+def var(name, *tail):
+    """``vars.<name>.<tail>`` inside a template."""
+    return "{{ vars.%s%s }}" % (name, "".join(".%s" % part for part in tail))
+
+
+def vref(name):
+    """``$vars.<name>`` inside a condition."""
+    return "$vars.%s" % name
+

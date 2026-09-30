@@ -165,4 +165,117 @@ RESOURCES.append(
     )
 )
 
+RESOURCES.append(
+    resource(
+        "purchase_orders",
+        "An order placed with a supplier, received line by line.",
+        [
+            S,
+            F("supplier_id", "integer", required=True),
+            F("code", max_length=24),
+            F("warehouse_id", "integer", required=True),
+            F("status", enum=["draft", "sent", "partially_received", "received", "cancelled"], default="draft"),
+            F("expected_at", "datetime", nullable=True),
+            money("subtotal_minor", default=0),
+            money("shipping_minor", default=0),
+            money("total_minor", default=0),
+            F("currency", max_length=3),
+            F("note", "text", max_length=2000),
+            F("created_by", max_length=64),
+            F("sent_at", "datetime", nullable=True),
+            F("received_at", "datetime", nullable=True),
+        ],
+        ops(
+            list_="store_staff",
+            get="store_staff",
+            create="inventory_staff",
+            update="inventory_staff",
+            delete="store_manager",
+        ),
+        relations=[
+            BT("supplier", "suppliers", "supplier_id"),
+            BT("warehouse", "warehouses", "warehouse_id"),
+            HM("items", "purchase_order_items", "purchase_order_id"),
+        ],
+        tags=["Inventory"],
+    )
+)
+
+RESOURCES.append(
+    resource(
+        "purchase_order_items",
+        "One line of a purchase order, with what has been received so far.",
+        [
+            S,
+            F("purchase_order_id", "integer", required=True),
+            V,
+            F("quantity", "integer", required=True, minimum=1),
+            money("unit_cost_minor", required=True),
+            F("received_quantity", "integer", minimum=0, default=0),
+        ],
+        ops(
+            list_="store_staff",
+            get="store_staff",
+            create="inventory_staff",
+            update="inventory_staff",
+            delete="inventory_staff",
+        ),
+        relations=[
+            BT("purchase_order", "purchase_orders", "purchase_order_id"),
+            BT("variant", "product_variants", "variant_id"),
+        ],
+        tags=["Inventory"],
+    )
+)
+
+RESOURCES.append(
+    resource(
+        "stock_counts",
+        "A physical count header; the variance flow reconciles on_hand to what was counted.",
+        [
+            S,
+            F("warehouse_id", "integer", required=True),
+            F("status", enum=["open", "posted", "cancelled"], default="open"),
+            F("started_by", max_length=64),
+            F("posted_at", "datetime", nullable=True),
+            F("note", "text", max_length=1000),
+            F("line_count", "integer", minimum=0, default=0),
+            F("adjusted_lines", "integer", minimum=0, default=0),
+        ],
+        ops(
+            list_="store_staff",
+            get="store_staff",
+            create="inventory_staff",
+            update="inventory_staff",
+            delete="store_manager",
+        ),
+        relations=[HM("lines", "stock_count_lines", "stock_count_id")],
+        tags=["Inventory"],
+    )
+)
+
+RESOURCES.append(
+    resource(
+        "stock_count_lines",
+        "One counted variant inside a stock count.",
+        [
+            S,
+            F("stock_count_id", "integer", required=True),
+            V,
+            F("counted_quantity", "integer", required=True, minimum=0),
+            F("system_quantity", "integer"),
+            F("variance", "integer"),
+        ],
+        ops(
+            list_="store_staff",
+            get="store_staff",
+            create="inventory_staff",
+            update="inventory_staff",
+            delete="inventory_staff",
+        ),
+        relations=[BT("stock_count", "stock_counts", "stock_count_id")],
+        tags=["Inventory"],
+    )
+)
+
 # __APPEND__

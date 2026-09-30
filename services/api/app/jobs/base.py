@@ -135,4 +135,10 @@ class PawabaseJob(Job):
 
     async def environment(self):
         platform = get_platform()
-        return platform, await platform.state(self.project, self.env)
+        release_id = self.params.get("release_id")
+        state = (
+            await platform.state_for_release(self.project, self.env, release_id)
+            if release_id
+            else await platform.state(self.project, self.env)
+        )
+        return platform, state

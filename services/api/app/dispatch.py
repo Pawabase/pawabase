@@ -1,4 +1,4 @@
-"""Handing ``/rest/v1/*`` to the calling environment's compiled application.
+"""Handing ``/rest/<version>/*`` to an immutable released application.
 
 This ASGI middleware sits inside the platform-context and telemetry
 middleware, so by the time a request reaches it the gateway's context is
@@ -11,12 +11,14 @@ routes, auth backends, validation and docs then take over.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
-from app.compiler.build import REST_PREFIX
 from pawabase_kit.context import SCOPE_KEY
+from pawabase_kit.telemetry import note
 
 FORWARDED_KEYS = ("user", "auth", "auth_scheme", "route", "pawabase.policy", "pawabase.plan")
+REST_PATH = re.compile(r"^/rest/(?P<version>v[1-9][0-9]*)(?:/|$)")
 
 
 async def _send_json(send, status: int, body: dict[str, Any]) -> None:
@@ -41,9 +43,8 @@ class DataPlaneDispatcher:
 
     async def __call__(self, scope, receive, send):
         path = scope.get("path", "")
-        if scope["type"] != "http" or not (
-            path == REST_PREFIX or path.startswith(REST_PREFIX + "/")
-        ):
+        match = REST_PATH.match(path) if scope["type"] == "http" else None
+        if match is None:
             await self.app(scope, receive, send)
             return
         context = scope.get(SCOPE_KEY)
@@ -60,18 +61,26 @@ class DataPlaneDispatcher:
         from sillo.exceptions import HTTPException
 
         try:
-            state = await self.platform.state_for(context)
+            version = match.group("version")
+            state = await self.platform.state_for_version(context, version)
         except HTTPException as exc:
             await _send_json(
-                send, exc.status_code, {"error": "unknown_environment", "message": str(exc.detail)}
+                send,
+                exc.status_code,
+                {"error": "api_version_unavailable", "message": str(exc.detail)},
             )
             return
+        prefix = f"/rest/{version}"
+        note("api_version", version)
+        if state.release_id:
+            note("release_id", state.release_id)
+            note("revision_id", state.revision_id)
         compiled = await state.compiled()
         inner = dict(scope)
-        rest = path[len(REST_PREFIX) :] or "/"
+        rest = path[len(prefix) :] or "/"
         inner["path"] = rest
         inner["raw_path"] = rest.encode()
-        inner["root_path"] = scope.get("root_path", "") + REST_PREFIX
+        inner["root_path"] = scope.get("root_path", "") + prefix
         try:
             await compiled(inner, receive, send)
         finally:

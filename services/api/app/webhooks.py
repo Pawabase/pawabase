@@ -83,6 +83,8 @@ async def queue_deliveries(
             target=endpoint.name,
             source="webhook",
             delivery_id=delivery.id,
+            release_id=state.release_id,
+            api_version=state.api_version,
         )
         queued += 1
     return queued

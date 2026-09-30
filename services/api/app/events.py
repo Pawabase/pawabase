@@ -76,7 +76,11 @@ class EventProcessor:
 
     async def handle(self, event: PlatformEvent) -> list[dict[str, Any]]:
         try:
-            state = await self.platform.state(event.project, event.env)
+            state = (
+                await self.platform.state_for_release(event.project, event.env, event.release_id)
+                if event.release_id
+                else await self.platform.state(event.project, event.env)
+            )
         except HTTPException:
             logger.warning(
                 "event %s for unknown environment %s/%s", event.name, event.project, event.env
@@ -142,6 +146,8 @@ class EventProcessor:
                         trigger="event",
                         auth={"authenticated": False, "kind": "system"},
                         request_id=event.request_id,
+                        release_id=state.release_id,
+                        api_version=state.api_version,
                     ),
                 )
             elif subscription.target_type == "function":
@@ -159,6 +165,8 @@ class EventProcessor:
                         trigger="event",
                         auth={"authenticated": False, "kind": "system"},
                         request_id=event.request_id,
+                        release_id=state.release_id,
+                        api_version=state.api_version,
                     ),
                 )
             elif subscription.target_type == "realtime":
@@ -187,6 +195,8 @@ class EventProcessor:
                     entry=n,
                     auth={"authenticated": False, "kind": "system"},
                     request_id=event.request_id,
+                    release_id=state.release_id,
+                    api_version=state.api_version,
                 ),
             )
 

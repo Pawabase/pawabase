@@ -30,7 +30,7 @@ ROUTES: tuple[Upstream, ...] = (
     Upstream("/auth/v1/callback/", "akountz", "none"),
     Upstream("/auth/v1/links/", "akountz", "none"),
     Upstream("/auth/v1/", "akountz"),
-    Upstream("/rest/v1/", "api"),
+    Upstream("/rest/", "api"),
     Upstream("/storage/v1/signed/", "api", "none"),
     Upstream("/storage/v1/", "api"),
     Upstream("/functions/v1/", "api"),

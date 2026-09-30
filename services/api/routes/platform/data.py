@@ -22,6 +22,7 @@ from app.data.store import Filter, parse_filters, parse_sort
 from app.openapi_scope import add_apikey_security
 from app.platform import Platform
 from app.resources import after_write
+from pawabase_kit.context import PlatformContext
 from routes.common import OPERATOR, actor, audit
 
 
@@ -146,8 +147,11 @@ def register(r: Router, platform: Platform) -> None:
     async def environment_openapi(ctx: HttpContext, ref: str, env: str):
         # Operators read the docs whether or not ``public_docs`` publishes them
         # at /docs/v1; that setting only decides what anonymous callers see.
-        state = await platform.state(ref, env)
-        spec = json.loads((await state.compiled()).build_openapi("/rest/v1"))
+        version = ctx.query_params.get("version", "v1")
+        state = await platform.state_for_version(
+            PlatformContext(project=ref, env=env, role="operator"), version
+        )
+        spec = json.loads((await state.compiled()).build_openapi(f"/rest/{version}"))
         return add_apikey_security(spec)
 
     @r.get(
@@ -157,9 +161,12 @@ def register(r: Router, platform: Platform) -> None:
         summary="The resource's compiled routes",
     )
     async def compiled_routes(ctx: HttpContext, ref: str, env: str, name: str):
-        state = await platform.state(ref, env)
-        document = json.loads((await state.compiled()).build_openapi("/rest/v1"))
-        prefix = f"/rest/v1/{name}"
+        version = ctx.query_params.get("version", "v1")
+        state = await platform.state_for_version(
+            PlatformContext(project=ref, env=env, role="operator"), version
+        )
+        document = json.loads((await state.compiled()).build_openapi(f"/rest/{version}"))
+        prefix = f"/rest/{version}/{name}"
         return {
             "paths": {
                 path: spec

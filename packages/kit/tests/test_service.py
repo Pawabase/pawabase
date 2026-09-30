@@ -134,6 +134,8 @@ async def test_service_client_and_telemetry():
     with pytest.raises(ServiceError) as raised:
         await wrong.get("/internal-only")
     assert raised.value.status == 401
+    raw = await wrong.request_raw("GET", "/internal-only")
+    assert raw["status"] == 401 and raw["body"]
 
     assert await client.get("/health/v1") == {"status": "application-ok"}
     assert await client.get("/health") == {"status": "ok", "service": "test"}

@@ -9,7 +9,7 @@ import { ToastProvider } from "./ui";
 export const ENV_NAV = [
   { title: "Build", items: [
     ["overview", "Overview"], ["database", "Database"], ["resources", "Resources"], ["schemas", "Schemas"],
-    ["transformers", "Transformers"], ["policies", "Policies"], ["routes", "Routes"], ["functions", "Functions"],
+    ["transformers", "Transformers"], ["policies", "Policies"], ["routes", "Routes"], ["explorer", "API Explorer"], ["functions", "Functions"],
   ] },
   { title: "Automate", items: [
     ["flows", "Flows"], ["subscriptions", "Event subscriptions"], ["schedules", "Schedules"],
@@ -17,6 +17,7 @@ export const ENV_NAV = [
   ] },
   { title: "Services", items: [["users", "Users & auth"], ["storage", "Storage"], ["realtime", "Realtime"]] },
   { title: "Operate", items: [
+    ["releases", "Releases & versions"],
     ["jobs", "Jobs & queues"], ["events", "Events & runs"], ["observability", "Observability"],
     ["keys", "API keys"], ["secrets", "Secrets"], ["settings", "Settings"],
   ] },

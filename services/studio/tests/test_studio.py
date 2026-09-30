@@ -44,6 +44,9 @@ async def test_sign_in_and_render_pages(studio):
     kind = (await studio.http.get("/projects/shop/main/policies", headers=INERTIA)).json()
     assert (kind["component"], kind["props"]["kind"]) == ("Env/Definitions", "policies")
 
+    explorer = (await studio.http.get("/projects/shop/main/explorer", headers=INERTIA)).json()
+    assert explorer["component"] == "Env/Explorer"
+
     editor = (await studio.http.get("/projects/shop/main/flows/new", headers=INERTIA)).json()
     assert editor["component"] == "Flows/Editor"
     assert editor["props"]["flow"] is None
@@ -114,6 +117,57 @@ async def test_bridge_forwards_as_the_operator(studio):
     users = await studio.http.get("/studio/api/auth/projects/shop/envs/main/users")
     assert users.json()["data"][0]["email"] == "u@example.com"
     assert (await studio.http.get("/studio/api/other/x")).status_code == 404
+
+
+async def test_explorer_uses_anonymous_context_and_optional_user_token(studio):
+    await studio.login()
+    signed_in = await studio.http.post(
+        "/studio/api/explorer/sign-in",
+        content=json.dumps(
+            {
+                "project": "shop",
+                "env": "main",
+                "email": "buyer@example.com",
+                "password": "Sup3r-secret!pass",
+            }
+        ),
+        headers={**studio.csrf(), "content-type": "application/json"},
+    )
+    assert signed_in.status_code == 200 and signed_in.json()["access_token"]
+    response = await studio.http.post(
+        "/studio/api/explorer/request",
+        content=json.dumps(
+            {
+                "project": "shop",
+                "env": "main",
+                "version": "v2",
+                "method": "POST",
+                "path": "/orders",
+                "query": {"expand": "items"},
+                "body": {"total": 42},
+                "headers": {"x-idempotency-key": "once", "apikey": "must-not-pass"},
+                "access_token": "user-token",
+            }
+        ),
+        headers={**studio.csrf(), "content-type": "application/json"},
+    )
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == 201 and result["body"] == {"id": 7, "total": 42}
+    assert "set-cookie" not in result["headers"]
+    call = studio.api.raw_call
+    assert (call["method"], call["path"], call["params"]) == (
+        "POST",
+        "/rest/v2/orders",
+        {"expand": "items"},
+    )
+    assert (call["context"].project, call["context"].env, call["context"].role) == (
+        "shop",
+        "main",
+        "anon",
+    )
+    assert call["headers"]["Authorization"] == "Bearer user-token"
+    assert "apikey" not in call["headers"]
 
 
 async def test_mutations_need_the_csrf_token(studio):

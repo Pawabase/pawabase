@@ -127,6 +127,18 @@ class Platform:
     async def state_for(self, context: PlatformContext) -> EnvironmentState:
         return await self.state(context.project, context.env)
 
+    async def state_for_version(
+        self, context: PlatformContext, api_version: str
+    ) -> EnvironmentState:
+        state = await self.envs.get_version(context.project, context.env, api_version)
+        self.ensure_code(context.project)
+        return state
+
+    async def state_for_release(self, project: str, env: str, release_id: str) -> EnvironmentState:
+        state = await self.envs.get_release(project, env, release_id)
+        self.ensure_code(project)
+        return state
+
     def ensure_code(self, project: str) -> ProjectCode:
         """Load ``<code_path>/<project>`` once: functions, policies, routes."""
         loaded = self.code.get(project)
@@ -151,11 +163,13 @@ class Platform:
 
     @staticmethod
     def cache_key(state: EnvironmentState, key: str) -> str:
-        return f"{state.project_ref}:{state.env_name}:{key}"
+        definition = state.release_id or f"live-{state.version}"
+        return f"{state.project_ref}:{state.env_name}:{definition}:{key}"
 
     @staticmethod
     def cache_tag(state: EnvironmentState, tag: str) -> str:
-        return f"{state.project_ref}:{state.env_name}:{tag}"
+        definition = state.release_id or f"live-{state.version}"
+        return f"{state.project_ref}:{state.env_name}:{definition}:{tag}"
 
     async def cache_get(self, state: EnvironmentState, key: str) -> Any:
         value = await self.cache.get(self.cache_key(state, key))
@@ -260,6 +274,8 @@ class Platform:
             payload=payload,
             actor=actor,
             request_id=request_id,
+            release_id=state.release_id,
+            api_version=state.api_version,
         )
 
     # ── realtime ─────────────────────────────────────────────────────────

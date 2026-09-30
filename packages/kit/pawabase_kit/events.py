@@ -49,6 +49,7 @@ class PlatformEvent:
         id: Unique id, for de-duplication and tracing.
         occurred_at: ISO-8601 UTC timestamp.
         request_id: The request that caused it, when there was one.
+        release_id, api_version: The immutable runtime definition that emitted it.
     """
 
     name: str
@@ -60,6 +61,8 @@ class PlatformEvent:
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
     occurred_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     request_id: str | None = None
+    release_id: str | None = None
+    api_version: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -153,6 +156,8 @@ class EventBus:
         payload: Any = None,
         actor: str | None = None,
         request_id: str | None = None,
+        release_id: str | None = None,
+        api_version: str | None = None,
     ) -> str:
         """Build and publish an event."""
         return await self.publish(
@@ -164,6 +169,8 @@ class EventBus:
                 actor=actor,
                 source=self.source,
                 request_id=request_id,
+                release_id=release_id,
+                api_version=api_version,
             )
         )
 

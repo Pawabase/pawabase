@@ -24,6 +24,9 @@ async def test_proxies_with_signed_context(gateway):
     assert headers["x-request-id"]
     assert response.headers["x-upstream"] == "api"
 
+    v2 = await gateway.http.get("/rest/v2/orders?apikey=pk_anon")
+    assert v2.status_code == 200 and v2.json()["path"] == "/rest/v2/orders"
+
 
 async def test_routes_by_prefix(gateway):
     for path, service in [

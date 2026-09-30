@@ -57,6 +57,9 @@ async def run_flow(
     run.state["credential"] = dict(credential or {"is_service": False})
     run.state["run"]["request_id"] = request_id
     run.state["run"]["trigger"] = trigger
+    run.state["run"]["api_version"] = state.api_version
+    run.state["run"]["release_id"] = state.release_id
+    run.state["run"]["revision_id"] = state.revision_id
     if job_id:
         run.state["run"]["job_id"] = job_id
     started = time.perf_counter()

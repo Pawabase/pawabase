@@ -51,6 +51,9 @@ class EnvironmentState:
     project_name: str
     env_name: str
     version: int
+    api_version: str | None = None
+    release_id: str | None = None
+    revision_id: str | None = None
     resources: dict[str, Resource] = field(default_factory=dict)
     specs: dict[str, ResourceSpec] = field(default_factory=dict)
     routes: list[RouteDef] = field(default_factory=list)
@@ -192,6 +195,7 @@ class EnvironmentCache:
     def __init__(self, platform: Platform) -> None:
         self.platform = platform
         self._states: dict[tuple[str, str], EnvironmentState] = {}
+        self._release_states: dict[tuple[str, str, str], EnvironmentState] = {}
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
 
     async def get(self, project: str, env: str) -> EnvironmentState:
@@ -215,12 +219,75 @@ class EnvironmentCache:
             self._states[key] = state
             return state
 
+    async def get_release(self, project: str, env: str, release_id: str) -> EnvironmentState:
+        from app.releases import state_from_snapshot
+        from database.models import DefinitionRevision, Release
+
+        key = (project, env, release_id)
+        cached = self._release_states.get(key)
+        if cached is not None:
+            return cached
+        release = (
+            await Release.filter(
+                id=release_id, environment__project__ref=project, environment__name=env
+            )
+            .select_related("environment__project")
+            .first()
+        )
+        if release is None:
+            raise HTTPException(status_code=404, detail=f"no release {release_id!r}")
+        revision = await DefinitionRevision.get_or_none(
+            id=release.revision_id, environment_id=release.environment_id
+        )
+        if revision is None:
+            raise HTTPException(status_code=409, detail="the release revision is missing")
+        state = await state_from_snapshot(
+            self.platform,
+            release.environment,
+            revision.snapshot,
+            api_version=release.api_version,
+            release_id=release.id,
+            revision_id=revision.id,
+        )
+        self._release_states[key] = state
+        return state
+
+    async def get_version(self, project: str, env: str, version: str) -> EnvironmentState:
+        from database.models import ApiVersion
+
+        api_version = await ApiVersion.filter(
+            environment__project__ref=project, environment__name=env, name=version
+        ).first()
+        # Existing projects remain live on v1 until they explicitly activate a release.
+        if api_version is None and version == "v1":
+            state = await self.get(project, env)
+            state.api_version = "v1"
+            return state
+        if api_version is None:
+            raise HTTPException(status_code=404, detail=f"API version {version!r} does not exist")
+        if api_version.status in ("sunset", "disabled"):
+            raise HTTPException(
+                status_code=410, detail=f"API version {version!r} is {api_version.status}"
+            )
+        if not api_version.active_release_id:
+            if version == "v1":
+                state = await self.get(project, env)
+                state.api_version = "v1"
+                return state
+            raise HTTPException(
+                status_code=503, detail=f"API version {version!r} has no active release"
+            )
+        return await self.get_release(project, env, api_version.active_release_id)
+
     def forget(self, project: str | None = None) -> None:
         if project is None:
             self._states.clear()
+            self._release_states.clear()
             return
         for key in [k for k in self._states if k[0] == project]:
             del self._states[key]
+        for key in [k for k in self._release_states if k[0] == project]:
+            del self._release_states[key]
 
 
 async def bump(environment_id: int) -> None:

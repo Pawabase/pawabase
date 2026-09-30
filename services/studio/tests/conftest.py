@@ -17,18 +17,20 @@ class FakeAkountz:
     mfa: bool = False
     calls: list[tuple[str, Any]] = field(default_factory=list)
 
-    def _tokens(self) -> dict[str, Any]:
+    def _tokens(
+        self, *, project: str = "_platform", env: str = "main", email: str = "root@pawabase.dev"
+    ) -> dict[str, Any]:
         from pawabase_kit.tokens import issue_user_token
 
         token = issue_user_token(
             self.master,
-            project="_platform",
-            env="main",
+            project=project,
+            env=env,
             user_id="1",
             jti="j1",
             session_id="s1",
-            email="root@pawabase.dev",
-            roles=["admin"],
+            email=email,
+            roles=["admin"] if project == "_platform" else ["customer"],
         )
         return {"access_token": token, "refresh_token": "r1", "token_type": "bearer"}
 
@@ -37,7 +39,11 @@ class FakeAkountz:
 
         self.calls.append((f"{method} {path}", json))
         if path == "/auth/v1/token":
-            assert kwargs["context"].project == "_platform"
+            context = kwargs["context"]
+            if context.project != "_platform":
+                if json.get("password") != PASSWORD:
+                    raise ServiceError(400, {"detail": "invalid email or password"}, service="akountz")
+                return self._tokens(project=context.project, env=context.env, email=json["email"])
             if json.get("grant_type") == "mfa":
                 if json.get("code") != "123456":
                     raise ServiceError(400, {"detail": "invalid code"}, service="akountz")
@@ -104,6 +110,31 @@ class FakeApi:
 
     async def close(self) -> None:
         pass
+
+    async def request_raw(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: Any = None,
+        params: Any = None,
+        context: Any = None,
+        headers: Any = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        self.raw_call = {
+            "method": method,
+            "path": path,
+            "json": json,
+            "params": params,
+            "context": context,
+            "headers": headers,
+        }
+        return {
+            "status": 201,
+            "headers": {"content-type": "application/json", "set-cookie": "secret=bad"},
+            "body": {"id": 7, **(json or {})},
+        }
 
 
 @dataclass

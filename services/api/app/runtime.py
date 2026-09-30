@@ -211,6 +211,8 @@ class ApiRuntime(BaseRuntime):
             trigger="job",
             auth=self.auth,
             request_id=self.request_id,
+            release_id=self.state.release_id,
+            api_version=self.state.api_version,
         )
 
     async def dispatch_function(self, function, input, *, delay=0, queue=None):
@@ -230,6 +232,8 @@ class ApiRuntime(BaseRuntime):
             trigger="job",
             auth=self.auth,
             request_id=self.request_id,
+            release_id=self.state.release_id,
+            api_version=self.state.api_version,
         )
 
     async def publish(self, channel, event, payload):
@@ -276,6 +280,8 @@ class ApiRuntime(BaseRuntime):
             html=html,
             template=template,
             data=dict(data or {}),
+            release_id=self.state.release_id,
+            api_version=self.state.api_version,
         )
         return {"queued": True, "job_id": job_id}
 

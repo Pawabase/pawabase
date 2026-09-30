@@ -24,11 +24,16 @@ from database.models.definitions import (
     WebhookEndpoint,
 )
 from database.models.projects import AuditEntry, Environment, Project, ProjectKey, Secret
+from database.models.releases import ApiVersion, Branch, DefinitionRevision, Deployment, Release
 
 __all__ = [
     "AuditEntry",
+    "ApiVersion",
+    "Branch",
     "Bucket",
     "Environment",
+    "DefinitionRevision",
+    "Deployment",
     "EventLog",
     "EventSubscription",
     "FailedJobRecord",
@@ -43,6 +48,7 @@ __all__ = [
     "Project",
     "ProjectKey",
     "RequestLog",
+    "Release",
     "Resource",
     "RouteDef",
     "Schedule",

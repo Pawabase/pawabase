@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from datetime import datetime
 from html import escape as html_escape
@@ -61,6 +62,8 @@ SECTIONS: dict[str, str] = {
     "events": "Env/Events",
     "realtime": "Env/Realtime",
     "observability": "Env/Observability",
+    "releases": "Env/Releases",
+    "explorer": "Env/Explorer",
     "settings": "Env/Settings",
 }
 
@@ -416,6 +419,152 @@ def register_routes(
             pass
 
     # ── the bridge ───────────────────────────────────────────────────────
+
+    @app.post("/studio/api/explorer/sign-in", exclude_from_schema=True)
+    async def explorer_sign_in(ctx: HttpContext):
+        """Obtain a project-user token for Explorer without a project API key."""
+        if await signed_in(ctx) is None:
+            return JSONResponse({"detail": "sign in first"}, status_code=401)
+        body = await _body(ctx)
+        project = str(body.get("project") or "")
+        env = str(body.get("env") or "")
+        if not re.fullmatch(r"[a-z][a-z0-9-]{1,62}", project) or not re.fullmatch(
+            r"[a-z][a-z0-9_-]{0,62}", env
+        ):
+            return JSONResponse({"detail": "invalid project or environment"}, status_code=400)
+        if body.get("mfa_token"):
+            payload = {
+                "grant_type": "mfa",
+                "mfa_token": str(body["mfa_token"]),
+                "code": str(body.get("code") or ""),
+            }
+        else:
+            payload = {
+                "grant_type": "password",
+                "email": str(body.get("email") or ""),
+                "password": str(body.get("password") or ""),
+            }
+        try:
+            result = await akountz.request(
+                "POST",
+                "/auth/v1/token",
+                json=payload,
+                context=PlatformContext(
+                    project=project, env=env, role="anon", key_id="studio-explorer"
+                ),
+            )
+        except ServiceError as exc:
+            return JSONResponse(
+                exc.body if isinstance(exc.body, dict) else {"detail": exc.body},
+                status_code=exc.status,
+            )
+        visible = {
+            key: result[key]
+            for key in ("access_token", "token_type", "expires_in", "mfa_required", "mfa_token")
+            if key in result
+        }
+        return JSONResponse(visible)
+
+    @app.post("/studio/api/explorer/request", exclude_from_schema=True)
+    async def explorer_request(ctx: HttpContext):
+        """Run one data-plane request with a signed anonymous context.
+
+        Studio proves the caller is an operator, but deliberately uses an
+        ``anon`` project context for the explored request. This keeps policy
+        behavior honest: public endpoints work immediately and authenticated
+        endpoints only work when the operator supplies a project-user token.
+        """
+        if await signed_in(ctx) is None:
+            return JSONResponse({"detail": "sign in first"}, status_code=401)
+        body = await _body(ctx)
+        project = str(body.get("project") or "")
+        env = str(body.get("env") or "")
+        version = str(body.get("version") or "v1")
+        method = str(body.get("method") or "GET").upper()
+        requested_path = str(body.get("path") or "/")
+        if not re.fullmatch(r"[a-z][a-z0-9-]{1,62}", project):
+            return JSONResponse({"detail": "invalid project"}, status_code=400)
+        if not re.fullmatch(r"[a-z][a-z0-9_-]{0,62}", env):
+            return JSONResponse({"detail": "invalid environment"}, status_code=400)
+        if not re.fullmatch(r"v[1-9][0-9]*", version):
+            return JSONResponse({"detail": "invalid API version"}, status_code=400)
+        if method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
+            return JSONResponse({"detail": "unsupported method"}, status_code=400)
+        expected_prefix = f"/rest/{version}"
+        if requested_path == expected_prefix:
+            requested_path = "/"
+        elif requested_path.startswith(expected_prefix + "/"):
+            requested_path = requested_path[len(expected_prefix) :]
+        if not requested_path.startswith("/"):
+            requested_path = "/" + requested_path
+        if ".." in requested_path.split("/") or requested_path.startswith("/rest/"):
+            return JSONResponse({"detail": "invalid endpoint path"}, status_code=400)
+
+        supplied_headers = body.get("headers") if isinstance(body.get("headers"), dict) else {}
+        blocked = {
+            "apikey",
+            "authorization",
+            "cookie",
+            "host",
+            "x-pawabase-context",
+            "x-pawabase-service",
+        }
+        forwarded_headers = {
+            str(key): str(value)
+            for key, value in supplied_headers.items()
+            if str(key).lower() not in blocked and value not in (None, "")
+        }
+        access_token = str(body.get("access_token") or "").strip()
+        if access_token.lower().startswith("bearer "):
+            access_token = access_token[7:].strip()
+        if access_token:
+            forwarded_headers["Authorization"] = f"Bearer {access_token}"
+        query = body.get("query") if isinstance(body.get("query"), dict) else None
+        payload = body.get("body") if method in {"POST", "PUT", "PATCH", "DELETE"} else None
+        started = time.perf_counter()
+        try:
+            result = await api.request_raw(
+                method,
+                expected_prefix + requested_path,
+                json=payload,
+                params=query,
+                context=PlatformContext(
+                    project=project, env=env, role="anon", key_id="studio-explorer"
+                ),
+                headers=forwarded_headers,
+            )
+        except Exception as exc:
+            return JSONResponse(
+                {
+                    "detail": f"the API could not be reached: {type(exc).__name__}",
+                    "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                },
+                status_code=502,
+            )
+        visible_headers = {
+            key: value
+            for key, value in result.get("headers", {}).items()
+            if key.lower()
+            in {
+                "cache-control",
+                "content-length",
+                "content-type",
+                "deprecation",
+                "etag",
+                "location",
+                "retry-after",
+                "sunset",
+                "x-request-id",
+            }
+        }
+        return JSONResponse(
+            {
+                "status": result["status"],
+                "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                "headers": visible_headers,
+                "body": result.get("body"),
+            }
+        )
 
     async def bridge(ctx: HttpContext, target: str, path: str):
         if target not in BRIDGE:
