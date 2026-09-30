@@ -11,6 +11,7 @@ from app.state import bump
 from database.models import ORG_ROLES, AuditEntry, Environment, Organization, OrgMember, Project
 from pawabase_kit.policies import PolicyGate
 
+
 #: Studio (a service token acting for an operator), CLI operators and other
 #: services. Project end users are refused, anonymous callers get a 401.
 class OperatorGate(PolicyGate):

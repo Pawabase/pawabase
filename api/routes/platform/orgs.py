@@ -169,7 +169,9 @@ def register(r: Router, platform: Platform) -> None:
         adopted = 0
         if first:
             # Projects made before organizations existed belong to the first one.
-            adopted = await Project.filter(organization_id__isnull=True).update(organization_id=org.id)
+            adopted = await Project.filter(organization_id__isnull=True).update(
+                organization_id=org.id
+            )
         await audit(
             ctx,
             "org.created",
@@ -275,7 +277,12 @@ def register(r: Router, platform: Platform) -> None:
                     status_code=409, detail="an organization keeps at least one owner"
                 )
         await target.delete()
-        await audit(ctx, "org.member_left" if leaving else "org.member_removed", org=slug, target=target.email)
+        await audit(
+            ctx,
+            "org.member_left" if leaving else "org.member_removed",
+            org=slug,
+            target=target.email,
+        )
         return no_content()
 
     # ── invitations ──────────────────────────────────────────────────────

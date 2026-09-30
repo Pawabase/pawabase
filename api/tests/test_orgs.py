@@ -66,7 +66,9 @@ async def test_projects_are_invisible_outside_their_organization(api):
     await api.studio.post(
         f"{P}/projects", json={"ref": "shop", "name": "Shop", "org": "acme"}, operator=ADA
     )
-    assert [p["ref"] for p in (await api.studio.get(f"{P}/projects", operator=ADA))["data"]] == ["shop"]
+    assert [p["ref"] for p in (await api.studio.get(f"{P}/projects", operator=ADA))["data"]] == [
+        "shop"
+    ]
     assert (await api.studio.get(f"{P}/projects", operator=BOB))["data"] == []
     # Reading, changing and reaching deep into another organization's project.
     for path in ("", "/envs", "/envs/development/keys", "/envs/development/overview"):
@@ -97,7 +99,9 @@ async def test_roles_limit_what_members_can_do(api):
         f"{P}/projects", json={"ref": "shop", "name": "Shop", "org": "acme"}, operator=ADA
     )
     invite = await api.studio.post(
-        f"{P}/orgs/acme/invitations", json={"email": "bob@example.com", "role": "viewer"}, operator=ADA
+        f"{P}/orgs/acme/invitations",
+        json={"email": "bob@example.com", "role": "viewer"},
+        operator=ADA,
     )
     await api.studio.post(f"{P}/invitations/{invite['token']}/accept", operator=BOB)
     # A viewer reads but changes nothing.
@@ -123,22 +127,30 @@ async def test_roles_limit_what_members_can_do(api):
 
 async def test_an_organization_keeps_an_owner(api):
     await make_org(api, ADA)
-    await refuses(409, api.studio.put(f"{P}/orgs/acme/members/1", json={"role": "admin"}, operator=ADA))
+    await refuses(
+        409, api.studio.put(f"{P}/orgs/acme/members/1", json={"role": "admin"}, operator=ADA)
+    )
     await refuses(409, api.studio.delete(f"{P}/orgs/acme/members/1", operator=ADA))
 
 
 async def test_only_owners_grant_ownership(api):
     await make_org(api, ADA)
     invite = await api.studio.post(
-        f"{P}/orgs/acme/invitations", json={"email": "bob@example.com", "role": "admin"}, operator=ADA
+        f"{P}/orgs/acme/invitations",
+        json={"email": "bob@example.com", "role": "admin"},
+        operator=ADA,
     )
     await api.studio.post(f"{P}/invitations/{invite['token']}/accept", operator=BOB)
-    await refuses(403, api.studio.put(f"{P}/orgs/acme/members/2", json={"role": "owner"}, operator=BOB))
+    await refuses(
+        403, api.studio.put(f"{P}/orgs/acme/members/2", json={"role": "owner"}, operator=BOB)
+    )
     await refuses(403, api.studio.delete(f"{P}/orgs/acme/members/1", operator=BOB))
     await refuses(
         403,
         api.studio.post(
-            f"{P}/orgs/acme/invitations", json={"email": "c@example.com", "role": "owner"}, operator=BOB
+            f"{P}/orgs/acme/invitations",
+            json={"email": "c@example.com", "role": "owner"},
+            operator=BOB,
         ),
     )
     await api.studio.put(f"{P}/orgs/acme/members/2", json={"role": "owner"}, operator=ADA)
@@ -166,13 +178,22 @@ async def test_invitations(api):
     await refuses(404, api.studio.get(f"{P}/invitations/{token}"))
     members = await api.studio.get(f"{P}/orgs/acme/members", operator=BOB)
     assert sorted(m["email"] for m in members["data"]) == ["ada@example.com", "bob@example.com"]
-    await refuses(409, api.studio.post(f"{P}/orgs/acme/invitations", json={"email": "bob@example.com"}, operator=ADA))
+    await refuses(
+        409,
+        api.studio.post(
+            f"{P}/orgs/acme/invitations", json={"email": "bob@example.com"}, operator=ADA
+        ),
+    )
 
 
 async def test_revoked_and_replaced_invitations_stop_working(api):
     await make_org(api, ADA)
-    first = await api.studio.post(f"{P}/orgs/acme/invitations", json={"email": "bob@example.com"}, operator=ADA)
-    second = await api.studio.post(f"{P}/orgs/acme/invitations", json={"email": "bob@example.com"}, operator=ADA)
+    first = await api.studio.post(
+        f"{P}/orgs/acme/invitations", json={"email": "bob@example.com"}, operator=ADA
+    )
+    second = await api.studio.post(
+        f"{P}/orgs/acme/invitations", json={"email": "bob@example.com"}, operator=ADA
+    )
     await refuses(404, api.studio.get(f"{P}/invitations/{first['token']}"))
     await api.studio.delete(f"{P}/orgs/acme/invitations/{second['id']}", operator=ADA)
     await refuses(404, api.studio.post(f"{P}/invitations/{second['token']}/accept", operator=BOB))
@@ -180,7 +201,9 @@ async def test_revoked_and_replaced_invitations_stop_working(api):
 
 async def test_leaving_and_deleting(api):
     await make_org(api, ADA)
-    invite = await api.studio.post(f"{P}/orgs/acme/invitations", json={"email": "bob@example.com"}, operator=ADA)
+    invite = await api.studio.post(
+        f"{P}/orgs/acme/invitations", json={"email": "bob@example.com"}, operator=ADA
+    )
     await api.studio.post(f"{P}/invitations/{invite['token']}/accept", operator=BOB)
     await api.studio.delete(f"{P}/orgs/acme/members/2", operator=BOB)
     await refuses(404, api.studio.get(f"{P}/orgs/acme", operator=BOB))
