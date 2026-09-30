@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 
 from tortoise.expressions import F
 
-from database.models import MetricCounter
+from database.models import MetricCounter, RequestLog
 from pawabase_kit.telemetry import RequestRecord, Telemetry
 
 REQUESTS_METRIC = "pawabase.requests"
@@ -36,7 +36,9 @@ class RequestRollup:
     def __init__(self, interval: float = FLUSH_SECONDS) -> None:
         self.interval = interval
         self.pending: dict[Key, list[float]] = defaultdict(lambda: [0, 0.0])
+        self.requests: list[RequestRecord] = []
         self._task: asyncio.Task | None = None
+        self._flush_lock = asyncio.Lock()
 
     def attach(self, telemetry: Telemetry) -> RequestRollup:
         telemetry.add_sink(self.record)
@@ -50,9 +52,42 @@ class RequestRollup:
         bucket = self.pending[key]
         bucket[0] += 1
         bucket[1] += record.duration_ms
+        self.requests.append(record)
 
     async def flush(self) -> None:
+        async with self._flush_lock:
+            await self._flush_pending()
+
+    async def _flush_pending(self) -> None:
         pending, self.pending = self.pending, defaultdict(lambda: [0, 0.0])
+        requests, self.requests = self.requests, []
+        if requests:
+            try:
+                await RequestLog.bulk_create(
+                    [
+                        RequestLog(
+                            request_id=record.request_id or "unknown",
+                            service=record.service,
+                            project=record.project or "",
+                            env=record.env or "",
+                            method=record.method,
+                            path=record.path,
+                            route=record.route,
+                            status=record.status,
+                            duration_ms=record.duration_ms,
+                            started_at=record.started_at,
+                            role=record.role,
+                            user=record.user,
+                            ip=record.ip,
+                            user_agent=record.user_agent,
+                            error=record.error,
+                            notes=record.notes,
+                        )
+                        for record in requests
+                    ]
+                )
+            except Exception:
+                logger.exception("could not store request history")
         for (project, env, window, tags), (count, total_ms) in pending.items():
             match = MetricCounter.filter(
                 project=project, env=env, name=REQUESTS_METRIC, tags=tags, window=window

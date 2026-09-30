@@ -61,6 +61,19 @@ PAY_FLOW = {
                 },
             ),
             node(
+                "log",
+                "log.write",
+                level="info",
+                category="billing",
+                code="order_paid",
+                message="Order payment completed",
+                tags={"operation": "pay"},
+                data={
+                    "order_id": "{{ steps.load.output.id }}",
+                    "password": "must-not-appear",
+                },
+            ),
+            node(
                 "reply",
                 "response.return",
                 status=200,
@@ -78,7 +91,8 @@ PAY_FLOW = {
             edge("start", "load"),
             edge("load", "paid"),
             edge("load", "missing", "missing"),
-            edge("paid", "event"),
+            edge("paid", "log"),
+            edge("log", "event"),
             edge("event", "reply"),
         ],
     },
@@ -183,6 +197,7 @@ async def test_custom_route_flow_and_event_consumer(acme):
     ).status_code == 401
 
     await api.drain()
+    await api.app.state["request_rollup"].flush()
     state = await api.platform.state("acme", "development")
     assert await api.platform.cache_get(state, "user:last-paid") == order["id"]
     events = (await api.studio.get(f"{ENV}/events?name=order.paid"))["data"]
@@ -202,6 +217,18 @@ async def test_custom_route_flow_and_event_consumer(acme):
     )
     metrics = (await api.studio.get(f"{ENV}/metrics?name=orders.paid"))["data"]
     assert metrics and metrics[0]["value"] == 1
+
+    request_id = paid.headers["x-request-id"]
+    request_rows = (
+        await api.studio.get(f"{ENV}/requests", params={"request_id": request_id})
+    )["data"]
+    assert request_rows and request_rows[0]["user"] == "7"
+    detail = await api.studio.get(f"{ENV}/requests/{request_id}")
+    assert {run["flow"] for run in detail["flow_runs"]} == {"pay-order", "on-order-paid"}
+    assert "order.paid" in {event["name"] for event in detail["events"]}
+    assert detail["jobs"] and detail["summary"]["logs"] == 1
+    assert detail["logs"][0]["code"] == "order_paid"
+    assert detail["logs"][0]["data"]["password"] == "[redacted]"
 
 
 async def test_functions_and_python_routes(acme):
@@ -239,7 +266,14 @@ async def test_manual_run_and_validation(acme):
         f"{ENV}/flows/pay-order/run", json={"input": {"params": {"id": str(order["id"])}}}
     )
     assert run["status"] == "succeeded" and run["response"]["status"] == 200
-    assert [step["node"] for step in run["trace"]] == ["start", "load", "paid", "event", "reply"]
+    assert [step["node"] for step in run["trace"]] == [
+        "start",
+        "load",
+        "paid",
+        "log",
+        "event",
+        "reply",
+    ]
     broken = {"name": "broken", "definition": {"nodes": [node("a", "nope")], "edges": []}}
     from pawabase_kit.clients import ServiceError
 

@@ -32,7 +32,12 @@ _trace: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
     "pawabase_trace", default=None
 )
 
-SKIP_PREFIXES = ("/health", "/internal/v1/telemetry")
+SKIP_PREFIXES = ("/internal/v1/telemetry",)
+
+
+def should_skip(path: str) -> bool:
+    """Skip service probes and telemetry's own reads, not application routes like /health/v1."""
+    return path == "/health" or path.startswith(SKIP_PREFIXES)
 
 
 @dataclass(slots=True)
@@ -87,7 +92,7 @@ class TelemetryRecorder:
         self.app: Any = None
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or scope.get("path", "").startswith(SKIP_PREFIXES):
+        if scope["type"] != "http" or should_skip(scope.get("path", "")):
             await self.app(scope, receive, send)
             return
         started = time.perf_counter()

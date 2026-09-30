@@ -8,9 +8,10 @@ Sillo's HTTP client.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
-from ..engine import FlowError, FlowResponse
+from ..engine import FlowError, FlowResponse, observable
 from ..registry import Block, BlockResult
 
 # ── auth and policies ──────────────────────────────────────────────────────
@@ -610,16 +611,38 @@ class Log(Block):
         },
         {"name": "message", "type": "string", "required": True},
         {"name": "data", "type": "json"},
+        {
+            "name": "category",
+            "type": "string",
+            "description": "Stable area such as billing, checkout, or authorization",
+        },
+        {
+            "name": "code",
+            "type": "string",
+            "description": "Stable machine-readable event code",
+        },
+        {"name": "tags", "type": "json", "description": "Searchable key/value labels"},
     ]
 
     async def run(self, config, run):
+        run_context = run.state.get("run") or {}
         entry = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "sequence": len(run.logs) + 1,
             "level": config.get("level") or "info",
-            "message": config.get("message"),
-            "data": config.get("data"),
+            "message": str(config.get("message") or ""),
+            "category": config.get("category") or "flow",
+            "code": config.get("code"),
+            "tags": observable(config.get("tags") or {}),
+            "data": observable(config.get("data")),
+            "node": run.current_node,
+            "block": self.key,
+            "run_id": run_context.get("id"),
+            "flow": run_context.get("flow"),
+            "request_id": run_context.get("request_id"),
         }
         run.logs.append(entry)
-        await run.runtime.log(entry["level"], str(entry["message"]), entry["data"])
+        await run.runtime.log(entry["level"], entry["message"], entry)
         return BlockResult(output=entry)
 
 

@@ -8,6 +8,32 @@ from tortoise import fields
 from database.fields import AnyJSONField
 
 
+class RequestLog(Model):
+    """One persisted data-plane request and its structured trace notes."""
+
+    id = fields.IntField(primary_key=True)
+    request_id = fields.CharField(max_length=64, db_index=True)
+    service = fields.CharField(max_length=32, db_index=True)
+    project = fields.CharField(max_length=63, db_index=True)
+    env = fields.CharField(max_length=63, db_index=True)
+    method = fields.CharField(max_length=16)
+    path = fields.TextField()
+    route = fields.CharField(max_length=512, null=True)
+    status = fields.IntField(db_index=True)
+    duration_ms = fields.FloatField(default=0)
+    started_at = fields.CharField(max_length=40, db_index=True)
+    role = fields.CharField(max_length=64, null=True)
+    user = fields.CharField(max_length=255, null=True)
+    ip = fields.CharField(max_length=64, null=True)
+    user_agent = fields.TextField(null=True)
+    error = fields.TextField(null=True)
+    notes = AnyJSONField(default=dict)
+
+    class Meta:
+        table = "pb_request_logs"
+        ordering = ["-id"]
+
+
 class FlowRun(Model):
     """One execution of a flow, with its step trace."""
 
@@ -87,6 +113,7 @@ class JobRun(Model):
     job = fields.CharField(max_length=128)
     target = fields.CharField(max_length=255, default="")
     source = fields.CharField(max_length=32, default="api")
+    request_id = fields.CharField(max_length=64, null=True, db_index=True)
     status = fields.CharField(max_length=16, default="queued", db_index=True)
     attempts = fields.IntField(default=0)
     max_attempts = fields.IntField(default=1)

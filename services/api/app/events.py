@@ -141,6 +141,7 @@ class EventProcessor:
                         input=event_input,
                         trigger="event",
                         auth={"authenticated": False, "kind": "system"},
+                        request_id=event.request_id,
                     ),
                 )
             elif subscription.target_type == "function":
@@ -157,6 +158,7 @@ class EventProcessor:
                         input=event_input,
                         trigger="event",
                         auth={"authenticated": False, "kind": "system"},
+                        request_id=event.request_id,
                     ),
                 )
             elif subscription.target_type == "realtime":
@@ -184,6 +186,7 @@ class EventProcessor:
                     trigger="event",
                     entry=n,
                     auth={"authenticated": False, "kind": "system"},
+                    request_id=event.request_id,
                 ),
             )
 

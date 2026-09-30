@@ -60,6 +60,10 @@ def build_app():
     async def internal(ctx: HttpContext):
         return {"caller": ctx.user.claims.get("svc"), "kind": ctx.user.kind}
 
+    @app.get("/health/v1")
+    async def application_health(ctx: HttpContext):
+        return {"status": "application-ok"}
+
     return app
 
 
@@ -131,9 +135,14 @@ async def test_service_client_and_telemetry():
         await wrong.get("/internal-only")
     assert raised.value.status == 401
 
+    assert await client.get("/health/v1") == {"status": "application-ok"}
+    assert await client.get("/health") == {"status": "ok", "service": "test"}
+
     telemetry = await client.get("/internal/v1/telemetry/requests")
     paths = [record["path"] for record in telemetry["requests"]]
     assert "/internal-only" in paths
+    assert "/health/v1" in paths
+    assert "/health" not in paths
     summary = await client.get("/internal/v1/telemetry/summary")
     assert summary["total"] >= 2
     await client.close()

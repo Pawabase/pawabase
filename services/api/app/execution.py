@@ -16,6 +16,7 @@ from database.models import FlowRun as FlowRunRecord
 from pawabase_kit.flows import FlowError, FlowRun
 from pawabase_kit.functions import get_function
 from pawabase_kit.schemas import validate_payload
+from pawabase_kit.telemetry import note
 
 
 class NotFound(LookupError):
@@ -54,8 +55,14 @@ async def run_flow(
         timeout=flow.timeout,
     )
     run.state["credential"] = dict(credential or {"is_service": False})
+    run.state["run"]["request_id"] = request_id
+    run.state["run"]["trigger"] = trigger
+    if job_id:
+        run.state["run"]["job_id"] = job_id
     started = time.perf_counter()
     status, error = "succeeded", None
+    request_flow = {"run_id": run.id, "flow": name, "trigger": trigger, "status": "running"}
+    note("flow_runs", request_flow, append=True)
     try:
         await run.execute()
         return run
@@ -66,6 +73,8 @@ async def run_flow(
         status, error = "failed", f"{type(exc).__name__}: {exc}"
         raise FlowError(error, code="flow_failed") from exc
     finally:
+        request_flow["status"] = status
+        request_flow["duration_ms"] = round((time.perf_counter() - started) * 1000, 3)
         if flow.record_runs:
             await FlowRunRecord.create(
                 id=run.id,
@@ -78,8 +87,8 @@ async def run_flow(
                 output=json_safe(run.result()) if status == "succeeded" else None,
                 error=error,
                 trace=run.trace(),
-                logs=json_safe(run.logs + runtime.logs),
-                duration_ms=round((time.perf_counter() - started) * 1000, 3),
+                logs=json_safe(run.logs),
+                duration_ms=request_flow["duration_ms"],
                 request_id=request_id,
                 job_id=job_id,
             )

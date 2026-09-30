@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -27,8 +28,11 @@ from app.data.store import Filter
 from app.platform import Platform
 from app.state import EnvironmentState
 from pawabase_kit.flows import BaseRuntime, FlowError, NotAvailable
+from pawabase_kit.flows.engine import observable
 from pawabase_kit.functions import FunctionContext, get_function
 from pawabase_kit.policies.engine import evaluate
+
+logger = logging.getLogger("pawabase.flow")
 
 
 class ApiRuntime(BaseRuntime):
@@ -206,6 +210,7 @@ class ApiRuntime(BaseRuntime):
             input=input,
             trigger="job",
             auth=self.auth,
+            request_id=self.request_id,
         )
 
     async def dispatch_function(self, function, input, *, delay=0, queue=None):
@@ -224,6 +229,7 @@ class ApiRuntime(BaseRuntime):
             input=input,
             trigger="job",
             auth=self.auth,
+            request_id=self.request_id,
         )
 
     async def publish(self, channel, event, payload):
@@ -341,8 +347,29 @@ class ApiRuntime(BaseRuntime):
         return decision.allowed
 
     async def log(self, level, message, data=None):
-        self.logs.append(
-            {"level": level, "message": message, "data": data, "at": datetime.now(UTC).isoformat()}
+        from pawabase_kit.telemetry import note
+
+        entry = observable(
+            data
+            if isinstance(data, dict) and data.get("message") == message
+            else {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "level": level,
+                "message": message,
+                "data": data,
+                "request_id": self.request_id,
+            }
+        )
+        self.logs.append(entry)
+        note("logs", entry, append=True)
+        logger.log(
+            {
+                "debug": logging.DEBUG,
+                "warning": logging.WARNING,
+                "error": logging.ERROR,
+            }.get(str(level).lower(), logging.INFO),
+            message,
+            extra={"pawabase": entry},
         )
 
     async def metric(self, name, value=1.0, tags=None):

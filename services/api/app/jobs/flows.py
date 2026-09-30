@@ -27,6 +27,7 @@ class RunFlowJob(PawabaseJob):
             auth=self.params.get("auth"),
             credential={"is_service": True, "role": "service"},
             job_id=self._job_id,
+            request_id=self.params.get("request_id"),
             entry=self.params.get("entry"),
         )
         return {"run_id": run.id, "result": run.result()}

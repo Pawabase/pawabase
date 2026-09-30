@@ -5,6 +5,7 @@ from database.models.activity import (
     JobRun,
     MailLog,
     MetricCounter,
+    RequestLog,
     WebhookDelivery,
     WorkerHeartbeat,
 )
@@ -41,6 +42,7 @@ __all__ = [
     "PolicyDef",
     "Project",
     "ProjectKey",
+    "RequestLog",
     "Resource",
     "RouteDef",
     "Schedule",

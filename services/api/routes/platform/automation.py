@@ -76,6 +76,7 @@ def register(r: Router, platform: Platform) -> None:
     async def run_now(ctx: HttpContext, ref: str, env: str, name: str, body: RunBody):
         state = await platform.state(ref, env)
         auth = body.as_user or {"authenticated": False, "kind": "operator"}
+        request_id = getattr(ctx.state, "request_id", None)
         try:
             run = await run_flow(
                 platform,
@@ -85,6 +86,7 @@ def register(r: Router, platform: Platform) -> None:
                 trigger="manual",
                 auth=auth,
                 credential={"is_service": body.as_user is None, "role": "operator"},
+                request_id=request_id,
                 entry=body.entry,
             )
         except NotFound as exc:
@@ -102,6 +104,7 @@ def register(r: Router, platform: Platform) -> None:
                 "node": exc.node,
                 "run_id": record.id if record else None,
                 "trace": record.trace if record else [],
+                "logs": record.logs if record else [],
             }
         await audit(ctx, "flow.run", project=ref, env=env, target=name)
         response = (

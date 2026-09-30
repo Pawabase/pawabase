@@ -24,6 +24,7 @@ from database.models import (
     MetricCounter,
     Project,
     ProjectKey,
+    RequestLog,
     WorkerHeartbeat,
 )
 from routes.common import OPERATOR, audit, dump, get_environment, page_params
@@ -300,6 +301,84 @@ def register(r: Router, platform: Platform) -> None:
             raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
 
     # ── observability ────────────────────────────────────────────────────
+
+    @r.get(
+        f"{base}/requests",
+        auth=OPERATOR,
+        tags=["observability"],
+        summary="Persisted request history with correlation ids",
+    )
+    async def requests(ctx: HttpContext, ref: str, env: str):
+        await get_environment(ref, env)
+        await platform.app.state["request_rollup"].flush()
+        limit, offset = page_params(ctx)
+        query = RequestLog.filter(project=ref, env=env)
+        if ctx.query_params.get("request_id"):
+            query = query.filter(request_id=ctx.query_params["request_id"])
+        if ctx.query_params.get("method"):
+            query = query.filter(method=ctx.query_params["method"].upper())
+        if ctx.query_params.get("status"):
+            status = ctx.query_params["status"]
+            if status.endswith("xx") and status[0].isdigit():
+                lower = int(status[0]) * 100
+                query = query.filter(status__gte=lower, status__lt=lower + 100)
+            elif status.isdigit():
+                query = query.filter(status=int(status))
+        if ctx.query_params.get("search"):
+            query = query.filter(path__icontains=ctx.query_params["search"])
+        rows = await query.order_by("-id").offset(offset).limit(limit)
+        return {"data": [dump(row) for row in rows]}
+
+    @r.get(
+        f"{base}/requests/{{request_id}}",
+        auth=OPERATOR,
+        tags=["observability"],
+        summary="One correlated request with flows, events and user logs",
+    )
+    async def request_trace(ctx: HttpContext, ref: str, env: str, request_id: str):
+        await get_environment(ref, env)
+        await platform.app.state["request_rollup"].flush()
+        request_rows = await RequestLog.filter(
+            project=ref, env=env, request_id=request_id
+        ).order_by("id")
+        runs = await FlowRun.filter(project=ref, env=env, request_id=request_id).order_by(
+            "created_at"
+        )
+        events = await EventLog.filter(project=ref, env=env, request_id=request_id).order_by(
+            "id"
+        )
+        jobs = await JobRun.filter(project=ref, env=env, request_id=request_id).order_by(
+            "created_at"
+        )
+        if not request_rows and not runs and not events and not jobs:
+            raise HTTPException(status_code=404, detail="no such request trace")
+        logs = []
+        for run in runs:
+            for entry in run.logs or []:
+                item = dict(entry) if isinstance(entry, dict) else {"message": str(entry)}
+                item.setdefault("flow", run.flow)
+                item.setdefault("run_id", run.id)
+                item.setdefault("request_id", request_id)
+                logs.append(item)
+        logs.sort(key=lambda item: str(item.get("timestamp") or item.get("at") or ""))
+        return {
+            "request_id": request_id,
+            "requests": [dump(row) for row in request_rows],
+            "flow_runs": [dump(run) for run in runs],
+            "events": [dump(event) for event in events],
+            "jobs": [dump(job) for job in jobs],
+            "logs": logs,
+            "summary": {
+                "services": sorted({row.service for row in request_rows}),
+                "duration_ms": round(sum(row.duration_ms for row in request_rows), 3),
+                "flows": len(runs),
+                "events": len(events),
+                "jobs": len(jobs),
+                "logs": len(logs),
+                "failed": any(row.status >= 500 for row in request_rows)
+                or any(run.status == "failed" for run in runs),
+            },
+        }
 
     @r.get(f"{base}/metrics", auth=OPERATOR, tags=["observability"], summary="Counters per minute")
     async def metrics(ctx: HttpContext, ref: str, env: str):

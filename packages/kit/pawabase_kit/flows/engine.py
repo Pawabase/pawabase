@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import re
 import time
 import uuid
 from collections.abc import Mapping
@@ -42,6 +43,11 @@ from .runtime import BaseRuntime, Runtime
 
 MAX_STEPS = 10_000
 TRACE_OUTPUT_LIMIT = 2_000
+TRACE_COLLECTION_LIMIT = 100
+SENSITIVE_KEY = re.compile(
+    r"(^|[_-])(authorization|cookie|password|passwd|secret|token|api[_-]?key|private[_-]?key)($|[_-])",
+    re.IGNORECASE,
+)
 
 
 class FlowError(Exception):
@@ -81,6 +87,8 @@ class Step:
     node: str
     block: str
     started_at: float
+    sequence: int = 0
+    input: Any = None
     duration_ms: float = 0.0
     handle: str | None = None
     output: Any = None
@@ -90,12 +98,43 @@ class Step:
         return {
             "node": self.node,
             "block": self.block,
+            "sequence": self.sequence,
             "started_at": self.started_at,
             "duration_ms": round(self.duration_ms, 3),
+            "status": "failed" if self.error else "succeeded",
             "handle": self.handle,
-            "output": _truncate(self.output),
+            "input": observable(self.input),
+            "output": observable(self.output),
             "error": self.error,
         }
+
+
+def observable(value: Any, *, depth: int = 0) -> Any:
+    """Return a bounded, JSON-safe value with common credential fields redacted."""
+    if depth >= 8:
+        return "[depth limit]"
+    if isinstance(value, Mapping):
+        result: dict[str, Any] = {}
+        items = list(value.items())
+        for key, item in items[:TRACE_COLLECTION_LIMIT]:
+            name = str(key)
+            result[name] = "[redacted]" if SENSITIVE_KEY.search(name) else observable(
+                item, depth=depth + 1
+            )
+        if len(items) > TRACE_COLLECTION_LIMIT:
+            result["…"] = f"{len(items) - TRACE_COLLECTION_LIMIT} more fields"
+        return result
+    if isinstance(value, (list, tuple, set)):
+        items = list(value)
+        result = [observable(item, depth=depth + 1) for item in items[:TRACE_COLLECTION_LIMIT]]
+        if len(items) > TRACE_COLLECTION_LIMIT:
+            result.append(f"[{len(items) - TRACE_COLLECTION_LIMIT} more items]")
+        return result
+    if isinstance(value, str):
+        return value if len(value) <= TRACE_OUTPUT_LIMIT else value[:TRACE_OUTPUT_LIMIT] + "…"
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return _truncate(value)
 
 
 def _truncate(value: Any) -> Any:
@@ -270,11 +309,12 @@ class FlowRun:
         key = block_key(node)
         block = self.registry.get(key)()
         raw = copy.deepcopy(node.get("data", {}).get("config", {}) or {})
-        step = Step(node=node_id, block=key, started_at=time.time())
+        step = Step(node=node_id, block=key, started_at=time.time(), sequence=self._count)
         self.current_node = node_id
         started = time.perf_counter()
         try:
             config = raw if block.raw_config else self.render(raw)
+            step.input = config
             result = await block.run(config, self)
             if not isinstance(result, BlockResult):
                 result = BlockResult(output=result)

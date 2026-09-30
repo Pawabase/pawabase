@@ -217,6 +217,7 @@ class Platform:
         describe = {
             "target": target,
             "source": source,
+            "request_id": kwargs.get("request_id"),
             "max_attempts": getattr(job, "tries", 1),
             "payload": _truncate(kwargs),
             "available_at": now
