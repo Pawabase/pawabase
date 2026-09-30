@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import fnmatch
+import ipaddress
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -217,6 +219,32 @@ class GatewayProxy:
             forwarded[CONTEXT_HEADER] = issue_context_token(self.settings.internal_secret, context)
         return forwarded
 
+    @staticmethod
+    def _key_allowed(scope: dict[str, Any], info: dict[str, Any]) -> str | None:
+        """Return a stable rejection code when a key's gateway restrictions fail."""
+        client = scope.get("client")
+        address = client[0] if client else None
+        allowed_ips = info.get("allowed_ips") or []
+        if allowed_ips:
+            try:
+                ip = ipaddress.ip_address(address or "")
+                if not any(ip in ipaddress.ip_network(item, strict=False) for item in allowed_ips):
+                    return "ip_not_allowed"
+            except ValueError:
+                # Bad stored rules must fail closed; management validation prevents this.
+                return "ip_not_allowed"
+        rules = info.get("allowed_routes") or []
+        if rules:
+            method, path = scope.get("method", "GET").upper(), scope.get("path", "")
+            for rule in rules:
+                parts = rule.split(None, 1)
+                rule_method, pattern = (parts[0].upper(), parts[1]) if len(parts) == 2 else ("*", parts[0])
+                if (rule_method in ("*", method)) and fnmatch.fnmatchcase(path, pattern):
+                    break
+            else:
+                return "route_not_allowed"
+        return None
+
     # ── dispatch ─────────────────────────────────────────────────────────
 
     async def __call__(self, scope, receive, send):
@@ -263,6 +291,9 @@ class GatewayProxy:
                     403,
                     {"error": "origin_not_allowed", "message": f"{origin} may not use this key."},
                 )
+                return
+            if denied := self._key_allowed(scope, info or {}):
+                await _json(send, 403, {"error": denied, "message": "This API key is not allowed for this request."})
                 return
         result = await self.limiter.check(HttpContext(scope, receive))
         if result is not None and not result.allowed:
@@ -351,12 +382,15 @@ class GatewayProxy:
         import websockets
 
         headers = self._headers(scope)
-        context, _, error = await self._context(scope, headers, upstream.key)
+        context, info, error = await self._context(scope, headers, upstream.key)
         first = await receive()  # websocket.connect
         if first["type"] != "websocket.connect":
             return
         if error:
             await send({"type": "websocket.close", "code": 4001, "reason": error})
+            return
+        if context is not None and (denied := self._key_allowed(scope, info or {})):
+            await send({"type": "websocket.close", "code": 4003, "reason": denied})
             return
         forwarded = self._forward_headers(scope, headers, context)
         forwarded = {k: v for k, v in forwarded.items() if not k.startswith("sec-websocket")}

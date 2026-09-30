@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import ipaddress
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sillo import HttpContext, Router, created, no_content
 from sillo.auth.apikey import generate_api_key
 from sillo.exceptions import HTTPException
@@ -63,6 +64,15 @@ class EnvironmentCreate(BaseModel):
     )
 
 
+class PreviewCreate(BaseModel):
+    name: str | None = Field(default=None, pattern=NAME_PATTERN)
+    ref: str = Field(min_length=1, max_length=48, pattern=r"^[a-z0-9][a-z0-9-]*$")
+    expires_in_hours: int = Field(default=72, ge=1, le=720)
+    infra: dict[str, Any] = Field(default_factory=dict)
+    auth: dict[str, Any] = Field(default_factory=dict)
+    settings: dict[str, Any] | None = None
+
+
 class EnvironmentUpdate(BaseModel):
     infra: dict[str, Any] | None = None
     auth: dict[str, Any] | None = None
@@ -75,6 +85,31 @@ class KeyCreate(BaseModel):
     role: Literal["publishable", "secret"] = "publishable"
     scopes: list[str] = Field(default_factory=list)
     expires_at: datetime | None = None
+    allowed_ips: list[str] = Field(default_factory=list, description="Client IPs or CIDR ranges")
+    allowed_routes: list[str] = Field(
+        default_factory=list,
+        description="Gateway route rules such as 'GET /rest/v1/orders' or '/functions/v1/*'",
+    )
+
+    @field_validator("allowed_ips")
+    @classmethod
+    def valid_ip_ranges(cls, values: list[str]) -> list[str]:
+        for value in values:
+            try:
+                ipaddress.ip_network(value, strict=False)
+            except ValueError as exc:
+                raise ValueError(f"invalid IP address or CIDR: {value}") from exc
+        return values
+
+    @field_validator("allowed_routes")
+    @classmethod
+    def valid_route_rules(cls, values: list[str]) -> list[str]:
+        for value in values:
+            parts = value.split(None, 1)
+            method, path = (parts[0], parts[1]) if len(parts) == 2 else ("*", parts[0])
+            if method.upper() not in {"*", "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"} or not path.startswith("/"):
+                raise ValueError("route rules must be '/path/*' or 'METHOD /path/*'")
+        return values
 
 
 class SecretPut(BaseModel):
@@ -99,6 +134,8 @@ async def create_key(
     *,
     scopes: list[str] | None = None,
     expires_at: datetime | None = None,
+    allowed_ips: list[str] | None = None,
+    allowed_routes: list[str] | None = None,
     created_by: str | None = None,
 ) -> tuple[str, ProjectKey]:
     """Mint a key with Sillo's API-key generator; only the hash is stored."""
@@ -111,6 +148,8 @@ async def create_key(
         key_hash=digest,
         scopes=scopes or [],
         expires_at=expires_at,
+        allowed_ips=allowed_ips or [],
+        allowed_routes=allowed_routes or [],
         created_by=created_by,
     )
     return full, key
@@ -375,6 +414,47 @@ def register(r: Router, platform: Platform) -> None:
             }
         )
 
+    @r.post(
+        "/projects/{ref}/envs/{env}/previews",
+        auth=OPERATOR,
+        tags=["previews"],
+        request_model=PreviewCreate,
+        summary="Create an expiring deploy-preview environment",
+    )
+    async def create_preview(ctx: HttpContext, ref: str, env: str, body: PreviewCreate):
+        """Clone definitions into an isolated, automatically-expiring environment."""
+        source = await get_environment(ref, env)
+        name = body.name or f"pr-{body.ref}"
+        if await Environment.filter(project_id=source.project_id, name=name).exists():
+            raise HTTPException(status_code=409, detail=f"environment {name!r} already exists")
+        settings = {**(source.settings or {}), **(body.settings or {}), "public_docs": False}
+        preview = await Environment.create(
+            project_id=source.project_id,
+            name=name,
+            infra=body.infra,
+            auth=body.auth,
+            settings=settings,
+            preview_source=source.name,
+            preview_expires_at=datetime.now(UTC) + timedelta(hours=body.expires_in_hours),
+        )
+        preview.project = source.project
+        publishable, _ = await create_key(
+            preview, "Preview publishable key", "publishable", expires_at=preview.preview_expires_at,
+            created_by=_actor(ctx),
+        )
+        secret, _ = await create_key(
+            preview, "Preview secret key", "secret", expires_at=preview.preview_expires_at,
+            created_by=_actor(ctx),
+        )
+        from routes.platform.promote import copy_definitions
+
+        copied = await copy_definitions(source, preview)
+        await audit(
+            ctx, "preview.created", project=ref, env=name, target=name,
+            details={"source": env, "expires_at": preview.preview_expires_at.isoformat(), "copied": copied},
+        )
+        return created({**environment_view(preview), "keys": {"publishable": publishable, "secret": secret}, "copied": copied})
+
     @r.get(
         "/projects/{ref}/envs/{env}",
         auth=OPERATOR,
@@ -421,6 +501,22 @@ def register(r: Router, platform: Platform) -> None:
         await audit(ctx, "environment.deleted", project=ref, env=env, target=env)
         return no_content()
 
+    @r.delete(
+        "/projects/{ref}/envs/{env}/previews/{preview}",
+        auth=OPERATOR,
+        tags=["previews"],
+        summary="Delete a deploy-preview environment",
+    )
+    async def delete_preview(ctx: HttpContext, ref: str, env: str, preview: str):
+        source = await get_environment(ref, env)
+        target = await get_environment(ref, preview)
+        if target.project_id != source.project_id or target.preview_source != source.name:
+            raise HTTPException(status_code=404, detail="no such deploy preview")
+        await target.delete()
+        platform.envs.forget(ref)
+        await audit(ctx, "preview.deleted", project=ref, env=preview, target=preview)
+        return no_content()
+
     @r.post(
         "/projects/{ref}/envs/{env}/promote",
         auth=OPERATOR,
@@ -460,6 +556,8 @@ def register(r: Router, platform: Platform) -> None:
             body.role,
             scopes=body.scopes,
             expires_at=body.expires_at,
+            allowed_ips=body.allowed_ips,
+            allowed_routes=body.allowed_routes,
             created_by=_actor(ctx),
         )
         await audit(

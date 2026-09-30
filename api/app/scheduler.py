@@ -88,6 +88,7 @@ class PlatformScheduler:
         return wanted
 
     async def reconcile(self) -> None:
+        await self._expire_previews()
         wanted = await self.desired()
         for key in [k for k in self._registered if k not in wanted]:
             self.manager.remove(self._registered.pop(key))
@@ -107,6 +108,16 @@ class PlatformScheduler:
                 self.fire, trigger, name=spec["name"], kwargs={"spec": spec}, coalesce=True
             )
             self._registered[key] = job.id
+
+    async def _expire_previews(self) -> None:
+        """Remove expired preview environments and all their dependent rows."""
+        now = datetime.now(UTC)
+        expired = await Environment.filter(preview_expires_at__lte=now).select_related("project")
+        for environment in expired:
+            project, name = environment.project.ref, environment.name
+            await environment.delete()
+            self.platform.envs.forget(project)
+            logger.info("expired deploy preview %s/%s", project, name)
 
     # ── firing ───────────────────────────────────────────────────────────
 

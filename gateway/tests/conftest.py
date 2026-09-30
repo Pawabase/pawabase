@@ -24,6 +24,15 @@ KEYS = {
         "key_id": "k2",
         "scopes": ["*"],
     },
+    "sk_restricted": {
+        "project": "shop",
+        "env": "main",
+        "role": "service",
+        "key_id": "k3",
+        "scopes": ["*"],
+        "allowed_ips": [],
+        "allowed_routes": ["GET /rest/v1/*"],
+    },
 }
 
 

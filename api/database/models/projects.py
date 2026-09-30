@@ -59,6 +59,11 @@ class Environment(Model):
     auth = AnyJSONField(default=dict)
     settings = AnyJSONField(default=dict)
     version = fields.IntField(default=1)
+    #: Deploy previews are ordinary isolated environments with an automatic
+    #: expiry.  Infrastructure is deliberately never copied into one unless
+    #: the caller supplies it explicitly.
+    preview_source = fields.CharField(max_length=63, null=True)
+    preview_expires_at = fields.DatetimeField(null=True)
 
     class Meta:
         table = "pb_environments"
@@ -88,6 +93,10 @@ class ProjectKey(Model):
     prefix = fields.CharField(max_length=24)
     key_hash = fields.CharField(max_length=128, unique=True, db_index=True)
     scopes = AnyJSONField(default=list)
+    #: CIDRs and route rules evaluated by the public gateway before proxying.
+    #: An empty list means unrestricted for backwards compatibility.
+    allowed_ips = AnyJSONField(default=list)
+    allowed_routes = AnyJSONField(default=list)
     expires_at = fields.DatetimeField(null=True)
     revoked_at = fields.DatetimeField(null=True)
     last_used_at = fields.DatetimeField(null=True)

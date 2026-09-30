@@ -89,6 +89,8 @@ def register(app: Any, platform: Platform) -> None:
             "env": environment.name,
             "role": "service" if key.role == "secret" else "anon",
             "scopes": key.scopes or [],
+            "allowed_ips": key.allowed_ips or [],
+            "allowed_routes": key.allowed_routes or [],
             "key_id": str(key.id),
             "cors_origins": (environment.settings or {}).get("cors_origins", []),
             "expires_at": key.expires_at.isoformat() if key.expires_at else None,

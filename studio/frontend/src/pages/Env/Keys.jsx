@@ -1,8 +1,17 @@
 import { usePage } from "@inertiajs/react";
 import { useState } from "react";
 import Layout from "../../components/Layout";
-import { Badge, Button, Card, CopyText, Field, Loading, Modal, PageHead, Table, useAction, when } from "../../components/ui";
+import { Badge, Button, Card, CopyText, Field, Loading, Modal, PageHead, Table, TagInput, useAction, when } from "../../components/ui";
 import { envPath, post, useApi } from "../../lib/api";
+
+// These are scopes enforced by the current API. TagInput still accepts custom
+// values, so a key can be prepared for project-specific policy scopes too.
+const API_KEY_SCOPES = [
+  "resource:read",
+  "resource:write",
+  "routes:invoke",
+  "functions:invoke",
+];
 
 export default function Keys({ project, env }) {
   const base = envPath(project.ref, env, "/keys");
@@ -29,6 +38,7 @@ export default function Keys({ project, env }) {
                 { label: "Role", render: (k) => <Badge tone={k.role === "secret" ? "yellow" : "blue"}>{k.role}</Badge> },
                 { label: "Prefix", render: (k) => <code>{k.prefix}…</code> },
                 { label: "Scopes", render: (k) => (k.scopes?.length ? k.scopes.join(", ") : "all") },
+                { label: "Restrictions", render: (k) => [k.allowed_ips?.length && `IPs: ${k.allowed_ips.join(", ")}`, k.allowed_routes?.length && `Routes: ${k.allowed_routes.join(", ")}`].filter(Boolean).join(" · ") || "none" },
                 { label: "Last used", render: (k) => when(k.last_used_at) },
                 { label: "State", render: (k) => <Badge tone={k.active ? "green" : "red"}>{k.active ? "active" : "revoked"}</Badge> },
                 { label: "", render: (k) => k.active && <Button size="sm" variant="danger" onClick={async () => { if (confirm(`Revoke ${k.name}? Clients using it stop working at once.`) && await run(() => post(`${base}/${k.id}/revoke`), "Key revoked")) keys.reload(); }}>Revoke</Button> },
@@ -64,11 +74,12 @@ function HealthCheck({ gatewayUrl, projectRef, env }) {
 }
 
 function NewKey({ base, onClose, onCreated }) {
-  const [data, setData] = useState({ name: "", role: "publishable", scopes: "" });
+  const [data, setData] = useState({ name: "", role: "publishable", scopes: [], allowed_ips: "", allowed_routes: "" });
   const [run, busy] = useAction();
   return (
     <Modal title="New API key" onClose={onClose} footer={<Button variant="primary" disabled={busy || !data.name} onClick={async () => {
-      const r = await run(() => post(base, { name: data.name, role: data.role, scopes: data.scopes.split(",").map((s) => s.trim()).filter(Boolean) }));
+      const split = (value) => value.split(",").map((s) => s.trim()).filter(Boolean);
+      const r = await run(() => post(base, { name: data.name, role: data.role, scopes: data.scopes, allowed_ips: split(data.allowed_ips), allowed_routes: split(data.allowed_routes) }));
       if (r) onCreated(r);
     }}>Create</Button>}>
       <Field label="Name"><input autoFocus value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} placeholder="web app" /></Field>
@@ -78,7 +89,9 @@ function NewKey({ base, onClose, onCreated }) {
           <option value="secret">secret — servers only</option>
         </select>
       </Field>
-      <Field label="Scopes" hint="Comma-separated, e.g. rest, storage, functions. Empty allows everything."><input value={data.scopes} onChange={(e) => setData({ ...data, scopes: e.target.value })} /></Field>
+      <Field label="Scopes" hint="Click a scope to limit the key. Leave empty for unrestricted access within its role."><TagInput value={data.scopes} onChange={(scopes) => setData({ ...data, scopes })} suggestions={API_KEY_SCOPES} placeholder="Custom scope, then Enter" /></Field>
+      <Field label="Allowed IP ranges" hint="Optional comma-separated IPs or CIDRs. The gateway rejects every other client."><input value={data.allowed_ips} onChange={(e) => setData({ ...data, allowed_ips: e.target.value })} placeholder="203.0.113.8, 10.0.0.0/8" /></Field>
+      <Field label="Allowed routes" hint="Optional comma-separated gateway rules: GET /rest/v1/* or POST /functions/v1/*."><input value={data.allowed_routes} onChange={(e) => setData({ ...data, allowed_routes: e.target.value })} placeholder="GET /rest/v1/*" /></Field>
     </Modal>
   );
 }
