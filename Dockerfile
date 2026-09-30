@@ -5,9 +5,9 @@
 # ── Studio's front end ─────────────────────────────────────────────────────
 FROM node:22-slim AS studio-assets
 WORKDIR /src
-COPY services/studio/frontend/package.json services/studio/frontend/package-lock.json ./
+COPY studio/frontend/package.json studio/frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
-COPY services/studio/frontend/ ./
+COPY studio/frontend/ ./
 RUN npm run build
 
 # ── Python services ────────────────────────────────────────────────────────
@@ -18,31 +18,33 @@ ENV PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH=/opt/venv/bin:$PATH \
+    PYTHONPATH=/app \
     SILLO_ENV_FILE=
 RUN pip install --no-cache-dir "uv>=0.8,<0.9"
 WORKDIR /app
 
 # Dependencies first, so code changes do not reinstall them.
 COPY pyproject.toml uv.lock ./
-COPY packages/kit/pyproject.toml packages/kit/pyproject.toml
-COPY services/api/pyproject.toml services/api/pyproject.toml
-COPY services/akountz/pyproject.toml services/akountz/pyproject.toml
-COPY services/angula/pyproject.toml services/angula/pyproject.toml
-COPY services/gateway/pyproject.toml services/gateway/pyproject.toml
-COPY services/studio/pyproject.toml services/studio/pyproject.toml
-RUN mkdir -p packages/kit/pawabase_kit && touch packages/kit/pawabase_kit/__init__.py \
-    && uv sync --frozen --no-dev --all-packages
+COPY api/pyproject.toml api/pyproject.toml
+COPY akountz/pyproject.toml akountz/pyproject.toml
+COPY angula/pyproject.toml angula/pyproject.toml
+COPY gateway/pyproject.toml gateway/pyproject.toml
+COPY studio/pyproject.toml studio/pyproject.toml
+RUN uv sync --frozen --no-dev --all-packages
 
-COPY packages packages
-COPY services services
+COPY pawabase_kit pawabase_kit
+COPY api api
+COPY akountz akountz
+COPY angula angula
+COPY gateway gateway
+COPY studio studio
 COPY examples examples
 COPY docker/entrypoint.sh /usr/local/bin/pawabase
-RUN uv sync --frozen --no-dev --all-packages \
-    && chmod +x /usr/local/bin/pawabase \
+RUN chmod +x /usr/local/bin/pawabase \
     && useradd --create-home --uid 10001 pawabase \
     && mkdir -p /data /code \
     && chown -R pawabase:pawabase /data /code
-COPY --from=studio-assets /src/dist services/studio/frontend/dist
+COPY --from=studio-assets /src/dist studio/frontend/dist
 
 USER pawabase
 VOLUME ["/data"]

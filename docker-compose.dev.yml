@@ -1,19 +1,38 @@
-# Pawabase, self-hosted.
+# Pawabase, for development.
 #
-#   cp .env.example .env      # then set the secrets
-#   docker compose up -d
+#   docker compose -f docker-compose.dev.yml up
 #
-# Clients use the gateway (:8080). Operators use Studio (:8090). Everything
-# else stays on the internal network. For development (live reload, no
-# rebuilds) use docker-compose.dev.yml instead.
+# The repository is bind-mounted into every container, so:
+#   - Python changes (any service, or pawabase_kit/) restart just that service;
+#   - Studio's front end runs on Vite with hot module reloading, no build.
+# Nothing to rebuild unless a pyproject.toml or uv.lock changes
+# (`docker compose -f docker-compose.dev.yml up --build`).
+#
+# Needs no .env: every secret has a development default. Create one to override.
+# Studio: http://localhost:8090 (admin@pawabase.local / Pawabase!admin1)
+# Gateway: http://localhost:8080
 
 x-pawabase: &pawabase
-  build: .
-  image: ${PAWABASE_IMAGE:-pawabase:local}
-  restart: unless-stopped
-  env_file: .env
+  build:
+    context: .
+    dockerfile: docker/dev.Dockerfile
+  image: pawabase:dev
+  env_file:
+    - path: .env
+      required: false
+  volumes:
+    - .:/app
   environment: &env
-    PAWABASE_APP_ENV: ${PAWABASE_APP_ENV:-production}
+    PAWABASE_RELOAD: "true"
+    WATCHFILES_FORCE_POLLING: ${WATCHFILES_FORCE_POLLING:-true}
+    PAWABASE_APP_ENV: local
+    PAWABASE_INTERNAL_SECRET: ${PAWABASE_INTERNAL_SECRET:-dev-internal-secret-change-me-please}
+    PAWABASE_JWT_MASTER_SECRET: ${PAWABASE_JWT_MASTER_SECRET:-dev-jwt-master-secret-change-me-please}
+    PAWABASE_MASTER_KEY: ${PAWABASE_MASTER_KEY:-dev-master-key-change-me-please-0000}
+    PAWABASE_ADMIN_EMAIL: ${PAWABASE_ADMIN_EMAIL:-admin@pawabase.local}
+    PAWABASE_ADMIN_PASSWORD: ${PAWABASE_ADMIN_PASSWORD:-Pawabase!admin1}
+    PAWABASE_PUBLIC_URL: http://localhost:8080
+    PAWABASE_PUBLIC_GATEWAY_URL: http://localhost:8080
     PAWABASE_REDIS_URL: redis://redis:6379/0
     PAWABASE_API_URL: http://api:8001
     PAWABASE_AKOUNTZ_URL: http://akountz:8002
@@ -23,21 +42,21 @@ x-pawabase: &pawabase
 
 x-api-env: &api-env
   <<: *env
-  PAWABASE_DATABASE_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase
-  PAWABASE_DEFAULT_DATA_URL: ${PAWABASE_DEFAULT_DATA_URL:-sqlite:///data/envs/{project}__{env}.db}
+  PAWABASE_DATABASE_URL: postgres://pawabase:pawabase@postgres:5432/pawabase
+  PAWABASE_DEFAULT_DATA_URL: sqlite:///data/envs/{project}__{env}.db
   PAWABASE_STORAGE_ROOT: /data/objects
-  PAWABASE_CODE_PATH: /code
+  PAWABASE_CODE_PATH: /app/examples/code
   PAWABASE_INLINE_WORKER: "false"
   PAWABASE_INLINE_SCHEDULER: "false"
 
 services:
   postgres:
     image: postgres:16-alpine
-    restart: unless-stopped
     environment:
       POSTGRES_USER: pawabase
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_PASSWORD: pawabase
       POSTGRES_DB: pawabase
+    ports: ["5432:5432"]
     volumes:
       - postgres:/var/lib/postgresql/data
       - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/10-databases.sql:ro
@@ -49,9 +68,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes: [redis:/data]
+    ports: ["6379:6379"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -62,22 +79,27 @@ services:
     <<: *pawabase
     command: ["api"]
     environment: *api-env
-    volumes: [api-data:/data, ./examples/code:/code:ro]
+    volumes:
+      - .:/app
+      - api-data:/data
+    ports: ["8001:8001"]
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     healthcheck: &health
       test: ["CMD", "python", "-c", "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % os.environ.get('PORT', '8001'), timeout=3)"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 12
+      retries: 20
       start_period: 20s
 
   worker:
     <<: *pawabase
     command: ["worker"]
     environment: *api-env
-    volumes: [api-data:/data, ./examples/code:/code:ro]
+    volumes:
+      - .:/app
+      - api-data:/data
     depends_on:
       api: { condition: service_healthy }
 
@@ -85,7 +107,9 @@ services:
     <<: *pawabase
     command: ["scheduler"]
     environment: *api-env
-    volumes: [api-data:/data, ./examples/code:/code:ro]
+    volumes:
+      - .:/app
+      - api-data:/data
     depends_on:
       api: { condition: service_healthy }
 
@@ -95,7 +119,8 @@ services:
     environment:
       <<: *env
       PORT: "8002"
-      PAWABASE_DATABASE_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/akountz
+      PAWABASE_DATABASE_URL: postgres://pawabase:pawabase@postgres:5432/akountz
+    ports: ["8002:8002"]
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -108,6 +133,7 @@ services:
     environment:
       <<: *env
       PORT: "8003"
+    ports: ["8003:8003"]
     depends_on:
       redis: { condition: service_healthy }
     healthcheck: *health
@@ -131,14 +157,28 @@ services:
     environment:
       <<: *env
       PORT: "8090"
+      PAWABASE_VITE_DEV: "true"
+      PAWABASE_VITE_DEV_SERVER: http://localhost:5173
     ports: ["${PAWABASE_STUDIO_PORT:-8090}:8090"]
     depends_on:
       api: { condition: service_healthy }
       akountz: { condition: service_healthy }
     healthcheck: *health
 
+  # Studio's front end on Vite. The browser loads scripts straight from here,
+  # so edits to studio/frontend/src hot-reload without touching a container.
+  vite:
+    image: node:22-slim
+    working_dir: /app/studio/frontend
+    command: sh -c "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0"
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+    ports: ["5173:5173"]
+    volumes:
+      - ./studio/frontend:/app/studio/frontend
+      - vite-modules:/app/studio/frontend/node_modules
+
 volumes:
   postgres:
-  redis:
   api-data:
-
+  vite-modules:

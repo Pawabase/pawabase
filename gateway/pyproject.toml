@@ -4,16 +4,13 @@ version = "0.1.0"
 description = "Pawabase API Gateway."
 requires-python = ">=3.11"
 license = "BSD-3-Clause"
-dependencies = ["pawabase-kit", "sillo-framework[cache,jwt]>=1.0.0", "httpx>=0.27", "websockets>=12"]
+dependencies = ["sillo-framework[cache,crypto,events,jwt,mail,record,test]>=1.0.0", "httpx>=0.27", "websockets>=12"]
 
 [tool.uv]
 package = false
-
-[tool.uv.sources]
-pawabase-kit = { workspace = true }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = [".", ".."]

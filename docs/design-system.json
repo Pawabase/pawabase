@@ -2,7 +2,7 @@
   "$schema": "https://pawabase.test/docs/design-system.schema.json",
   "name": "Pawabase Studio Design System",
   "version": "1.0.0",
-  "source_of_truth": "services/studio/frontend/src/styles.css",
+  "source_of_truth": "studio/frontend/src/styles.css",
   "description": "The visual system of the Studio control plane. Calm and rounded: an off-white canvas framed by a slightly deeper lilac, white cards with large soft corners and no borders, pill buttons (ink filled for the primary action), and a pastel palette for decoration rather than state.",
 
   "principles": [

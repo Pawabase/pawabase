@@ -12,6 +12,7 @@ STATE="${PAWABASE_DEV_DIR:-$ROOT/.dev}"
 mkdir -p "$STATE/logs"
 
 export SILLO_ENV_FILE=""
+export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export PAWABASE_APP_ENV="${PAWABASE_APP_ENV:-local}"
 export PAWABASE_INTERNAL_SECRET="${PAWABASE_INTERNAL_SECRET:-dev-internal-secret-change-me-please}"
 export PAWABASE_JWT_MASTER_SECRET="${PAWABASE_JWT_MASTER_SECRET:-dev-jwt-master-secret-change-me-please}"
@@ -24,16 +25,16 @@ export PAWABASE_ADMIN_PASSWORD="${PAWABASE_ADMIN_PASSWORD:-Pawabase!admin1}"
 export PAWABASE_INLINE_SCHEDULER=true
 [ -n "${STUDIO_VITE:-}" ] && export PAWABASE_VITE_DEV=true
 
-if [ -z "${STUDIO_VITE:-}" ] && [ ! -f "$ROOT/services/studio/frontend/dist/.vite/manifest.json" ]; then
+if [ -z "${STUDIO_VITE:-}" ] && [ ! -f "$ROOT/studio/frontend/dist/.vite/manifest.json" ]; then
   echo "Building Studio's front end…"
-  (cd "$ROOT/services/studio/frontend" && npm install --no-audit --no-fund && npm run build)
+  (cd "$ROOT/studio/frontend" && npm install --no-audit --no-fund && npm run build)
 fi
 
 pids=()
 start() {
   local name=$1 port=$2
   shift 2
-  (cd "$ROOT/services/$name" && env "$@" uv run uvicorn app.main:app --host 127.0.0.1 --port "$port" --log-level warning) \
+  (cd "$ROOT/$name" && env "$@" uv run uvicorn app.main:app --host 127.0.0.1 --port "$port" --log-level warning) \
     >"$STATE/logs/$name.log" 2>&1 &
   pids+=($!)
   echo "  $name → http://127.0.0.1:$port   (log: .dev/logs/$name.log)"

@@ -33,11 +33,23 @@ listed in [`docs/sillo-gaps.md`](docs/sillo-gaps.md).
 | Akountz | 8002 | Identity. |
 | Angula | 8003 | Realtime. |
 
-The services share one image and a small library (`packages/kit`), but run as separate
+The services share one image and a small shared library (`pawabase_kit/`), but run as separate
 processes that talk over HTTP with audience-bound service tokens. See
 [`ARCHITECTURE.md`](ARCHITECTURE.md) for the design and how each capability maps onto Sillo.
 
-## Run it with Docker
+## Develop with Docker
+
+```sh
+docker compose -f docker-compose.dev.yml up
+```
+
+Runs every service plus Postgres and Redis, with the repository bind-mounted into the
+containers. Edit Python in any service or `pawabase_kit/` and only that service restarts;
+edit Studio's front end and Vite hot-reloads the browser. No `.env` needed. Studio is on
+<http://localhost:8090> (`admin@pawabase.local` / `Pawabase!admin1`), the gateway on `:8080`.
+Rebuild (`up --build`) only when a `pyproject.toml` or `uv.lock` changes.
+
+## Run it with Docker (production)
 
 To try it on your machine with ready-made settings:
 
@@ -105,21 +117,26 @@ Sign in as `admin@pawabase.local` / `Pawabase!admin1`. Create a project with the
 Tests and lint:
 
 ```sh
-for p in packages/kit services/*; do (cd $p && uv run pytest -q tests); done
+uv run pytest -q                                   # pawabase_kit
+for s in api akountz angula gateway studio; do (cd $s && uv run pytest -q tests); done
 uv run ruff check . && uv run ruff format --check .
 ```
 
 ## Repository layout
 
 ```
-packages/kit/        shared library: policies, flow engine and blocks, schemas, service auth
-services/api/        Pawabase API, worker and scheduler
-services/akountz/    identity
-services/angula/     realtime
-services/gateway/    public gateway
-services/studio/     control plane (Python server + frontend/)
+pawabase_kit/        code shared by the services (not a package): policies, flow engine and blocks, schemas, service auth
+api/                 Pawabase API, worker and scheduler
+akountz/             identity
+angula/              realtime
+gateway/             public gateway
+studio/              control plane (Python server + frontend/)
+tests/               pawabase_kit tests (each service has its own tests/)
+apps/                docs (Mintlify) and marketing site
 examples/code/       example project code
-docker/              image entrypoint, Postgres init
+docker/              entrypoints, dev image, Postgres init
+docker-compose.yml       production stack (one built image)
+docker-compose.dev.yml   development stack (live reload)
 docs/                design notes, Sillo gaps
 ```
 

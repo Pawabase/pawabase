@@ -2,23 +2,42 @@
 # pawabase <service>: run one Pawabase service in this container.
 set -e
 
+# PAWABASE_RELOAD=true (set by docker-compose.dev.yml) restarts a service
+# whenever its own code or pawabase_kit changes on the bind-mounted source.
 serve() {
-  cd "/app/services/$1"
-  exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-$2}" \
+  cd "/app/$1"
+  if [ "${PAWABASE_RELOAD:-false}" = "true" ]; then
+    set -- "$@" --reload --reload-dir "/app/$1" --reload-dir /app/pawabase_kit \
+      --reload-include "*.html" --reload-include "*.json"
+  fi
+  local svc=$1 port=$2
+  shift 2
+  exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-$port}" \
     --proxy-headers --forwarded-allow-ips="${FORWARDED_ALLOW_IPS:-*}" \
-    --log-level "${LOG_LEVEL:-info}"
+    --log-level "${LOG_LEVEL:-info}" "$@"
+}
+
+# Long-running non-HTTP processes (worker, scheduler): a plain exec in
+# production, restarted by watchfiles in dev.
+run() {
+  cd "/app/$1"
+  shift
+  if [ "${PAWABASE_RELOAD:-false}" = "true" ]; then
+    exec watchfiles --filter python "python $*" /app/api /app/pawabase_kit
+  fi
+  exec python "$@"
 }
 
 migrate() {
   if [ "${PAWABASE_MIGRATE:-true}" = "true" ]; then
-    (cd "/app/services/$1" && python -m database.migrate)
+    (cd "/app/$1" && python -m database.migrate)
   fi
 }
 
 case "$1" in
   api)       migrate api; serve api 8001 ;;
-  worker)    cd /app/services/api && exec python -m app.worker ;;
-  scheduler) cd /app/services/api && exec python -m app.scheduler ;;
+  worker)    run api -m app.worker ;;
+  scheduler) run api -m app.scheduler ;;
   akountz)   migrate akountz; serve akountz 8002 ;;
   angula)    serve angula 8003 ;;
   gateway)   serve gateway 8080 ;;

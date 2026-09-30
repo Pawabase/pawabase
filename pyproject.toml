@@ -19,16 +19,21 @@ package = false
 
 [tool.uv.workspace]
 members = [
-    "packages/kit",
-    "services/api",
-    "services/akountz",
-    "services/angula",
-    "services/gateway",
-    "services/studio",
+    "api",
+    "akountz",
+    "angula",
+    "gateway",
+    "studio",
 ]
 
-[tool.uv.sources]
-pawabase-kit = { workspace = true }
+# pawabase_kit/ is not a package: a plain directory of code shared by the
+# services. Each service puts the repo root on its path (see its pytest
+# config, docker/entrypoint.sh and scripts/dev.sh) and imports it by name.
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100

@@ -36,14 +36,14 @@ ships the primitive, Pawabase uses it and adds the product around it.
 
 | Service | Directory | Owns |
 |---|---|---|
-| **Gateway** | `services/gateway` | Public routing, API-key resolution, signed platform context, CORS, rate limiting, request ids, WebSocket proxying. No business logic. |
-| **Pawabase API** | `services/api` | Projects and environments, the project-configuration authority, Resources and the data plane, custom routes, schemas, transformers, policies, functions, flows, events, webhooks, queues, jobs, scheduler, cache, storage, secrets, API keys, mail, Atlas docs. |
-| **Worker** | `services/api` (`python -m app.worker`) | Runs Sillo `QueueWorker`s: flows, functions, webhook delivery, mail, event processing. |
-| **Scheduler** | `services/api` (`python -m app.scheduler`) | Runs Sillo's `SchedulerManager`, loading schedules from the database. |
-| **Akountz** | `services/akountz` | Identity: users, passwords, tokens, sessions, verification, reset, magic links, OAuth/OIDC, MFA (TOTP), recovery codes, organizations, teams, invitations, roles, permissions, login history. |
-| **Angula** | `services/angula` | Realtime: channels, topics, publish/subscribe, presence, channel authorization, inspection. |
-| **Studio** | `services/studio` | The control plane UI (Sillo + `sillo-inertia` + React). |
-| **Kit** | `packages/kit` | A shared library, not a service: policy engine, flow engine and blocks, schema compiler, transformers, service authentication, context propagation, telemetry and service bootstrap. |
+| **Gateway** | `gateway` | Public routing, API-key resolution, signed platform context, CORS, rate limiting, request ids, WebSocket proxying. No business logic. |
+| **Pawabase API** | `api` | Projects and environments, the project-configuration authority, Resources and the data plane, custom routes, schemas, transformers, policies, functions, flows, events, webhooks, queues, jobs, scheduler, cache, storage, secrets, API keys, mail, Atlas docs. |
+| **Worker** | `api` (`python -m app.worker`) | Runs Sillo `QueueWorker`s: flows, functions, webhook delivery, mail, event processing. |
+| **Scheduler** | `api` (`python -m app.scheduler`) | Runs Sillo's `SchedulerManager`, loading schedules from the database. |
+| **Akountz** | `akountz` | Identity: users, passwords, tokens, sessions, verification, reset, magic links, OAuth/OIDC, MFA (TOTP), recovery codes, organizations, teams, invitations, roles, permissions, login history. |
+| **Angula** | `angula` | Realtime: channels, topics, publish/subscribe, presence, channel authorization, inspection. |
+| **Studio** | `studio` | The control plane UI (Sillo + `sillo-inertia` + React). |
+| **Kit** | `pawabase_kit/` | Shared code, not a service or an installable package: policy engine, flow engine and blocks, schema compiler, transformers, service authentication, context propagation, telemetry and service bootstrap. |
 
 The worker and scheduler run the API image as separate processes because they have separate
 scaling and failure characteristics (Sillo's docs say not to run the scheduler in every web

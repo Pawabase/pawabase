@@ -13,7 +13,6 @@ members = [
     "pawabase-angula",
     "pawabase-api",
     "pawabase-gateway",
-    "pawabase-kit",
     "pawabase-studio",
 ]
 
@@ -797,10 +796,10 @@ dev = [
 [[package]]
 name = "pawabase-akountz"
 version = "0.1.0"
-source = { virtual = "services/akountz" }
+source = { virtual = "akountz" }
 dependencies = [
     { name = "asyncpg" },
-    { name = "pawabase-kit" },
+    { name = "httpx" },
     { name = "pyotp" },
     { name = "sillo-framework", extra = ["all"] },
     { name = "sillo-oauth" },
@@ -809,7 +808,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "asyncpg", specifier = ">=0.29" },
-    { name = "pawabase-kit", editable = "packages/kit" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "pyotp", specifier = ">=2.9" },
     { name = "sillo-framework", extras = ["all"], specifier = ">=1.0.0" },
     { name = "sillo-oauth", specifier = ">=1.0.0" },
@@ -818,27 +817,27 @@ requires-dist = [
 [[package]]
 name = "pawabase-angula"
 version = "0.1.0"
-source = { virtual = "services/angula" }
+source = { virtual = "angula" }
 dependencies = [
-    { name = "pawabase-kit" },
-    { name = "sillo-framework", extra = ["events", "jwt"] },
+    { name = "httpx" },
+    { name = "sillo-framework", extra = ["cache", "crypto", "events", "jwt", "mail", "record", "test"] },
     { name = "sillo-wire" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "pawabase-kit", editable = "packages/kit" },
-    { name = "sillo-framework", extras = ["events", "jwt"], specifier = ">=1.0.0" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "sillo-framework", extras = ["cache", "crypto", "events", "jwt", "mail", "record", "test"], specifier = ">=1.0.0" },
     { name = "sillo-wire", specifier = ">=1.0.0" },
 ]
 
 [[package]]
 name = "pawabase-api"
 version = "0.1.0"
-source = { virtual = "services/api" }
+source = { virtual = "api" }
 dependencies = [
     { name = "asyncpg" },
-    { name = "pawabase-kit" },
+    { name = "httpx" },
     { name = "sillo-framework", extra = ["all", "storage-s3"] },
     { name = "sillo-oauth" },
 ]
@@ -846,7 +845,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "asyncpg", specifier = ">=0.29" },
-    { name = "pawabase-kit", editable = "packages/kit" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "sillo-framework", extras = ["all", "storage-s3"], specifier = ">=1.0.0" },
     { name = "sillo-oauth", specifier = ">=1.0.0" },
 ]
@@ -854,52 +853,35 @@ requires-dist = [
 [[package]]
 name = "pawabase-gateway"
 version = "0.1.0"
-source = { virtual = "services/gateway" }
+source = { virtual = "gateway" }
 dependencies = [
     { name = "httpx" },
-    { name = "pawabase-kit" },
-    { name = "sillo-framework", extra = ["cache", "jwt"] },
+    { name = "sillo-framework", extra = ["cache", "crypto", "events", "jwt", "mail", "record", "test"] },
     { name = "websockets" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
-    { name = "pawabase-kit", editable = "packages/kit" },
-    { name = "sillo-framework", extras = ["cache", "jwt"], specifier = ">=1.0.0" },
+    { name = "sillo-framework", extras = ["cache", "crypto", "events", "jwt", "mail", "record", "test"], specifier = ">=1.0.0" },
     { name = "websockets", specifier = ">=12" },
-]
-
-[[package]]
-name = "pawabase-kit"
-version = "0.1.0"
-source = { editable = "packages/kit" }
-dependencies = [
-    { name = "httpx" },
-    { name = "sillo-framework", extra = ["cache", "crypto", "events", "jwt", "mail", "record", "test"] },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "sillo-framework", extras = ["jwt", "record", "cache", "events", "crypto", "mail", "test"], specifier = ">=1.0.0" },
 ]
 
 [[package]]
 name = "pawabase-studio"
 version = "0.1.0"
-source = { virtual = "services/studio" }
+source = { virtual = "studio" }
 dependencies = [
-    { name = "pawabase-kit" },
-    { name = "sillo-framework", extra = ["cache", "jwt"] },
+    { name = "httpx" },
+    { name = "sillo-framework", extra = ["cache", "crypto", "events", "jwt", "mail", "record", "test"] },
     { name = "sillo-inertia" },
     { name = "websockets" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "pawabase-kit", editable = "packages/kit" },
-    { name = "sillo-framework", extras = ["jwt", "cache"], specifier = ">=1.0.0" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "sillo-framework", extras = ["cache", "crypto", "events", "jwt", "mail", "record", "test"], specifier = ">=1.0.0" },
     { name = "sillo-inertia", specifier = ">=1.0.0" },
     { name = "websockets", specifier = ">=12" },
 ]
