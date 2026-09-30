@@ -163,6 +163,100 @@ async def test_time_now_formats():
     assert isinstance(steps["unix"]["output"], int)
 
 
+async def test_collection_blocks_filter_sort_group_and_batch():
+    flow = {
+        "nodes": [
+            node("start", "trigger.manual"),
+            node(
+                "filter",
+                "transform.filter",
+                value="{{ input.items }}",
+                condition={"gte": ["$item.score", 10]},
+            ),
+            node("sort", "transform.sort", value="{{ steps.filter.output }}", field="score"),
+            node("group", "transform.group", value="{{ steps.sort.output }}", field="team"),
+            node("batch", "transform.batch", value="{{ steps.sort.output }}", size=1),
+        ],
+        "edges": [
+            edge("start", "filter"),
+            edge("filter", "sort"),
+            edge("sort", "group"),
+            edge("group", "batch"),
+        ],
+    }
+    run = await run_flow(
+        flow,
+        runtime=FakeRuntime(),
+        input={
+            "items": [
+                {"name": "b", "score": 12, "team": "blue"},
+                {"name": "a", "score": 4, "team": "blue"},
+                {"name": "c", "score": 20, "team": "red"},
+            ]
+        },
+    )
+    assert [item["name"] for item in run.state["steps"]["sort"]["output"]] == ["b", "c"]
+    assert set(run.state["steps"]["group"]["output"]) == {"blue", "red"}
+    assert run.state["steps"]["batch"]["output"] == [
+        [{"name": "b", "score": 12, "team": "blue"}],
+        [{"name": "c", "score": 20, "team": "red"}],
+    ]
+
+
+async def test_timeout_block_uses_timeout_handle():
+    flow = {
+        "nodes": [
+            node("start", "trigger.manual"),
+            node("deadline", "control.timeout", seconds=0.01),
+            node("work", "control.delay", seconds=0.1),
+            node("timed_out", "control.set", values={"timed_out": True}),
+        ],
+        "edges": [
+            edge("start", "deadline"),
+            edge("deadline", "work", "attempt"),
+            edge("deadline", "timed_out", "timeout"),
+        ],
+    }
+    run = await run_flow(flow, runtime=FakeRuntime())
+    assert run.state["vars"] == {"timed_out": True}
+    assert run.state["steps"]["deadline"]["handle"] == "timeout"
+
+
+async def test_while_block_repeats_body_and_has_iteration_guard():
+    flow = {
+        "nodes": [
+            node("start", "trigger.manual"),
+            node("init", "control.set", values={"index": 0}),
+            node(
+                "loop",
+                "control.while",
+                condition={"lt": ["$vars.index", 3]},
+                max_iterations=10,
+            ),
+            node("increment", "math.calculate", operation="add", values=["{{ vars.index }}", 1]),
+            node("save", "control.set", values={"index": "{{ steps.increment.output }}"}),
+            node("done", "response.return", body="{{ vars.index }}"),
+        ],
+        "edges": [
+            edge("start", "init"),
+            edge("init", "loop"),
+            edge("loop", "increment", "body"),
+            edge("increment", "save"),
+            edge("loop", "done", "done"),
+        ],
+    }
+    run = await run_flow(flow, runtime=FakeRuntime())
+    assert run.response.body == 3
+    assert [item["index"] for item in run.state["steps"]["loop"]["output"]] == [1, 2, 3]
+
+    flow["nodes"][2]["data"]["config"] = {
+        "condition": True,
+        "max_iterations": 2,
+    }
+    with pytest.raises(FlowError, match="exceeded 2 iterations"):
+        await run_flow(flow, runtime=FakeRuntime())
+
+
 def test_validation_reports_problems():
     problems = validate_flow({"nodes": [node("a", "nope")], "edges": [edge("a", "b")]})
     assert any("unknown block" in p for p in problems)

@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 from pydantic import ValidationError
 
+from ...policies.engine import evaluate, lookup, validate_condition
 from ...schemas import validate_payload
 from ...templating import render
 from ...transformers import apply_transformer
@@ -269,6 +270,112 @@ class Now(Block):
         return BlockResult(output=moment.isoformat())
 
 
+class Filter(Block):
+    """Keeps list items matching a policy-style condition."""
+
+    key = "transform.filter"
+    title = "Filter list"
+    category = "data"
+    raw_config = True
+    config = [
+        {"name": "value", "type": "json", "required": True},
+        {
+            "name": "condition",
+            "type": "json",
+            "required": True,
+            "widget": "condition",
+            "description": "Use $item and $index to inspect each list item",
+        },
+    ]
+
+    async def run(self, config, run):
+        value = run.render(config.get("value"))
+        if not isinstance(value, list):
+            raise FlowError("filter needs a list", code="not_a_list")
+        condition = config.get("condition", False)
+        validate_condition(condition)
+        matches = []
+        for index, item in enumerate(value):
+            context = {**run.state, "item": item, "index": index}
+            if evaluate(condition, context):
+                matches.append(item)
+        return BlockResult(output=matches)
+
+
+class Sort(Block):
+    """Sorts a list by a field or dotted path."""
+
+    key = "transform.sort"
+    title = "Sort list"
+    category = "data"
+    config = [
+        {"name": "value", "type": "json", "required": True},
+        {"name": "field", "type": "string", "required": True},
+        {"name": "descending", "type": "boolean", "default": False},
+    ]
+
+    async def run(self, config, run):
+        value = config.get("value")
+        if not isinstance(value, list):
+            raise FlowError("sort needs a list", code="not_a_list")
+        field = str(config.get("field") or "")
+        if not field:
+            raise FlowError("sort needs a field", code="bad_config")
+        try:
+            output = sorted(value, key=lambda item: (lookup(item, field) is None, lookup(item, field)))
+        except TypeError:
+            output = sorted(value, key=lambda item: str(lookup(item, field) or ""))
+        if config.get("descending"):
+            output.reverse()
+        return BlockResult(output=output)
+
+
+class Group(Block):
+    """Groups a list into an object keyed by a field or dotted path."""
+
+    key = "transform.group"
+    title = "Group list"
+    category = "data"
+    config = [
+        {"name": "value", "type": "json", "required": True},
+        {"name": "field", "type": "string", "required": True},
+    ]
+
+    async def run(self, config, run):
+        value = config.get("value")
+        if not isinstance(value, list):
+            raise FlowError("group needs a list", code="not_a_list")
+        field = str(config.get("field") or "")
+        if not field:
+            raise FlowError("group needs a field", code="bad_config")
+        groups: dict[str, list[Any]] = {}
+        for item in value:
+            key = str(lookup(item, field))
+            groups.setdefault(key, []).append(item)
+        return BlockResult(output=groups)
+
+
+class Batch(Block):
+    """Splits a list into bounded batches for downstream processing."""
+
+    key = "transform.batch"
+    title = "Batch list"
+    category = "data"
+    config = [
+        {"name": "value", "type": "json", "required": True},
+        {"name": "size", "type": "integer", "required": True, "minimum": 1, "maximum": 1000},
+    ]
+
+    async def run(self, config, run):
+        value = config.get("value")
+        if not isinstance(value, list):
+            raise FlowError("batch needs a list", code="not_a_list")
+        size = int(config.get("size") or 0)
+        if size < 1 or size > 1000:
+            raise FlowError("batch size must be between 1 and 1000", code="bad_config")
+        return BlockResult(output=[value[index : index + size] for index in range(0, len(value), size)])
+
+
 BLOCKS = [
     Transform,
     Template,
@@ -280,4 +387,8 @@ BLOCKS = [
     GenerateId,
     Hash,
     Now,
+    Filter,
+    Sort,
+    Group,
+    Batch,
 ]

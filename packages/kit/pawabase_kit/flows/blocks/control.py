@@ -100,6 +100,57 @@ class ForEach(Block):
         return BlockResult(output=results, handle="done")
 
 
+class While(Block):
+    """Runs the ``body`` branch while a condition is true, then follows ``done``."""
+
+    key = "control.while"
+    title = "While"
+    category = "control"
+    handles = ["body", "done"]
+    raw_config = True
+    config = [
+        {
+            "name": "condition",
+            "type": "json",
+            "required": True,
+            "widget": "condition",
+            "description": "Condition evaluated before every iteration",
+        },
+        {
+            "name": "max_iterations",
+            "type": "integer",
+            "default": 1000,
+            "minimum": 1,
+            "maximum": 10000,
+            "description": "Safety limit for this loop",
+        },
+    ]
+
+    async def run(self, config, run):
+        condition = config.get("condition", False)
+        validate_condition(condition)
+        max_iterations = int(config.get("max_iterations") or 1000)
+        if max_iterations < 1 or max_iterations > 10_000:
+            raise FlowError(
+                "max_iterations must be between 1 and 10000", code="bad_config"
+            )
+
+        node_id = run.current_node
+        outputs = []
+        iterations = 0
+        while evaluate(condition, run.state):
+            if iterations >= max_iterations:
+                raise FlowError(
+                    f"while loop exceeded {max_iterations} iterations",
+                    code="too_many_iterations",
+                )
+            outputs.append(await run.run_branch(node_id, "body"))
+            iterations += 1
+            if run.stopped:
+                break
+        return BlockResult(output=outputs, handle="done")
+
+
 class SetVariables(Block):
     """Sets ``vars.<name>`` for later blocks."""
 
@@ -211,4 +262,35 @@ class Retry(Block):
         return BlockResult(output=output)
 
 
-BLOCKS = [If, Switch, ForEach, SetVariables, Merge, Delay, Stop, Retry]
+class Timeout(Block):
+    """Runs an ``attempt`` branch with a deadline, then follows ``next`` or ``timeout``."""
+
+    key = "control.timeout"
+    title = "Timeout"
+    category = "control"
+    handles = ["attempt", "next", "timeout"]
+    config = [
+        {
+            "name": "seconds",
+            "type": "number",
+            "required": True,
+            "minimum": 0.001,
+            "maximum": 300,
+            "description": "Maximum time allowed for the attempt branch",
+        }
+    ]
+
+    async def run(self, config, run):
+        seconds = float(config.get("seconds") or 0)
+        if seconds <= 0 or seconds > 300:
+            raise FlowError("timeout must be between 0.001 and 300 seconds", code="bad_config")
+        try:
+            output = await asyncio.wait_for(
+                run.run_branch(run.current_node, "attempt"), timeout=seconds
+            )
+        except TimeoutError:
+            return BlockResult(output={"timeout_seconds": seconds}, handle="timeout")
+        return BlockResult(output=output)
+
+
+BLOCKS = [If, Switch, ForEach, While, SetVariables, Merge, Delay, Stop, Retry, Timeout]
