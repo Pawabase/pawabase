@@ -23,6 +23,7 @@ from database.models.definitions import (
     TransformerDef,
     WebhookEndpoint,
 )
+from database.models.orgs import ORG_ROLES, Organization, OrgInvitation, OrgMember
 from database.models.projects import AuditEntry, Environment, Project, ProjectKey, Secret
 from database.models.releases import ApiVersion, Branch, DefinitionRevision, Deployment, Release
 
@@ -44,6 +45,10 @@ __all__ = [
     "MailLog",
     "MailTemplate",
     "MetricCounter",
+    "ORG_ROLES",
+    "Organization",
+    "OrgInvitation",
+    "OrgMember",
     "PolicyDef",
     "Project",
     "ProjectKey",

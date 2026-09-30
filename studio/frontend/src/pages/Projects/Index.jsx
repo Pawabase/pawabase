@@ -1,6 +1,6 @@
 import { Link, router } from "@inertiajs/react";
 import { Fragment, useState } from "react";
-import Layout, { envTone } from "../../components/Layout";
+import Layout, { atLeast, envTone } from "../../components/Layout";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, CopyText, EmptyState, Field, Modal, PageHead, Section, Segmented, Sheet, TagInput, Tile, useAction } from "../../components/ui";
 import { post } from "../../lib/api";
@@ -12,15 +12,16 @@ const KIND_LABELS = {
   subscriptions: "Subscriptions", webhooks: "Webhooks", "inbound-hooks": "Inbound hooks", schedules: "Schedules",
 };
 
-export default function ProjectsIndex({ projects, overview }) {
+export default function ProjectsIndex({ org, projects, overview }) {
   const [creating, setCreating] = useState(false);
+  const canCreate = atLeast(org.role, "developer");
   const [created, setCreated] = useState(null);
   return (
     <Layout title="Projects">
       <PageHead
         title="Projects"
-        description="Each project is a backend with its own environments, data, auth and automation."
-        actions={<Button variant="primary" onClick={() => setCreating(true)}><Icon name="plus" />New project</Button>}
+        description={`Backends in ${org.name}. Each has its own environments, data, auth and automation.`}
+        actions={canCreate && <Button variant="primary" onClick={() => setCreating(true)}><Icon name="plus" />New project</Button>}
       />
       <div className="grid" style={{ marginBottom: 20 }}>
         <Tile tone="lavender" icon="projects" value={overview.projects} label="Projects" i={0} />
@@ -30,8 +31,10 @@ export default function ProjectsIndex({ projects, overview }) {
       </div>
       {projects.length === 0 ? (
         <Card>
-          <EmptyState icon="bolt" title="Create your first project" action={<Button variant="primary" onClick={() => setCreating(true)}><Icon name="plus" />New project</Button>}>
-            It comes with development, staging and production environments and API keys for each.
+          <EmptyState icon="bolt" title={canCreate ? "Create your first project" : "No projects yet"} action={canCreate && <Button variant="primary" onClick={() => setCreating(true)}><Icon name="plus" />New project</Button>}>
+            {canCreate
+              ? `It lives in ${org.name} and comes with development, staging and production environments and API keys for each.`
+              : `Ask an owner, admin or developer of ${org.name} to create one.`}
           </EmptyState>
         </Card>
       ) : (
@@ -52,7 +55,7 @@ export default function ProjectsIndex({ projects, overview }) {
           ))}
         </div>
       )}
-      {creating && <CreateProject onClose={() => setCreating(false)} onCreated={(result) => { setCreating(false); setCreated(result); }} />}
+      {creating && <CreateProject org={org} onClose={() => setCreating(false)} onCreated={(result) => { setCreating(false); setCreated(result); }} />}
       {created && <CreatedKeys project={created} onClose={() => { setCreated(null); router.visit(`/projects/${created.ref}`); }} />}
     </Layout>
   );
@@ -105,7 +108,7 @@ function BlueprintSummary({ doc }) {
   );
 }
 
-function CreateProject({ onClose, onCreated }) {
+function CreateProject({ org, onClose, onCreated }) {
   const [mode, setMode] = useState("blank");
   const [data, setData] = useState({ name: "", ref: "", description: "", environments: ["development", "staging", "production"] });
   const [blueprint, setBlueprint] = useState(null);
@@ -135,6 +138,7 @@ function CreateProject({ onClose, onCreated }) {
     const body = {
       name: data.name,
       ref: data.ref || slugify(data.name),
+      org: org.slug,
       description: data.description,
       environments: data.environments,
       ...(mode === "blueprint" ? { blueprint } : {}),
@@ -155,7 +159,7 @@ function CreateProject({ onClose, onCreated }) {
   return (
     <Sheet
       title="New project"
-      subtitle="A backend with its own environments, keys, data and automation."
+      subtitle={`Created in ${org.name}, with its own environments, keys, data and automation.`}
       icon="projects"
       tone="lavender"
       onClose={onClose}

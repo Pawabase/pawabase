@@ -153,9 +153,23 @@ Pawabase adds code only where Sillo has no primitive:
 
 ---
 
-## 4. Projects, environments, infrastructure
+## 4. Organizations, projects, environments, infrastructure
 
-A **project** is one application backend. It has one or more **environments** (`development`,
+An **organization** is the top level: a team of operators (Akountz users of `_platform`) and the
+projects they own. Nothing exists outside one; Studio sends a new operator to create one before
+anything else. The API owns the tables (`pb_organizations`, `pb_org_members`, `pb_org_invitations`)
+and a project's `organization` column. Members hold one of four roles (`viewer` < `developer` <
+`admin` < `owner`) that apply to every project in the organization.
+
+Access is enforced in one place: `OperatorGate` (`api/routes/common.py`) checks the operator's
+membership for every management route that names a `{ref}`, so a route cannot forget to. Non-members
+get a `404`. Service credentials are not tied to an organization. Studio forwards a few paths without
+the API (realtime, identities, telemetry, the Explorer) and checks project membership itself first.
+Invitations are one-time tokens (only the hash is stored); accepting one creates the invitee's
+operator account when they have none. Platform organizations are unrelated to the per-project
+end-user organizations in Akountz.
+
+A **project** is one application backend, and lives in one organization. It has one or more **environments** (`development`,
 `production`, …). Everything the platform stores is keyed by `(project, environment)`, and
 environments never share data, keys, secrets, signing keys or queues.
 

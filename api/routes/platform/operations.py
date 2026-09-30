@@ -22,12 +22,21 @@ from database.models import (
     JobRun,
     MailLog,
     MetricCounter,
+    Organization,
     Project,
     ProjectKey,
     RequestLog,
     WorkerHeartbeat,
 )
-from routes.common import OPERATOR, audit, dump, get_environment, page_params
+from routes.common import (
+    OPERATOR,
+    audit,
+    dump,
+    get_environment,
+    get_org,
+    my_org_ids,
+    page_params,
+)
 
 
 class InvalidateBody(BaseModel):
@@ -405,6 +414,11 @@ def register(r: Router, platform: Platform) -> None:
     async def audit_log(ctx: HttpContext):
         limit, offset = page_params(ctx)
         query = AuditEntry.all()
+        if slug := ctx.query_params.get("org"):
+            query = query.filter(org=(await get_org(ctx, slug)).slug)
+        elif (mine := await my_org_ids(ctx)) is not None:
+            slugs = await Organization.filter(id__in=mine).values_list("slug", flat=True)
+            query = query.filter(org__in=list(slugs))
         if ctx.query_params.get("project"):
             query = query.filter(project=ctx.query_params["project"])
         return {
@@ -483,9 +497,17 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.get("/overview", auth=OPERATOR, tags=["observability"], summary="Installation overview")
     async def installation(ctx: HttpContext):
+        projects, environments = Project.all(), Environment.all()
+        if slug := ctx.query_params.get("org"):
+            org = await get_org(ctx, slug)
+            projects = projects.filter(organization=org)
+            environments = environments.filter(project__organization=org)
+        elif (mine := await my_org_ids(ctx)) is not None:
+            projects = projects.filter(organization_id__in=mine)
+            environments = environments.filter(project__organization_id__in=mine)
         return {
-            "projects": await Project.all().count(),
-            "environments": await Environment.all().count(),
+            "projects": await projects.count(),
+            "environments": await environments.count(),
             "started_at": platform.started_at.isoformat(),
             "events_backend": platform.bus.backend,
             "queue_backend": type(platform.queue).__name__,

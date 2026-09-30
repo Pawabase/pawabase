@@ -1,11 +1,14 @@
 import { Link, router } from "@inertiajs/react";
 import { useState } from "react";
-import Layout from "../../components/Layout";
+import Layout, { atLeast } from "../../components/Layout";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, Field, Modal, PageHead, Switch, Table, useAction, when } from "../../components/ui";
 import { del, get, patch, post } from "../../lib/api";
 
-export default function ProjectShow({ project, envs }) {
+export default function ProjectShow({ project, envs, orgs = [] }) {
+  const role = orgs.find((o) => o.slug === project.org)?.role;
+  const canEdit = atLeast(role, "developer");
+  const canDelete = atLeast(role, "admin");
   const [modal, setModal] = useState(null);
   const [run, busy] = useAction();
   const reload = () => router.reload();
@@ -19,10 +22,10 @@ export default function ProjectShow({ project, envs }) {
         title={project.name}
         description={project.description || `Project ${project.ref}`}
         actions={<>
-          <Button onClick={reloadCode} disabled={busy}>Reload code</Button>
+          {canEdit && <Button onClick={reloadCode} disabled={busy}>Reload code</Button>}
           <Button onClick={() => setModal("export")}><Icon name="braces" />Export blueprint</Button>
-          <Button onClick={() => setModal("edit")}>Edit</Button>
-          <Button variant="primary" onClick={() => setModal("env")}>New environment</Button>
+          {canEdit && <Button onClick={() => setModal("edit")}>Edit</Button>}
+          {canEdit && <Button variant="primary" onClick={() => setModal("env")}>New environment</Button>}
         </>}
       />
       <Card flush title="Environments" actions={<Button size="sm" onClick={() => setModal("promote")}>Promote…</Button>}>
@@ -37,7 +40,7 @@ export default function ProjectShow({ project, envs }) {
           ]}
         />
       </Card>
-      <div style={{ marginTop: 20 }}>
+      {canDelete && <div style={{ marginTop: 20 }}>
         <Card title="Danger zone">
           <div className="spread">
             <span className="muted">Deleting a project removes its definitions, keys and secrets. Data in your own databases is left alone.</span>
@@ -47,7 +50,7 @@ export default function ProjectShow({ project, envs }) {
             }}>Delete project</Button>
           </div>
         </Card>
-      </div>
+      </div>}
       {modal === "env" && <NewEnvironment project={project} envs={envs} onClose={() => setModal(null)} onDone={reload} />}
       {modal === "edit" && <EditProject project={project} onClose={() => setModal(null)} onDone={reload} />}
       {modal === "promote" && <Promote project={project} envs={envs} onClose={() => setModal(null)} />}

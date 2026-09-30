@@ -39,6 +39,14 @@ export function envTone(name, index = 0) {
   return ENV_TONES[index % ENV_TONES.length];
 }
 
+export const ORG_ROLE_LABELS = { owner: "Owner", admin: "Admin", developer: "Developer", viewer: "Viewer" };
+
+/** Whether *role* is at least *need* (viewer < developer < admin < owner). */
+export function atLeast(role, need) {
+  const order = ["viewer", "developer", "admin", "owner"];
+  return order.indexOf(role) >= order.indexOf(need);
+}
+
 export function envHref(ref, env, section) {
   return section === "overview" ? `/projects/${ref}/${env}` : `/projects/${ref}/${env}/${section}`;
 }
@@ -68,7 +76,10 @@ function useTheme() {
 
 export default function Layout({ title, crumbs = [], children, full }) {
   const { props, url } = usePage();
-  const { operator, project, envs, env, section } = props;
+  const { operator, project, envs, env, section, orgs = [] } = props;
+  const orgSlug = props.org?.slug || project?.org;
+  const org = orgs.find((o) => o.slug === orgSlug) || null;
+  const orgRole = org?.role;
   const [dark, toggleTheme] = useTheme();
   const [navOpen, setNavOpen] = useState(false);
   useEffect(() => setNavOpen(false), [url]);
@@ -79,6 +90,24 @@ export default function Layout({ title, crumbs = [], children, full }) {
       <div className={`shell ${navOpen ? "nav-open" : ""}`}>
         <aside className="sidebar">
           <Link href="/" className="brand"><Logo sub="Studio" /></Link>
+          {org && (
+            <label className="switcher" title="Switch organization">
+              <span className="avatar pastel lavender"><Icon name="org" size={17} /></span>
+              <span className="grow">
+                <b>{org.name}</b>
+                <span className="sub">{ORG_ROLE_LABELS[org.role] || "Organization"}</span>
+              </span>
+              <Icon name="chevronDown" size={16} className="faint" />
+              <select
+                value={org.slug}
+                onChange={(e) => router.visit(e.target.value === "+new" ? "/orgs/new" : `/orgs/${e.target.value}`)}
+                aria-label="Organization"
+              >
+                {orgs.map((o) => <option key={o.slug} value={o.slug}>{o.name}</option>)}
+                <option value="+new">+ New organization…</option>
+              </select>
+            </label>
+          )}
           {project && env && (
             <label className="switcher" title="Switch environment">
               <span className={`avatar pastel ${envTone(env, envIndex)}`}>{project.name.slice(0, 1).toUpperCase()}</span>
@@ -110,9 +139,15 @@ export default function Layout({ title, crumbs = [], children, full }) {
               ))
             ) : (
               <>
-                <div className="nav-title">Platform</div>
-                <Link href="/" className={!project && title === "Projects" ? "active" : ""}><Icon name="projects" />Projects</Link>
-                <Link href="/audit" className={title === "Audit log" ? "active" : ""}><Icon name="audit" />Audit log</Link>
+                <div className="nav-title">{org ? org.name : "Studio"}</div>
+                {org && (
+                  <>
+                    <Link href={`/orgs/${org.slug}`} className={!project && title === "Projects" ? "active" : ""}><Icon name="projects" />Projects</Link>
+                    <Link href={`/orgs/${org.slug}/team`} className={title === "Team" ? "active" : ""}><Icon name="team" />Team</Link>
+                    <Link href={`/orgs/${org.slug}/audit`} className={title === "Audit log" ? "active" : ""}><Icon name="audit" />Audit log</Link>
+                    {atLeast(orgRole, "admin") && <Link href={`/orgs/${org.slug}/settings`} className={title === "Organization settings" ? "active" : ""}><Icon name="settings" />Settings</Link>}
+                  </>
+                )}
                 {project && (
                   <>
                     <div className="nav-title">{project.name}</div>
@@ -149,7 +184,7 @@ export default function Layout({ title, crumbs = [], children, full }) {
             <div className="row" style={{ minWidth: 0 }}>
               <button type="button" className="icon-btn menu-btn" onClick={() => setNavOpen(true)} aria-label="Open navigation"><Icon name="menu" /></button>
               <div className="crumbs">
-                <Link href="/">Projects</Link>
+                {org ? <Link href={`/orgs/${org.slug}`}>{org.name}</Link> : <Link href="/">Studio</Link>}
                 {project && <><span className="sep">/</span><Link href={`/projects/${project.ref}`}>{project.name}</Link></>}
                 {env && <><span className="sep">/</span><Link href={envHref(project.ref, env, "overview")}>{env}</Link></>}
                 {crumbs.map((c, i) => <span key={i} className="row" style={{ gap: 4 }}><span className="sep">/</span><span className="here">{c}</span></span>)}

@@ -15,17 +15,21 @@ from tortoise.transactions import in_transaction
 from app import blueprints
 from app.platform import Platform
 from app.secrets import mask
-from database.models import Environment, Project, ProjectKey, Secret
+from database.models import Environment, Organization, Project, ProjectKey, Secret
 from pawabase_kit.records import upsert
 from routes.common import (
     NAME_PATTERN,
     OPERATOR,
+    OPERATOR_ADMIN,
     PROJECT_REF_PATTERN,
     audit,
     changed,
     dump,
     get_environment,
+    get_org,
     get_project,
+    my_org_ids,
+    operator_of,
 )
 
 DEFAULT_ENVIRONMENTS = ["development", "production"]
@@ -35,6 +39,11 @@ class ProjectCreate(BaseModel):
     ref: str = Field(pattern=PROJECT_REF_PATTERN, description="Stable reference, e.g. acme")
     name: str = Field(min_length=1, max_length=200)
     description: str = ""
+    org: str | None = Field(
+        default=None,
+        description="The organization's slug. Required for operators; services without one "
+        "create the project in the 'default' organization.",
+    )
     environments: list[str] = Field(default_factory=lambda: list(DEFAULT_ENVIRONMENTS))
     blueprint: dict[str, Any] | None = Field(
         default=None,
@@ -115,6 +124,32 @@ def key_view(key: ProjectKey) -> dict[str, Any]:
     return data
 
 
+def project_view(project: Project, **extra: Any) -> dict[str, Any]:
+    """A project as the management plane reports it, with its organization's slug."""
+    org = project.organization if hasattr(project.organization, "slug") else None
+    data = {**dump(project), "org": org.slug if org else None, **extra}
+    if "environments" not in extra and hasattr(project, "environments"):
+        try:
+            data["environments"] = [e.name for e in project.environments]
+        except Exception:
+            pass
+    return data
+
+
+async def resolve_org(ctx: HttpContext, slug: str | None) -> Organization:
+    """The organization a new project goes into."""
+    if slug:
+        return await get_org(ctx, slug, "developer")
+    if operator_of(ctx) is not None:
+        raise HTTPException(
+            status_code=422, detail="choose the organization the project belongs to (org)"
+        )
+    org, _ = await Organization.get_or_create(
+        slug="default", defaults={"name": "Default", "created_by": None}
+    )
+    return org
+
+
 def environment_view(environment: Environment) -> dict[str, Any]:
     data = dump(environment)
     data["project"] = (
@@ -129,12 +164,14 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.get("/projects", auth=OPERATOR, tags=["projects"], summary="List projects")
     async def list_projects(ctx: HttpContext):
-        projects = await Project.all().prefetch_related("environments")
-        return {
-            "data": [
-                {**dump(p), "environments": [e.name for e in p.environments]} for p in projects
-            ]
-        }
+        query = Project.all()
+        if slug := ctx.query_params.get("org"):
+            org = await get_org(ctx, slug)
+            query = query.filter(organization=org)
+        elif (mine := await my_org_ids(ctx)) is not None:
+            query = query.filter(organization_id__in=mine)
+        projects = await query.prefetch_related("environments", "organization")
+        return {"data": [project_view(p) for p in projects]}
 
     @r.post(
         "/projects",
@@ -144,6 +181,7 @@ def register(r: Router, platform: Platform) -> None:
         summary="Create a project",
     )
     async def create_project(ctx: HttpContext, body: ProjectCreate):
+        org = await resolve_org(ctx, body.org)
         if await Project.filter(ref=body.ref).exists():
             raise HTTPException(status_code=409, detail=f"project {body.ref!r} already exists")
         blueprint = None
@@ -159,7 +197,11 @@ def register(r: Router, platform: Platform) -> None:
         environments: list[Environment] = []
         async with in_transaction():
             project = await Project.create(
-                ref=body.ref, name=body.name, description=body.description, created_by=_actor(ctx)
+                ref=body.ref,
+                name=body.name,
+                description=body.description,
+                created_by=_actor(ctx),
+                organization=org,
             )
             for index, name in enumerate(dict.fromkeys(body.environments or DEFAULT_ENVIRONMENTS)):
                 if not re.match(NAME_PATTERN, name):
@@ -197,18 +239,26 @@ def register(r: Router, platform: Platform) -> None:
             ctx,
             "project.created",
             project=project.ref,
+            org=org.slug,
             target=project.ref,
             details={"blueprint": blueprints.summarise(blueprint)} if blueprint else None,
         )
         return created(
-            {**dump(project), "environments": list(keys), "keys": keys, "blueprint": report}
+            {
+                **dump(project),
+                "org": org.slug,
+                "environments": list(keys),
+                "keys": keys,
+                "blueprint": report,
+            }
         )
 
     @r.get("/projects/{ref}", auth=OPERATOR, tags=["projects"], summary="Get a project")
     async def get_project_view(ctx: HttpContext, ref: str):
         project = await get_project(ref)
+        await project.fetch_related("organization")
         environments = await Environment.filter(project=project).select_related("project")
-        return {**dump(project), "environments": [environment_view(e) for e in environments]}
+        return project_view(project, environments=[environment_view(e) for e in environments])
 
     @r.patch(
         "/projects/{ref}",
@@ -227,15 +277,16 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.delete(
         "/projects/{ref}",
-        auth=OPERATOR,
+        auth=OPERATOR_ADMIN,
         tags=["projects"],
         summary="Delete a project and all its definitions",
     )
     async def delete_project(ctx: HttpContext, ref: str):
         project = await get_project(ref)
+        await project.fetch_related("organization")
+        await audit(ctx, "project.deleted", project=ref, target=ref)
         await project.delete()
         platform.envs.forget(ref)
-        await audit(ctx, "project.deleted", project=ref, target=ref)
         return no_content()
 
     @r.get(

@@ -1,5 +1,7 @@
 import json
 
+from tests.conftest import ORG, PASSWORD
+
 INERTIA = {"X-Inertia": "true"}
 
 
@@ -24,11 +26,14 @@ async def test_login_page_is_a_full_document_with_built_assets(studio):
 
 async def test_sign_in_and_render_pages(studio):
     await studio.login()
-    home = await studio.http.get("/", headers=INERTIA)
+    assert (await studio.http.get("/")).headers["location"] == "/orgs/acme"
+    home = await studio.http.get("/orgs/acme", headers=INERTIA)
     assert home.status_code == 200
     page = home.json()
     assert page["component"] == "Projects/Index"
-    assert page["props"]["projects"] == [{"ref": "shop", "name": "Shop"}]
+    assert page["props"]["projects"] == [{"ref": "shop", "name": "Shop", "org": "acme"}]
+    assert page["props"]["org"]["slug"] == "acme"
+    assert page["props"]["orgs"][0]["slug"] == "acme"
     assert page["props"]["operator"] == {
         "id": "1",
         "email": "root@pawabase.dev",
@@ -84,7 +89,7 @@ async def test_mfa_challenge(studio):
         "/login", json={"mfa_token": "challenge", "code": "123456"}, headers=studio.csrf()
     )
     assert done.headers["location"] == "/"
-    assert (await studio.http.get("/", headers=INERTIA)).status_code == 200
+    assert (await studio.http.get("/orgs/acme", headers=INERTIA)).status_code == 200
 
 
 async def test_bridge_forwards_as_the_operator(studio):
@@ -203,3 +208,98 @@ async def test_realtime_publish_carries_the_environment(studio):
     telemetry = await studio.http.get("/studio/api/telemetry/requests?project=shop")
     assert telemetry.status_code == 200
     assert studio.api.calls[-1][1] == "/internal/v1/telemetry/requests"
+
+
+async def test_nothing_exists_outside_an_organization(studio):
+    """With no organization, every page sends the operator to create one."""
+    studio.api.orgs = []
+    await studio.login()
+    assert (await studio.http.get("/")).headers["location"] == "/setup"
+    assert (await studio.http.get("/projects/shop")).headers["location"] == "/setup"
+    assert (await studio.http.get("/orgs/acme")).headers["location"] == "/setup"
+    setup = (await studio.http.get("/setup", headers=INERTIA)).json()
+    assert (setup["component"], setup["props"]["first"]) == ("Org/Create", True)
+    # Once they have one, setup is done.
+    studio.api.orgs = [dict(ORG)]
+    assert (await studio.http.get("/setup")).headers["location"] == "/"
+
+
+async def test_organization_pages(studio):
+    await studio.login()
+    team = (await studio.http.get("/orgs/acme/team", headers=INERTIA)).json()
+    assert team["component"] == "Org/Team"
+    assert [m["email"] for m in team["props"]["members"]] == ["root@pawabase.dev"]
+    assert team["props"]["invitations"][0]["email"] == "new@example.com"
+    settings = (await studio.http.get("/orgs/acme/settings", headers=INERTIA)).json()
+    assert settings["component"] == "Org/Settings"
+    audit = (await studio.http.get("/orgs/acme/audit", headers=INERTIA)).json()
+    assert audit["component"] == "Audit"
+    assert ("GET", "/platform/v1/audit", None, {"limit": 200, "org": "acme"}) in studio.api.calls
+    assert (await studio.http.get("/audit")).headers["location"] == "/orgs/acme/audit"
+    # Non-admins do not get the invitation list.
+    studio.api.orgs = [{**ORG, "role": "viewer"}]
+    studio.api.calls.clear()
+    await studio.http.get("/orgs/acme/team", headers=INERTIA)
+    assert not any(path.endswith("/invitations") for _, path, _, _ in studio.api.calls)
+
+
+async def test_the_last_organization_is_remembered(studio):
+    studio.api.orgs = [dict(ORG), {**ORG, "slug": "beta", "name": "Beta"}]
+    await studio.login()
+    await studio.http.get("/projects/shop", headers=INERTIA)
+    assert (await studio.http.get("/")).headers["location"] == "/orgs/acme"
+
+
+async def test_invitation_link_is_public_and_only_offers_its_own_address(studio):
+    good = (await studio.http.get("/invite/good", headers=INERTIA)).json()
+    assert good["component"] == "Auth/Invite"
+    assert good["props"]["invitation"]["email"] == "new@example.com"
+    assert "token" not in good["props"]["invitation"]
+    bad = (await studio.http.get("/invite/stale", headers=INERTIA)).json()
+    assert bad["props"]["invitation"] is None
+
+
+async def test_signed_in_operator_accepts_an_invitation(studio):
+    await studio.login()
+    response = await studio.http.post("/invite/good", json={}, headers=studio.csrf())
+    assert response.status_code in (302, 303)
+    assert response.headers["location"] == "/orgs/acme"
+    assert ("POST", "/platform/v1/invitations/good/accept", None, None) in studio.api.calls
+
+
+async def test_login_returns_to_a_same_site_page_only(studio):
+    await studio.http.get("/login")
+    response = await studio.http.post(
+        "/login",
+        json={"email": "root@pawabase.dev", "password": PASSWORD, "next": "/invite/good"},
+        headers=studio.csrf(),
+    )
+    assert response.headers["location"] == "/invite/good"
+    await studio.http.post("/logout", headers=studio.csrf())
+    await studio.http.get("/login")
+    response = await studio.http.post(
+        "/login",
+        json={"email": "root@pawabase.dev", "password": PASSWORD, "next": "https://evil.example"},
+        headers=studio.csrf(),
+    )
+    assert response.headers["location"] == "/"
+
+
+async def test_paths_that_skip_the_api_still_respect_organizations(studio):
+    """Realtime, identities, telemetry and the Explorer are forwarded without
+    the API's organization check, so Studio makes it first."""
+    await studio.login()
+    other = "/studio/api/realtime/rival/main/channels"
+    assert (await studio.http.get(other)).status_code == 404
+    assert (await studio.http.get("/studio/api/auth/projects/rival/envs/main/users")).status_code == 404
+    assert (await studio.http.get("/studio/api/auth/projects/_platform/envs/main/users")).status_code == 404
+    assert (await studio.http.get("/studio/api/telemetry/requests")).status_code == 404
+    assert (await studio.http.get("/projects/rival/main/realtime/ticket")).status_code == 404
+    explored = await studio.http.post(
+        "/studio/api/explorer/request",
+        json={"project": "rival", "env": "main", "method": "GET", "path": "/x"},
+        headers=studio.csrf(),
+    )
+    assert explored.status_code == 404
+    mine = await studio.http.get("/studio/api/auth/projects/shop/envs/main/users")
+    assert mine.status_code == 200

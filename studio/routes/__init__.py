@@ -18,6 +18,7 @@ from datetime import datetime
 from html import escape as html_escape
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 import websockets
@@ -67,6 +68,9 @@ SECTIONS: dict[str, str] = {
     "settings": "Env/Settings",
 }
 
+#: How long a "this operator may use that project" answer is trusted.
+ACCESS_TTL = 15.0
+
 #: Bridge targets: which service, and the path prefix calls are confined to.
 BRIDGE: dict[str, tuple[str, str]] = {
     "platform": ("api", "/platform/v1/"),
@@ -104,17 +108,56 @@ def register_routes(
             method, "/platform/v1" + path, operator=ctx.scope[OPERATOR_SCOPE], **kwargs
         )
 
+    # ── organizations ────────────────────────────────────────────────────
+
+    access: dict[tuple[str, str], float] = {}
+
+    async def may_use_project(ctx: HttpContext, ref: str) -> bool:
+        """Whether the operator's organizations include the project.
+
+        The API enforces this on every management call; Studio asks too for the
+        paths it forwards without the API (realtime, telemetry, identities, the
+        Explorer), so those cannot reach another organization's project.
+        """
+        key = (str(ctx.scope[OPERATOR_SCOPE]["sub"]), ref)
+        if access.get(key, 0) > time.monotonic():
+            return True
+        try:
+            await call(ctx, "GET", f"/projects/{ref}")
+        except ServiceError:
+            return False
+        access[key] = time.monotonic() + ACCESS_TTL
+        return True
+
+    async def my_orgs(ctx: HttpContext) -> list[dict[str, Any]]:
+        return (await call(ctx, "GET", "/orgs")).get("data", [])
+
+    def remember_org(ctx: HttpContext, slug: str | None) -> None:
+        session = ctx.scope.get("session")
+        if session is not None and slug:
+            session.set("org", slug)
+
+    def safe_next(target: str | None) -> str:
+        """A same-site path to return to after signing in."""
+        if target and target.startswith("/") and not target.startswith("//"):
+            return target
+        return "/"
+
     # ── sign-in ──────────────────────────────────────────────────────────
 
     @app.get("/login", exclude_from_schema=True)
     async def login_page(ctx: HttpContext):
         if await signed_in(ctx):
-            return redirect("/")
-        return await render("Auth/Login", {"mfa_token": ctx.query_params.get("mfa_token")})
+            return redirect(safe_next(ctx.query_params.get("next")))
+        return await render(
+            "Auth/Login",
+            {"mfa_token": ctx.query_params.get("mfa_token"), "next": ctx.query_params.get("next")},
+        )
 
     @app.post("/login", exclude_from_schema=True)
     async def login(ctx: HttpContext):
         body = await _body(ctx)
+        after = safe_next(str(body.get("next") or "") or None)
         payload: dict[str, Any]
         if body.get("mfa_token"):
             payload = {
@@ -132,10 +175,11 @@ def register_routes(
             await operators.sign_in(ctx, akountz, master, payload)
         except operators.SignInFailed as exc:
             if exc.mfa_token:
-                return redirect(f"/login?mfa_token={exc.mfa_token}")
+                suffix = f"&next={quote(after)}" if after != "/" else ""
+                return redirect(f"/login?mfa_token={exc.mfa_token}{suffix}")
             set_errors(ctx, {"code" if payload["grant_type"] == "mfa" else "email": exc.message})
             return back(fallback="/login")
-        return redirect("/")
+        return redirect(after)
 
     @app.post("/logout", exclude_from_schema=True)
     async def logout(ctx: HttpContext):
@@ -144,10 +188,14 @@ def register_routes(
 
     # ── pages ────────────────────────────────────────────────────────────
 
-    async def page(ctx: HttpContext, component: str, loader) -> Any:
+    async def page(ctx: HttpContext, component: str, loader, *, org_required: bool = True) -> Any:
         if not await signed_in(ctx):
             return redirect("/login")
         try:
+            orgs = await my_orgs(ctx)
+            if not orgs and org_required:
+                # Nothing exists outside an organization: make one first.
+                return redirect("/setup")
             props = await loader()
         except ServiceError as exc:
             if exc.status == 404:
@@ -157,25 +205,176 @@ def register_routes(
                 {"message": _detail(exc), "service": exc.service},
                 status_code=502,
             )
-        return await render(component, props)
+        slug = (props.get("project") or {}).get("org") or (props.get("org") or {}).get("slug")
+        remember_org(ctx, slug)
+        return await render(component, {"orgs": orgs, **props})
+
+    def role_of(orgs: list[dict[str, Any]], slug: str) -> str | None:
+        return next((o["role"] for o in orgs if o["slug"] == slug), None)
+
+    async def landing(ctx: HttpContext, suffix: str = "") -> Any:
+        """Send the operator to their organization (the last one they used)."""
+        if not await signed_in(ctx):
+            return redirect("/login")
+        try:
+            orgs = await my_orgs(ctx)
+        except ServiceError as exc:
+            return await render(
+                "Errors/Unavailable",
+                {"message": _detail(exc), "service": exc.service},
+                status_code=502,
+            )
+        if not orgs:
+            return redirect("/setup")
+        session = ctx.scope.get("session")
+        last = session.get("org") if session is not None else None
+        slug = last if any(o["slug"] == last for o in orgs) else orgs[0]["slug"]
+        return redirect(f"/orgs/{slug}{suffix}")
 
     @app.get("/", exclude_from_schema=True)
     async def home(ctx: HttpContext):
+        return await landing(ctx)
+
+    @app.get("/setup", exclude_from_schema=True)
+    async def setup(ctx: HttpContext):
+        """The first thing an operator does: create the organization projects live in."""
+
         async def load():
-            projects = await call(ctx, "GET", "/projects")
-            overview = await call(ctx, "GET", "/overview")
-            return {"projects": projects.get("data", projects), "overview": overview}
+            return {"first": True}
+
+        if await signed_in(ctx) and await my_orgs(ctx):
+            return redirect("/")
+        return await page(ctx, "Org/Create", load, org_required=False)
+
+    @app.get("/orgs/new", exclude_from_schema=True)
+    async def new_org(ctx: HttpContext):
+        async def load():
+            return {"first": False}
+
+        return await page(ctx, "Org/Create", load, org_required=False)
+
+    async def org_props(ctx: HttpContext, slug: str) -> dict[str, Any]:
+        return {"org": await call(ctx, "GET", f"/orgs/{slug}")}
+
+    @app.get("/orgs/{slug}", exclude_from_schema=True)
+    async def org_home(ctx: HttpContext, slug: str):
+        async def load():
+            projects = await call(ctx, "GET", "/projects", params={"org": slug})
+            overview = await call(ctx, "GET", "/overview", params={"org": slug})
+            return {
+                **await org_props(ctx, slug),
+                "projects": projects.get("data", projects),
+                "overview": overview,
+            }
 
         return await page(ctx, "Projects/Index", load)
 
-    @app.get("/audit", exclude_from_schema=True)
-    async def audit(ctx: HttpContext):
+    @app.get("/orgs/{slug}/team", exclude_from_schema=True)
+    async def org_team(ctx: HttpContext, slug: str):
         async def load():
+            props = await org_props(ctx, slug)
+            members = await call(ctx, "GET", f"/orgs/{slug}/members")
+            invitations = []
+            if props["org"]["role"] in ("admin", "owner"):
+                invitations = (await call(ctx, "GET", f"/orgs/{slug}/invitations")).get("data", [])
             return {
-                "entries": (await call(ctx, "GET", "/audit", params={"limit": 200})).get("data", [])
+                **props,
+                "members": members.get("data", []),
+                "invitations": invitations,
+                "me": ctx.scope[OPERATOR_SCOPE]["sub"],
             }
 
+        return await page(ctx, "Org/Team", load)
+
+    @app.get("/orgs/{slug}/settings", exclude_from_schema=True)
+    async def org_settings(ctx: HttpContext, slug: str):
+        return await page(ctx, "Org/Settings", lambda: org_props(ctx, slug))
+
+    @app.get("/orgs/{slug}/audit", exclude_from_schema=True)
+    async def org_audit(ctx: HttpContext, slug: str):
+        async def load():
+            entries = await call(ctx, "GET", "/audit", params={"limit": 200, "org": slug})
+            return {**await org_props(ctx, slug), "entries": entries.get("data", [])}
+
         return await page(ctx, "Audit", load)
+
+    @app.get("/audit", exclude_from_schema=True)
+    async def audit(ctx: HttpContext):
+        return await landing(ctx, "/audit")
+
+    # ── invitations ──────────────────────────────────────────────────────
+    #
+    # An invitation link works before sign-in, so its page is public: the
+    # token is the credential, and it only ever offers the one address it was
+    # sent to. Accepting signs the invitee in, creating their operator account
+    # first when they have none.
+
+    async def invitation_page(ctx: HttpContext, token: str, **extra: Any):
+        try:
+            invitation = await api.request("GET", f"/platform/v1/invitations/{quote(token)}")
+        except ServiceError as exc:
+            if exc.status != 404:
+                raise
+            return await render("Auth/Invite", {"token": token, "invitation": None})
+        operator = await signed_in(ctx)
+        return await render(
+            "Auth/Invite",
+            {
+                "token": token,
+                "invitation": invitation,
+                "mismatch": bool(operator and operator["email"].lower() != invitation["email"]),
+                **extra,
+            },
+        )
+
+    @app.get("/invite/{token}", exclude_from_schema=True)
+    async def invite_page(ctx: HttpContext, token: str):
+        return await invitation_page(ctx, token)
+
+    @app.post("/invite/{token}", exclude_from_schema=True)
+    async def accept_invite(ctx: HttpContext, token: str):
+        body = await _body(ctx)
+        try:
+            invitation = await api.request("GET", f"/platform/v1/invitations/{quote(token)}")
+        except ServiceError:
+            return redirect(f"/invite/{token}")
+        operator = await signed_in(ctx)
+        if operator is None:
+            password = str(body.get("password") or "")
+            try:
+                await akountz.request(
+                    "POST",
+                    "/admin/v1/projects/_platform/envs/main/users",
+                    json={
+                        "email": invitation["email"],
+                        "password": password,
+                        "name": str(body.get("name") or ""),
+                        "email_verified": True,
+                    },
+                )
+            except ServiceError as exc:
+                if exc.status == 409:
+                    # They already have an account: sign in, then come back.
+                    return redirect(f"/login?next={quote(f'/invite/{token}')}")
+                set_errors(ctx, {"password": _detail(exc)})
+                return back(fallback=f"/invite/{token}")
+            try:
+                await operators.sign_in(
+                    ctx,
+                    akountz,
+                    master,
+                    {"grant_type": "password", "email": invitation["email"], "password": password},
+                )
+            except operators.SignInFailed as exc:
+                set_errors(ctx, {"password": exc.message})
+                return back(fallback=f"/invite/{token}")
+            operator = await signed_in(ctx)
+        try:
+            joined = await call(ctx, "POST", f"/invitations/{quote(token)}/accept")
+        except ServiceError as exc:
+            set_errors(ctx, {"invitation": _detail(exc)})
+            return back(fallback=f"/invite/{token}")
+        return redirect(f"/orgs/{joined['slug']}")
 
     async def project_props(ctx: HttpContext, ref: str) -> dict[str, Any]:
         project = await call(ctx, "GET", f"/projects/{ref}")
@@ -362,6 +561,8 @@ def register_routes(
     async def realtime_ticket(ctx: HttpContext, ref: str, env: str):
         if await signed_in(ctx) is None:
             return JSONResponse({"detail": "sign in first"}, status_code=401)
+        if not await may_use_project(ctx, ref):
+            return JSONResponse({"detail": f"no project {ref!r}"}, status_code=404)
         context = PlatformContext(project=ref, env=env, role="operator", key_id="studio-console")
         return JSONResponse({"ticket": issue_context_token(settings.internal_secret, context, ttl=20)})
 
@@ -432,6 +633,8 @@ def register_routes(
             r"[a-z][a-z0-9_-]{0,62}", env
         ):
             return JSONResponse({"detail": "invalid project or environment"}, status_code=400)
+        if not await may_use_project(ctx, project):
+            return JSONResponse({"detail": f"no project {project!r}"}, status_code=404)
         if body.get("mfa_token"):
             payload = {
                 "grant_type": "mfa",
@@ -488,6 +691,8 @@ def register_routes(
             return JSONResponse({"detail": "invalid environment"}, status_code=400)
         if not re.fullmatch(r"v[1-9][0-9]*", version):
             return JSONResponse({"detail": "invalid API version"}, status_code=400)
+        if not await may_use_project(ctx, project):
+            return JSONResponse({"detail": f"no project {project!r}"}, status_code=404)
         if method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
             return JSONResponse({"detail": "unsupported method"}, status_code=400)
         expected_prefix = f"/rest/{version}"
@@ -587,6 +792,13 @@ def register_routes(
         params = dict(ctx.query_params)
         call: dict[str, Any] = {"json": body, "params": params or None, "operator": operator}
         segments = clean.split("/")
+        # The API checks organization access itself. These services do not
+        # know organizations, so Studio confirms the project is the operator's.
+        project = _bridge_project(target, segments, params)
+        if target != "platform" and (project is None or project.startswith("_")):
+            return JSONResponse({"detail": "name a project of yours"}, status_code=404)
+        if project is not None and target != "platform" and not await may_use_project(ctx, project):
+            return JSONResponse({"detail": f"no project {project!r}"}, status_code=404)
         if (
             target == "realtime"
             and ctx.method == "POST"
@@ -640,6 +852,20 @@ async def _body(ctx: HttpContext) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
     form = await ctx.form()
     return {k: form.get(k) for k in form}
+
+
+def _bridge_project(target: str, segments: list[str], params: dict[str, Any]) -> str | None:
+    """The project a bridged call to a project-agnostic service is about."""
+    if target == "auth":
+        # /admin/v1/projects/<project>/envs/<env>/...
+        return segments[1] if len(segments) > 3 and segments[0] == "projects" else None
+    if target == "realtime":
+        # /internal/v1/realtime/<project>/<env>/...
+        return segments[0] if segments and segments[0] else None
+    if target == "telemetry":
+        value = params.get("project")
+        return str(value) if value else None
+    return None
 
 
 def _recent(worker: dict[str, Any], seconds: float = 600) -> bool:

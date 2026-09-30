@@ -2,8 +2,8 @@ import { Head, useForm } from "@inertiajs/react";
 import { Icon } from "../../components/icons";
 import { Logo } from "../../components/Logo";
 
-export default function Login({ mfa_token }) {
-  const form = useForm(mfa_token ? { mfa_token, code: "" } : { email: "", password: "" });
+export default function Login({ mfa_token, next }) {
+  const form = useForm(mfa_token ? { mfa_token, code: "", next: next || "" } : { email: "", password: "", next: next || "" });
   const submit = (e) => {
     e.preventDefault();
     form.post("/login", { preserveState: true });
@@ -55,8 +55,8 @@ export default function Login({ mfa_token }) {
           {mfa_token ? "Verify" : "Sign in"}
         </button>
         <p className="hint" style={{ margin: 0 }}>
-          Operators are users of the reserved <code>_platform</code> project. The first one comes from
-          <code> PAWABASE_ADMIN_EMAIL</code> / <code>PAWABASE_ADMIN_PASSWORD</code>.
+          The first operator comes from <code>PAWABASE_ADMIN_EMAIL</code> / <code>PAWABASE_ADMIN_PASSWORD</code>.
+          Everyone else joins through an invitation to an organization.
         </p>
       </form>
       </div>

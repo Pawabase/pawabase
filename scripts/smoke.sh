@@ -29,8 +29,12 @@ code=$(curl -sS -o /dev/null -w '%{http_code}' -b "$JAR" -c "$JAR" -X POST "$STU
 [ "$code" = 302 ] || [ "$code" = 303 ] || { echo "sign-in answered $code"; exit 1; }
 studio GET /studio/api/platform/projects >/dev/null
 
+echo "organization $REF"
+studio POST /studio/api/platform/orgs "{\"slug\": \"$REF\", \"name\": \"Smoke\"}" >/dev/null
+studio GET "/studio/api/platform/orgs/$REF" | json 'd["role"]' | grep -q owner
+
 echo "project $REF"
-KEY=$(studio POST /studio/api/platform/projects "{\"ref\": \"$REF\", \"name\": \"Smoke\", \"environments\": [\"main\"]}" \
+KEY=$(studio POST /studio/api/platform/projects "{\"ref\": \"$REF\", \"org\": \"$REF\", \"name\": \"Smoke\", \"environments\": [\"main\"]}" \
   | json 'd["keys"]["main"]["publishable"]')
 studio POST "/studio/api/platform/projects/$REF/envs/main/resources" \
   '{"name": "notes", "fields": [{"name": "text", "type": "string", "required": true}], "operations": {"list": {"enabled": true, "policy": "public"}, "create": {"enabled": true, "policy": "public"}}}' >/dev/null
@@ -41,6 +45,10 @@ curl -sS -f -X POST "$GATEWAY/rest/v1/notes" -H "apikey: $KEY" -H "content-type:
 curl -sS -f "$GATEWAY/rest/v1/notes" -H "apikey: $KEY" | json 'd["data"][0]["text"]' | grep -q hello
 code=$(curl -sS -o /dev/null -w '%{http_code}' "$GATEWAY/rest/v1/notes")
 [ "$code" = 401 ] || { echo "a request without a key answered $code"; exit 1; }
+
+echo "invitations"
+studio POST "/studio/api/platform/orgs/$REF/invitations" '{"email": "teammate@example.com", "role": "viewer"}' \
+  | json 'd["token"]' | grep -q .
 
 echo "sign-up through the gateway"
 curl -sS -f -X POST "$GATEWAY/auth/v1/signup" -H "apikey: $KEY" -H "content-type: application/json" \

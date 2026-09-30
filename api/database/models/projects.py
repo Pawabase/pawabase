@@ -21,6 +21,12 @@ class Project(Model):
     name = fields.CharField(max_length=200)
     description = fields.TextField(default="")
     created_by = fields.CharField(max_length=255, null=True)
+    #: The organization the project lives in. Every project has one; the column
+    #: is nullable only so databases created before organizations existed can
+    #: migrate, and those projects are adopted by the first organization made.
+    organization = fields.ForeignKeyField(
+        "models.Organization", related_name="projects", null=True, on_delete=fields.RESTRICT
+    )
 
     environments: fields.ReverseRelation[Environment]
 
@@ -116,6 +122,7 @@ class AuditEntry(Model):
     id = fields.IntField(primary_key=True)
     project = fields.CharField(max_length=63, null=True, db_index=True)
     env = fields.CharField(max_length=63, null=True)
+    org = fields.CharField(max_length=63, null=True, db_index=True)
     actor = fields.CharField(max_length=255, null=True)
     action = fields.CharField(max_length=100)
     target = fields.CharField(max_length=255, default="")

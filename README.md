@@ -111,8 +111,9 @@ scripts/dev.sh                  # every service on SQLite, Studio on :8090
 STUDIO_VITE=1 scripts/dev.sh    # …with Studio's front end from `npm run dev`
 ```
 
-Sign in as `admin@pawabase.local` / `Pawabase!admin1`. Create a project with the reference
-`demo` to load the example function in `examples/code/demo`.
+Sign in as `admin@pawabase.local` / `Pawabase!admin1`. Studio first asks you to create an
+organization (every project lives in one, and you manage your team there); then create a project
+with the reference `demo` to load the example function in `examples/code/demo`.
 
 Tests and lint:
 

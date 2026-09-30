@@ -69,9 +69,15 @@ class FakeAkountz:
         pass
 
 
+ORG = {"slug": "acme", "name": "Acme", "role": "owner", "projects": 1, "members": 1}
+
+
 @dataclass
 class FakeApi:
     calls: list[tuple[str, str, Any, Any]] = field(default_factory=list)
+    orgs: list[dict[str, Any]] = field(default_factory=lambda: [dict(ORG)])
+    #: Projects the operator may reach; anything else is another organization's.
+    projects: tuple[str, ...] = ("shop",)
 
     async def request(
         self,
@@ -85,15 +91,33 @@ class FakeApi:
     ) -> Any:
         from pawabase_kit.clients import ServiceError
 
-        assert operator and operator["email"] == "root@pawabase.dev"
+        if not path.startswith("/platform/v1/invitations/"):
+            assert operator and operator["email"] == "root@pawabase.dev"
         self.calls.append((method, path, json, params))
         self.last_kwargs = kwargs
+        if path == "/platform/v1/orgs" and method == "GET":
+            return {"data": self.orgs}
+        if path == "/platform/v1/orgs/acme":
+            return next(o for o in self.orgs if o["slug"] == "acme")
+        if path == "/platform/v1/orgs/acme/members":
+            return {"data": [{"user_id": "1", "email": "root@pawabase.dev", "role": "owner"}]}
+        if path == "/platform/v1/orgs/acme/invitations":
+            return {"data": [{"id": 1, "email": "new@example.com", "role": "developer"}]}
+        if path == "/platform/v1/invitations/good":
+            return {"organization": "Acme", "slug": "acme", "email": "new@example.com", "role": "developer"}
+        if path.startswith("/platform/v1/invitations/"):
+            if path.endswith("/accept"):
+                return {"slug": "acme", "role": "developer"}
+            raise ServiceError(404, {"detail": "this invitation is no longer valid"}, service="api")
+        ref = path.removeprefix("/platform/v1/projects/").split("/")[0]
+        if path.startswith("/platform/v1/projects/") and ref not in self.projects and ref != "nope":
+            raise ServiceError(404, {"detail": f"no project {ref!r}"}, service="api")
         if path == "/platform/v1/projects":
-            return {"data": [{"ref": "shop", "name": "Shop"}]}
+            return {"data": [{"ref": "shop", "name": "Shop", "org": "acme"}]}
         if path == "/platform/v1/overview":
             return {"projects": 1}
         if path == "/platform/v1/projects/shop":
-            return {"ref": "shop", "name": "Shop"}
+            return {"ref": "shop", "name": "Shop", "org": "acme"}
         if path == "/platform/v1/projects/shop/envs":
             return {"data": [{"name": "main", "is_default": True}]}
         if path == "/platform/v1/projects/shop/envs/main/overview":

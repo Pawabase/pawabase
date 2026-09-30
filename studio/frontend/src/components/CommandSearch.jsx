@@ -23,6 +23,8 @@ function score(text, query) {
 export default function CommandSearch() {
   const { props } = usePage();
   const { project, envs, env } = props;
+  const orgs = props.orgs || [];
+  const orgSlug = props.org?.slug || project?.org;
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -75,14 +77,21 @@ export default function CommandSearch() {
     for (const p of projects || []) {
       all.push({ group: "Projects", label: p.name, hint: p.ref, icon: "projects", href: `/projects/${p.ref}` });
     }
-    all.push({ group: "Platform", label: "All projects", hint: "Home", icon: "projects", href: "/" });
-    all.push({ group: "Platform", label: "Audit log", hint: "Who changed what", icon: "audit", href: "/audit" });
+    for (const o of orgs) {
+      all.push({ group: "Organizations", label: o.name, hint: `${o.slug} · switch`, icon: "org", href: `/orgs/${o.slug}` });
+    }
+    if (orgSlug) {
+      all.push({ group: "Organization", label: "Team", hint: "Members, roles, invitations", icon: "team", href: `/orgs/${orgSlug}/team` });
+      all.push({ group: "Organization", label: "Audit log", hint: "Who changed what", icon: "audit", href: `/orgs/${orgSlug}/audit` });
+      all.push({ group: "Organization", label: "Organization settings", hint: "Name, danger zone", icon: "settings", href: `/orgs/${orgSlug}/settings` });
+    }
+    all.push({ group: "Organizations", label: "New organization", hint: "Create", icon: "plus", href: "/orgs/new" });
     return all
       .map((item) => ({ ...item, rank: Math.max(score(item.label, query), score(item.hint || "", query) * 0.6) }))
       .filter((item) => item.rank > 0)
       .sort((a, b) => (query ? b.rank - a.rank : 0))
       .slice(0, 14);
-  }, [project, env, envs, projects, query]);
+  }, [project, env, envs, projects, orgs, orgSlug, query]);
 
   useEffect(() => setActive(0), [query]);
 
