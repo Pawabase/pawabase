@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Layout from "../../components/Layout";
+import SqlBuilder from "../../components/SqlBuilder";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, Loading, Modal, PageHead, Table, formatCell, useAction } from "../../components/ui";
 import { envPath, post, useApi } from "../../lib/api";
@@ -35,7 +36,7 @@ export default function Database({ project, env }) {
           {table ? <TableView base={base} table={table} /> : <div className="calm" style={{ padding: 24 }}>Pick a table on the left, or click <b>SQL</b> to run a query.</div>}
         </div>
       </div>
-      {sqlOpen && <SqlModal base={base} onClose={() => setSqlOpen(false)} />}
+      {sqlOpen && <SqlModal base={base} tables={overview.data?.tables || []} dialect={overview.data?.dialect} table={table} onClose={() => setSqlOpen(false)} />}
     </Layout>
   );
 }
@@ -64,8 +65,9 @@ function TableView({ base, table }) {
   );
 }
 
-function SqlModal({ base, onClose }) {
-  const [sql, setSql] = useState("SELECT 1 AS ok");
+function SqlModal({ base, tables, dialect, table, onClose }) {
+  const [sql, setSql] = useState(table ? `SELECT *\nFROM "${table}"\nLIMIT 100` : "SELECT 1 AS ok");
+  const [builder, setBuilder] = useState(true);
   const [allowWrite, setAllowWrite] = useState(false);
   const [result, setResult] = useState(null);
   const [run, busy] = useAction();
@@ -84,6 +86,17 @@ function SqlModal({ base, onClose }) {
         <Button variant="primary" disabled={busy} onClick={execute}>Run</Button>
       </>}
     >
+      <div className="spread" style={{ marginBottom: 8 }}>
+        <b>Query builder</b>
+        <Button size="sm" onClick={() => setBuilder(!builder)}>{builder ? "Hide" : "Show"}</Button>
+      </div>
+      {builder && (
+        <>
+          <SqlBuilder base={base} tables={tables} dialect={dialect} initialTable={table} onSql={setSql} onWrites={(writes) => setAllowWrite(writes)} />
+          <p className="hint" style={{ margin: "10px 0 14px" }}>Each click rewrites the SQL below. Edit it by hand any time; the next click in the builder replaces your edits.</p>
+        </>
+      )}
+      <b style={{ display: "block", marginBottom: 8 }}>SQL</b>
       <textarea
         rows={6}
         className="mono"

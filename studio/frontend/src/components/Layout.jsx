@@ -90,24 +90,6 @@ export default function Layout({ title, crumbs = [], children, full }) {
       <div className={`shell ${navOpen ? "nav-open" : ""}`}>
         <aside className="sidebar">
           <Link href="/" className="brand"><Logo sub="Studio" /></Link>
-          {org && (
-            <label className="switcher" title="Switch organization">
-              <span className="avatar pastel lavender"><Icon name="org" size={17} /></span>
-              <span className="grow">
-                <b>{org.name}</b>
-                <span className="sub">{ORG_ROLE_LABELS[org.role] || "Organization"}</span>
-              </span>
-              <Icon name="chevronDown" size={16} className="faint" />
-              <select
-                value={org.slug}
-                onChange={(e) => router.visit(e.target.value === "+new" ? "/orgs/new" : `/orgs/${e.target.value}`)}
-                aria-label="Organization"
-              >
-                {orgs.map((o) => <option key={o.slug} value={o.slug}>{o.name}</option>)}
-                <option value="+new">+ New organization…</option>
-              </select>
-            </label>
-          )}
           {project && env && (
             <label className="switcher" title="Switch environment">
               <span className={`avatar pastel ${envTone(env, envIndex)}`}>{project.name.slice(0, 1).toUpperCase()}</span>
@@ -183,8 +165,23 @@ export default function Layout({ title, crumbs = [], children, full }) {
           <div className="topbar">
             <div className="row" style={{ minWidth: 0 }}>
               <button type="button" className="icon-btn menu-btn" onClick={() => setNavOpen(true)} aria-label="Open navigation"><Icon name="menu" /></button>
+              {org && (
+                <label className="org-pick" title="Switch organization">
+                  <span className="avatar pastel lavender"><Icon name="org" size={14} /></span>
+                  <b>{org.name}</b>
+                  <Icon name="chevronDown" size={15} className="faint" />
+                  <select
+                    value={org.slug}
+                    onChange={(e) => router.visit(e.target.value === "+new" ? "/orgs/new" : `/orgs/${e.target.value}`)}
+                    aria-label="Organization"
+                  >
+                    {orgs.map((o) => <option key={o.slug} value={o.slug}>{o.name}</option>)}
+                    <option value="+new">+ New organization…</option>
+                  </select>
+                </label>
+              )}
               <div className="crumbs">
-                {org ? <Link href={`/orgs/${org.slug}`}>{org.name}</Link> : <Link href="/">Studio</Link>}
+                {!org && <Link href="/">Studio</Link>}
                 {project && <><span className="sep">/</span><Link href={`/projects/${project.ref}`}>{project.name}</Link></>}
                 {env && <><span className="sep">/</span><Link href={envHref(project.ref, env, "overview")}>{env}</Link></>}
                 {crumbs.map((c, i) => <span key={i} className="row" style={{ gap: 4 }}><span className="sep">/</span><span className="here">{c}</span></span>)}
