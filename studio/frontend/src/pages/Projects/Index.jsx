@@ -2,7 +2,7 @@ import { Link, router } from "@inertiajs/react";
 import { Fragment, useState } from "react";
 import Layout, { atLeast, envTone } from "../../components/Layout";
 import { Icon } from "../../components/icons";
-import { Badge, Button, Card, CopyText, EmptyState, Field, Modal, PageHead, Section, Segmented, Sheet, TagInput, Tile, useAction } from "../../components/ui";
+import { Badge, Button, CopyText, Field, Modal, Section, Segmented, Sheet, TagInput, useAction } from "../../components/ui";
 import { post } from "../../lib/api";
 
 const PROJECT_TONES = ["lavender", "peach", "mint", "sky", "butter", "rose"];
@@ -12,48 +12,61 @@ const KIND_LABELS = {
   subscriptions: "Subscriptions", webhooks: "Webhooks", "inbound-hooks": "Inbound hooks", schedules: "Schedules",
 };
 
-export default function ProjectsIndex({ org, projects, overview }) {
+export default function ProjectsIndex({ org, projects }) {
   const [creating, setCreating] = useState(false);
-  const canCreate = atLeast(org.role, "developer");
   const [created, setCreated] = useState(null);
+  const canCreate = atLeast(org.role, "developer");
+  const canInvite = atLeast(org.role, "admin");
+  const count = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
   return (
     <Layout title="Projects">
-      <PageHead
-        title="Projects"
-        description={`Backends in ${org.name}. Each has its own environments, data, auth and automation.`}
-        actions={canCreate && <Button variant="primary" onClick={() => setCreating(true)}><Icon name="plus" />New project</Button>}
-      />
-      <div className="grid" style={{ marginBottom: 20 }}>
-        <Tile tone="lavender" icon="projects" value={overview.projects} label="Projects" i={0} />
-        <Tile tone="peach" icon="layers" value={overview.environments} label="Environments" i={1} />
-        <Tile tone="mint" icon="jobs" value={overview.queue_backend} label="Queue backend" i={2} />
-        <Tile tone="butter" icon="events" value={overview.events_backend} label="Event bus" i={3} />
-      </div>
-      {projects.length === 0 ? (
-        <Card>
-          <EmptyState icon="bolt" title={canCreate ? "Create your first project" : "No projects yet"} action={canCreate && <Button variant="primary" onClick={() => setCreating(true)}><Icon name="plus" />New project</Button>}>
-            {canCreate
-              ? `It lives in ${org.name} and comes with development, staging and production environments and API keys for each.`
-              : `Ask an owner, admin or developer of ${org.name} to create one.`}
-          </EmptyState>
-        </Card>
-      ) : (
-        <div className="grid wide">
-          {projects.map((p, i) => (
-            <Link key={p.ref} href={`/projects/${p.ref}`} className="card stack rise" style={{ gap: 14, "--i": i }}>
-              <div className="row" style={{ gap: 12 }}>
-                <span className={`avatar pastel ${PROJECT_TONES[i % PROJECT_TONES.length]}`} style={{ width: 44, height: 44, borderRadius: 14, fontSize: 18 }}>{p.name.slice(0, 1).toUpperCase()}</span>
-                <div className="grow">
-                  <h2>{p.name}</h2>
-                  <code className="faint">{p.ref}</code>
-                </div>
-                <Icon name="chevronRight" className="faint" />
-              </div>
-              <p className="muted" style={{ margin: 0, minHeight: 21 }}>{p.description || "No description"}</p>
-              <div className="row wrap" style={{ gap: 6 }}>{(p.environments || []).map((e, j) => <span key={e} className={`badge pastel ${envTone(e, j)}`}>{e}</span>)}</div>
-            </Link>
-          ))}
+      <section className="org-hero pastel lavender rise">
+        <span className="blob" style={{ width: 280, height: 280, right: -70, top: -110, background: "var(--peach)" }} />
+        <span className="blob" style={{ width: 150, height: 150, right: 190, bottom: -70, background: "var(--mint)" }} />
+        <div className="org-hero-body">
+          <span className="org-hero-badge"><Icon name="org" size={14} />{org.role}</span>
+          <h1>{org.name}</h1>
+          <p>{count(projects.length, "project")} · {count(org.members, "team member")}</p>
         </div>
+        <div className="org-hero-actions">
+          {canCreate && <Button variant="primary" onClick={() => setCreating(true)}><Icon name="plus" />New project</Button>}
+          <Link href={`/orgs/${org.slug}/team`} className="btn"><Icon name="team" />{canInvite ? "Invite team" : "Team"}</Link>
+        </div>
+      </section>
+
+      {projects.length === 0 ? (
+        <div className="org-empty rise" style={{ "--i": 1 }}>
+          <span className="tile-icon"><Icon name="bolt" /></span>
+          <h2>{canCreate ? "Build your first backend" : "No projects yet"}</h2>
+          <p>{canCreate ? "A project gives you data, auth, storage and automation, with a development and production environment ready to use." : `Ask an owner, admin or developer of ${org.name} to create one.`}</p>
+          {canCreate && <Button variant="primary" onClick={() => setCreating(true)}><Icon name="plus" />New project</Button>}
+        </div>
+      ) : (
+        <>
+          <h2 className="org-section">Projects</h2>
+          <div className="project-grid">
+            {projects.map((p, i) => (
+              <Link key={p.ref} href={`/projects/${p.ref}`} className="project-card rise" style={{ "--i": i + 1 }}>
+                <span className={`avatar pastel ${PROJECT_TONES[i % PROJECT_TONES.length]}`}>{p.name.slice(0, 1).toUpperCase()}</span>
+                <div className="project-card-body">
+                  <h3>{p.name}</h3>
+                  <code>{p.ref}</code>
+                  <p>{p.description || "No description yet"}</p>
+                </div>
+                <div className="project-card-foot">
+                  <div className="row wrap" style={{ gap: 6 }}>{(p.environments || []).map((e, j) => <span key={e} className={`badge pastel ${envTone(e, j)}`}>{e}</span>)}</div>
+                  <Icon name="chevronRight" className="faint" />
+                </div>
+              </Link>
+            ))}
+            {canCreate && (
+              <button type="button" className="project-card new rise" style={{ "--i": projects.length + 1 }} onClick={() => setCreating(true)}>
+                <span className="plus"><Icon name="plus" size={22} /></span>
+                <b>New project</b>
+              </button>
+            )}
+          </div>
+        </>
       )}
       {creating && <CreateProject org={org} onClose={() => setCreating(false)} onCreated={(result) => { setCreating(false); setCreated(result); }} />}
       {created && <CreatedKeys project={created} onClose={() => { setCreated(null); router.visit(`/projects/${created.ref}`); }} />}

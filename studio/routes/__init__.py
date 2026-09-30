@@ -260,12 +260,7 @@ def register_routes(
     async def org_home(ctx: HttpContext, slug: str):
         async def load():
             projects = await call(ctx, "GET", "/projects", params={"org": slug})
-            overview = await call(ctx, "GET", "/overview", params={"org": slug})
-            return {
-                **await org_props(ctx, slug),
-                "projects": projects.get("data", projects),
-                "overview": overview,
-            }
+            return {**await org_props(ctx, slug), "projects": projects.get("data", projects)}
 
         return await page(ctx, "Projects/Index", load)
 
