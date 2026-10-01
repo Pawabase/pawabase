@@ -1,6 +1,7 @@
 import { Head, Link, router, usePage } from "@inertiajs/react";
 import { useEffect, useState } from "react";
 import CommandSearch from "./CommandSearch";
+import Console from "./Console";
 import StatusLights from "./StatusLights";
 import { Icon } from "./icons";
 import { Logo } from "./Logo";
@@ -197,6 +198,7 @@ export default function Layout({ title, crumbs = [], children, full }) {
           </div>
           <div className={`content ${full ? "full" : ""}`}>{children}</div>
         </main>
+        <Console project={project} env={env} />
       </div>
     </ToastProvider>
   );

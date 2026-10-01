@@ -215,6 +215,27 @@ class ApiRuntime(BaseRuntime):
             api_version=self.state.api_version,
         )
 
+    async def call_flow(self, flow, input):
+        """Run a named flow inline, preserving the caller's execution context."""
+        if self.depth >= 8:
+            raise FlowError("flow calls are nested too deeply", code="too_deep")
+        if flow not in self.state.flows:
+            raise FlowError(f"no flow {flow!r}", code="unknown_flow")
+        from app.execution import run_flow
+
+        child = await run_flow(
+            self.platform,
+            self.state,
+            flow,
+            input,
+            trigger="flow",
+            auth=self.auth,
+            credential={"is_service": True, "role": "service"},
+            request_id=self.request_id,
+            depth=self.depth + 1,
+        )
+        return child.result()
+
     async def dispatch_function(self, function, input, *, delay=0, queue=None):
         from app.jobs.functions import RunFunctionJob
 

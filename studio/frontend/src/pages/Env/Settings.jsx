@@ -68,6 +68,7 @@ export default function Settings({ project, env }) {
 }
 
 function SettingsForm({ settings, onChange, onSave, dirty, busy, policyNames, children }) {
+  const [active, setActive] = useState("docs");
   const set = (patch) => onChange({ ...settings, ...patch });
   const realtime = settings.realtime || {};
   const setRealtime = (patch) => set({ realtime: { ...realtime, ...patch } });
@@ -76,63 +77,36 @@ function SettingsForm({ settings, onChange, onSave, dirty, busy, policyNames, ch
   const custom = Object.fromEntries(Object.entries(settings).filter(([k]) => !KNOWN_KEYS.includes(k)));
   const setCustom = (next) => onChange({ ...Object.fromEntries(KNOWN_KEYS.map((k) => [k, settings[k]]).filter(([, v]) => v !== undefined)), ...next });
 
-  return (
-    <div className="stack lg">
-      <Card title="API documentation" actions={<Button variant="primary" size="sm" disabled={busy || !dirty} onClick={onSave}>Save</Button>}>
-        <Switch
-          checked={!!settings.public_docs}
-          onChange={(v) => set({ public_docs: v })}
-          label="Publish generated API docs"
-          hint="Makes the OpenAPI reference public at /docs/v1. Operators can always see it from Studio either way."
-        />
-      </Card>
-
-      <Card title="CORS" actions={<Button variant="primary" size="sm" disabled={busy || !dirty} onClick={onSave}>Save</Button>}>
-        <Field label="Allowed browser origins" hint="Sites allowed to call the gateway with a publishable key from JavaScript. Leave empty to allow none.">
-          <TagInput value={settings.cors_origins || []} onChange={(v) => set({ cors_origins: v })} placeholder="https://app.example.com" />
-        </Field>
-      </Card>
-
-      <Card title="Realtime" actions={<Button variant="primary" size="sm" disabled={busy || !dirty} onClick={onSave}>Save</Button>}>
-        <div className="stack" style={{ gap: 14 }}>
-          <div className="grid two">
-            <Switch checked={realtime.allow_client_publish !== false} onChange={(v) => setRealtime({ allow_client_publish: v })} label="Clients may publish" hint="Off restricts publishing to servers and flows; clients can still subscribe." />
-            <Field label="Default policy" hint="Used by any channel that matches no rule below.">
-              <PolicyPicker value={realtime.default_policy ?? null} onChange={(v) => setRealtime({ default_policy: v })} policies={policyNames} nullLabel="Default (authenticated)" />
-            </Field>
-          </div>
-          <Section title="Channel rules" description="Matched top to bottom by pattern (supports {{ auth.org }}-style templates and * wildcards).">
-            {rules.length === 0 && <p className="muted" style={{ margin: 0 }}>No rules yet — every channel falls back to the default policy above.</p>}
-            <div className="stack" style={{ gap: 10 }}>
-              {rules.map((rule, i) => (
-                <div key={i} className="card sunken" style={{ padding: 14 }}>
-                  <div className="row" style={{ justifyContent: "space-between", marginBottom: 10, alignItems: "flex-end" }}>
-                    <Field label="Pattern" className="grow"><input value={rule.pattern || ""} onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, pattern: e.target.value } : r)))} placeholder="org:{{ auth.org }}" /></Field>
-                    <IconButton icon="trash" label="Remove rule" onClick={() => setRules(rules.filter((_, j) => j !== i))} />
-                  </div>
-                  <div className="grid two">
-                    <Field label="Subscribe"><PolicyPicker value={rule.subscribe ?? null} onChange={(v) => setRules(rules.map((r, j) => (j === i ? { ...r, subscribe: v } : r)))} policies={policyNames} nullLabel="Default (authenticated)" /></Field>
-                    <Field label="Publish"><PolicyPicker value={rule.publish ?? null} onChange={(v) => setRules(rules.map((r, j) => (j === i ? { ...r, publish: v } : r)))} policies={policyNames} nullLabel="Default (authenticated)" /></Field>
-                  </div>
-                  <div className="grid two mt-field">
-                    <Switch checked={rule.presence !== false} onChange={(v) => setRules(rules.map((r, j) => (j === i ? { ...r, presence: v } : r)))} label="Presence" />
-                    <Field label="History depth" hint="Messages kept for late subscribers."><input type="number" min={0} max={1000} value={rule.history ?? 50} onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, history: Number(e.target.value) || 0 } : r)))} /></Field>
-                  </div>
-                </div>
-              ))}
-            </div>
+  const sections = [
+    ["docs", "API documentation", "Control public OpenAPI access"],
+    ["cors", "CORS", "Configure browser origins"],
+    ["realtime", "Realtime", "Set channel and policy rules"],
+    ["custom", "Custom settings", "Add project-specific values"],
+  ];
+  const title = sections.find(([key]) => key === active)?.[1];
+  return <div className="stack lg">
+    <div style={{ display: "flex", gap: 18, alignItems: "flex-start" }}>
+      <nav className="card" style={{ width: 230, flexShrink: 0, padding: 8 }} aria-label="Settings sections">
+        {sections.map(([key, label, description]) => <button key={key} type="button" onClick={() => setActive(key)} style={{ width: "100%", textAlign: "left", border: 0, borderRadius: 8, padding: "11px 10px", background: active === key ? "var(--accent-soft)" : "transparent", color: "inherit", cursor: "pointer" }}><b style={{ display: "block", fontSize: 13 }}>{label}</b><span className="hint" style={{ fontSize: 11 }}>{description}</span></button>)}
+      </nav>
+      <Card title={title} actions={<Button variant="primary" size="sm" disabled={busy || !dirty} onClick={onSave}>Save changes</Button>} className="grow">
+        {active === "docs" && <Switch checked={!!settings.public_docs} onChange={(v) => set({ public_docs: v })} label="Publish generated API docs" hint="Makes the OpenAPI reference public at /docs/v1. Operators can always see it from Studio either way." />}
+        {active === "cors" && <Field label="Allowed browser origins" hint="Sites allowed to call the gateway with a publishable key from JavaScript. Leave empty to allow none."><TagInput value={settings.cors_origins || []} onChange={(v) => set({ cors_origins: v })} placeholder="https://app.example.com" /></Field>}
+        {active === "custom" && <Field label="Project values" hint="Extra keys flows and policies can read as $settings.<key>. They are not platform configuration."><KeyValue value={custom} onChange={setCustom} keyLabel="Key" valueLabel="Value" addLabel="Add setting" /></Field>}
+        {active === "realtime" && <div className="stack" style={{ gap: 16 }}>
+          <Switch checked={realtime.allow_client_publish !== false} onChange={(v) => setRealtime({ allow_client_publish: v })} label="Clients may publish" hint="Off restricts publishing to servers and flows; clients can still subscribe." />
+          <Field label="Default policy" hint="Used by any channel that matches no rule below."><PolicyPicker value={realtime.default_policy ?? null} onChange={(v) => setRealtime({ default_policy: v })} policies={policyNames} nullLabel="Default (authenticated)" /></Field>
+          <Section title="Channel rules" description="Rules are matched top to bottom. Patterns support {{ auth.org }} templates and * wildcards.">
+            {rules.length === 0 && <p className="muted" style={{ margin: 0 }}>No rules yet — every channel uses the default policy.</p>}
+            <div className="stack" style={{ gap: 10 }}>{rules.map((rule, i) => <div key={i} className="card sunken" style={{ padding: 14 }}>
+              <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-end" }}><Field label="Pattern" className="grow"><input value={rule.pattern || ""} onChange={(e) => setRules(rules.map((r, j) => j === i ? { ...r, pattern: e.target.value } : r))} placeholder="org:{{ auth.org }}" /></Field><IconButton icon="trash" label="Remove rule" onClick={() => setRules(rules.filter((_, j) => j !== i))} /></div>
+              <div className="stack" style={{ gap: 10 }}><Field label="Subscribe"><PolicyPicker value={rule.subscribe ?? null} onChange={(v) => setRules(rules.map((r, j) => j === i ? { ...r, subscribe: v } : r))} policies={policyNames} nullLabel="Default (authenticated)" /></Field><Field label="Publish"><PolicyPicker value={rule.publish ?? null} onChange={(v) => setRules(rules.map((r, j) => j === i ? { ...r, publish: v } : r))} policies={policyNames} nullLabel="Default (authenticated)" /></Field><Switch checked={rule.presence !== false} onChange={(v) => setRules(rules.map((r, j) => j === i ? { ...r, presence: v } : r))} label="Presence" /><Field label="History depth" hint="Messages kept for late subscribers."><input type="number" min={0} max={1000} value={rule.history ?? 50} onChange={(e) => setRules(rules.map((r, j) => j === i ? { ...r, history: Number(e.target.value) || 0 } : r))} /></Field></div>
+            </div>)}</div>
             <Button size="sm" onClick={() => setRules([...rules, { ...BLANK_RULE }])}><Icon name="plus" />Add channel rule</Button>
           </Section>
-        </div>
+        </div>}
       </Card>
-
-      <Card title="Custom settings" actions={<Button variant="primary" size="sm" disabled={busy || !dirty} onClick={onSave}>Save</Button>}>
-        <Field label="Anything else" hint="Extra keys your own flows and policies read as $settings.<key>. Not used by the platform itself.">
-          <KeyValue value={custom} onChange={setCustom} keyLabel="Key" valueLabel="Value" addLabel="Add setting" />
-        </Field>
-      </Card>
-
-      {children}
     </div>
-  );
+    {children}
+  </div>;
 }

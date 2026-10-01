@@ -35,6 +35,7 @@ async def run_flow(
     request_id: str | None = None,
     job_id: str | None = None,
     entry: str | None = None,
+    depth: int = 0,
 ) -> FlowRun:
     """Execute flow *name* and record the run. Raises :class:`FlowError`."""
     flow = state.flows.get(name)
@@ -42,7 +43,7 @@ async def run_flow(
         raise NotFound(f"no flow {name!r}")
     if not flow.enabled:
         raise FlowError(f"flow {name!r} is disabled", status=409, code="disabled")
-    runtime = ApiRuntime(platform, state, auth=auth, request_id=request_id)
+    runtime = ApiRuntime(platform, state, auth=auth, request_id=request_id, depth=depth)
     run = FlowRun(
         flow.definition,
         runtime=runtime,

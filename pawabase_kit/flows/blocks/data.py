@@ -76,6 +76,35 @@ class Pick(Block):
         return BlockResult(output={k: value.get(k) for k in fields if k in value})
 
 
+class RenameFields(Block):
+    """Renames top-level fields on an object or every object in a list."""
+
+    key = "transform.rename"
+    title = "Rename fields"
+    category = "data"
+    config = [
+        {"name": "value", "type": "json", "required": True},
+        {"name": "fields", "type": "json", "required": True, "description": "Map old field names to new field names"},
+    ]
+
+    async def run(self, config, run):
+        value = config.get("value")
+        fields = config.get("fields")
+        if not isinstance(fields, dict):
+            raise FlowError("rename fields needs a field map", code="bad_config")
+
+        def rename(item):
+            if not isinstance(item, dict):
+                raise FlowError("rename fields needs objects", code="not_an_object")
+            output = dict(item)
+            for old, new in fields.items():
+                if old in output:
+                    output[str(new)] = output.pop(old)
+            return output
+
+        return BlockResult(output=[rename(item) for item in value] if isinstance(value, list) else rename(value))
+
+
 class Validate(Block):
     """Validates a value against field definitions. Fails with 422 or follows ``invalid``."""
 
@@ -356,6 +385,129 @@ class Group(Block):
         return BlockResult(output=groups)
 
 
+class Unique(Block):
+    """Removes duplicate list items, optionally using a field or dotted path."""
+
+    key = "transform.unique"
+    title = "Remove duplicates"
+    category = "data"
+    config = [
+        {"name": "value", "type": "json", "required": True},
+        {"name": "field", "type": "string", "description": "Field or dotted path used to identify duplicates"},
+    ]
+
+    async def run(self, config, run):
+        value = config.get("value")
+        if not isinstance(value, list):
+            raise FlowError("remove duplicates needs a list", code="not_a_list")
+        field = config.get("field")
+        seen = set()
+        output = []
+        for item in value:
+            candidate = lookup(item, field) if field else item
+            try:
+                key = json.dumps(candidate, sort_keys=True, default=str)
+            except (TypeError, ValueError):
+                key = repr(candidate)
+            if key not in seen:
+                seen.add(key)
+                output.append(item)
+        return BlockResult(output=output)
+
+
+class Summarize(Block):
+    """Summarizes a list, optionally once per group."""
+
+    key = "transform.summarize"
+    title = "Summarize list"
+    category = "data"
+    config = [
+        {"name": "value", "type": "json", "required": True},
+        {
+            "name": "operation",
+            "type": "string",
+            "enum": [
+                "count", "count_distinct", "sum", "average", "min", "max", "median",
+                "mode", "first", "last", "collect", "distinct",
+            ],
+            "required": True,
+            "description": "The aggregation to calculate",
+        },
+        {"name": "field", "type": "string", "description": "Field or dotted path to summarize"},
+        {"name": "group_by", "type": "string", "description": "Field or dotted path to group by"},
+        {"name": "ignore_null", "type": "boolean", "default": True},
+    ]
+
+    async def run(self, config, run):
+        value = config.get("value")
+        if not isinstance(value, list):
+            raise FlowError("summarize needs a list", code="not_a_list")
+        field = config.get("field")
+        operation = config.get("operation")
+        ignore_null = config.get("ignore_null", True)
+
+        def values(items):
+            result = [lookup(item, field) if field else item for item in items]
+            return [item for item in result if item is not None] if ignore_null else result
+
+        def identity(item):
+            try:
+                return json.dumps(item, sort_keys=True, default=str)
+            except (TypeError, ValueError):
+                return repr(item)
+
+        def summarize(items):
+            extracted = values(items)
+            if operation == "count":
+                return len(extracted) if field and ignore_null else len(items)
+            if operation in {"count_distinct", "distinct"}:
+                unique = list(dict.fromkeys(identity(item) for item in extracted))
+                if operation == "count_distinct":
+                    return len(unique)
+                seen = set()
+                return [item for item in extracted if not (identity(item) in seen or seen.add(identity(item)))]
+            if operation == "collect":
+                return extracted
+            if operation in {"first", "last"}:
+                if not extracted:
+                    return None
+                return extracted[0] if operation == "first" else extracted[-1]
+            try:
+                numbers = [float(item) for item in extracted]
+            except (TypeError, ValueError) as exc:
+                raise FlowError(f"{operation} needs numeric values", code="not_a_number") from exc
+            if not numbers:
+                return None
+            if operation == "sum":
+                result = sum(numbers)
+            elif operation == "average":
+                result = sum(numbers) / len(numbers)
+            elif operation == "min":
+                result = min(numbers)
+            elif operation == "max":
+                result = max(numbers)
+            elif operation == "median":
+                ordered = sorted(numbers)
+                middle = len(ordered) // 2
+                result = ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2
+            elif operation == "mode":
+                counts: dict[float, int] = {}
+                for number in numbers:
+                    counts[number] = counts.get(number, 0) + 1
+                result = max(numbers, key=lambda number: counts[number])
+            else:
+                raise FlowError(f"unknown summary operation {operation!r}", code="bad_config")
+            return int(result) if isinstance(result, float) and result.is_integer() else result
+
+        group_by = config.get("group_by")
+        if not group_by:
+            return BlockResult(output=summarize(value))
+        groups: dict[str, list[Any]] = {}
+        for item in value:
+            groups.setdefault(str(lookup(item, group_by)), []).append(item)
+        return BlockResult(output={key: summarize(items) for key, items in groups.items()})
+
+
 class Batch(Block):
     """Splits a list into bounded batches for downstream processing."""
 
@@ -377,10 +529,58 @@ class Batch(Block):
         return BlockResult(output=[value[index : index + size] for index in range(0, len(value), size)])
 
 
+class Flatten(Block):
+    """Flattens nested lists by a selected number of levels."""
+
+    key = "transform.flatten"
+    title = "Flatten list"
+    category = "data"
+    config = [
+        {"name": "value", "type": "json", "required": True},
+        {"name": "depth", "type": "integer", "default": 1, "minimum": 1, "maximum": 20},
+    ]
+
+    async def run(self, config, run):
+        value = config.get("value")
+        if not isinstance(value, list):
+            raise FlowError("flatten needs a list", code="not_a_list")
+        depth = int(config.get("depth") or 1)
+        if not 1 <= depth <= 20:
+            raise FlowError("flatten depth must be between 1 and 20", code="bad_config")
+        output = value
+        for _ in range(depth):
+            output = [child for item in output for child in (item if isinstance(item, list) else [item])]
+        return BlockResult(output=output)
+
+
+class Slice(Block):
+    """Selects a window of a list for paging or limiting results."""
+
+    key = "transform.slice"
+    title = "Slice list"
+    category = "data"
+    config = [
+        {"name": "value", "type": "json", "required": True},
+        {"name": "offset", "type": "integer", "default": 0},
+        {"name": "limit", "type": "integer", "description": "Maximum number of items"},
+    ]
+
+    async def run(self, config, run):
+        value = config.get("value")
+        if not isinstance(value, list):
+            raise FlowError("slice needs a list", code="not_a_list")
+        offset = int(config.get("offset") or 0)
+        limit = config.get("limit")
+        if offset < 0 or (limit is not None and int(limit) < 0):
+            raise FlowError("slice offset and limit cannot be negative", code="bad_config")
+        return BlockResult(output=value[offset:] if limit is None else value[offset : offset + int(limit)])
+
+
 BLOCKS = [
     Transform,
     Template,
     Pick,
+    RenameFields,
     Validate,
     JsonParse,
     JsonStringify,
@@ -391,5 +591,9 @@ BLOCKS = [
     Filter,
     Sort,
     Group,
+    Unique,
+    Summarize,
     Batch,
+    Flatten,
+    Slice,
 ]

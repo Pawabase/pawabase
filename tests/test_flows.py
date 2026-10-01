@@ -43,6 +43,9 @@ class FakeRuntime(BaseRuntime):
     async def log(self, level, message, data=None):
         pass
 
+    async def call_flow(self, flow, input):
+        return {"flow": flow, "input": input}
+
 
 def test_builtin_catalogue_is_substantial():
     registry = default_registry()
@@ -128,6 +131,18 @@ async def test_loop_variables_and_cache():
     assert runtime.cache["total"] == 12
 
 
+async def test_call_flow_returns_the_child_result():
+    flow = {
+        "nodes": [
+            node("start", "trigger.manual"),
+            node("child", "flow.call", flow="calculate_tax", input={"amount": "{{ input.amount }}"}),
+        ],
+        "edges": [edge("start", "child")],
+    }
+    run = await run_flow(flow, runtime=FakeRuntime(), input={"amount": 125})
+    assert run.result() == {"flow": "calculate_tax", "input": {"amount": 125}}
+
+
 async def test_error_branch_and_unavailable_capability():
     flow = {
         "nodes": [
@@ -201,6 +216,103 @@ async def test_collection_blocks_filter_sort_group_and_batch():
         [{"name": "b", "score": 12, "team": "blue"}],
         [{"name": "c", "score": 20, "team": "red"}],
     ]
+
+
+async def test_summarize_list_supports_aggregates_and_groups():
+    flow = {
+        "nodes": [
+            node("start", "trigger.manual"),
+            node("count", "transform.summarize", value="{{ input.items }}", operation="count"),
+            node(
+                "totals",
+                "transform.summarize",
+                value="{{ input.items }}",
+                operation="sum",
+                field="amount",
+                group_by="team",
+            ),
+            node(
+                "median",
+                "transform.summarize",
+                value="{{ input.items }}",
+                operation="median",
+                field="amount",
+            ),
+            node(
+                "distinct",
+                "transform.summarize",
+                value="{{ input.items }}",
+                operation="count_distinct",
+                field="team",
+            ),
+        ],
+        "edges": [
+            edge("start", "count"), edge("count", "totals"), edge("totals", "median"), edge("median", "distinct")
+        ],
+    }
+    run = await run_flow(
+        flow,
+        runtime=FakeRuntime(),
+        input={
+            "items": [
+                {"team": "blue", "amount": 10},
+                {"team": "blue", "amount": 20},
+                {"team": "red", "amount": 30},
+                {"team": "red", "amount": 40},
+            ]
+        },
+    )
+    assert run.state["steps"]["count"]["output"] == 4
+    assert run.state["steps"]["totals"]["output"] == {"blue": 30, "red": 70}
+    assert run.state["steps"]["median"]["output"] == 25
+    assert run.state["steps"]["distinct"]["output"] == 2
+
+
+async def test_list_and_object_transforms():
+    flow = {
+        "nodes": [
+            node("start", "trigger.manual"),
+            node("unique", "transform.unique", value="{{ input.items }}", field="email"),
+            node("slice", "transform.slice", value="{{ steps.unique.output }}", offset=1, limit=1),
+            node("rename", "transform.rename", value="{{ steps.slice.output }}", fields={"name": "full_name"}),
+            node("flatten", "transform.flatten", value="{{ input.nested }}", depth=2),
+        ],
+        "edges": [
+            edge("start", "unique"), edge("unique", "slice"), edge("slice", "rename"), edge("rename", "flatten")
+        ],
+    }
+    run = await run_flow(
+        flow,
+        runtime=FakeRuntime(),
+        input={
+            "items": [
+                {"email": "a@example.com", "name": "Ada"},
+                {"email": "a@example.com", "name": "Duplicate Ada"},
+                {"email": "b@example.com", "name": "Bea"},
+            ],
+            "nested": [[1, 2], [3, [4, 5]]],
+        },
+    )
+    assert run.state["steps"]["unique"]["output"] == [
+        {"email": "a@example.com", "name": "Ada"},
+        {"email": "b@example.com", "name": "Bea"},
+    ]
+    assert run.state["steps"]["rename"]["output"] == [{"email": "b@example.com", "full_name": "Bea"}]
+    assert run.state["steps"]["flatten"]["output"] == [1, 2, 3, 4, 5]
+
+
+async def test_noop_continues_without_changing_state():
+    flow = {
+        "nodes": [
+            node("start", "trigger.manual"),
+            node("nothing", "control.noop"),
+            node("done", "control.set", values={"complete": True}),
+        ],
+        "edges": [edge("start", "nothing"), edge("nothing", "done")],
+    }
+    run = await run_flow(flow, runtime=FakeRuntime())
+    assert run.state["steps"]["nothing"]["output"] is None
+    assert run.state["vars"] == {"complete": True}
 
 
 async def test_timeout_block_uses_timeout_handle():

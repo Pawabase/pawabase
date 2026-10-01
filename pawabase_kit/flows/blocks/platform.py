@@ -341,6 +341,21 @@ class DispatchFlow(Block):
         return BlockResult(output={"job_id": job_id})
 
 
+class CallFlow(Block):
+    """Calls another flow inline and continues with its result."""
+
+    key = "flow.call"
+    title = "Call flow"
+    category = "jobs"
+    config = [
+        {"name": "flow", "type": "string", "required": True},
+        {"name": "input", "type": "json"},
+    ]
+
+    async def run(self, config, run):
+        return BlockResult(output=await run.runtime.call_flow(config["flow"], config.get("input")))
+
+
 class DispatchFunction(Block):
     """Runs a Python function as a background job."""
 
@@ -731,6 +746,7 @@ BLOCKS = [
     CacheInvalidate,
     EmitEvent,
     DispatchFlow,
+    CallFlow,
     DispatchFunction,
     Publish,
     StoragePut,

@@ -192,6 +192,17 @@ class Merge(Block):
         return BlockResult(output=merged)
 
 
+class NoOp(Block):
+    """Continues the flow without changing state or doing work."""
+
+    key = "control.noop"
+    title = "Do nothing"
+    category = "control"
+
+    async def run(self, config, run):
+        return BlockResult(output=None)
+
+
 class Delay(Block):
     """Waits before continuing. Long waits belong in a delayed job instead."""
 
@@ -293,4 +304,4 @@ class Timeout(Block):
         return BlockResult(output=output)
 
 
-BLOCKS = [If, Switch, ForEach, While, SetVariables, Merge, Delay, Stop, Retry, Timeout]
+BLOCKS = [If, Switch, ForEach, While, SetVariables, Merge, NoOp, Delay, Stop, Retry, Timeout]
