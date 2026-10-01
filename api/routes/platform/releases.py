@@ -12,7 +12,13 @@ from sillo.exceptions import HTTPException
 from tortoise.transactions import in_transaction
 
 from app.platform import Platform
-from app.releases import compatibility, snapshot_checksum, snapshot_environment, validate_snapshot
+from app.releases import (
+    apply_snapshot,
+    compatibility,
+    snapshot_checksum,
+    snapshot_environment,
+    validate_snapshot,
+)
 from database.models import ApiVersion, Branch, DefinitionRevision, Deployment, Release
 from routes.common import NAME_PATTERN, OPERATOR, actor, audit, dump, get_environment
 
@@ -22,7 +28,13 @@ VERSION_PATTERN = r"^v[1-9][0-9]*$"
 class BranchCreate(BaseModel):
     name: str = Field(pattern=NAME_PATTERN)
     from_revision: str | None = None
+    from_branch: str | None = Field(default=None, pattern=NAME_PATTERN)
     protected: bool = False
+
+
+class BranchMerge(BaseModel):
+    target: str = Field(default="main", pattern=NAME_PATTERN)
+    force: bool = False
 
 
 class RevisionCreate(BaseModel):
@@ -66,6 +78,18 @@ async def _release_snapshot(release_id: str | None, environment_id: int):
     return revision.snapshot if revision else None
 
 
+async def _branch_snapshot(environment, branch: Branch) -> dict:
+    """The definitions a branch owns at this moment.
+
+    ``main`` intentionally remains the environment's live working tree. Every
+    other branch gets its own stored draft and never reads from live rows after
+    creation.
+    """
+    if branch.name == "main":
+        return await snapshot_environment(environment)
+    return dict(branch.draft or {"format": 1, "definitions": {}})
+
+
 def register(r: Router, platform: Platform) -> None:
     prefix = "/projects/{ref}/envs/{env}"
 
@@ -79,21 +103,71 @@ def register(r: Router, platform: Platform) -> None:
         environment = await get_environment(ref, env)
         if await Branch.filter(environment=environment, name=body.name).exists():
             raise HTTPException(status_code=409, detail=f"branch {body.name!r} already exists")
-        if (
-            body.from_revision
-            and not await DefinitionRevision.filter(
-                id=body.from_revision, environment=environment
-            ).exists()
-        ):
-            raise HTTPException(status_code=404, detail="the source revision does not exist")
+        if body.from_revision and body.from_branch:
+            raise HTTPException(status_code=422, detail="choose a revision or branch as the source, not both")
+        source = None
+        if body.from_revision:
+            source = await DefinitionRevision.get_or_none(id=body.from_revision, environment=environment)
+            if source is None:
+                raise HTTPException(status_code=404, detail="the source revision does not exist")
+        source_branch = None
+        if body.from_branch:
+            source_branch = await Branch.get_or_none(environment=environment, name=body.from_branch)
+            if source_branch is None:
+                raise HTTPException(status_code=404, detail=f"source branch {body.from_branch!r} does not exist")
+        # A new branch starts as an isolated copy. Its subsequent definition
+        # edits belong to this snapshot, never to the environment's live tree.
+        draft = dict(source.snapshot) if source else (await _branch_snapshot(environment, source_branch) if source_branch else await snapshot_environment(environment))
         branch = await Branch.create(
             environment=environment,
             name=body.name,
-            head_revision_id=body.from_revision,
+            head_revision_id=body.from_revision or (source_branch.head_revision_id if source_branch else None),
+            draft=draft,
+            base_snapshot=dict(draft),
+            changes=[],
             protected=body.protected,
         )
         await audit(ctx, "branch.created", project=ref, env=env, target=body.name)
         return created(dump(branch))
+
+    @r.get(prefix + "/branches/{branch_name}/draft", auth=OPERATOR, tags=["releases"])
+    async def branch_draft(ctx: HttpContext, ref: str, env: str, branch_name: str):
+        """Read the isolated working tree used when a branch is checked out."""
+        environment = await get_environment(ref, env)
+        branch = await Branch.get_or_none(environment=environment, name=branch_name)
+        if branch is None:
+            raise HTTPException(status_code=404, detail=f"branch {branch_name!r} does not exist")
+        return {"branch": dump(branch), "snapshot": await _branch_snapshot(environment, branch)}
+
+    @r.post(prefix + "/branches/{branch_name}/merge", auth=OPERATOR, tags=["releases"], request_model=BranchMerge)
+    async def merge_branch(ctx: HttpContext, ref: str, env: str, branch_name: str, body: BranchMerge):
+        """Merge a feature branch only when its target has not diverged.
+
+        A divergent target is rejected rather than silently overwriting another
+        author's definitions; callers can inspect the two drafts and retry
+        with ``force`` only when that replacement is intentional.
+        """
+        environment = await get_environment(ref, env)
+        source = await Branch.get_or_none(environment=environment, name=branch_name)
+        if source is None or source.name == "main":
+            raise HTTPException(status_code=404, detail="choose an existing non-main source branch")
+        target = await Branch.get_or_none(environment=environment, name=body.target)
+        if body.target != "main" and target is None:
+            raise HTTPException(status_code=404, detail=f"target branch {body.target!r} does not exist")
+        current = await snapshot_environment(environment) if body.target == "main" else await _branch_snapshot(environment, target)
+        if not body.force and snapshot_checksum(current) != snapshot_checksum(source.base_snapshot or {}):
+            raise HTTPException(status_code=409, detail="target has changed since this branch was created; resolve or force the merge")
+        if body.target == "main":
+            await apply_snapshot(environment, source.draft)
+            platform.envs.forget(ref)
+        else:
+            target.draft = dict(source.draft)
+            target.base_snapshot = dict(current)
+            await target.save(update_fields=["draft", "base_snapshot"])
+        source.changes = [*list(source.changes or []), {"action": "merged", "target": body.target, "actor": actor(ctx), "at": datetime.now(UTC).isoformat()}]
+        await source.save(update_fields=["changes"])
+        await audit(ctx, "branch.merged", project=ref, env=env, target=branch_name, details={"target": body.target, "force": body.force})
+        return {"source": branch_name, "target": body.target, "merged": True}
 
     @r.get(prefix + "/revisions", auth=OPERATOR, tags=["releases"])
     async def list_revisions(ctx: HttpContext, ref: str, env: str):
@@ -126,7 +200,7 @@ def register(r: Router, platform: Platform) -> None:
                     status_code=404, detail=f"branch {branch_name!r} does not exist"
                 )
             branch = await Branch.create(environment=environment, name="main", protected=True)
-        snapshot = await snapshot_environment(environment)
+        snapshot = await _branch_snapshot(environment, branch)
         problems = await validate_snapshot(platform, environment, snapshot)
         last = await DefinitionRevision.filter(environment=environment).order_by("-number").first()
         revision = await DefinitionRevision.create(

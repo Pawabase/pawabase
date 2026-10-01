@@ -4,7 +4,7 @@ import {
   addEdge, useEdgesState, useNodesState, useReactFlow,
 } from "@xyflow/react";
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
-import Layout from "../../components/Layout";
+import Layout, { envHref } from "../../components/Layout";
 import { Badge, Button, Field, Json, JsonInput, Tabs, useAction } from "../../components/ui";
 import { envPath, post, put } from "../../lib/api";
 
@@ -94,14 +94,14 @@ function Editor({ project, env, flow, blocks }) {
   const save = async () => {
     const body = { ...meta, timeout: Number(meta.timeout), definition: definition() };
     const result = await run(() => (isNew ? post(base, body) : put(`${base}/${flow.name}`, body)), "Flow saved");
-    if (result && isNew) router.visit(`/projects/${project.ref}/${env}/flows/${result.name}`);
+    if (result && isNew) router.visit(envHref(project.ref, env, "flows", result.name));
   };
 
   const selectedNode = nodes.find((n) => n.id === selected);
   const nodeTypes = useMemo(() => ({ block: BlockNode }), []);
 
   return (
-    <Layout title={meta.name || "New flow"} crumbs={[<a key="f" href={`/projects/${project.ref}/${env}/flows`}>flows</a>, meta.name || "new"]} full>
+    <Layout title={meta.name || "New flow"} crumbs={[<a key="f" href={envHref(project.ref, env, "flows")}>flows</a>, meta.name || "new"]} full>
       <BlocksContext.Provider value={{ byKey, trace }}>
         <div className="flow-shell">
           <Palette blocks={blocks} onAdd={addBlock} />

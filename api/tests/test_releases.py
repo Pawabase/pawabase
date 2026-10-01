@@ -76,3 +76,49 @@ async def test_versioned_releases_and_rollback(api):
     assert (await api.http.get("/rest/v2/widgets", headers=headers)).status_code == 200
     deployments = (await api.studio.get(f"{ENV}/deployments"))["data"]
     assert [item["action"] for item in deployments][:2] == ["rolled_back", "activated"]
+
+
+async def test_feature_branch_definition_edits_are_isolated_until_merge(api):
+    await api.studio.post(
+        "/platform/v1/projects",
+        json={"ref": "branching", "name": "Branching", "environments": ["development"]},
+    )
+    env = "/platform/v1/projects/branching/envs/development"
+    flow = {
+        "name": "notify",
+        "description": "main definition",
+        "definition": {"nodes": [{"id": "start", "data": {"block": "trigger.manual", "config": {}}}], "edges": []},
+    }
+    await api.studio.post(f"{env}/flows", json=flow)
+    await api.studio.post(f"{env}/branches", json={"name": "feature-notify"})
+
+    feature = {**flow, "description": "feature definition"}
+    await api.studio.put(f"{env}/flows/notify", json=feature, params={"branch": "feature-notify"})
+
+    assert (await api.studio.get(f"{env}/flows/notify"))["description"] == "main definition"
+    assert (
+        await api.studio.get(f"{env}/flows/notify", params={"branch": "feature-notify"})
+    )["description"] == "feature definition"
+    await api.studio.post(
+        f"{env}/branches", json={"name": "feature-copy", "from_branch": "feature-notify"}
+    )
+    assert (
+        await api.studio.get(f"{env}/flows/notify", params={"branch": "feature-copy"})
+    )["description"] == "feature definition"
+
+    route = await api.studio.post(
+        f"{env}/routes",
+        params={"branch": "feature-notify"},
+        json={"method": "POST", "path": "/notify", "handler_type": "flow", "handler": "notify"},
+    )
+    assert route["id"] < 0
+    assert (await api.studio.get(f"{env}/routes"))["data"] == []
+    assert (await api.studio.get(f"{env}/routes/{route['id']}", params={"branch": "feature-notify"}))["path"] == "/notify"
+
+    revision = await api.studio.post(
+        f"{env}/branches/feature-notify/revisions", json={"message": "feature work"}
+    )
+    assert revision["branch"] == "feature-notify"
+    await api.studio.post(f"{env}/branches/feature-notify/merge", json={"target": "main"})
+    assert (await api.studio.get(f"{env}/flows/notify"))["description"] == "feature definition"
+    assert (await api.studio.get(f"{env}/routes"))["data"][0]["path"] == "/notify"

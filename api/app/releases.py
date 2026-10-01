@@ -174,6 +174,20 @@ async def snapshot_environment(environment: Environment) -> dict[str, Any]:
     return result
 
 
+async def apply_snapshot(environment: Environment, snapshot: dict[str, Any]) -> None:
+    """Replace the live definition tree with an explicitly merged snapshot.
+
+    This is intentionally only called by an explicit branch merge. It never
+    runs while saving a definition in a feature branch.
+    """
+    definitions = snapshot.get("definitions") or {}
+    for kind, (model, columns) in DEFINITIONS.items():
+        await model.filter(environment_id=environment.id).delete()
+        for source in definitions.get(kind, []):
+            values = {key: _json_value(source.get(key)) for key in columns if key != "id" and key in source}
+            await model.create(environment=environment, **values)
+
+
 def snapshot_checksum(snapshot: dict[str, Any]) -> str:
     encoded = json.dumps(snapshot, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(encoded.encode()).hexdigest()

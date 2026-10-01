@@ -1,6 +1,6 @@
 import { Link, router } from "@inertiajs/react";
 import { useState } from "react";
-import Layout from "../../components/Layout";
+import Layout, { envHref } from "../../components/Layout";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, Json, Loading, PageHead, Sheet, Status, Table, when } from "../../components/ui";
 import { envPath, useApi } from "../../lib/api";
@@ -9,7 +9,7 @@ export default function Flows({ project, env }) {
   const base = envPath(project.ref, env);
   const flows = useApi(`${base}/flows`);
   const [runsOpen, setRunsOpen] = useState(false);
-  const editor = (name) => `/projects/${project.ref}/${env}/flows/${name}`;
+  const editor = (name) => envHref(project.ref, env, "flows", name);
   return (
     <Layout title="Flows">
       <PageHead

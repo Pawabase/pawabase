@@ -7,6 +7,13 @@ function xsrf() {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
+function workingBranch(path, service) {
+  if (service !== "platform" || !path.startsWith("/projects/")) return undefined;
+  const match = path.match(/^\/projects\/([^/]+)\/envs\/([^/]+)/);
+  if (!match) return undefined;
+  try { return localStorage.getItem(`pawabase.branch.${match[1]}.${match[2]}`) || "main"; } catch { return "main"; }
+}
+
 export class ApiError extends Error {
   constructor(status, body) {
     super(describe(body) || `Request failed (${status})`);
@@ -25,7 +32,8 @@ function describe(body) {
 }
 
 export async function api(method, path, body, { service = "platform", params } = {}) {
-  const query = params ? "?" + new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")) : "";
+  const allParams = { ...(params || {}), ...(workingBranch(path, service) ? { branch: workingBranch(path, service) } : {}) };
+  const query = Object.keys(allParams).length ? "?" + new URLSearchParams(Object.entries(allParams).filter(([, v]) => v !== undefined && v !== null && v !== "")) : "";
   const response = await fetch(`/studio/api/${service}${path}${query}`, {
     method,
     credentials: "same-origin",

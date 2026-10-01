@@ -26,9 +26,9 @@ class ApiSettings(PlatformSettings):
     """
 
     service_name: str = "api"
-    database_url: str = "sqlite://storage/api.db"
+    database_url: str = "postgres://pawabase:pawabase@127.0.0.1:5432/pawabase"
     db_generate_schemas: bool = False
-    default_data_url: str = "sqlite://storage/data/{project}__{env}.db"
+    default_data_url: str = "postgres://pawabase:pawabase@127.0.0.1:5432/pawabase"
     storage_root: str = "storage/objects"
     code_path: str = "code"
     public_url: str = "http://127.0.0.1:8080"

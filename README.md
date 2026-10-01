@@ -82,9 +82,10 @@ curl -X POST http://localhost:8080/auth/v1/signup -H "apikey: <publishable key>"
   -H "content-type: application/json" -d '{"email":"ada@example.com","password":"Str0ng!pass"}'
 ```
 
-The bundled Postgres holds the platform's own data, with one database each for the API and
-Akountz. Redis carries the queue, events, cache and rate limits. Each environment's resource
-data goes wherever you point it (Studio → Settings → Infrastructure → `database_url`). The
+The bundled Postgres holds the platform's own data, Akountz, and default resource tables.
+Default resource tables are namespaced by project and environment; configure
+`database_url` in Studio → Settings → Infrastructure when an environment should use its own
+database. Redis carries the queue, events, cache and rate limits. The
 same goes for storage (local or any S3-compatible service) and mail (SMTP). Reference
 credentials as `secret://NAME` so they are stored encrypted.
 

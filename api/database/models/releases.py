@@ -17,6 +17,13 @@ class Branch(Model):
     )
     name = fields.CharField(max_length=63)
     head_revision_id = fields.CharField(max_length=32, null=True)
+    #: Mutable definition snapshot for an isolated working branch. ``main``
+    #: continues to use the environment's live definitions.
+    draft = AnyJSONField(default=dict)
+    #: Snapshot the branch started from, used for safe three-way merge checks.
+    base_snapshot = AnyJSONField(default=dict)
+    #: Append-only authoring actions performed against this branch.
+    changes = AnyJSONField(default=list)
     protected = fields.BooleanField(default=False)
 
     class Meta:

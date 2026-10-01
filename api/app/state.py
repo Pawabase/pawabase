@@ -10,7 +10,8 @@ invalidation messages.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+import hashlib
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 from sillo.exceptions import HTTPException
@@ -96,6 +97,22 @@ class EnvironmentState:
             project=self.project_ref, env=self.env_name
         )
 
+    def database_table(self, table: str) -> str:
+        """Physical table name for the default shared Postgres database.
+
+        Docker's resource-data database is shared by all Pawabase
+        environments. Prefixing only its default tables prevents identically
+        named resources in development and production from colliding. An
+        explicitly configured database is owned by the developer, so its
+        declared table name is preserved exactly.
+        """
+        if self.infra.get("database_url") or not self.database_url().startswith(
+            ("postgres://", "postgresql://")
+        ):
+            return table
+        scope = hashlib.sha256(f"{self.project_ref}:{self.env_name}".encode()).hexdigest()[:12]
+        return f"pb_{scope}_{table}"[:63]
+
     async def source(self) -> DataSource:
         return await self.platform.sources.get(
             self.database_url(), alias=f"{self.project_ref}:{self.env_name}"
@@ -108,7 +125,8 @@ class EnvironmentState:
         return spec
 
     async def store(self, name: str) -> ResourceStore:
-        return ResourceStore(await self.source(), self.spec(name))
+        spec = self.spec(name)
+        return ResourceStore(await self.source(), replace(spec, table=self.database_table(spec.table)))
 
     # ── compiled API ─────────────────────────────────────────────────────
 

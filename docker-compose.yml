@@ -24,7 +24,7 @@ x-pawabase: &pawabase
 x-api-env: &api-env
   <<: *env
   PAWABASE_DATABASE_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase
-  PAWABASE_DEFAULT_DATA_URL: ${PAWABASE_DEFAULT_DATA_URL:-sqlite:///data/envs/{project}__{env}.db}
+  PAWABASE_DEFAULT_DATA_URL: ${PAWABASE_DEFAULT_DATA_URL:-postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase}
   PAWABASE_STORAGE_ROOT: /data/objects
   PAWABASE_CODE_PATH: /code
   PAWABASE_INLINE_WORKER: "false"
@@ -141,4 +141,3 @@ volumes:
   postgres:
   redis:
   api-data:
-

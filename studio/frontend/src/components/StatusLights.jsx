@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-// One small light per platform service, checked every 30 seconds.
-// Hover or focus shows each service's state and response time.
+// One compact platform light, checked every 30 seconds. Hover or focus reveals
+// the individual services and their response times.
 
 const LABEL = { up: "Operational", down: "Unreachable", unknown: "Not reporting" };
 
@@ -32,12 +32,13 @@ export default function StatusLights() {
     };
   }, []);
 
-  if (!services) return <div className="lights" aria-hidden="true"><span className="light pending" /><span className="light pending" /><span className="light pending" /></div>;
+  if (!services) return <div className="lights" aria-label="Checking system status"><span className="light pending" /></div>;
   const down = services.filter((s) => s.status === "down").length;
   const summary = down ? `${down} service${down > 1 ? "s" : ""} down` : "All systems operational";
+  const overall = down ? "down" : services.some((s) => s.status !== "up") ? "unknown" : "up";
   return (
     <div className="lights" tabIndex={0} aria-label={summary}>
-      {services.map((s) => <span key={s.name} className={`light ${s.status}`} />)}
+      <span className={`light ${overall}`} />
       <div className="lights-pop" role="tooltip">
         <div className="lights-head">
           <b>{summary}</b>

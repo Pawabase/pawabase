@@ -63,7 +63,6 @@ SECTIONS: dict[str, str] = {
     "events": "Env/Events",
     "realtime": "Env/Realtime",
     "observability": "Env/Observability",
-    "releases": "Env/Releases",
     "explorer": "Env/Explorer",
     "settings": "Env/Settings",
 }
@@ -104,6 +103,14 @@ def register_routes(
         return operator
 
     async def call(ctx: HttpContext, method: str, path: str, **kwargs: Any) -> Any:
+        # Inertia pages are rendered on the server, unlike follow-up browser
+        # requests made through the Studio bridge. Carry the checked-out branch
+        # here too so the first render of an editor cannot accidentally show
+        # main while its saves go to a feature branch.
+        branch = ctx.query_params.get("branch")
+        if branch and path.startswith("/projects/") and "/envs/" in path:
+            separator = "&" if "?" in path else "?"
+            path = f"{path}{separator}branch={quote(branch, safe='')}"
         return await api.request(
             method, "/platform/v1" + path, operator=ctx.scope[OPERATOR_SCOPE], **kwargs
         )
