@@ -343,6 +343,31 @@ async def test_inbound_hooks_verify_signatures(acme):
     assert events[0]["payload"]["body"] == {"amount": 100}
 
 
+async def test_inbound_hooks_verify_paystack_sha512_signatures(acme):
+    api = acme
+    hook = await api.studio.post(
+        f"{ENV}/inbound-hooks",
+        json={
+            "slug": "paystack",
+            "target": "payment.completed",
+            "verification": "hmac-sha512",
+            "signature_header": "x-paystack-signature",
+        },
+    )
+    secret = hook["secret"]
+    body = json.dumps({"event": "charge.success", "data": {"reference": "PAY-1"}}).encode()
+    signature = hmac.new(secret.encode(), body, hashlib.sha512).hexdigest()
+    response = await api.http.post(
+        "/hooks/v1/acme/development/paystack",
+        content=body,
+        headers={"x-paystack-signature": signature, "content-type": "application/json"},
+    )
+    assert response.status_code == 202
+    await api.drain()
+    events = (await api.studio.get(f"{ENV}/events?name=payment.completed"))["data"]
+    assert events[0]["payload"]["body"]["event"] == "charge.success"
+
+
 async def test_storage_with_policies_and_signed_urls(acme):
     api = acme
     await api.studio.post(

@@ -387,7 +387,7 @@ function WebhookForm({ body, patch, refs, isNew }) {
 
 // ── inbound hooks ─────────────────────────────────────────────────────────
 
-const VERIFY = [["hmac-sha256", "HMAC-SHA256"], ["pawabase", "Pawabase signature"], ["token", "Shared token"], ["none", "None"]];
+const VERIFY = [["hmac-sha256", "HMAC-SHA256"], ["hmac-sha512", "HMAC-SHA512"], ["pawabase", "Pawabase signature"], ["token", "Shared token"], ["none", "None"]];
 
 function InboundForm({ body, patch, refs, isNew, project, env }) {
   const verification = body.verification || "hmac-sha256";

@@ -20,8 +20,9 @@ In Studio, go to **Projects → New project → From blueprint**, choose
 two values **once**; copy them:
 
 - the environment's **publishable** and **secret** keys;
-- the **payment-gateway** inbound hook secret. Configure it in your payment
-  provider's dashboard.
+- the Paystack secret key is configured after import as the environment secret
+  **`PAYSTACK_SECRET_KEY`**. It is read only by the checkout flow and is never
+  sent to a browser.
 
 Webhooks (`erp_sync`, `analytics_warehouse`) are imported **switched off**. Point them
 at your own URLs before enabling them.
@@ -96,18 +97,28 @@ An address is
 Order totals are subtotal − discount + shipping + 7.5% VAT; shipping is free
 above the zone's threshold.
 
-**Payment.** Send the shopper to your provider with `payment.reference` and
-`order.total_minor`. The provider calls the **payment-gateway** inbound hook,
-which is HMAC-SHA256 signed in `x-signature`:
+**Payment.** Checkout initializes Paystack server-side and returns
+`payment.authorization_url`, `payment.access_code`, and the unique
+`payment.reference`. Redirect the shopper to `authorization_url` (or use the
+access code with the Paystack client integration); never initialize a
+transaction from the browser because that would expose the secret key. In
+**Operate → Secrets**, set `PAYSTACK_SECRET_KEY`. In **Automate → Inbound hooks →
+Paystack**, set its **Secret** to the same Paystack secret key, then register
+the displayed hook URL in the Paystack dashboard. The hook verifies
+`x-paystack-signature` as HMAC-SHA512 before the payment flow is queued.
+
+Paystack's `charge.success` callback has this shape:
 
 ```json
 { "event": "charge.success",
   "data": { "reference": "<payment.reference>", "amount": 3762500, "fees": 15000, "id": "ch_123", "channel": "card" } }
 ```
 
-The hook marks the payment captured and the order paid, commits stock, updates
-the customer's totals, credits the store's ledger and emails the
-confirmation. Duplicate notifications are ignored. Poll
+The callback marks the payment captured and the order paid, commits stock,
+updates the customer's totals, credits the store's ledger and emails the
+confirmation. Duplicate notifications are ignored. Use the server-side
+Paystack verification endpoint as a recovery path for an interrupted browser
+return; do not mark an order paid solely because a client reports success. Poll
 `/storefront/orders/{reference}` or subscribe to realtime for the result.
 
 ## 4. Merchant dashboard

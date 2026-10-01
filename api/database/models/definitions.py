@@ -244,7 +244,7 @@ class InboundHook(_Definition):
 
     Attributes:
         slug: The URL segment (``/hooks/v1/<slug>``).
-        verification: ``none``, ``hmac-sha256`` or ``token``.
+        verification: ``none``, ``hmac-sha256``, ``hmac-sha512``, ``pawabase`` or ``token``.
         signature_header: Where the signature (or token) arrives.
         target_type: ``event`` (publish ``target``) or ``flow``.
     """

@@ -47,13 +47,19 @@ def verify_signature(
     return hmac.compare_digest(expected, parts.get("v1", ""))
 
 
-def verify_plain_hmac(secret: str, body: bytes, signature: str) -> bool:
-    """Check a bare hex (optionally ``sha256=``-prefixed) HMAC-SHA256 of the body.
+def verify_plain_hmac(secret: str, body: bytes, signature: str, *, algorithm: str = "sha256") -> bool:
+    """Check a bare hex (optionally algorithm-prefixed) HMAC of the body.
 
-    This is the format GitHub, Shopify-style and many other providers send.
+    Providers commonly use either HMAC-SHA256 (GitHub and Shopify-style
+    callbacks) or HMAC-SHA512 (Paystack). The caller selects the algorithm
+    from the persisted inbound-hook verification mode; it is never inferred
+    from an untrusted request header.
     """
-    signature = signature.split("=", 1)[1] if signature.startswith("sha256=") else signature
-    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    if algorithm not in {"sha256", "sha512"}:
+        raise ValueError(f"unsupported HMAC algorithm {algorithm!r}")
+    prefix = f"{algorithm}="
+    signature = signature[len(prefix):] if signature.startswith(prefix) else signature
+    expected = hmac.new(secret.encode(), body, getattr(hashlib, algorithm)).hexdigest()
     return hmac.compare_digest(expected, signature.strip())
 
 

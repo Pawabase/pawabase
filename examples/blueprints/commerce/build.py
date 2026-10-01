@@ -389,7 +389,7 @@ RESOURCES = [
 
     # Money
     resource("payments", "Money received for orders. Written by flows only.", [
-        S, F("order_id", "integer", required=True), F("provider", enum=["gateway", "cash", "bank_transfer", "pos_card", "mobile_money"], required=True),
+        S, F("order_id", "integer", required=True), F("provider", enum=["paystack", "cash", "bank_transfer", "pos_card", "mobile_money"], required=True),
         F("reference", required=True, max_length=64), F("provider_reference", max_length=120), F("currency", enum=CURRENCIES),
         money("amount_minor", required=True), money("provider_fee_minor", default=0), money("platform_fee_minor", default=0),
         money("refunded_minor", default=0), F("status", enum=["pending", "captured", "failed", "refunded", "partially_refunded"], default="pending"),
@@ -780,17 +780,29 @@ FROM cart_items ci JOIN product_variants v ON v.id = ci.variant_id WHERE ci.cart
         "store_id": f"{{{{ {C}.store_id }}}}", "order_id": "{{ steps.order.output.id }}", "user_id": "{{ auth.user_id }}",
         "kind": "placed", "message": "Order placed", "is_customer_visible": True}}),
     ("payment", "resource.create", {"resource": "payments", "data": {
-        "store_id": f"{{{{ {C}.store_id }}}}", "order_id": "{{ steps.order.output.id }}", "provider": "gateway",
+        "store_id": f"{{{{ {C}.store_id }}}}", "order_id": "{{ steps.order.output.id }}", "provider": "paystack",
         "reference": "PAY-{{ steps.ref.output }}", "currency": "{{ steps.store.output.data.0.currency }}",
         "amount_minor": "{{ steps.totals.output.0.total | int }}", "status": "pending"}}),
+    ("paystack_key", "secret.get", {"name": "PAYSTACK_SECRET_KEY", "as": "paystack_secret_key"}),
+    ("paystack_initialize", "http.request", {"method": "POST", "url": "https://api.paystack.co/transaction/initialize",
+        "headers": {"Authorization": "Bearer {{ vars.paystack_secret_key }}", "Content-Type": "application/json"},
+        "body": {"email": "{{ steps.order.output.email }}", "amount": "{{ steps.order.output.total_minor }}",
+                 "currency": "{{ steps.order.output.currency }}", "reference": "{{ steps.payment.output.reference }}"},
+        "timeout": 15, "retries": 2}),
+    ("provider_ok", "control.if", {"condition": {"eq": ["$steps.paystack_initialize.output.body.status", True]}}),
+    err("payment_unavailable", 502, "payment_initialization_failed", "Payment provider could not initialize this order"),
+    ("provider_details", "resource.update", {"resource": "payments", "id": "{{ steps.payment.output.id }}", "data": {
+        "provider_reference": "{{ steps.paystack_initialize.output.body.data.reference }}", "method": "paystack"}}),
     ("convert", "resource.update", {"resource": "carts", "id": f"{{{{ {C}.id }}}}", "data": {"status": "converted", "converted_at": "{{ steps.now.output }}", "customer_id": "{{ vars.customer.id }}"}}),
     ("announce", "event.emit", {"event": "order.placed", "payload": {
         "order_id": "{{ steps.order.output.id }}", "store_id": f"{{{{ {C}.store_id }}}}", "number": "{{ steps.order.output.number }}",
         "cart_id": f"{{{{ {C}.id }}}}", "total_minor": "{{ steps.order.output.total_minor }}", "email": "{{ steps.order.output.email }}"}}),
     ("reply", "response.return", {"status": 201, "body": {
         "order": "{{ steps.order.output }}",
-        "payment": {"reference": "PAY-{{ steps.ref.output }}", "amount_minor": "{{ steps.order.output.total_minor }}",
-                    "currency": "{{ steps.order.output.currency }}", "status": "pending"},
+        "payment": {"provider": "paystack", "reference": "{{ steps.payment.output.reference }}", "amount_minor": "{{ steps.order.output.total_minor }}",
+                    "currency": "{{ steps.order.output.currency }}", "status": "pending",
+                    "authorization_url": "{{ steps.paystack_initialize.output.body.data.authorization_url }}",
+                    "access_code": "{{ steps.paystack_initialize.output.body.data.access_code }}"},
         "shipping": "{{ steps.rate.output.0 }}"}}),
 ], [
     ("http", "cart"), ("cart", "no_cart"), ("no_cart", "missing_cart", "true"), ("no_cart", "closed", "false"),
@@ -801,13 +813,15 @@ FROM cart_items ci JOIN product_variants v ON v.id = ci.variant_id WHERE ci.cart
     ("known", "use_customer", "true"), ("known", "new_customer", "false"), ("new_customer", "use_new"),
     ("use_customer", "now"), ("use_new", "now"), ("now", "ref"), ("ref", "order"), ("order", "each"),
     ("each", "item", "each"), ("item", "tracked"), ("tracked", "reserve_calc", "true"), ("reserve_calc", "reserve"),
-    ("each", "placed", "done"), ("placed", "payment"), ("payment", "convert"), ("convert", "announce"), ("announce", "reply"),
+    ("each", "placed", "done"), ("placed", "payment"), ("payment", "paystack_key"), ("paystack_key", "paystack_initialize"),
+    ("paystack_initialize", "provider_ok"), ("provider_ok", "payment_unavailable", "false"), ("provider_ok", "provider_details", "true"),
+    ("provider_details", "convert"), ("convert", "announce"), ("announce", "reply"),
 ], timeout=120))
 
 # Payments ----------------------------------------------------------------------
 P = "input.event.payload"
-FLOWS.append(flow("payment_gateway", "Inbound hook: a payment provider confirms a charge (charge.success) and the payment is captured once.", [
-    ("hook", "trigger.webhook", {"hook": "payment-gateway"}),
+FLOWS.append(flow("payment_gateway", "Paystack charge.success webhook: records verified payment details and emits an idempotent capture event.", [
+    ("hook", "trigger.webhook", {"hook": "paystack"}),
     ("success", "control.if", {"condition": {"eq": ["$input.body.event", "charge.success"]}}),
     ("find", "resource.list", {"resource": "payments", "filters": {"reference": "{{ input.body.data.reference }}"}, "limit": 1}),
     ("known", "control.if", {"condition": {"truthy": "$steps.find.output.total"}}),
@@ -1508,8 +1522,8 @@ WEBHOOKS = [
 ]
 
 INBOUND = [
-    {"slug": "payment-gateway", "name": "Payment gateway", "description": "Charge confirmations from your payment provider.",
-     "verification": "hmac-sha256", "signature_header": "x-signature", "target_type": "flow", "target": "payment_gateway", "enabled": True},
+    {"slug": "paystack", "name": "Paystack", "description": "Verified Paystack charge.success notifications.",
+     "verification": "hmac-sha512", "signature_header": "x-paystack-signature", "target_type": "flow", "target": "payment_gateway", "enabled": True},
 ]
 
 SCHEDULES = [

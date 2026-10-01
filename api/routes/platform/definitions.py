@@ -170,7 +170,7 @@ class InboundHookBody(BaseModel):
     slug: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{1,62}$")
     name: str = ""
     description: str = ""
-    verification: Literal["none", "hmac-sha256", "pawabase", "token"] = "hmac-sha256"
+    verification: Literal["none", "hmac-sha256", "hmac-sha512", "pawabase", "token"] = "hmac-sha256"
     signature_header: str = "x-signature"
     target_type: Literal["event", "flow"] = "event"
     target: str = Field(min_length=1)

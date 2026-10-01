@@ -39,6 +39,8 @@ def register(app: Any, platform: Platform) -> None:
             provided = ctx.headers.get(hook.signature_header.lower(), "")
             if hook.verification == "hmac-sha256":
                 valid = bool(provided) and verify_plain_hmac(secret, body, provided)
+            elif hook.verification == "hmac-sha512":
+                valid = bool(provided) and verify_plain_hmac(secret, body, provided, algorithm="sha512")
             elif hook.verification == "pawabase":
                 valid = bool(provided) and verify_signature(secret, body, provided)
             else:

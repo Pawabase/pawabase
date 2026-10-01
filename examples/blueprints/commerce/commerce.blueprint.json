@@ -3480,7 +3480,7 @@
             "name": "provider",
             "type": "string",
             "enum": [
-              "gateway",
+              "paystack",
               "cash",
               "bank_transfer",
               "pos_card",
@@ -7809,7 +7809,7 @@
                   "data": {
                     "store_id": "{{ steps.cart.output.data.0.store_id }}",
                     "order_id": "{{ steps.order.output.id }}",
-                    "provider": "gateway",
+                    "provider": "paystack",
                     "reference": "PAY-{{ steps.ref.output }}",
                     "currency": "{{ steps.store.output.data.0.currency }}",
                     "amount_minor": "{{ steps.totals.output.0.total | int }}",
@@ -7819,10 +7819,101 @@
               }
             },
             {
-              "id": "convert",
+              "id": "paystack_key",
               "position": {
                 "x": 360,
                 "y": 3960
+              },
+              "data": {
+                "block": "secret.get",
+                "config": {
+                  "name": "PAYSTACK_SECRET_KEY",
+                  "as": "paystack_secret_key"
+                }
+              }
+            },
+            {
+              "id": "paystack_initialize",
+              "position": {
+                "x": 360,
+                "y": 4110
+              },
+              "data": {
+                "block": "http.request",
+                "config": {
+                  "method": "POST",
+                  "url": "https://api.paystack.co/transaction/initialize",
+                  "headers": {
+                    "Authorization": "Bearer {{ vars.paystack_secret_key }}",
+                    "Content-Type": "application/json"
+                  },
+                  "body": {
+                    "email": "{{ steps.order.output.email }}",
+                    "amount": "{{ steps.order.output.total_minor }}",
+                    "currency": "{{ steps.order.output.currency }}",
+                    "reference": "{{ steps.payment.output.reference }}"
+                  },
+                  "timeout": 15,
+                  "retries": 2
+                }
+              }
+            },
+            {
+              "id": "provider_ok",
+              "position": {
+                "x": 80,
+                "y": 4260
+              },
+              "data": {
+                "block": "control.if",
+                "config": {
+                  "condition": {
+                    "eq": [
+                      "$steps.paystack_initialize.output.body.status",
+                      true
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "id": "payment_unavailable",
+              "position": {
+                "x": 80,
+                "y": 4410
+              },
+              "data": {
+                "block": "error.raise",
+                "config": {
+                  "status": 502,
+                  "code": "payment_initialization_failed",
+                  "message": "Payment provider could not initialize this order"
+                }
+              }
+            },
+            {
+              "id": "provider_details",
+              "position": {
+                "x": 360,
+                "y": 4410
+              },
+              "data": {
+                "block": "resource.update",
+                "config": {
+                  "resource": "payments",
+                  "id": "{{ steps.payment.output.id }}",
+                  "data": {
+                    "provider_reference": "{{ steps.paystack_initialize.output.body.data.reference }}",
+                    "method": "paystack"
+                  }
+                }
+              }
+            },
+            {
+              "id": "convert",
+              "position": {
+                "x": 80,
+                "y": 4560
               },
               "data": {
                 "block": "resource.update",
@@ -7840,8 +7931,8 @@
             {
               "id": "announce",
               "position": {
-                "x": 360,
-                "y": 4110
+                "x": 80,
+                "y": 4710
               },
               "data": {
                 "block": "event.emit",
@@ -7862,7 +7953,7 @@
               "id": "reply",
               "position": {
                 "x": 80,
-                "y": 4260
+                "y": 4860
               },
               "data": {
                 "block": "response.return",
@@ -7871,10 +7962,13 @@
                   "body": {
                     "order": "{{ steps.order.output }}",
                     "payment": {
-                      "reference": "PAY-{{ steps.ref.output }}",
+                      "provider": "paystack",
+                      "reference": "{{ steps.payment.output.reference }}",
                       "amount_minor": "{{ steps.order.output.total_minor }}",
                       "currency": "{{ steps.order.output.currency }}",
-                      "status": "pending"
+                      "status": "pending",
+                      "authorization_url": "{{ steps.paystack_initialize.output.body.data.authorization_url }}",
+                      "access_code": "{{ steps.paystack_initialize.output.body.data.access_code }}"
                     },
                     "shipping": "{{ steps.rate.output.0 }}"
                   }
@@ -8079,8 +8173,35 @@
               "target": "payment"
             },
             {
-              "id": "payment-next-convert",
+              "id": "payment-next-paystack_key",
               "source": "payment",
+              "target": "paystack_key"
+            },
+            {
+              "id": "paystack_key-next-paystack_initialize",
+              "source": "paystack_key",
+              "target": "paystack_initialize"
+            },
+            {
+              "id": "paystack_initialize-next-provider_ok",
+              "source": "paystack_initialize",
+              "target": "provider_ok"
+            },
+            {
+              "id": "provider_ok-false-payment_unavailable",
+              "source": "provider_ok",
+              "target": "payment_unavailable",
+              "sourceHandle": "false"
+            },
+            {
+              "id": "provider_ok-true-provider_details",
+              "source": "provider_ok",
+              "target": "provider_details",
+              "sourceHandle": "true"
+            },
+            {
+              "id": "provider_details-next-convert",
+              "source": "provider_details",
               "target": "convert"
             },
             {
@@ -8101,7 +8222,7 @@
       },
       {
         "name": "payment_gateway",
-        "description": "Inbound hook: a payment provider confirms a charge (charge.success) and the payment is captured once.",
+        "description": "Paystack charge.success webhook: records verified payment details and emits an idempotent capture event.",
         "definition": {
           "nodes": [
             {
@@ -8113,7 +8234,7 @@
               "data": {
                 "block": "trigger.webhook",
                 "config": {
-                  "hook": "payment-gateway"
+                  "hook": "paystack"
                 }
               }
             },
@@ -16478,11 +16599,11 @@
     ],
     "inbound-hooks": [
       {
-        "slug": "payment-gateway",
-        "name": "Payment gateway",
-        "description": "Charge confirmations from your payment provider.",
-        "verification": "hmac-sha256",
-        "signature_header": "x-signature",
+        "slug": "paystack",
+        "name": "Paystack",
+        "description": "Verified Paystack charge.success notifications.",
+        "verification": "hmac-sha512",
+        "signature_header": "x-paystack-signature",
         "target_type": "flow",
         "target": "payment_gateway",
         "enabled": true
