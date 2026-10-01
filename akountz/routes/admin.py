@@ -16,7 +16,7 @@ from sillo.exceptions import HTTPException
 from tortoise.expressions import Q
 from tortoise.functions import Count
 
-from app import mfa, rbac
+from app import backup, mfa, rbac
 from app.accounts import check_password_policy, create_account, get_user, user_view
 from app.environment import load_config
 from app.platform import Akountz
@@ -55,6 +55,12 @@ class RoleBody(BaseModel):
 
 class GrantBody(BaseModel):
     permissions: list[str]
+
+
+class RestoreBody(BaseModel):
+    identities: dict[str, Any]
+    replace: bool = False
+    dry_run: bool = False
 
 
 def register(r: Router, akountz: Akountz) -> None:
@@ -287,6 +293,40 @@ def register(r: Router, akountz: Akountz) -> None:
         if not await rbac.delete_role(project, env, name):
             raise HTTPException(status_code=404, detail="no such role")
         return no_content()
+
+    # ── backup and restore ───────────────────────────────────────────────
+
+    @r.get(
+        f"{base}/backup",
+        auth=SERVICE_ONLY,
+        tags=["admin"],
+        summary="Every role, user (with password hashes), and organization",
+    )
+    async def export_backup(ctx: HttpContext, project: str, env: str):
+        return await backup.export_identities(project, env)
+
+    @r.post(
+        f"{base}/restore",
+        auth=SERVICE_ONLY,
+        tags=["admin"],
+        request_model=RestoreBody,
+        summary="Apply the identities of a backup",
+    )
+    async def restore_backup(ctx: HttpContext, project: str, env: str, body: RestoreBody):
+        document = body.identities
+        if document.get("format") != backup.FORMAT:
+            raise HTTPException(status_code=422, detail="not an identities backup of this version")
+        if body.dry_run:
+            return {"dry_run": True, **backup.counts(document), "replace": body.replace}
+        try:
+            report = await backup.restore_identities(
+                project, env, document, replace=body.replace
+            )
+        except (KeyError, TypeError) as exc:
+            raise HTTPException(
+                status_code=422, detail=f"the backup is malformed: {type(exc).__name__}: {exc}"
+            ) from exc
+        return report
 
     # ── organizations ────────────────────────────────────────────────────
 
