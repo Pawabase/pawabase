@@ -1,6 +1,7 @@
 """Blueprints: export an environment, create a new project from it."""
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -144,3 +145,18 @@ async def test_blueprints_only_create_new_projects(source):
             "/platform/v1/projects", json={"ref": "src", "name": "Overwrite", "blueprint": blueprint}
         )
     assert again.value.status == 409  # an existing project is never touched
+
+
+async def test_peopleops_blueprint_imports(api):
+    """The large reference system stays importable as definitions evolve."""
+    api.platform.akountz = FakeAkountz()
+    path = Path(__file__).parents[2] / "examples/blueprints/peopleops/peopleops.blueprint.json"
+    blueprint = json.loads(path.read_text())
+    created = await api.studio.post(
+        "/platform/v1/projects",
+        json={"ref": "peopleops", "name": "PeopleOps", "environments": ["development"], "blueprint": blueprint},
+    )
+    report = created["blueprint"]
+    assert report["definitions"]["resources"] == 72
+    assert report["definitions"]["flows"] == 18
+    assert report["roles"] == 16
