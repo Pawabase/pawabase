@@ -1,9 +1,9 @@
 import pytest
 from pydantic import ValidationError
 
-from pawabase_kit.schemas import SchemaError, compile_model, compile_schemas, validate_payload
-from pawabase_kit.templating import render
-from pawabase_kit.transformers import (
+from pawabase_core.schemas import SchemaError, compile_model, compile_schemas, validate_payload
+from pawabase_core.templating import render
+from pawabase_core.transformers import (
     TransformerError,
     apply_transformer,
     transformer,

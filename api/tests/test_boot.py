@@ -19,7 +19,7 @@ async def test_updates_of_existing_rows(api):
     from datetime import UTC, datetime
 
     from database.models import Secret, WorkerHeartbeat
-    from pawabase_kit.records import upsert
+    from pawabase_core.records import upsert
 
     for processed in (1, 2):
         await upsert(WorkerHeartbeat, name="w1", defaults={"kind": "worker", "queues": [], "status": "running", "started_at": datetime.now(UTC), "last_seen": datetime.now(UTC), "processed": processed, "concurrency": 1})
@@ -64,7 +64,7 @@ async def test_deploy_preview_is_an_expiring_isolated_environment(api):
 
 
 async def test_api_key_restrictions_are_resolved_for_the_gateway(api, settings):
-    from pawabase_kit.clients import ServiceClient
+    from pawabase_core.clients import ServiceClient
 
     await api.studio.post(
         "/platform/v1/projects", json={"ref": "restricted", "name": "Restricted"}

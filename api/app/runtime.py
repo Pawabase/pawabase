@@ -1,7 +1,7 @@
 """The capabilities flows and functions call, backed by Sillo.
 
 :class:`ApiRuntime` is the API's implementation of
-:class:`pawabase_kit.flows.Runtime`. Each method lands on a platform service:
+:class:`pawabase_core.flows.Runtime`. Each method lands on a platform service:
 Resource stores for data, ``sillo.cache`` for caching, ``sillo.events`` for
 events, ``sillo.work`` for jobs, Angula for realtime, ``sillo.storage`` for
 files, ``sillo.mail`` for email, and the environment's secrets.
@@ -27,10 +27,10 @@ from app.data.inspect import is_read_only
 from app.data.store import Filter
 from app.platform import Platform
 from app.state import EnvironmentState
-from pawabase_kit.flows import BaseRuntime, FlowError, NotAvailable
-from pawabase_kit.flows.engine import observable
-from pawabase_kit.functions import FunctionContext, get_function
-from pawabase_kit.policies.engine import evaluate
+from pawabase_core.flows import BaseRuntime, FlowError, NotAvailable
+from pawabase_core.flows.engine import observable
+from pawabase_core.functions import FunctionContext
+from pawabase_core.policies.engine import evaluate
 
 logger = logging.getLogger("pawabase.flow")
 
@@ -46,8 +46,10 @@ class ApiRuntime(BaseRuntime):
         auth: Mapping[str, Any] | None = None,
         request_id: str | None = None,
         depth: int = 0,
+        branch: str | None = None,
     ) -> None:
         self.platform = platform
+        self.branch = branch
         self.state = state
         self.auth = dict(auth or {})
         self.request_id = request_id
@@ -131,6 +133,18 @@ class ApiRuntime(BaseRuntime):
         return await asyncio.wait_for(
             source.fetch(sql, list(params or [])), timeout=self.platform.settings.query_timeout
         )
+
+    async def db(self):
+        """A SQL session on the environment's database (see :class:`app.data.session.DbSession`)."""
+        from app.data.session import DbSession
+
+        return DbSession(await self.state.source(), self.state.specs)
+
+    def transaction(self):
+        """``async with runtime.transaction() as db``: one atomic unit of SQL."""
+        from app.data.session import Transaction
+
+        return Transaction(self.state)
 
     async def db_transaction(self, operations):
         from app.resources import after_write
@@ -239,7 +253,7 @@ class ApiRuntime(BaseRuntime):
     async def dispatch_function(self, function, input, *, delay=0, queue=None):
         from app.jobs.functions import RunFunctionJob
 
-        if get_function(self.state.project_ref, function) is None:
+        if self.platform.function_spec(self.state.project_ref, self.state.env_name, function, self.branch) is None:
             raise FlowError(f"no function {function!r}", code="unknown_function")
         return await self.platform.dispatch(
             RunFunctionJob,
@@ -249,6 +263,7 @@ class ApiRuntime(BaseRuntime):
             delay=delay,
             target=function,
             function=function,
+            branch=self.branch,
             input=input,
             trigger="job",
             auth=self.auth,
@@ -353,11 +368,12 @@ class ApiRuntime(BaseRuntime):
             trigger="flow",
             auth=self.auth,
             depth=self.depth + 1,
+            branch=self.branch,
         )
 
     async def identity_user(self, user_id):
-        from pawabase_kit.clients import ServiceError
-        from pawabase_kit.context import PlatformContext
+        from pawabase_core.clients import ServiceError
+        from pawabase_core.context import PlatformContext
 
         context = PlatformContext(
             project=self.state.project_ref, env=self.state.env_name, role="service"
@@ -374,7 +390,7 @@ class ApiRuntime(BaseRuntime):
         return decision.allowed
 
     async def log(self, level, message, data=None):
-        from pawabase_kit.telemetry import note
+        from pawabase_core.telemetry import note
 
         entry = observable(
             data
@@ -416,6 +432,7 @@ def function_context(
         env=runtime.state.env_name,
         runtime=runtime,
         trigger=trigger,
+        branch=runtime.branch or "main",
     )
 
 

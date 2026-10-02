@@ -4,7 +4,17 @@ version = "0.1.0"
 description = "Pawabase: a self-hostable backend platform built on Sillo. Bring your infrastructure, build your backend."
 requires-python = ">=3.11"
 license = "BSD-3-Clause"
-dependencies = []
+dependencies = ["httpx>=0.27"]
+
+[project.scripts]
+pawabase = "pawabase.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pawabase"]
 
 [dependency-groups]
 dev = [
@@ -13,9 +23,6 @@ dev = [
     "ruff>=0.6",
     "fakeredis[lua]>=2.26",
 ]
-
-[tool.uv]
-package = false
 
 [tool.uv.workspace]
 members = [
@@ -26,9 +33,8 @@ members = [
     "studio",
 ]
 
-# pawabase_kit/ is not a package: a plain directory of code shared by the
-# services. Each service puts the repo root on its path (see its pytest
-# config, docker/entrypoint.sh and scripts/dev.sh) and imports it by name.
+# ``pawabase_core`` is private shared code for the self-hosted services. The
+# installable ``pawabase`` wheel is the public API Kit and CLI only.
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
@@ -45,4 +51,4 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 ignore = ["E501", "B008", "SIM105"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "database", "routes", "pawabase_kit"]
+known-first-party = ["app", "database", "routes", "pawabase_core"]

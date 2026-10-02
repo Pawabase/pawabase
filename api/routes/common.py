@@ -9,7 +9,8 @@ from sillo.exceptions import HTTPException
 
 from app.state import bump
 from database.models import ORG_ROLES, AuditEntry, Environment, Organization, OrgMember, Project
-from pawabase_kit.policies import PolicyGate
+from pawabase_core.context import current_context
+from pawabase_core.policies import PolicyGate
 
 
 #: Studio (a service token acting for an operator), CLI operators and other
@@ -26,6 +27,17 @@ class OperatorGate(PolicyGate):
         self.need = need
 
     async def authenticate(self, ctx: HttpContext) -> bool:
+        platform = current_context(ctx)
+        # A secret/scoped project API key reaches the API only as a gateway
+        # signed context. This is what lets the CLI manage its own project
+        # without ever converting that key into an operator bearer token.
+        if platform is not None and platform.is_service:
+            # A project key manages *its own* project and environment, nothing else: the gateway proves whose key it is, and this is where the path is
+            # held to it. Without the check a secret key for one project could administer any other.
+            params = ctx.path_params or {}
+            if params.get("ref") not in (None, platform.project) or params.get("env") not in (None, platform.env):
+                raise HTTPException(status_code=403, detail="This API key belongs to a different project or environment")
+            return True
         await super().authenticate(ctx)
         ref = (ctx.path_params or {}).get("ref")
         if ref is not None:

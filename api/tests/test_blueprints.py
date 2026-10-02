@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from pawabase_kit.clients import ServiceError
+from pawabase_core.clients import ServiceError
 
 SRC = "/platform/v1/projects/src/envs/development"
 

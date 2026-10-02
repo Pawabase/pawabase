@@ -17,7 +17,7 @@ from app.openapi_scope import add_apikey_security
 from app.platform import Platform
 from app.webhooks import verify_plain_hmac, verify_signature
 from database.models import InboundHook
-from pawabase_kit.context import SCOPE_KEY
+from pawabase_core.context import SCOPE_KEY
 
 MAX_HOOK_BYTES = 1024 * 1024
 

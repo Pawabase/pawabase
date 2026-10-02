@@ -27,8 +27,8 @@ from app.runtime import matches_condition
 from app.state import EnvironmentState
 from app.webhooks import endpoint_matches, queue_deliveries
 from database.models import EventLog
-from pawabase_kit.events import PlatformEvent
-from pawabase_kit.templating import render
+from pawabase_core.events import PlatformEvent
+from pawabase_core.templating import render
 
 logger = logging.getLogger("pawabase.events")
 

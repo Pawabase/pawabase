@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pawabase_kit.settings import PlatformSettings
+from pawabase_core.settings import PlatformSettings
 
 
 class GatewaySettings(PlatformSettings):

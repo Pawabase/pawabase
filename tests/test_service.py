@@ -2,14 +2,14 @@ import pytest
 from sillo import HttpContext
 from sillo.testclient import AsyncTestClient
 
-from pawabase_kit.auth import ProjectUserBackend
-from pawabase_kit.clients import ServiceClient, ServiceError
-from pawabase_kit.context import CONTEXT_HEADER, PlatformContext, current_context
-from pawabase_kit.events import EventBus, PlatformEvent
-from pawabase_kit.policies import PolicyGate
-from pawabase_kit.service import SERVICE_ONLY, create_service
-from pawabase_kit.settings import PlatformSettings
-from pawabase_kit.tokens import (
+from pawabase_core.auth import ProjectUserBackend
+from pawabase_core.clients import ServiceClient, ServiceError
+from pawabase_core.context import CONTEXT_HEADER, PlatformContext, current_context
+from pawabase_core.events import EventBus, PlatformEvent
+from pawabase_core.policies import PolicyGate
+from pawabase_core.service import SERVICE_ONLY, create_service
+from pawabase_core.settings import PlatformSettings
+from pawabase_core.tokens import (
     TokenInvalid,
     issue_context_token,
     issue_service_token,

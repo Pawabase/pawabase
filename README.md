@@ -33,7 +33,7 @@ listed in [`docs/sillo-gaps.md`](docs/sillo-gaps.md).
 | Akountz | 8002 | Identity. |
 | Angula | 8003 | Realtime. |
 
-The services share one image and a small shared library (`pawabase_kit/`), but run as separate
+The services share one image and a small shared library (`pawabase_core/`), but run as separate
 processes that talk over HTTP with audience-bound service tokens. See
 [`ARCHITECTURE.md`](ARCHITECTURE.md) for the design and how each capability maps onto Sillo.
 
@@ -44,7 +44,7 @@ docker compose -f docker-compose.dev.yml up
 ```
 
 Runs every service plus Postgres and Redis, with the repository bind-mounted into the
-containers. Edit Python in any service or `pawabase_kit/` and only that service restarts;
+containers. Edit Python in any service or `pawabase_core/` and only that service restarts;
 edit Studio's front end and Vite hot-reloads the browser. No `.env` needed. Studio is on
 <http://localhost:8090> (`admin@pawabase.local` / `Pawabase!admin1`), the gateway on `:8080`.
 Rebuild (`up --build`) only when a `pyproject.toml` or `uv.lock` changes.
@@ -119,7 +119,7 @@ with the reference `demo` to load the example function in `examples/code/demo`.
 Tests and lint:
 
 ```sh
-uv run pytest -q                                   # pawabase_kit
+uv run pytest -q                                   # pawabase_core
 for s in api akountz angula gateway studio; do (cd $s && uv run pytest -q tests); done
 uv run ruff check . && uv run ruff format --check .
 ```
@@ -127,13 +127,13 @@ uv run ruff check . && uv run ruff format --check .
 ## Repository layout
 
 ```
-pawabase_kit/        code shared by the services (not a package): policies, flow engine and blocks, schemas, service auth
+pawabase_core/        code shared by the services (not a package): policies, flow engine and blocks, schemas, service auth
 api/                 Pawabase API, worker and scheduler
 akountz/             identity
 angula/              realtime
 gateway/             public gateway
 studio/              control plane (Python server + frontend/)
-tests/               pawabase_kit tests (each service has its own tests/)
+tests/               pawabase_core tests (each service has its own tests/)
 apps/                docs (Mintlify) and marketing site
 examples/code/       example project code
 docker/              entrypoints, dev image, Postgres init

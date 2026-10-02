@@ -25,8 +25,8 @@ from app.dispatch import DataPlaneDispatcher
 from app.platform import Platform
 from app.request_metrics import RequestRollup
 from database.config import MODEL_MODULES, database_config
-from pawabase_kit.auth import OperatorBackend, ProjectUserBackend
-from pawabase_kit.service import create_service
+from pawabase_core.auth import OperatorBackend, ProjectUserBackend
+from pawabase_core.service import create_service
 
 logger = logging.getLogger("pawabase.api")
 

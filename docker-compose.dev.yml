@@ -3,7 +3,7 @@
 #   docker compose -f docker-compose.dev.yml up
 #
 # The repository is bind-mounted into every container, so:
-#   - Python changes (any service, or pawabase_kit/) restart just that service;
+#   - Python changes (any service, or pawabase_core/) restart just that service;
 #   - Studio's front end runs on Vite with hot module reloading, no build.
 # Nothing to rebuild unless a pyproject.toml or uv.lock changes
 # (`docker compose -f docker-compose.dev.yml up --build`).

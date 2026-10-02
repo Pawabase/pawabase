@@ -20,7 +20,7 @@ from app.accounts import check_password_policy, create_account, find_by_email, n
 from app.environment import AuthConfig, load_config
 from app.platform import Akountz
 from app.sessions import log_event, revoke_all, start_session
-from pawabase_kit.ratelimit import rate_limit_middleware
+from pawabase_core.ratelimit import rate_limit_middleware
 from routes.auth import config_for
 
 SENT = {"sent": True, "message": "If the address has an account, a message is on its way."}

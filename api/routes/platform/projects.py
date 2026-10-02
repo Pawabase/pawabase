@@ -17,7 +17,7 @@ from app import blueprints
 from app.platform import Platform
 from app.secrets import mask
 from database.models import Environment, Organization, Project, ProjectKey, Secret
-from pawabase_kit.records import upsert
+from pawabase_core.records import upsert
 from routes.common import (
     NAME_PATTERN,
     OPERATOR,

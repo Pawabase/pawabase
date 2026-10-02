@@ -5,7 +5,7 @@
       -d '{"name": "Ada"}'
 """
 
-from pawabase_kit.functions import FunctionContext, function
+from pawabase_core.functions import FunctionContext, function
 
 
 @function("hello", policy="public", input_fields=[{"name": "name", "type": "string"}])

@@ -9,8 +9,8 @@ from sillo import SilloApp
 
 from app.config import AngulaSettings
 from app.realtime import Realtime
-from pawabase_kit.auth import ProjectUserBackend
-from pawabase_kit.service import create_service
+from pawabase_core.auth import ProjectUserBackend
+from pawabase_core.service import create_service
 
 PRUNE_SECONDS = 30
 

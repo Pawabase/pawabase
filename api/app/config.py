@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pawabase_kit.settings import PlatformSettings
+from pawabase_core.settings import PlatformSettings
 
 
 class ApiSettings(PlatformSettings):
@@ -18,6 +18,8 @@ class ApiSettings(PlatformSettings):
         storage_root: Default local storage root for environments that have
             not configured storage.
         code_path: Where project code (functions, routes, policies) is mounted.
+        deployments_path: Where uploaded function artifacts live (a writable volume shared by the API, workers and scheduler); defaults to
+            ``<code_path>/.deployments``, which is wrong when ``code_path`` is a read-only mount.
         public_url: The gateway's public origin, used in signed URLs and docs.
         inline_worker: Run a queue worker inside the API process. Right for a
             single-process development setup with no Redis; production runs
@@ -31,12 +33,17 @@ class ApiSettings(PlatformSettings):
     default_data_url: str = "postgres://pawabase:pawabase@127.0.0.1:5432/pawabase"
     storage_root: str = "storage/objects"
     code_path: str = "code"
+    #: Where ``pawabase deploy`` artifacts are stored: writable, and shared by every API and worker process. Empty means ``<code_path>/.deployments``.
+    deployments_path: str = ""
     public_url: str = "http://127.0.0.1:8080"
     inline_worker: bool = True
     inline_scheduler: bool = False
     queue_prefix: str = "pawabase:queue:"
     max_upload_bytes: int = 50 * 1024 * 1024
     query_timeout: float = 15.0
+    #: Proxies between the gateway and the open internet (a load balancer is 1). The caller's address, as handed to functions, is the entry
+    #: ``trusted_proxy_hops`` places from the right of ``X-Forwarded-For``: the gateway appends the address it saw, so the left side is whatever the caller sent.
+    trusted_proxy_hops: int = 0
 
 
 def load_settings(**overrides) -> ApiSettings:

@@ -82,7 +82,7 @@ class FakeApiClient:
     calls: list[str] = field(default_factory=list)
 
     async def post(self, path: str, json: dict[str, Any]) -> dict[str, Any]:
-        from pawabase_kit.clients import ServiceError
+        from pawabase_core.clients import ServiceError
 
         assert path == "/internal/v1/keys/resolve"
         self.calls.append(json["key"])

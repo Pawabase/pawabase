@@ -1,6 +1,6 @@
 import pytest
 
-from pawabase_kit.flows import (
+from pawabase_core.flows import (
     BaseRuntime,
     FlowError,
     FlowRun,

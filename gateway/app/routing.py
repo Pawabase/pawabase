@@ -41,8 +41,9 @@ ROUTES: tuple[Upstream, ...] = (
     # "required") so it also proves the key itself resolves for that project.
     Upstream("/health/v1/", "api"),
     Upstream("/realtime/v1/", "angula"),
-    # The management plane authenticates operators itself (bearer tokens).
-    Upstream("/platform/v1/", "api", "none"),
+    # Operators may use bearer tokens; the Functions CLI may instead present a
+    # scoped project API key, which the gateway turns into a signed context.
+    Upstream("/platform/v1/", "api", "optional"),
 )
 
 #: Never exposed publicly, whatever the prefix table says.

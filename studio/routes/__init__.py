@@ -30,9 +30,9 @@ from sillo_inertia import Inertia, back, redirect, render, set_errors
 
 from app import operators
 from app.config import StudioSettings
-from pawabase_kit.clients import ServiceClient, ServiceError
-from pawabase_kit.context import CONTEXT_HEADER, PlatformContext
-from pawabase_kit.tokens import TokenInvalid, issue_context_token, verify_context_token
+from pawabase_core.clients import ServiceClient, ServiceError
+from pawabase_core.context import CONTEXT_HEADER, PlatformContext
+from pawabase_core.tokens import TokenInvalid, issue_context_token, verify_context_token
 
 OPERATOR_SCOPE = "studio.operator"
 

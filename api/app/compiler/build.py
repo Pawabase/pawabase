@@ -23,10 +23,10 @@ from app.compiler.routes import register_route
 from app.data.source import DataSourceError
 from app.data.sql import SqlError
 from app.execution import NotFound
-from pawabase_kit.auth import ProjectUserBackend
-from pawabase_kit.flows import FlowError
-from pawabase_kit.principal import Principal
-from pawabase_kit.transformers import TransformerError
+from pawabase_core.auth import ProjectUserBackend
+from pawabase_core.flows import FlowError
+from pawabase_core.principal import Principal
+from pawabase_core.transformers import TransformerError
 
 if TYPE_CHECKING:
     from app.state import EnvironmentState

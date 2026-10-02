@@ -16,7 +16,7 @@ from app.environment import load_config
 from app.platform import Akountz
 from app.sessions import elevate, list_sessions, log_event, revoke_session, start_session
 from database.models import AuthUser, Identity, LoginEvent
-from pawabase_kit.ratelimit import rate_limit_middleware
+from pawabase_core.ratelimit import rate_limit_middleware
 from routes.auth import signed_in_user
 
 

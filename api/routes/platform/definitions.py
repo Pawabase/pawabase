@@ -38,10 +38,10 @@ from database.models import (
     TransformerDef,
     WebhookEndpoint,
 )
-from pawabase_kit.flows import validate_flow
-from pawabase_kit.policies import PolicyEngine, PolicyError, validate_condition
-from pawabase_kit.schemas import SchemaError, validate_fields
-from pawabase_kit.transformers import TransformerError, validate_transformer
+from pawabase_core.flows import validate_flow
+from pawabase_core.policies import PolicyEngine, PolicyError, validate_condition
+from pawabase_core.schemas import SchemaError, validate_fields
+from pawabase_core.transformers import TransformerError, validate_transformer
 from routes.common import NAME_PATTERN, OPERATOR, audit, changed, dump, get_environment
 
 RESERVED_RESOURCE_NAMES = {"docs", "openapi.json", "x", "rpc", "health", "internal", "platform"}

@@ -1,6 +1,6 @@
 import pytest
 
-from pawabase_kit.policies import (
+from pawabase_core.policies import (
     Policy,
     PolicyEngine,
     PolicyError,

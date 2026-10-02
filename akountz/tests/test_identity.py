@@ -5,9 +5,9 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 
-from pawabase_kit.clients import ServiceError
-from pawabase_kit.settings import PLATFORM_ENV, PLATFORM_PROJECT
-from pawabase_kit.tokens import peek_claims, verify_user_token
+from pawabase_core.clients import ServiceError
+from pawabase_core.settings import PLATFORM_ENV, PLATFORM_PROJECT
+from pawabase_core.tokens import peek_claims, verify_user_token
 
 
 @pytest.fixture

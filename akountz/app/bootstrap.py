@@ -10,9 +10,9 @@ from sillo.record import Record
 from app.config import AkountzSettings
 from app.platform import Akountz
 from database.config import MODEL_MODULES, database_config
-from pawabase_kit.auth import ProjectUserBackend
-from pawabase_kit.service import create_service
-from pawabase_kit.settings import PLATFORM_ENV, PLATFORM_PROJECT
+from pawabase_core.auth import ProjectUserBackend
+from pawabase_core.service import create_service
+from pawabase_core.settings import PLATFORM_ENV, PLATFORM_PROJECT
 
 logger = logging.getLogger("pawabase.akountz")
 

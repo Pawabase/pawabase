@@ -4,7 +4,7 @@ import copy
 
 import pytest
 
-from pawabase_kit.clients import ServiceError
+from pawabase_core.clients import ServiceError
 
 ENV = "/platform/v1/projects/shop/envs/development"
 

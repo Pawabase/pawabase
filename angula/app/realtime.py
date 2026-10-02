@@ -32,10 +32,10 @@ from sillo.exceptions import HTTPException
 from sillo_wire import Hub, MemoryBacklog, Peer
 
 from app.config import AngulaSettings
-from pawabase_kit.clients import ServiceClient, ServiceError
-from pawabase_kit.policies import Policy, PolicyEngine
-from pawabase_kit.policies.engine import validate_condition
-from pawabase_kit.templating import render
+from pawabase_core.clients import ServiceClient, ServiceError
+from pawabase_core.policies import Policy, PolicyEngine
+from pawabase_core.policies.engine import validate_condition
+from pawabase_core.templating import render
 
 logger = logging.getLogger("pawabase.angula")
 

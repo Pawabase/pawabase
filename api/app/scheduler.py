@@ -27,7 +27,7 @@ from sillo.work.scheduler import CronTrigger, IntervalTrigger, SchedulerManager
 
 from app.platform import Platform
 from database.models import Environment, Schedule
-from pawabase_kit.records import upsert
+from pawabase_core.records import upsert
 
 logger = logging.getLogger("pawabase.scheduler")
 

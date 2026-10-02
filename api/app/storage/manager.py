@@ -16,8 +16,8 @@ from sillo.storage import Bucket, LocalDriver, MemoryDriver
 from sillo.storage.base import Action, StorageEvent
 from sillo.storage.signing import Signer
 
-from pawabase_kit.policies import PolicyStorage
-from pawabase_kit.telemetry import note
+from pawabase_core.policies import PolicyStorage
+from pawabase_core.telemetry import note
 
 from .s3 import S3Driver
 

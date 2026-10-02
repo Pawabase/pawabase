@@ -16,7 +16,7 @@ class FakeApi:
         self.events: list[dict[str, Any]] = []
 
     async def get(self, path: str, **kwargs: Any) -> Any:
-        from pawabase_kit.clients import ServiceError
+        from pawabase_core.clients import ServiceError
 
         parts = path.strip("/").split("/")
         if parts[:3] == ["internal", "v1", "environments"] and parts[-1] == "auth":
@@ -67,8 +67,8 @@ class Harness:
     def headers(
         self, project: str = "acme", env: str = "development", token: str | None = None
     ) -> dict[str, str]:
-        from pawabase_kit.context import CONTEXT_HEADER, PlatformContext
-        from pawabase_kit.tokens import issue_context_token
+        from pawabase_core.context import CONTEXT_HEADER, PlatformContext
+        from pawabase_core.tokens import issue_context_token
 
         headers = {
             CONTEXT_HEADER: issue_context_token(
@@ -98,7 +98,7 @@ async def akz(tmp_path):
     from app.bootstrap import create_app
     from app.config import AkountzSettings
     from app.platform import Akountz
-    from pawabase_kit.clients import ServiceClient
+    from pawabase_core.clients import ServiceClient
 
     settings = AkountzSettings(
         _env_file=None,

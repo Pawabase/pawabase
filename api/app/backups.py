@@ -31,7 +31,7 @@ from app.data.store import MAX_PAGE_SIZE, ResourceStore
 from app.releases import apply_snapshot, snapshot_checksum, snapshot_environment
 from app.state import bump
 from database.models import Environment, Secret
-from pawabase_kit.records import upsert
+from pawabase_core.records import upsert
 from routes.platform.promote import KINDS, SKIP
 
 if TYPE_CHECKING:

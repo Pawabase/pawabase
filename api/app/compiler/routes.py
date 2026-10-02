@@ -23,12 +23,12 @@ from sillo.helpers.strings import pascal_case
 
 from app.compiler.common import PlanGate, cache_key
 from app.compiler.errors import FORBIDDEN, UNAUTHENTICATED, UNPROCESSABLE, responses
-from pawabase_kit.flows import FlowError
-from pawabase_kit.policies import build_policy_context
-from pawabase_kit.ratelimit import rate_limit_middleware
-from pawabase_kit.schemas import compile_model
-from pawabase_kit.telemetry import note
-from pawabase_kit.transformers import apply_transformer
+from pawabase_core.flows import FlowError
+from pawabase_core.policies import build_policy_context
+from pawabase_core.ratelimit import rate_limit_middleware
+from pawabase_core.schemas import compile_model
+from pawabase_core.telemetry import note
+from pawabase_core.transformers import apply_transformer
 
 if TYPE_CHECKING:
     from sillo import SilloApp
@@ -85,6 +85,14 @@ def register_route(app: SilloApp, state: EnvironmentState, route: Any) -> str:
             "params": {key: ctx.path_params[key] for key in ctx.path_params},
             "query": dict(ctx.query_params),
             "body": body.model_dump(mode="json") if hasattr(body, "model_dump") else body,
+            # What a function may need to judge the call itself: a store API key in
+            # `authorization`, the caller's address for risk checks, the user agent.
+            "headers": {
+                name.lower(): value
+                for name, value in ctx.headers.items()
+                if name.lower() not in _PRIVATE_HEADERS and not name.lower().startswith("x-pawabase-")
+            },
+            "client_ip": _client_ip(ctx, platform.settings.trusted_proxy_hops),
         }
         key = None
         if route.cache_ttl and method == "GET":
@@ -184,6 +192,20 @@ def register_route(app: SilloApp, state: EnvironmentState, route: Any) -> str:
         middleware=limits,
     )
     return f"{method} {route.path}"
+
+
+#: Never handed to a function: credentials of the platform itself and browser session state.
+_PRIVATE_HEADERS = {"cookie", "apikey", "x-api-key", "proxy-authorization"}
+
+
+def _client_ip(ctx: HttpContext, trusted_hops: int = 0) -> str | None:
+    """The caller's address. ``X-Forwarded-For`` is a list each proxy *appends* to, so everything the caller put in it is on the left and cannot be
+    trusted; the gateway appends the address it actually saw, and ``trusted_hops`` more proxies in front of it each add one more."""
+    forwarded = [part.strip() for part in (ctx.headers.get("x-forwarded-for") or "").split(",") if part.strip()]
+    if forwarded:
+        return forwarded[max(0, len(forwarded) - 1 - trusted_hops)]
+    client = ctx.scope.get("client")
+    return client[0] if client else None
 
 
 PATH_PARAM = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)(?::[A-Za-z]+)?\}")

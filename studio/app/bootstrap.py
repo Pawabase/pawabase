@@ -14,8 +14,8 @@ from sillo.session import SessionMiddleware
 from sillo_inertia import Inertia, vite_react
 
 from app.config import StudioSettings
-from pawabase_kit.clients import ServiceClient
-from pawabase_kit.service import create_service
+from pawabase_core.clients import ServiceClient
+from pawabase_core.service import create_service
 
 ROOT = Path(__file__).resolve().parent.parent
 ENTRY = "src/main.jsx"

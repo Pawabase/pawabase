@@ -37,10 +37,10 @@ from sillo.security import RateLimitConfig, RateLimitMiddleware
 from app.config import GatewaySettings
 from app.keys import KeyRejected, KeyResolver
 from app.routing import route_for
-from pawabase_kit.clients import ServiceError
-from pawabase_kit.context import CONTEXT_HEADER, SCOPE_KEY
-from pawabase_kit.telemetry import note
-from pawabase_kit.tokens import issue_context_token
+from pawabase_core.clients import ServiceError
+from pawabase_core.context import CONTEXT_HEADER, SCOPE_KEY
+from pawabase_core.telemetry import note
+from pawabase_core.tokens import issue_context_token
 
 logger = logging.getLogger("pawabase.gateway")
 

@@ -15,7 +15,7 @@ from app.environment import load_config
 from app.platform import Akountz
 from database.models import AuthUser, Invitation, Membership, Organization, Team, TeamMember
 from database.models.orgs import ORG_ROLES
-from pawabase_kit.records import upsert
+from pawabase_core.records import upsert
 from routes.auth import signed_in_user
 
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}$")

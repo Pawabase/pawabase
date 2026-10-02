@@ -2,7 +2,7 @@
 
 import pyotp
 
-from pawabase_kit.tokens import verify_user_token
+from pawabase_core.tokens import verify_user_token
 
 
 async def test_signup_signin_refresh_and_token_claims(akz):

@@ -23,7 +23,7 @@ class _Definition(Model):
 
 
 class SchemaDef(_Definition):
-    """A reusable schema: field definitions (see ``pawabase_kit.schemas``)."""
+    """A reusable schema: field definitions (see ``pawabase_core.schemas``)."""
 
     environment = fields.ForeignKeyField(
         "models.Environment", related_name="schemas", on_delete=fields.CASCADE

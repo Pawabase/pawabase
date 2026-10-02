@@ -414,7 +414,7 @@ class Migration(migrations.Migration):
                 ('environment', fields.ForeignKeyField('models.Environment', source_field='environment_id', db_constraint=True, to_field='id', related_name='schemas', on_delete=OnDelete.CASCADE)),
                 ('fields_', AnyJSONField(source_field='fields', default=list, encoder=functools.partial(dumps, separators=(',', ':')), decoder=loads)),
             ],
-            options={'table': 'pb_schemas', 'app': 'models', 'unique_together': (('environment', 'name'),), 'pk_attr': 'id', 'table_description': 'A reusable schema: field definitions (see ``pawabase_kit.schemas``).'},
+            options={'table': 'pb_schemas', 'app': 'models', 'unique_together': (('environment', 'name'),), 'pk_attr': 'id', 'table_description': 'A reusable schema: field definitions (see ``pawabase_core.schemas``).'},
             bases=['_Definition'],
         ),
         ops.CreateModel(

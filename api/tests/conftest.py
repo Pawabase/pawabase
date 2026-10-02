@@ -35,8 +35,8 @@ class Api:
     def context_headers(
         self, project: str, env: str, role: str = "anon", scopes=()
     ) -> dict[str, str]:
-        from pawabase_kit.context import CONTEXT_HEADER, PlatformContext
-        from pawabase_kit.tokens import issue_context_token
+        from pawabase_core.context import CONTEXT_HEADER, PlatformContext
+        from pawabase_core.tokens import issue_context_token
 
         context = PlatformContext(
             project=project, env=env, role=role, key_id="test", scopes=tuple(scopes)
@@ -46,7 +46,7 @@ class Api:
     def user_headers(
         self, project: str, env: str, user_id: str = "1", roles=(), perms=(), email=None
     ) -> dict[str, str]:
-        from pawabase_kit.tokens import issue_user_token
+        from pawabase_core.tokens import issue_user_token
 
         token = issue_user_token(
             self.settings.jwt_master_secret,
@@ -83,7 +83,7 @@ async def api(settings):
     from sillo.testclient import AsyncTestClient
 
     from app.bootstrap import create_app
-    from pawabase_kit.clients import ServiceClient
+    from pawabase_core.clients import ServiceClient
 
     app = create_app(settings)
     # The lifespan is driven directly rather than through the client's context

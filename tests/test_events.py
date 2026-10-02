@@ -6,7 +6,7 @@ import fakeredis
 from sillo.events import EventEmitter
 from sillo.events.transports.persistent import PersistentTransport
 
-from pawabase_kit.events import EventBus
+from pawabase_core.events import EventBus
 
 
 def _bus(server, source: str) -> EventBus:

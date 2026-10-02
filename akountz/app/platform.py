@@ -16,11 +16,11 @@ from sillo.cache import base as cache_base
 from sillo.helpers.signing import URLSafeTimedSerializer
 
 from app.config import AkountzSettings
-from pawabase_kit.clients import ServiceClient
-from pawabase_kit.context import PlatformContext
-from pawabase_kit.crypto import SecretBox
-from pawabase_kit.events import EventBus
-from pawabase_kit.tokens import derive_env_secret
+from pawabase_core.clients import ServiceClient
+from pawabase_core.context import PlatformContext
+from pawabase_core.crypto import SecretBox
+from pawabase_core.events import EventBus
+from pawabase_core.tokens import derive_env_secret
 
 logger = logging.getLogger("pawabase.akountz")
 

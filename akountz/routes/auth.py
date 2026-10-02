@@ -31,9 +31,9 @@ from app.sessions import (
     start_session,
 )
 from database.models import AuthUser
-from pawabase_kit.context import require_context
-from pawabase_kit.principal import Principal
-from pawabase_kit.ratelimit import rate_limit_middleware
+from pawabase_core.context import require_context
+from pawabase_core.principal import Principal
+from pawabase_core.ratelimit import rate_limit_middleware
 
 
 class SignUp(BaseModel):

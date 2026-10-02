@@ -8,8 +8,8 @@ from typing import Any
 
 from sillo.auth.exceptions import AuthenticationFailed, PermissionDenied
 
-from pawabase_kit.policies import PolicyGate, build_policy_context
-from pawabase_kit.telemetry import note
+from pawabase_core.policies import PolicyGate, build_policy_context
+from pawabase_core.telemetry import note
 
 PLAN_SCOPE_KEY = "pawabase.plan"
 
@@ -26,7 +26,7 @@ class PlanGate(PolicyGate):
         from sillo.auth import useAuth
 
         await useAuth.authenticate(self, ctx)
-        from pawabase_kit.context import current_context
+        from pawabase_core.context import current_context
 
         platform = current_context(ctx)
         if (
@@ -53,7 +53,7 @@ def cache_key(ctx, *parts: Any) -> str:
     identity = (
         user.identity if user is not None and getattr(user, "is_authenticated", False) else "anon"
     )
-    from pawabase_kit.context import current_context
+    from pawabase_core.context import current_context
 
     platform = current_context(ctx)
     role = platform.role if platform else "none"

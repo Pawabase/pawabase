@@ -19,7 +19,7 @@ from database.models import (
     TransformerDef,
     WebhookEndpoint,
 )
-from pawabase_kit.records import upsert
+from pawabase_core.records import upsert
 
 #: Kind name → (model, natural key fields). Secrets and keys are never copied:
 #: they belong to the environment they were created in.

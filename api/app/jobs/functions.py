@@ -26,4 +26,5 @@ class RunFunctionJob(PawabaseJob):
             trigger=self.params.get("trigger", "job"),
             auth=self.params.get("auth"),
             request_id=self.params.get("request_id"),
+            branch=self.params.get("branch"),
         )

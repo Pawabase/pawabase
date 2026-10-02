@@ -14,6 +14,7 @@ import json
 import logging
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -23,15 +24,24 @@ from tortoise.exceptions import IntegrityError
 
 from app.config import ApiSettings
 from app.data.source import DataSourcePool
+from app.deployments import Deployments
 from app.mail import MailManager
 from app.secrets import SecretBox, is_reference, reference_name
 from app.state import EnvironmentCache, EnvironmentState
 from app.storage.manager import StorageManager
-from pawabase_kit.clients import ServiceClient
-from pawabase_kit.context import PlatformContext
-from pawabase_kit.events import EventBus
-from pawabase_kit.functions import ProjectCode, load_project_code
-from pawabase_kit.telemetry import note
+from pawabase_core.clients import ServiceClient
+from pawabase_core.context import PlatformContext
+from pawabase_core.events import EventBus
+from pawabase_core.functions import (
+    MAIN,
+    FunctionSpec,
+    ProjectCode,
+    clear_functions,
+    list_resolved_functions,
+    load_project_code,
+    resolve_function,
+)
+from pawabase_core.telemetry import note
 
 if TYPE_CHECKING:
     from sillo.work.queue import QueueConnection
@@ -81,6 +91,7 @@ class Platform:
             timeout=30.0, follow_redirects=False, headers={"user-agent": "Pawabase/0.1"}
         )
         self.code: dict[str, ProjectCode] = {}
+        self.deployments = Deployments(settings.deployments_path or Path(settings.code_path) / ".deployments")
         self.app: Any = None
         self.app: Any = None
         self.started_at = datetime.now(UTC)
@@ -122,6 +133,7 @@ class Platform:
     async def state(self, project: str, env: str) -> EnvironmentState:
         state = await self.envs.get(project, env)
         self.ensure_code(project)
+        self.deployments.ensure_loaded(project, env)
         return state
 
     async def state_for(self, context: PlatformContext) -> EnvironmentState:
@@ -148,7 +160,25 @@ class Platform:
                 logger.warning("project %s code errors: %s", project, loaded.errors)
         return loaded
 
+    def function_spec(self, project: str, env: str, name: str, branch: str | None = None) -> FunctionSpec | None:
+        """The function *name* as *branch* of *project*'s *env* sees it: deployed on the branch, deployed to the environment, then mounted project code."""
+        self.ensure_code(project)
+        self.deployments.ensure_loaded(project, env)
+        if branch and branch != MAIN:
+            self.deployments.ensure_loaded(project, env, branch)
+        return resolve_function(project, env, branch, name)
+
+    def function_specs(self, project: str, env: str, branch: str | None = None) -> list[FunctionSpec]:
+        self.ensure_code(project)
+        self.deployments.ensure_loaded(project, env)
+        if branch and branch != MAIN:
+            self.deployments.ensure_loaded(project, env, branch)
+        return list_resolved_functions(project, env, branch)
+
     def reload_code(self, project: str) -> ProjectCode:
+        clear_functions(project)
+        for name in [name for name in list(__import__("sys").modules) if name.startswith(f"pawabase_code.{project}.")]:
+            del __import__("sys").modules[name]
         self.code.pop(project, None)
         self.envs.forget(project)
         return self.ensure_code(project)

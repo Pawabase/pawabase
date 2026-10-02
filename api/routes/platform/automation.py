@@ -20,8 +20,7 @@ from database.models import (
     WebhookDelivery,
     WebhookEndpoint,
 )
-from pawabase_kit.flows import FlowError, default_registry, validate_flow
-from pawabase_kit.functions import list_functions
+from pawabase_core.flows import FlowError, default_registry, validate_flow
 from routes.common import OPERATOR, audit, dump, get_environment, page_params
 
 
@@ -31,6 +30,12 @@ class RunBody(BaseModel):
     as_user: dict[str, Any] | None = Field(
         default=None, description="Run as if this auth context called it"
     )
+    branch: str | None = Field(default=None, description="Run the code deployed on this branch (functions only)")
+
+
+def _source_of(key: str) -> str:
+    """Where a function came from: a branch deployment, the environment's deployment, or code mounted for the project."""
+    return "branch" if "@" in key else "deployment" if "/" in key else "project"
 
 
 class EmitBody(BaseModel):
@@ -39,7 +44,7 @@ class EmitBody(BaseModel):
 
 
 def _operator_auth(ctx: HttpContext) -> dict[str, Any]:
-    from pawabase_kit.principal import policy_auth
+    from pawabase_core.principal import policy_auth
 
     return policy_auth(ctx.scope.get("user"))
 
@@ -159,8 +164,10 @@ def register(r: Router, platform: Platform) -> None:
     async def functions(ctx: HttpContext, ref: str, env: str):
         await platform.state(ref, env)
         code = platform.ensure_code(ref)
+        branch = ctx.query_params.get("branch") or None
         return {
-            "data": [spec.describe() for spec in list_functions(ref)],
+            "data": [{**spec.describe(), "source": _source_of(spec.project)} for spec in platform.function_specs(ref, env, branch)],
+            "branch": branch or "main",
             "modules": code.modules,
             "errors": code.errors,
             "router": code.router is not None,
@@ -183,6 +190,7 @@ def register(r: Router, platform: Platform) -> None:
                 body.input,
                 trigger="manual",
                 auth=body.as_user or _operator_auth(ctx),
+                branch=body.branch,
             )
         except NotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -296,7 +304,7 @@ def register(r: Router, platform: Platform) -> None:
                             "via": f"subscription:{subscription.name}",
                         }
                     )
-            from pawabase_kit.events import PlatformEvent
+            from pawabase_core.events import PlatformEvent
 
             for flow_name, node in flow_event_entries(
                 state, PlatformEvent(name=name, project=ref, env=env)

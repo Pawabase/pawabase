@@ -23,6 +23,7 @@ from database.models.definitions import (
     TransformerDef,
     WebhookEndpoint,
 )
+from database.models.functions import FunctionDeployment, FunctionRun
 from database.models.orgs import ORG_ROLES, Organization, OrgInvitation, OrgMember
 from database.models.projects import AuditEntry, Environment, Project, ProjectKey, Secret
 from database.models.releases import ApiVersion, Branch, DefinitionRevision, Deployment, Release
@@ -39,6 +40,8 @@ __all__ = [
     "EventSubscription",
     "FailedJobRecord",
     "Flow",
+    "FunctionDeployment",
+    "FunctionRun",
     "FlowRun",
     "InboundHook",
     "JobRun",

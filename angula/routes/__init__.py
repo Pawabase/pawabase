@@ -26,11 +26,11 @@ from sillo.exceptions import HTTPException
 from sillo_wire import Peer
 
 from app.realtime import Connection, Realtime
-from pawabase_kit.context import SCOPE_KEY, require_context
-from pawabase_kit.policies import credential_context
-from pawabase_kit.principal import ANONYMOUS_POLICY_CONTEXT, policy_auth
-from pawabase_kit.service import SERVICE_ONLY
-from pawabase_kit.tokens import TokenInvalid, verify_user_token
+from pawabase_core.context import SCOPE_KEY, require_context
+from pawabase_core.policies import credential_context
+from pawabase_core.principal import ANONYMOUS_POLICY_CONTEXT, policy_auth
+from pawabase_core.service import SERVICE_ONLY
+from pawabase_core.tokens import TokenInvalid, verify_user_token
 
 
 class PublishBody(BaseModel):
@@ -45,7 +45,7 @@ def _auth_from_token(
     if not token:
         return dict(ANONYMOUS_POLICY_CONTEXT), None
     claims = verify_user_token(token, realtime.settings.jwt_master_secret, project=project, env=env)
-    from pawabase_kit.principal import Principal
+    from pawabase_core.principal import Principal
 
     principal = Principal("user", claims)
     return principal.as_policy_context(), principal.identity

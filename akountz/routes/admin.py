@@ -22,7 +22,7 @@ from app.environment import load_config
 from app.platform import Akountz
 from app.sessions import list_sessions, revoke_all, revoke_session
 from database.models import AuthUser, Identity, LoginEvent, Membership, Organization, Team
-from pawabase_kit.service import SERVICE_ONLY
+from pawabase_core.service import SERVICE_ONLY
 
 
 class AdminUserCreate(BaseModel):
@@ -417,7 +417,7 @@ def register(r: Router, akountz: Akountz) -> None:
         summary="One user of the calling context's environment",
     )
     async def context_user(ctx: HttpContext, user_id: str):
-        from pawabase_kit.context import require_context
+        from pawabase_core.context import require_context
 
         context = require_context(ctx)
         return await user_view(await user_or_404(context.project, context.env, user_id), admin=True)

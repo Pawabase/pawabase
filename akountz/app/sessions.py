@@ -21,7 +21,7 @@ from app.accounts import user_view
 from app.environment import AuthConfig
 from app.platform import Akountz
 from database.models import AuthUser, LoginEvent, Membership, Organization, SessionInfo
-from pawabase_kit.tokens import issue_user_token, peek_claims
+from pawabase_core.tokens import issue_user_token, peek_claims
 
 
 def client_info(ctx: Any) -> tuple[str | None, str | None]:

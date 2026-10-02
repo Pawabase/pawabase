@@ -43,7 +43,7 @@ ships the primitive, Pawabase uses it and adds the product around it.
 | **Akountz** | `akountz` | Identity: users, passwords, tokens, sessions, verification, reset, magic links, OAuth/OIDC, MFA (TOTP), recovery codes, organizations, teams, invitations, roles, permissions, login history. |
 | **Angula** | `angula` | Realtime: channels, topics, publish/subscribe, presence, channel authorization, inspection. |
 | **Studio** | `studio` | The control plane UI (Sillo + `sillo-inertia` + React). |
-| **Kit** | `pawabase_kit/` | Shared code, not a service or an installable package: policy engine, flow engine and blocks, schema compiler, transformers, service authentication, context propagation, telemetry and service bootstrap. |
+| **Kit** | `pawabase_core/` | Shared code, not a service or an installable package: policy engine, flow engine and blocks, schema compiler, transformers, service authentication, context propagation, telemetry and service bootstrap. |
 
 The worker and scheduler run the API image as separate processes because they have separate
 scaling and failure characteristics (Sillo's docs say not to run the scheduler in every web

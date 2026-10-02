@@ -27,8 +27,8 @@ from sillo.storage import (
 from sillo.storage.routes import GUARDS, INLINE, _quote
 
 from app.platform import Platform
-from pawabase_kit.context import require_context
-from pawabase_kit.policies import credential_context
+from pawabase_core.context import require_context
+from pawabase_core.policies import credential_context
 
 
 class SignRequest(BaseModel):

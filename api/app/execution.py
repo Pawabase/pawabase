@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
+import uuid
 from collections.abc import Mapping
 from typing import Any
 
@@ -13,10 +15,13 @@ from app.platform import Platform, json_safe
 from app.runtime import ApiRuntime, function_context
 from app.state import EnvironmentState
 from database.models import FlowRun as FlowRunRecord
-from pawabase_kit.flows import FlowError, FlowRun
-from pawabase_kit.functions import get_function
-from pawabase_kit.schemas import validate_payload
-from pawabase_kit.telemetry import note
+from database.models import FunctionRun
+from pawabase_core.flows import FlowError, FlowRun
+from pawabase_core.functions import MAIN, FunctionError
+from pawabase_core.schemas import validate_payload
+from pawabase_core.telemetry import note
+
+logger = logging.getLogger("pawabase.execution")
 
 
 class NotFound(LookupError):
@@ -109,9 +114,10 @@ async def call_function(
     request_id: str | None = None,
     depth: int = 0,
     request: Mapping[str, Any] | None = None,
+    branch: str | None = None,
 ) -> Any:
-    """Call a Python function registered for this project."""
-    spec = get_function(state.project_ref, name)
+    """Call a Python function visible to this environment (on *branch*, when given) and retain its run log."""
+    spec = platform.function_spec(state.project_ref, state.env_name, name, branch)
     if spec is None:
         raise NotFound(f"no function {name!r}")
     if spec.input_fields:
@@ -126,11 +132,52 @@ async def call_function(
                 code="invalid",
                 details=json.loads(exc.json(include_url=False)),
             ) from exc
-    runtime = ApiRuntime(platform, state, auth=auth, request_id=request_id, depth=depth)
+    runtime = ApiRuntime(platform, state, auth=auth, request_id=request_id, depth=depth, branch=branch)
     context = function_context(runtime, input, trigger, request)
+    started = time.perf_counter()
+    status, output, error = "succeeded", None, None
     try:
-        return await asyncio.wait_for(spec.handler(context), timeout=spec.timeout)
+        output = await asyncio.wait_for(spec.handler(context), timeout=spec.timeout)
+        return output
     except TimeoutError as exc:
-        raise FlowError(
-            f"function {name!r} exceeded {spec.timeout}s", status=504, code="timeout"
-        ) from exc
+        status, error = "failed", f"function {name!r} exceeded {spec.timeout}s"
+        raise FlowError(f"function {name!r} exceeded {spec.timeout}s", status=504, code="timeout") from exc
+    except FunctionError as exc:
+        # A function that chose to fail: its status and code reach the caller as they are, not as a 500.
+        status, error = "failed", exc.message
+        raise FlowError(exc.message, status=exc.status, code=exc.code, details=exc.details) from exc
+    except Exception as exc:
+        status, error = "failed", f"{type(exc).__name__}: {exc}"
+        raise
+    finally:
+        try:
+            await FunctionRun.create(
+                id=uuid.uuid4().hex,
+                project=state.project_ref,
+                env=state.env_name,
+                branch=branch or MAIN,
+                function=name,
+                deployment_id=_deployment_of(platform, spec),
+                trigger=trigger,
+                status=status,
+                input=json_safe(input),
+                output=json_safe(output) if status == "succeeded" else None,
+                error=error,
+                logs=json_safe([*context.logs, *runtime.logs]),
+                duration_ms=round((time.perf_counter() - started) * 1000, 3),
+                request_id=request_id,
+            )
+        except Exception:
+            # Observability must not turn a successful user function into a
+            # failure when the platform control database is degraded.
+            logger.exception("could not record function run %s", name)
+
+
+def _deployment_of(platform: Platform, spec: Any) -> str | None:
+    """The id of the deployment a function came from (``None`` for code mounted on the project)."""
+    if "/" not in spec.project:
+        return None
+    project, rest = spec.project.split("/", 1)
+    env, _, branch = rest.partition("@")
+    stamp = platform.deployments.stamp(project, env, branch or MAIN)
+    return stamp["id"] if stamp else None

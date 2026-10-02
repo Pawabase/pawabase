@@ -22,7 +22,7 @@ from app.data.store import Filter, parse_filters, parse_sort
 from app.openapi_scope import add_apikey_security
 from app.platform import Platform
 from app.resources import after_write
-from pawabase_kit.context import PlatformContext
+from pawabase_core.context import PlatformContext
 from routes.common import OPERATOR, actor, audit
 
 

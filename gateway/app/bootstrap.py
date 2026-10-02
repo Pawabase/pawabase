@@ -12,8 +12,8 @@ from sillo.security import CorsConfig, CORSMiddleware
 from app.config import GatewaySettings
 from app.keys import KeyResolver
 from app.proxy import GatewayProxy
-from pawabase_kit.clients import ServiceClient
-from pawabase_kit.service import SERVICE_ONLY, create_service
+from pawabase_core.clients import ServiceClient
+from pawabase_core.service import SERVICE_ONLY, create_service
 
 SERVICES = ("api", "akountz", "angula")
 

@@ -32,7 +32,11 @@ COPY gateway/pyproject.toml gateway/pyproject.toml
 COPY studio/pyproject.toml studio/pyproject.toml
 RUN uv sync --frozen --no-dev --all-packages
 
-COPY pawabase_kit pawabase_kit
+# Libraries the deployed functions import (the platform does not know what they are). Edit docker/function-requirements.txt, rebuild.
+COPY docker/function-requirements.txt /tmp/function-requirements.txt
+RUN uv pip install --python /opt/venv/bin/python --no-cache -r /tmp/function-requirements.txt
+COPY pawabase pawabase
+COPY pawabase_core pawabase_core
 COPY api api
 COPY akountz akountz
 COPY angula angula

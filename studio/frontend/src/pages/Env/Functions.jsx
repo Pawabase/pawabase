@@ -37,7 +37,7 @@ export default function Functions({ project, env }) {
             </Card>
             <Card title="Example">
               <pre className="code-block">{`# projects/${project.ref}/functions/orders.py
-from pawabase_kit.functions import FunctionContext, function
+from pawabase_core.functions import FunctionContext, function
 
 @function("order_total", policy="authenticated")
 async def order_total(ctx: FunctionContext):

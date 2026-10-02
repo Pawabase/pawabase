@@ -26,8 +26,8 @@ from database.models import (
     TransformerDef,
     WebhookEndpoint,
 )
-from pawabase_kit.policies import Policy, PolicyEngine, python_policies
-from pawabase_kit.schemas import compile_schemas
+from pawabase_core.policies import Policy, PolicyEngine, python_policies
+from pawabase_core.schemas import compile_schemas
 
 DEFINITIONS: dict[str, tuple[type, tuple[str, ...]]] = {
     "resources": (

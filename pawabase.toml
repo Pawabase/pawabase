@@ -1,0 +1,3 @@
+# Which Pawabase this project deploys to. The API key is not here: it belongs in .env (PAWABASE_API_KEY).
+
+project = "sell4mw"

@@ -59,8 +59,8 @@ def realtime_app():
 
 
 def context_query(settings, project="acme", env="dev", role="anon") -> dict[str, str]:
-    from pawabase_kit.context import CONTEXT_HEADER, PlatformContext
-    from pawabase_kit.tokens import issue_context_token
+    from pawabase_core.context import CONTEXT_HEADER, PlatformContext
+    from pawabase_core.tokens import issue_context_token
 
     return {
         CONTEXT_HEADER: issue_context_token(
@@ -70,7 +70,7 @@ def context_query(settings, project="acme", env="dev", role="anon") -> dict[str,
 
 
 def token(settings, user_id="1", roles=(), project="acme", env="dev") -> str:
-    from pawabase_kit.tokens import issue_user_token
+    from pawabase_core.tokens import issue_user_token
 
     return issue_user_token(
         settings.jwt_master_secret,
@@ -187,8 +187,8 @@ def test_channel_authorization(realtime_app):
 
 def test_server_publish_reaches_private_channel(realtime_app):
     client, settings, fake, realtime = realtime_app
-    from pawabase_kit.auth import SERVICE_HEADER
-    from pawabase_kit.tokens import issue_service_token
+    from pawabase_core.auth import SERVICE_HEADER
+    from pawabase_core.tokens import issue_service_token
 
     ada = connect(client, settings, token(settings, "1"))
     subscribe(ada, "user:1")

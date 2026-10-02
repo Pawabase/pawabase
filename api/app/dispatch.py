@@ -14,8 +14,8 @@ import json
 import re
 from typing import Any
 
-from pawabase_kit.context import SCOPE_KEY
-from pawabase_kit.telemetry import note
+from pawabase_core.context import SCOPE_KEY
+from pawabase_core.telemetry import note
 
 FORWARDED_KEYS = ("user", "auth", "auth_scheme", "route", "pawabase.policy", "pawabase.plan")
 REST_PATH = re.compile(r"^/rest/(?P<version>v[1-9][0-9]*)(?:/|$)")

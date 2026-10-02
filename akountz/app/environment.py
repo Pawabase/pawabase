@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING, Any
 
 from sillo.exceptions import HTTPException
 
-from pawabase_kit.clients import ServiceError
-from pawabase_kit.settings import PLATFORM_ENV, PLATFORM_PROJECT
+from pawabase_core.clients import ServiceError
+from pawabase_core.settings import PLATFORM_ENV, PLATFORM_PROJECT
 
 if TYPE_CHECKING:
     from app.platform import Akountz

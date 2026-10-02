@@ -114,7 +114,7 @@ NOTIFY_FLOW = {
 
 FUNCTION_CODE = textwrap.dedent(
     '''
-    from pawabase_kit.functions import function
+    from pawabase_core.functions import function
 
     @function("quote", input_fields=[{"name": "items", "type": "integer", "required": True, "minimum": 1}])
     async def quote(ctx):
@@ -275,7 +275,7 @@ async def test_manual_run_and_validation(acme):
         "reply",
     ]
     broken = {"name": "broken", "definition": {"nodes": [node("a", "nope")], "edges": []}}
-    from pawabase_kit.clients import ServiceError
+    from pawabase_core.clients import ServiceError
 
     with pytest.raises(ServiceError) as refused:
         await api.studio.post(f"{ENV}/flows", json=broken)
@@ -435,7 +435,7 @@ async def test_schedules_and_jobs(acme):
             "payload": {"kind": "daily"},
         },
     )
-    from pawabase_kit.clients import ServiceError
+    from pawabase_core.clients import ServiceError
 
     with pytest.raises(ServiceError):
         await api.studio.post(
@@ -468,7 +468,7 @@ async def test_schedules_and_jobs(acme):
 
 
 async def test_internal_key_resolution_and_config(acme, settings):
-    from pawabase_kit.clients import ServiceClient, ServiceError
+    from pawabase_core.clients import ServiceClient, ServiceError
 
     api = acme
     created = await api.studio.post(

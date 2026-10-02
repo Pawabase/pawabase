@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from tortoise.expressions import F
 
 from database.models import MetricCounter, RequestLog
-from pawabase_kit.telemetry import RequestRecord, Telemetry
+from pawabase_core.telemetry import RequestRecord, Telemetry
 
 REQUESTS_METRIC = "pawabase.requests"
 FLUSH_SECONDS = 5.0

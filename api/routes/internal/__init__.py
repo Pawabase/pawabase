@@ -17,7 +17,7 @@ from sillo.exceptions import HTTPException
 
 from app.platform import Platform
 from database.models import Environment, PolicyDef, ProjectKey
-from pawabase_kit.service import SERVICE_ONLY
+from pawabase_core.service import SERVICE_ONLY
 
 
 class ResolveBody(BaseModel):

@@ -19,7 +19,7 @@ from sillo.work.queue import ConnectionManager, PayloadSerializer, QueueWorker, 
 
 from app.jobs.failed import RecordFailedJobRepository
 from app.platform import PLATFORM_QUEUES, Platform
-from pawabase_kit.records import upsert
+from pawabase_core.records import upsert
 
 logger = logging.getLogger("pawabase.worker")
 

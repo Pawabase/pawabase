@@ -1,6 +1,6 @@
 import pytest
 
-from pawabase_kit.clients import ServiceError
+from pawabase_core.clients import ServiceError
 
 P = "/platform/v1"
 

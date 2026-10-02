@@ -1,6 +1,6 @@
 """Immutable revisions, independently routed API versions, and rollback."""
 
-from pawabase_kit.clients import ServiceError
+from pawabase_core.clients import ServiceError
 
 ENV = "/platform/v1/projects/releases/envs/development"
 PUBLIC = {"list": {"enabled": True, "policy": "public"}}

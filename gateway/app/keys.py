@@ -13,8 +13,8 @@ from typing import Any
 from sillo.cache import BaseCache, MemoryCache
 from sillo.cache import base as cache_base
 
-from pawabase_kit.clients import ServiceClient, ServiceError
-from pawabase_kit.context import PlatformContext
+from pawabase_core.clients import ServiceClient, ServiceError
+from pawabase_core.context import PlatformContext
 
 NEGATIVE_TTL = 5
 

@@ -20,7 +20,7 @@ class FakeAkountz:
     def _tokens(
         self, *, project: str = "_platform", env: str = "main", email: str = "root@pawabase.dev"
     ) -> dict[str, Any]:
-        from pawabase_kit.tokens import issue_user_token
+        from pawabase_core.tokens import issue_user_token
 
         token = issue_user_token(
             self.master,
@@ -35,7 +35,7 @@ class FakeAkountz:
         return {"access_token": token, "refresh_token": "r1", "token_type": "bearer"}
 
     async def request(self, method: str, path: str, *, json: Any = None, **kwargs: Any) -> Any:
-        from pawabase_kit.clients import ServiceError
+        from pawabase_core.clients import ServiceError
 
         self.calls.append((f"{method} {path}", json))
         if path == "/auth/v1/token":
@@ -89,7 +89,7 @@ class FakeApi:
         operator: Any = None,
         **kwargs: Any,
     ) -> Any:
-        from pawabase_kit.clients import ServiceError
+        from pawabase_core.clients import ServiceError
 
         if not path.startswith("/platform/v1/invitations/"):
             assert operator and operator["email"] == "root@pawabase.dev"

@@ -12,10 +12,9 @@ from sillo.exceptions import HTTPException
 from app.compiler.common import error_body
 from app.execution import NotFound, call_function, run_flow
 from app.platform import Platform
-from pawabase_kit.context import require_context
-from pawabase_kit.flows import FlowError
-from pawabase_kit.functions import get_function
-from pawabase_kit.policies import build_policy_context
+from pawabase_core.context import require_context
+from pawabase_core.flows import FlowError
+from pawabase_core.policies import build_policy_context
 
 
 async def _json_body(ctx: HttpContext) -> Any:
@@ -61,7 +60,8 @@ def register(app: Any, platform: Platform) -> None:
     async def invoke_function(ctx: HttpContext, name: str):
         context = require_context(ctx)
         state = await platform.state_for(context)
-        spec = get_function(context.project, name)
+        branch = ctx.query_params.get("branch") or None
+        spec = platform.function_spec(context.project, context.env, name, branch)
         if spec is None:
             raise HTTPException(status_code=404, detail=f"no function {name!r}")
         if not context.allows_scope("functions:invoke"):
@@ -77,6 +77,7 @@ def register(app: Any, platform: Platform) -> None:
                 trigger="http",
                 auth=policy_context["auth"],
                 request_id=ctx.headers.get("x-request-id"),
+                branch=branch,
             )
         except FlowError as exc:
             return json_response(

@@ -14,10 +14,10 @@ from typing import Any
 
 from sillo import HttpContext
 
-from pawabase_kit.clients import ServiceClient, ServiceError
-from pawabase_kit.context import PlatformContext
-from pawabase_kit.settings import PLATFORM_ENV, PLATFORM_PROJECT
-from pawabase_kit.tokens import TokenInvalid, verify_user_token
+from pawabase_core.clients import ServiceClient, ServiceError
+from pawabase_core.context import PlatformContext
+from pawabase_core.settings import PLATFORM_ENV, PLATFORM_PROJECT
+from pawabase_core.tokens import TokenInvalid, verify_user_token
 
 SESSION_KEY = "operator"
 PLATFORM_CONTEXT = PlatformContext(

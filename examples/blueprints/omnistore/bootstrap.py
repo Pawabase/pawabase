@@ -33,9 +33,9 @@ import os
 import sys
 from pathlib import Path
 
-from pawabase_kit.clients import ServiceClient, ServiceError
-from pawabase_kit.context import PlatformContext
-from pawabase_kit.settings import PLATFORM_ENV, PLATFORM_PROJECT
+from pawabase_core.clients import ServiceClient, ServiceError
+from pawabase_core.context import PlatformContext
+from pawabase_core.settings import PLATFORM_ENV, PLATFORM_PROJECT
 
 PLATFORM_CONTEXT = PlatformContext(
     project=PLATFORM_PROJECT, env=PLATFORM_ENV, role="anon", key_id="studio"

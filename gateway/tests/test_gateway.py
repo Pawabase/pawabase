@@ -1,5 +1,5 @@
-from pawabase_kit.context import CONTEXT_HEADER
-from pawabase_kit.tokens import verify_context_token
+from pawabase_core.context import CONTEXT_HEADER
+from pawabase_core.tokens import verify_context_token
 
 
 async def test_proxies_with_signed_context(gateway):

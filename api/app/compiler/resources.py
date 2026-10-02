@@ -28,11 +28,11 @@ from app.compiler.common import PLAN_SCOPE_KEY, PlanGate, cache_key
 from app.compiler.errors import FORBIDDEN, NOT_FOUND, UNAUTHENTICATED, UNPROCESSABLE, responses
 from app.data.store import MAX_PAGE_SIZE, Filter, ResourceSpec, parse_filters, parse_sort
 from app.resources import after_write, resource_tag
-from pawabase_kit.policies import build_policy_context
-from pawabase_kit.ratelimit import rate_limit_middleware
-from pawabase_kit.schemas import compile_model
-from pawabase_kit.telemetry import note
-from pawabase_kit.transformers import apply_transformer
+from pawabase_core.policies import build_policy_context
+from pawabase_core.ratelimit import rate_limit_middleware
+from pawabase_core.schemas import compile_model
+from pawabase_core.telemetry import note
+from pawabase_core.transformers import apply_transformer
 
 if TYPE_CHECKING:
     from sillo import SilloApp
@@ -64,7 +64,7 @@ def _auth_actor(ctx: HttpContext) -> str | None:
 
 
 def _is_service(ctx: HttpContext) -> bool:
-    from pawabase_kit.policies import credential_context
+    from pawabase_core.policies import credential_context
 
     return bool(credential_context(ctx).get("is_service"))
 
