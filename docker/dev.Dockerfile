@@ -21,7 +21,7 @@ COPY studio/pyproject.toml studio/pyproject.toml
 RUN uv sync --frozen --all-packages \
     && uv pip install --python /opt/venv/bin/python watchfiles
 
-COPY docker/entrypoint.sh /usr/local/bin/pawabase
-RUN chmod +x /usr/local/bin/pawabase
-ENTRYPOINT ["pawabase"]
+COPY docker/entrypoint.sh /usr/local/bin/pawabase-service
+RUN chmod +x /usr/local/bin/pawabase-service
+ENTRYPOINT ["pawabase-service"]
 CMD ["help"]

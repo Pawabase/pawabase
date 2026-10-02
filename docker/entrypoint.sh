@@ -1,5 +1,6 @@
 #!/bin/sh
-# pawabase <service>: run one Pawabase service in this container.
+# pawabase-service <service>: run one Pawabase service in this container.
+# (Not named `pawabase`: the Python kit installs a `pawabase` command, the deploy CLI, on the same PATH.)
 set -e
 
 # PAWABASE_RELOAD=true (set by docker-compose.dev.yml) restarts a service
@@ -44,6 +45,6 @@ case "$1" in
   studio)    serve studio 8090 ;;
   migrate)   migrate api; migrate akountz ;;
   *)
-    echo "usage: pawabase api|worker|scheduler|akountz|angula|gateway|studio|migrate" >&2
+    echo "usage: pawabase-service api|worker|scheduler|akountz|angula|gateway|studio|migrate" >&2
     exit 64 ;;
 esac
