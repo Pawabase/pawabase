@@ -42,7 +42,7 @@ start() {
 trap 'kill "${pids[@]}" 2>/dev/null; wait' EXIT INT TERM
 
 echo "Starting Pawabase:"
-start api 8001 PAWABASE_DATABASE_URL="sqlite://$STATE/api.db" PAWABASE_DEFAULT_DATA_URL="sqlite://$STATE/data/{project}__{env}.db" PAWABASE_STORAGE_ROOT="$STATE/objects" PAWABASE_CODE_PATH="$ROOT/examples/code"
+start api 8001 PAWABASE_DATABASE_URL="sqlite://$STATE/api.db" PAWABASE_DEFAULT_DATA_URL="sqlite://$STATE/data/{project}__{env}.db" PAWABASE_STORAGE_ROOT="$STATE/objects" PAWABASE_CODE_PATH="$ROOT/code"
 start akountz 8002 PAWABASE_DATABASE_URL="sqlite://$STATE/akountz.db"
 start angula 8003
 start gateway 8080

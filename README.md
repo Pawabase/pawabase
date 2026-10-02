@@ -100,7 +100,7 @@ Containers apply database migrations on start (Sillo Record migrations). Set
   a development secret is still in place.
 - Scale `api`, `worker`, `akountz`, `angula` and `gateway` horizontally. Keep one `scheduler`.
 - Mount your project code (functions, policies, routes) at `/code/<project>`. The compose file
-  mounts `examples/code`.
+  mounts `code/`.
 
 ## Develop without Docker
 
@@ -114,7 +114,7 @@ STUDIO_VITE=1 scripts/dev.sh    # …with Studio's front end from `npm run dev`
 
 Sign in as `admin@pawabase.local` / `Pawabase!admin1`. Studio first asks you to create an
 organization (every project lives in one, and you manage your team there); then create a project
-with the reference `demo` to load the example function in `examples/code/demo`.
+with any reference.
 
 Tests and lint:
 
@@ -143,7 +143,7 @@ angula/              realtime
 gateway/             public gateway
 studio/              control plane (Python server + frontend/)
 tests/               pawabase_core tests (each service has its own tests/)
-examples/code/       example project code
+code/                project code mounted into the API (empty; `.deployments` is git-ignored)
 docker/              entrypoints, dev image, Postgres init
 docker-compose.yml       production stack (one built image)
 docker-compose.dev.yml   development stack (live reload)

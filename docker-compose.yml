@@ -64,7 +64,7 @@ services:
     <<: *pawabase
     command: ["api"]
     environment: *api-env
-    volumes: [api-data:/data, ./examples/code:/code:ro]
+    volumes: [api-data:/data, ./code:/code:ro]
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -79,7 +79,7 @@ services:
     <<: *pawabase
     command: ["worker"]
     environment: *api-env
-    volumes: [api-data:/data, ./examples/code:/code:ro]
+    volumes: [api-data:/data, ./code:/code:ro]
     depends_on:
       api: { condition: service_healthy }
 
@@ -87,7 +87,7 @@ services:
     <<: *pawabase
     command: ["scheduler"]
     environment: *api-env
-    volumes: [api-data:/data, ./examples/code:/code:ro]
+    volumes: [api-data:/data, ./code:/code:ro]
     depends_on:
       api: { condition: service_healthy }
 

@@ -44,7 +44,6 @@ COPY akountz akountz
 COPY angula angula
 COPY gateway gateway
 COPY studio studio
-COPY examples examples
 COPY docker/entrypoint.sh /usr/local/bin/pawabase
 RUN chmod +x /usr/local/bin/pawabase \
     && useradd --create-home --uid 10001 pawabase \
