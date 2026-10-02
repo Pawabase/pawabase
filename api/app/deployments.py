@@ -4,8 +4,12 @@
 
     <deployments_path>/<project>/<env>/<branch>/
         current/                       the active artifact, unpacked (functions/*.py and the helper packages shipped with it)
-        current/.pawabase-deployment   {"id", "checksum"} of the active deployment: the one thing every process reads
+        current/.pawabase-deployment   {"id", "checksum", "packages"} of the active deployment: the one thing every process reads
+        current/functions/requirements.txt   optional: the libraries the functions import, installed when the deployment is activated
         archives/<deployment id>.tar.gz   every artifact ever deployed, so a rollback re-activates bytes that really ran before
+
+Libraries are installed once per distinct ``requirements.txt`` into ``<deployments_path>/.packages/<project>/<hash>/`` and put on ``sys.path`` only while
+that project's functions are imported. A deploy that changes only code reuses them; a rollback finds the ones its own deployment used.
 
 The platform may run as several processes (API workers, job workers). A deploy lands in one of them, so every process looks at the stamp file before it
 resolves a function, at most once a second, and reloads when the id changed: nothing has to be told about a deployment, and a process that starts later
@@ -21,7 +25,9 @@ import hashlib
 import io
 import json
 import logging
+import re
 import shutil
+import subprocess
 import sys
 import tarfile
 import time
@@ -30,6 +36,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from pawabase.functions import module_prefix
+
 from pawabase_core.functions import (
     MAIN,
     ProjectCode,
@@ -45,6 +52,14 @@ MAX_FILES = 2_000
 MAX_FILE_BYTES = 10 * 1024 * 1024
 MAX_UNPACKED_BYTES = 64 * 1024 * 1024
 RECHECK_SECONDS = 1.0
+REQUIREMENTS = "functions/requirements.txt"
+PACKAGES = ".packages"
+MAX_REQUIREMENTS = 100
+#: One plain requirement: a name, optional extras, version specifiers, an optional environment marker. Nothing that reaches outside the index
+#: (URLs, paths, VCS references, ``-r``/``-e``/``--index-url`` options): an upload must not choose where code comes from.
+REQUIREMENT_LINE = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9._-]*(\[[A-Za-z0-9_,.\- ]+\])?\s*((===|==|>=|<=|~=|!=|<|>)\s*[A-Za-z0-9.*+!_-]+\s*,?\s*)*(;[^#]*)?$"
+)
 #: Loaded for a whole project from the mounted code directory, never from an upload: they change what the platform enforces and routes, not what a function does.
 PROJECT_LEVEL = ("routes.py", "policies.py", "transformers.py")
 
@@ -63,6 +78,36 @@ class _Seen:
     loaded_id: str | None = None
     code: ProjectCode | None = None
     modules: list[str] = field(default_factory=list)
+
+
+def parse_requirements(text: str) -> tuple[list[str], list[str]]:
+    """The requirement lines in *text* and a problem for each line that is not a plain requirement."""
+    lines: list[str] = []
+    problems: list[str] = []
+    for number, raw in enumerate(text.splitlines(), 1):
+        line = raw.split(" #", 1)[0].strip() if not raw.lstrip().startswith("#") else ""
+        if not line:
+            continue
+        if not REQUIREMENT_LINE.match(line):
+            problems.append(f"{REQUIREMENTS}:{number}: {line!r} is not a plain requirement (a package name with optional version, such as 'Pillow>=10.3'; options, URLs and paths are not allowed).")
+        else:
+            lines.append(line)
+    if len(lines) > MAX_REQUIREMENTS:
+        problems.append(f"{REQUIREMENTS} lists {len(lines)} packages; the limit is {MAX_REQUIREMENTS}.")
+    return lines, problems
+
+
+def requirements_in(archive: bytes) -> str | None:
+    """The text of ``functions/requirements.txt`` inside a bundle, without unpacking it."""
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as bundle:
+            for member in bundle.getmembers():
+                if member.name == REQUIREMENTS and member.isfile() and member.size <= MAX_FILE_BYTES:
+                    handle = bundle.extractfile(member)
+                    return handle.read().decode("utf-8", "replace") if handle else None
+    except tarfile.TarError:
+        return None
+    return None
 
 
 def unpack(archive: bytes, destination: Path) -> int:
@@ -99,8 +144,11 @@ def unpack(archive: bytes, destination: Path) -> int:
 class Deployments:
     """Install, find, load and remove function artifacts."""
 
-    def __init__(self, root: str | Path) -> None:
+    def __init__(self, root: str | Path, *, install_requirements: bool = True, index_url: str = "", install_timeout: int = 300) -> None:
         self.root = Path(root).resolve()
+        self.install_requirements = install_requirements
+        self.index_url = index_url
+        self.install_timeout = install_timeout
         self._seen: dict[str, _Seen] = {}
 
     # ── where things are ────────────────────────────────────────────────
@@ -125,6 +173,81 @@ class Deployments:
         if not base.is_dir():
             return []
         return sorted(entry.name for entry in base.iterdir() if (entry / "current").is_dir())
+
+    # ── libraries ───────────────────────────────────────────────────────
+
+    def packages_dir(self, project: str, digest: str) -> Path:
+        return self.root / PACKAGES / project / digest
+
+    def prepare(self, project: str, archive: bytes) -> str | None:
+        """Install what the bundle's ``functions/requirements.txt`` asks for (blocking: run it off the event loop). Returns the hash that names the
+        installed set, or ``None`` when the bundle has none. Raises :class:`DeploymentError` when it cannot be installed; nothing is activated then."""
+        text = requirements_in(archive)
+        return None if text is None else self._ensure_packages(project, text)
+
+    def _ensure_packages(self, project: str, text: str) -> str | None:
+        lines, problems = parse_requirements(text)
+        if problems:
+            raise DeploymentError("functions/requirements.txt was refused.", problems)
+        if not lines:
+            return None
+        if not self.install_requirements:
+            raise DeploymentError(
+                "This platform does not install a deployment's requirements.",
+                ["functions/requirements.txt is present, but installing is off here (PAWABASE_FUNCTION_INSTALL). Install the libraries on the platform and delete the file, or enable installing."],
+                status=409,
+            )
+        digest = hashlib.sha256(("\n".join(sorted(lines)) + "\n" + self.index_url + f"\npy{sys.version_info.major}.{sys.version_info.minor}").encode()).hexdigest()[:16]
+        target = self.packages_dir(project, digest)
+        if (target / ".ok").is_file():
+            return digest
+        target.parent.mkdir(parents=True, exist_ok=True)
+        building = target.parent / f".build-{digest}-{time.monotonic_ns()}"
+        building.mkdir()
+        try:
+            requirements = building / "requirements.txt"
+            requirements.write_text("\n".join(lines) + "\n")
+            installed = building / "site"
+            self._pip(requirements, installed)
+            (installed / ".ok").write_text(json.dumps({"requirements": lines, "installed_at": time.time()}))
+            try:
+                installed.rename(target)
+            except OSError:  # another process finished the same set first
+                if not (target / ".ok").is_file():
+                    raise
+        finally:
+            shutil.rmtree(building, ignore_errors=True)
+        return digest
+
+    def _pip(self, requirements: Path, target: Path) -> None:
+        index = ["--index-url", self.index_url] if self.index_url else []
+        uv = shutil.which("uv")
+        if uv:
+            command = [uv, "pip", "install", "--quiet", "--no-cache-dir", "--python", sys.executable, "--target", str(target), "-r", str(requirements), *index]
+        else:
+            command = [sys.executable, "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--target", str(target), "-r", str(requirements), *index]
+        try:
+            done = subprocess.run(command, capture_output=True, text=True, timeout=self.install_timeout, check=False)  # noqa: S603 - argv list, lines are validated
+        except subprocess.TimeoutExpired as exc:
+            raise DeploymentError("Installing the requirements took too long.", [f"Stopped after {self.install_timeout}s."]) from exc
+        except OSError as exc:
+            raise DeploymentError("The installer could not be started.", [str(exc)], status=500) from exc
+        if done.returncode != 0:
+            tail = [line for line in (done.stderr or done.stdout).strip().splitlines() if line.strip()][-8:]
+            raise DeploymentError("The requirements could not be installed.", ["functions/requirements.txt: " + (tail[0] if tail else "the installer failed"), *tail[1:]])
+
+    def _library_paths(self, project: str, stamp: dict[str, Any] | None, current: Path) -> list[Path]:
+        digest = (stamp or {}).get("packages")
+        if not digest:
+            return []
+        target = self.packages_dir(project, digest)
+        if not (target / ".ok").is_file():  # the shared volume lost it: build it again from the artifact's own file
+            try:
+                self._ensure_packages(project, (current / REQUIREMENTS).read_text())
+            except (OSError, DeploymentError) as exc:
+                logger.error("libraries for %s are missing and could not be restored: %s", project, exc)
+                return []
+        return [target]
 
     # ── loading ─────────────────────────────────────────────────────────
 
@@ -152,8 +275,11 @@ class Deployments:
         clear_functions(key)
         for name in [name for name in sys.modules if name.startswith(f"{module_prefix(key)}.")]:
             del sys.modules[name]
-        code = load_code_dir(self.current(project, env, branch), key, only_functions=True, purge_under=self.root)
         stamp = self.stamp(project, env, branch)
+        current = self.current(project, env, branch)
+        # Forget modules an earlier artifact imported from its own files, but never the installed libraries: a C extension cannot be imported twice.
+        owners = [entry for entry in self.root.iterdir() if entry.is_dir() and entry.name != PACKAGES] if self.root.is_dir() else []
+        code = load_code_dir(current, key, only_functions=True, purge_under=owners, extra_paths=self._library_paths(project, stamp, current))
         seen.checked_at, seen.loaded_id, seen.code = time.monotonic(), (stamp or {}).get("id"), code
         if code.errors:
             logger.warning("deployment %s has errors: %s", key, code.errors)
@@ -173,7 +299,8 @@ class Deployments:
             problems = self._check(staging)
             if problems:
                 raise DeploymentError("The bundle was refused.", problems)
-            (staging / STAMP).write_text(json.dumps({"id": deployment_id, "checksum": checksum, "files": files, "activated_at": time.time()}))
+            packages = self.prepare(project, archive)
+            (staging / STAMP).write_text(json.dumps({"id": deployment_id, "checksum": checksum, "files": files, "packages": packages, "activated_at": time.time()}))
             if current.exists():
                 current.rename(previous)
             staging.rename(current)

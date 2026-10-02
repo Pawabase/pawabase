@@ -22,7 +22,7 @@ from sillo.cache import BaseCache, MemoryCache
 from sillo.cache import base as cache_base
 from tortoise.exceptions import IntegrityError
 
-from app.config import ApiSettings
+from app.config import ApiSettings, function_install_enabled
 from app.data.source import DataSourcePool
 from app.deployments import Deployments
 from app.mail import MailManager
@@ -91,7 +91,12 @@ class Platform:
             timeout=30.0, follow_redirects=False, headers={"user-agent": "Pawabase/0.1"}
         )
         self.code: dict[str, ProjectCode] = {}
-        self.deployments = Deployments(settings.deployments_path or Path(settings.code_path) / ".deployments")
+        self.deployments = Deployments(
+            settings.deployments_path or Path(settings.code_path) / ".deployments",
+            install_requirements=function_install_enabled(settings),
+            index_url=settings.function_index_url,
+            install_timeout=settings.function_install_timeout,
+        )
         self.app: Any = None
         self.app: Any = None
         self.started_at = datetime.now(UTC)

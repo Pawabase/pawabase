@@ -35,6 +35,12 @@ class ApiSettings(PlatformSettings):
     code_path: str = "code"
     #: Where ``pawabase deploy`` artifacts are stored: writable, and shared by every API and worker process. Empty means ``<code_path>/.deployments``.
     deployments_path: str = ""
+    #: Install a deployment's ``functions/requirements.txt`` at deploy time. ``None`` (the default) means yes, except when ``app_env`` is ``production``,
+    #: where installing packages from the network on a deploy is opt-in (``PAWABASE_FUNCTION_INSTALL=true``).
+    function_install: bool | None = None
+    #: Package index for those installs (empty: the installer's default).
+    function_index_url: str = ""
+    function_install_timeout: int = 300
     public_url: str = "http://127.0.0.1:8080"
     inline_worker: bool = True
     inline_scheduler: bool = False
@@ -44,6 +50,10 @@ class ApiSettings(PlatformSettings):
     #: Proxies between the gateway and the open internet (a load balancer is 1). The caller's address, as handed to functions, is the entry
     #: ``trusted_proxy_hops`` places from the right of ``X-Forwarded-For``: the gateway appends the address it saw, so the left side is whatever the caller sent.
     trusted_proxy_hops: int = 0
+
+
+def function_install_enabled(settings: ApiSettings) -> bool:
+    return settings.app_env != "production" if settings.function_install is None else settings.function_install
 
 
 def load_settings(**overrides) -> ApiSettings:

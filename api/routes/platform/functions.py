@@ -7,6 +7,7 @@ redefine. See :mod:`app.deployments` for how artifacts are stored and switched.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 from datetime import UTC, datetime
@@ -49,6 +50,13 @@ def register(r: Router, platform: Platform) -> None:
     async def activate(ref: str, env: str, deployment: FunctionDeployment, raw: bytes | None) -> FunctionDeployment:
         """Install (or re-install) *deployment*'s artifact and make it the only active one on its branch."""
         try:
+            # Libraries are installed off the event loop (it can take a while); activating then finds them already there.
+            stored = raw
+            if stored is None:
+                source = platform.deployments.archive(ref, env, deployment.branch, deployment.id)
+                stored = source.read_bytes() if source.is_file() else None
+            if stored is not None:
+                await asyncio.to_thread(platform.deployments.prepare, ref, stored)
             if raw is None:
                 code = platform.deployments.reactivate(ref, env, deployment.branch, deployment.id)
             else:
