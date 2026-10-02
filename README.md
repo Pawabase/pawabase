@@ -124,6 +124,15 @@ for s in api akountz angula gateway studio; do (cd $s && uv run pytest -q tests)
 uv run ruff check . && uv run ruff format --check .
 ```
 
+## Related repositories
+
+| Repository | What it is |
+| --- | --- |
+| [pawabase-python](https://github.com/Pawabase/pawabase-python) | Python kit, CLI and emulator (`pip install pawabase`); this platform depends on it |
+| [pawabase-js](https://github.com/Pawabase/pawabase-js) | TypeScript client (`@pawabase/client`) |
+| [pawabase-docs](https://github.com/Pawabase/pawabase-docs) | Documentation (Mintlify) |
+| [pawabase-website](https://github.com/Pawabase/pawabase-website) | Marketing site |
+
 ## Repository layout
 
 ```
@@ -134,7 +143,6 @@ angula/              realtime
 gateway/             public gateway
 studio/              control plane (Python server + frontend/)
 tests/               pawabase_core tests (each service has its own tests/)
-apps/                docs (Mintlify) and marketing site
 examples/code/       example project code
 docker/              entrypoints, dev image, Postgres init
 docker-compose.yml       production stack (one built image)

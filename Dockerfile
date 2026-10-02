@@ -20,7 +20,10 @@ ENV PYTHONUNBUFFERED=1 \
     PATH=/opt/venv/bin:$PATH \
     PYTHONPATH=/app \
     SILLO_ENV_FILE=
-RUN pip install --no-cache-dir "uv>=0.8,<0.9"
+# git: the Pawabase kit is installed from its repository (see [tool.uv.sources]).
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir "uv>=0.8,<0.9"
 WORKDIR /app
 
 # Dependencies first, so code changes do not reinstall them.
@@ -35,7 +38,6 @@ RUN uv sync --frozen --no-dev --all-packages
 # Libraries the deployed functions import (the platform does not know what they are). Edit docker/function-requirements.txt, rebuild.
 COPY docker/function-requirements.txt /tmp/function-requirements.txt
 RUN uv pip install --python /opt/venv/bin/python --no-cache -r /tmp/function-requirements.txt
-COPY pawabase pawabase
 COPY pawabase_core pawabase_core
 COPY api api
 COPY akountz akountz

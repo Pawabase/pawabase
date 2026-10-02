@@ -18,3 +18,4 @@ node_modules/
 services/studio/static/build/
 .DS_Store
 .dev/
+.deployments/

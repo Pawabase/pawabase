@@ -8,11 +8,11 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "pawabase",
     "pawabase-akountz",
     "pawabase-angula",
     "pawabase-api",
     "pawabase-gateway",
+    "pawabase-platform",
     "pawabase-studio",
 ]
 
@@ -772,25 +772,10 @@ wheels = [
 
 [[package]]
 name = "pawabase"
-version = "0.1.0"
-source = { virtual = "." }
-
-[package.dev-dependencies]
-dev = [
-    { name = "fakeredis", extra = ["lua"] },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "fakeredis", extras = ["lua"], specifier = ">=2.26" },
-    { name = "pytest", specifier = ">=8.3" },
-    { name = "pytest-asyncio", specifier = ">=0.25" },
-    { name = "ruff", specifier = ">=0.6" },
+version = "0.2.0"
+source = { git = "https://github.com/Pawabase/pawabase-python#93c78d21f3119cb8817fe4d61bc41a09cf9c81f0" }
+dependencies = [
+    { name = "httpx" },
 ]
 
 [[package]]
@@ -865,6 +850,37 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "sillo-framework", extras = ["cache", "crypto", "events", "jwt", "mail", "record", "test"], specifier = ">=1.0.0" },
     { name = "websockets", specifier = ">=12" },
+]
+
+[[package]]
+name = "pawabase-platform"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "httpx" },
+    { name = "pawabase" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "fakeredis", extra = ["lua"] },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "pawabase", git = "https://github.com/Pawabase/pawabase-python" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "fakeredis", extras = ["lua"], specifier = ">=2.26" },
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "pytest-asyncio", specifier = ">=0.25" },
+    { name = "ruff", specifier = ">=0.6" },
 ]
 
 [[package]]
