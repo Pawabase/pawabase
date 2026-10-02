@@ -16,7 +16,8 @@ from typing import Any
 from .policies.engine import lookup
 
 _TEMPLATE = re.compile(r"\{\{\s*(.+?)\s*\}\}")
-_WHOLE = re.compile(r"^\{\{\s*(.+?)\s*\}\}$")
+# One expression and nothing else. The expression may not contain "}}": otherwise "{{ a }} · {{ b }}" would match as a single expression "a }} · {{ b".
+_WHOLE = re.compile(r"^\{\{\s*((?:(?!\}\}).)+?)\s*\}\}$")
 
 
 def _apply_filter(value: Any, name: str, argument: str | None) -> Any:
