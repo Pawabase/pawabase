@@ -11,7 +11,7 @@ A field definition::
     {"name": "title", "type": "string", "required": true, "max_length": 200}
 
 Types: ``string``, ``text``, ``integer``, ``number``, ``boolean``, ``datetime``,
-``date``, ``uuid``, ``email``, ``url``, ``json``, ``array`` (with ``items``),
+``date``, ``uuid``, ``ulid``, ``email``, ``url``, ``json``, ``array`` (with ``items``),
 ``object`` (with ``fields``) and ``ref`` (with ``schema``, a reusable schema's name).
 """
 
@@ -23,7 +23,9 @@ import uuid
 from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, create_model
+
+from .ids import ULID_PATTERN
 
 FIELD_TYPES = (
     "string",
@@ -34,6 +36,7 @@ FIELD_TYPES = (
     "datetime",
     "date",
     "uuid",
+    "ulid",
     "email",
     "url",
     "json",
@@ -114,6 +117,9 @@ def _python_type(
         return dt.date
     if kind == "uuid":
         return uuid.UUID
+    if kind == "ulid":
+        # Accepted in either case, stored and returned upper-case.
+        return Annotated[str, StringConstraints(to_upper=True, pattern=ULID_PATTERN)]
     if kind == "json":
         return Any
     if kind == "array":
