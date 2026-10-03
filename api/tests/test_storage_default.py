@@ -165,3 +165,38 @@ async def test_prepare_default_reports_a_down_service():
     message = await storage.prepare_default()
     assert "NOT READY" in message
     assert "storage: local (default)" == await manager().prepare_default()
+
+
+# ── live (opt-in) ────────────────────────────────────────────────────────
+# PAWABASE_TEST_S3_ENDPOINT=http://127.0.0.1:9000 PAWABASE_TEST_S3_KEY=... PAWABASE_TEST_S3_SECRET=... pytest
+
+
+@pytest.mark.asyncio
+async def test_against_a_real_s3_compatible_service():
+    import os
+    import uuid
+
+    endpoint = os.environ.get("PAWABASE_TEST_S3_ENDPOINT")
+    if not endpoint:
+        pytest.skip("set PAWABASE_TEST_S3_ENDPOINT to run against MinIO or another S3 service")
+    driver = S3Driver(
+        bucket=f"pawabase-test-{uuid.uuid4().hex[:8]}",
+        endpoint=endpoint,
+        access_key=os.environ.get("PAWABASE_TEST_S3_KEY", ""),
+        secret_key=os.environ.get("PAWABASE_TEST_S3_SECRET", ""),
+        public_endpoint=endpoint,
+    )
+
+    async def body():
+        yield b"hello"
+
+    try:
+        assert await driver.ensure_bucket() is True
+        assert (await driver.write("dir/a.txt", body(), content_type="text/plain")).size == 5
+        assert b"".join([chunk async for chunk in driver.read("dir/a.txt")]) == b"hello"
+        assert [f.key for f in (await driver.page("dir/")).files] == ["dir/a.txt"]
+        async with httpx.AsyncClient() as client:
+            assert (await client.get(driver.signed_url("dir/a.txt"))).text == "hello"
+        assert await driver.delete("dir/a.txt") is True
+    finally:
+        await driver.close()
