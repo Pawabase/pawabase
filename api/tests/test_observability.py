@@ -187,3 +187,23 @@ async def test_the_request_trace_merges_spans_logs_and_summary(api):
     assert summary["failed"] is False and trace["error"] is None
     assert trace["requests"][0]["route"] == "/rest/v1/notes"
     assert logging.getLogger().handlers  # the capture handler is installed
+
+
+async def test_old_request_history_is_pruned_and_zero_keeps_everything(api):
+    from datetime import UTC, datetime, timedelta
+
+    from database.models import RequestLog
+
+    old = (datetime.now(UTC) - timedelta(days=30)).isoformat()
+    fresh = datetime.now(UTC).isoformat()
+    for stamp in (old, fresh):
+        await RequestLog.create(
+            request_id=stamp, service="api", project="acme", env="development",
+            method="GET", path="/x", status=200, started_at=stamp,
+        )  # fmt: skip
+    rollup = api.app.state["request_rollup"]
+    rollup.retention_days = 0
+    assert await rollup.prune() == 0
+    rollup.retention_days = 14
+    assert await rollup.prune() == 1
+    assert [r.request_id for r in await RequestLog.filter(project="acme")] == [fresh]
