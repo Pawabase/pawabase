@@ -209,9 +209,16 @@ class S3Driver(Driver):
             extra = {"content-type": resolved, "content-length": str(size)}
             if declared_type:
                 extra["x-amz-meta-declared-type"] = declared_type
+            body = spool.read()
             response = await self._request(
-                "PUT", key, content=spool.read(), payload_hash=digest.hexdigest(), extra=extra
+                "PUT", key, content=body, payload_hash=digest.hexdigest(), extra=extra
             )
+            if response.status_code == 404 and "NoSuchBucket" in response.text:
+                # A first upload to a fresh service: make the bucket, once, and retry.
+                await self.ensure_bucket()
+                response = await self._request(
+                    "PUT", key, content=body, payload_hash=digest.hexdigest(), extra=extra
+                )
         if response.status_code >= 300:
             raise StorageError(
                 f"s3 refused the write ({response.status_code}): {response.text[:200]}"
