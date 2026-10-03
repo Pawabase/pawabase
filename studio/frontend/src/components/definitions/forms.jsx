@@ -284,29 +284,6 @@ function RouteForm({ body, patch, refs }) {
   );
 }
 
-// ── mail templates ────────────────────────────────────────────────────────
-
-function MailForm({ body, patch, isNew }) {
-  const [view, setView] = useState("html");
-  return (
-    <>
-      <Identity body={body} patch={patch} isNew={isNew} namePlaceholder="welcome" />
-      <Section title="Message" description="Use {{ name }} for values the sender passes.">
-        <Field label="Subject"><input placeholder="Welcome, {{ name }}" {...text(body, "subject", patch)} /></Field>
-        <Segmented options={[["html", "HTML"], ["text", "Plain text"], ["preview", "Preview"]]} value={view} onChange={setView} />
-        {view === "html" && <textarea rows={14} spellCheck={false} placeholder="<p>Hi {{ name }}</p>" {...text(body, "html", patch)} />}
-        {view === "text" && <textarea className="prose" rows={10} placeholder="Hi {{ name }}" {...text(body, "text", patch)} />}
-        {view === "preview" && (
-          <div className="card sunken" style={{ padding: 0, overflow: "hidden" }}>
-            <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)", fontSize: 13 }}><span className="muted">Subject: </span><b>{body.subject || "(no subject)"}</b></div>
-            <iframe title="Preview" sandbox="" srcDoc={body.html || `<pre style="font-family:sans-serif">${(body.text || "").replace(/</g, "&lt;")}</pre>`} style={{ width: "100%", height: 320, border: 0, background: "#fff" }} />
-          </div>
-        )}
-      </Section>
-    </>
-  );
-}
-
 // ── event subscriptions ───────────────────────────────────────────────────
 
 function eventSuggestions(refs) {
@@ -522,7 +499,6 @@ export const FORMS = {
   policies: PolicyForm,
   resources: ResourceForm,
   routes: RouteForm,
-  "mail-templates": MailForm,
   subscriptions: SubscriptionForm,
   webhooks: WebhookForm,
   "inbound-hooks": InboundForm,

@@ -15,9 +15,9 @@ export const ENV_NAV = [
   ] },
   { title: "Automate", items: [
     ["flows", "Flows"], ["subscriptions", "Event subscriptions"], ["schedules", "Schedules"],
-    ["webhooks", "Webhooks"], ["inbound-hooks", "Inbound hooks"], ["mail-templates", "Mail templates"],
+    ["webhooks", "Webhooks"], ["inbound-hooks", "Inbound hooks"],
   ] },
-  { title: "Services", items: [["users", "Users & auth"], ["storage", "Storage"], ["realtime", "Realtime"]] },
+  { title: "Services", items: [["users", "Users & auth"], ["mail", "Mail"], ["storage", "Storage"], ["realtime", "Realtime"]] },
   { title: "Operate", items: [
     ["jobs", "Jobs & queues"], ["events", "Events & runs"], ["observability", "Observability"],
     ["keys", "API keys"], ["secrets", "Secrets"], ["backups", "Backups"], ["settings", "Settings"],
@@ -28,7 +28,7 @@ export const ENV_NAV = [
 export const SECTION_TONES = {
   resources: "lavender", schemas: "sky", transformers: "butter", policies: "mint", routes: "peach",
   functions: "sky", flows: "lavender", subscriptions: "rose", schedules: "butter", webhooks: "peach",
-  "inbound-hooks": "mint", "mail-templates": "rose", buckets: "sky", storage: "sky",
+  "inbound-hooks": "mint", mail: "rose", buckets: "sky", storage: "sky",
 };
 
 const ENV_TONES = ["lavender", "peach", "mint", "butter", "sky", "rose"];
