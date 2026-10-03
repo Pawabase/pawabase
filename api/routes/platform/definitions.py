@@ -83,7 +83,7 @@ class ResourceBody(BaseModel):
     description: str = ""
     table: str | None = Field(default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
     primary_key: str = Field(default="id", pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
-    id_type: Literal["integer", "uuid"] = "integer"
+    id_type: Literal["integer", "uuid", "ulid"] = "integer"
     fields: list[dict[str, Any]] = Field(default_factory=list)
     operations: dict[Literal["list", "get", "create", "update", "delete"], OperationSettings] = (
         Field(default_factory=dict)

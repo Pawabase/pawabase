@@ -16,6 +16,8 @@ from typing import Any
 from pypika_tortoise import Order, Table
 from pypika_tortoise.functions import Count, Star
 
+from pawabase_core.ids import new_ulid
+
 from . import inspect as db_inspect
 from .source import DataSource, timed
 from .sql import (
@@ -74,7 +76,7 @@ class ResourceSpec:
         if self.primary_key not in self.field_map:
             self.field_map[self.primary_key] = {
                 "name": self.primary_key,
-                "type": "uuid" if self.id_type == "uuid" else "integer",
+                "type": self.id_type if self.id_type in ("uuid", "ulid") else "integer",
             }
         if self.timestamps:
             for name in TIMESTAMP_FIELDS:
@@ -298,8 +300,9 @@ class ResourceStore:
         }
         values = self._clean({**defaults, **data})
         dialect = self.source.dialect
-        if self.spec.id_type == "uuid" and self.spec.primary_key not in values:
-            values[self.spec.primary_key] = self._encode(self.spec.primary_key, str(uuid.uuid4()))
+        if self.spec.primary_key not in values and self.spec.id_type in ("uuid", "ulid"):
+            fresh = str(uuid.uuid4()) if self.spec.id_type == "uuid" else new_ulid()
+            values[self.spec.primary_key] = self._encode(self.spec.primary_key, fresh)
         if self.spec.timestamps:
             stamp = now_value(dialect)
             values.setdefault("created_at", stamp)

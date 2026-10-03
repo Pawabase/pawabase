@@ -58,6 +58,7 @@ _TYPES: dict[str, dict[str, str]] = {
         "datetime": "TEXT",
         "date": "TEXT",
         "uuid": "TEXT",
+        "ulid": "TEXT",
         "json": "TEXT",
     },
     "postgres": {
@@ -71,6 +72,7 @@ _TYPES: dict[str, dict[str, str]] = {
         "datetime": "TIMESTAMPTZ",
         "date": "DATE",
         "uuid": "UUID",
+        "ulid": "CHAR(26)",
         "json": "JSONB",
     },
     "mysql": {
@@ -84,6 +86,7 @@ _TYPES: dict[str, dict[str, str]] = {
         "datetime": "DATETIME(6)",
         "date": "DATE",
         "uuid": "CHAR(36)",
+        "ulid": "CHAR(26)",
         "json": "JSON",
     },
 }
@@ -106,6 +109,9 @@ def primary_key_column(dialect: str, name: str, id_type: str) -> str:
     column = quote(dialect, name)
     if id_type == "uuid":
         kind = {"sqlite": "TEXT", "postgres": "UUID", "mysql": "CHAR(36)"}[dialect]
+        return f"{column} {kind} PRIMARY KEY"
+    if id_type == "ulid":
+        kind = {"sqlite": "TEXT", "postgres": "CHAR(26)", "mysql": "CHAR(26)"}[dialect]
         return f"{column} {kind} PRIMARY KEY"
     return {
         "sqlite": f"{column} INTEGER PRIMARY KEY AUTOINCREMENT",
@@ -181,6 +187,8 @@ def encode_value(dialect: str, spec: Mapping[str, Any] | None, value: Any) -> An
         return day.isoformat() if dialect == "sqlite" else day
     if kind == "uuid":
         return str(value) if dialect != "postgres" else uuid.UUID(str(value))
+    if kind == "ulid":
+        return str(value).upper()
     if kind == "integer":
         return int(value)
     if kind == "number":

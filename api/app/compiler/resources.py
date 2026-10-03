@@ -28,6 +28,7 @@ from app.compiler.common import PLAN_SCOPE_KEY, PlanGate, cache_key
 from app.compiler.errors import FORBIDDEN, NOT_FOUND, UNAUTHENTICATED, UNPROCESSABLE, responses
 from app.data.store import MAX_PAGE_SIZE, Filter, ResourceSpec, parse_filters, parse_sort
 from app.resources import after_write, resource_tag
+from pawabase_core.ids import is_ulid
 from pawabase_core.policies import build_policy_context
 from pawabase_core.ratelimit import rate_limit_middleware
 from pawabase_core.schemas import compile_model
@@ -55,6 +56,10 @@ def _coerce_id(spec: ResourceSpec, raw: str) -> Any:
         if not raw.isdigit():
             raise HTTPException(status_code=404, detail="Not found")
         return int(raw)
+    if spec.id_type == "ulid":
+        if not is_ulid(raw):
+            raise HTTPException(status_code=404, detail="Not found")
+        return raw.upper()
     return raw
 
 
@@ -174,7 +179,7 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
         + [
             {
                 "name": spec.primary_key,
-                "type": "uuid" if spec.id_type == "uuid" else "integer",
+                "type": spec.id_type if spec.id_type in ("uuid", "ulid") else "integer",
                 "read_only": True,
             }
         ],
