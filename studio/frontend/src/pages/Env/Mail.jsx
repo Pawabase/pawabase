@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/Layout";
 import { Icon } from "../../components/icons";
-import { Badge, Button, Card, EmptyState, Field, Json, JsonInput, Loading, Modal, PageHead, Segmented, Sheet, Status, Switch, Table, Tile, useAction, when } from "../../components/ui";
+import { Badge, Button, Card, EmptyState, Field, Json, JsonInput, Loading, Modal, PageHead, Segmented, Sheet, Spinner, Status, Switch, Table, Tile, useAction, when } from "../../components/ui";
 import { del, envPath, patch, post, put, useApi } from "../../lib/api";
 
 const PROVIDERS = [
@@ -175,7 +175,7 @@ function Delivery({ base, environment }) {
     });
     setProvider((PROVIDERS.find(([, , preset]) => preset.host && preset.host === saved.host) || ["custom"])[0]);
   }, [environment.data]);
-  if (!form) return <Loading state={environment} />;
+  if (!form) return <Loading state={environment}>{() => <div className="empty"><Spinner /></div>}</Loading>;
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
   const choose = (key) => {
     setProvider(key);
@@ -235,7 +235,7 @@ function Templates({ base }) {
         <p className="muted" style={{ margin: 0, maxWidth: 420 }}>Written in Jinja. Flows and functions send a template by name and hand it data, for example <code>{"{{ order.number }}"}</code>.</p>
         <Button variant="primary" size="sm" onClick={() => setEditing({ isNew: true, name: "", description: "", subject: "", html: "", text: "" })}><Icon name="plus" />New template</Button>
       </div>
-      <Loading state={templates} empty="No templates yet.">
+      <Loading state={templates}>
         {() => rows.length === 0
           ? <EmptyState icon="mail" tone="rose" title="No templates yet">Create one, then send it from a flow with the Send email block.</EmptyState>
           : <Table rows={rows} onRowClick={(row) => setEditing({ ...row })} columns={[{ label: "Name", render: (r) => <b>{r.name}</b> }, { label: "Subject", render: (r) => <span className="muted">{r.subject}</span> }]} />}
