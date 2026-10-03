@@ -11,6 +11,7 @@ from sillo import HttpContext, Router, no_content
 from sillo.exceptions import HTTPException
 from tortoise.functions import Count
 
+from app import route_stats
 from app.analytics import DEFAULT_RANGE, environment_analytics
 from app.platform import PLATFORM_QUEUES, Platform
 from database.models import (
@@ -388,6 +389,54 @@ def register(r: Router, platform: Platform) -> None:
                 or any(run.status == "failed" for run in runs),
             },
         }
+
+    def minutes_param(ctx: HttpContext, default: int = 60) -> int:
+        try:
+            return max(1, min(int(ctx.query_params.get("minutes", default)), 30 * 24 * 60))
+        except ValueError:
+            raise HTTPException(status_code=422, detail="minutes must be a whole number") from None
+
+    @r.get(
+        f"{base}/observability/routes",
+        auth=OPERATOR,
+        tags=["observability"],
+        summary="Routes ranked by failures, error rate, latency, traffic or time spent",
+    )
+    async def route_ranking(ctx: HttpContext, ref: str, env: str):
+        await get_environment(ref, env)
+        await platform.app.state["request_rollup"].flush()
+        try:
+            limit = max(1, min(int(ctx.query_params.get("limit", 50)), 200))
+        except ValueError:
+            raise HTTPException(status_code=422, detail="limit must be a whole number") from None
+        return await route_stats.routes_for(
+            ref, env, minutes=minutes_param(ctx), sort=ctx.query_params.get("sort", "errors"), limit=limit
+        )
+
+    @r.get(
+        f"{base}/observability/routes/detail",
+        auth=OPERATOR,
+        tags=["observability"],
+        summary="One route: timeline, statuses, errors, slowest requests, time by step kind",
+    )
+    async def route_detail(ctx: HttpContext, ref: str, env: str):
+        await get_environment(ref, env)
+        await platform.app.state["request_rollup"].flush()
+        method, route = ctx.query_params.get("method"), ctx.query_params.get("route")
+        if not method or not route:
+            raise HTTPException(status_code=422, detail="method and route are required")
+        return await route_stats.route_detail_for(ref, env, method, route, minutes=minutes_param(ctx))
+
+    @r.get(
+        f"{base}/observability/errors",
+        auth=OPERATOR,
+        tags=["observability"],
+        summary="Failures grouped by what went wrong and where",
+    )
+    async def error_groups(ctx: HttpContext, ref: str, env: str):
+        await get_environment(ref, env)
+        await platform.app.state["request_rollup"].flush()
+        return await route_stats.errors_for(ref, env, minutes=minutes_param(ctx))
 
     @r.get(f"{base}/metrics", auth=OPERATOR, tags=["observability"], summary="Counters per minute")
     async def metrics(ctx: HttpContext, ref: str, env: str):

@@ -28,6 +28,7 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from .source import timed
 from .sql import JSON_TYPES, TIMESTAMP_FIELDS, check_identifier, decode_value, encode_value, now_value, quote
 
 
@@ -87,7 +88,7 @@ class DbSession:
 
     async def fetch(self, statement: str, params: Sequence[Any] = ()) -> list[dict[str, Any]]:
         """Rows as dicts. JSON, boolean and datetime columns are decoded."""
-        rows = await self.client.execute_query_dict(self.sql(statement), [self._param(p) for p in params])
+        rows = await timed(self.client, "execute_query_dict", self.sql(statement), [self._param(p) for p in params])
         return [self._row(dict(row)) for row in rows]
 
     async def one(self, statement: str, params: Sequence[Any] = ()) -> dict[str, Any] | None:
@@ -105,7 +106,7 @@ class DbSession:
 
     async def execute(self, statement: str, params: Sequence[Any] = ()) -> int:
         """Run a write. Returns the number of rows it changed."""
-        count, _ = await self.client.execute_query(self.sql(statement), [self._param(p) for p in params])
+        count, _ = await timed(self.client, "execute_query", self.sql(statement), [self._param(p) for p in params])
         return int(count or 0)
 
     def _encode(self, table: str, data: Mapping[str, Any]) -> dict[str, Any]:
@@ -137,12 +138,15 @@ class DbSession:
         statement = f"INSERT INTO {quote(self.dialect, table)} ({columns}) VALUES ({marks})"
         key = spec.primary_key if spec is not None else "id"
         if self.dialect == "postgres":
-            rows = await self.client.execute_query_dict(
-                self.sql(statement + f" RETURNING {quote(self.dialect, key)}"), list(encoded.values())
+            rows = await timed(
+                self.client,
+                "execute_query_dict",
+                self.sql(statement + f" RETURNING {quote(self.dialect, key)}"),
+                list(encoded.values()),
             )
             new_id = rows[0][key]
         else:
-            new_id = await self.client.execute_insert(self.sql(statement), list(encoded.values()))
+            new_id = await timed(self.client, "execute_insert", self.sql(statement), list(encoded.values()))
             if key in values:
                 new_id = values[key]
         row = await self.one(f"SELECT * FROM {quote(self.dialect, table)} WHERE {quote(self.dialect, key)} = ?", [new_id])
