@@ -15,6 +15,7 @@ export const FIELD_TYPES = [
   ["datetime", "Date & time", "⏱", "butter"],
   ["date", "Date", "D", "butter"],
   ["uuid", "UUID", "id", "peach"],
+  ["ulid", "ULID", "id", "peach"],
   ["email", "Email", "@", "rose"],
   ["url", "URL", "↗", "rose"],
   ["json", "JSON", "{}", "peach"],

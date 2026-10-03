@@ -145,8 +145,8 @@ function ResourceForm({ body, patch, refs, isNew }) {
           <Field label="Primary key">
             <input className="mono" {...text(body, "primary_key", patch)} placeholder="id" />
           </Field>
-          <Field label="ID type">
-            <Segmented options={[["integer", "Auto-increment"], ["uuid", "UUID"]]} value={body.id_type || "integer"} onChange={(id_type) => patch({ id_type })} />
+          <Field label="ID type" hint="Chosen once: changing it later does not convert existing rows. ULIDs are sortable by creation time and do not reveal how many records exist.">
+            <Segmented options={[["ulid", "ULID"], ["uuid", "UUID"], ["integer", "Auto-increment"]]} value={body.id_type || "integer"} onChange={(id_type) => patch({ id_type })} />
           </Field>
           <Field label="Description" optional className="span"><input placeholder="What rows live here?" {...text(body, "description", patch)} /></Field>
         </div>
