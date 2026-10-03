@@ -19,7 +19,7 @@ from database.models import FunctionRun
 from pawabase_core.flows import FlowError, FlowRun
 from pawabase_core.functions import MAIN, FunctionError
 from pawabase_core.schemas import validate_payload
-from pawabase_core.telemetry import note
+from pawabase_core.telemetry import note, span
 
 logger = logging.getLogger("pawabase.execution")
 
@@ -73,7 +73,8 @@ async def run_flow(
     request_flow = {"run_id": run.id, "flow": name, "trigger": trigger, "status": "running"}
     note("flow_runs", request_flow, append=True)
     try:
-        await run.execute()
+        with span("flow", name, trigger=trigger):
+            await run.execute()
         return run
     except FlowError as exc:
         status, error = "failed", exc.message
@@ -137,7 +138,8 @@ async def call_function(
     started = time.perf_counter()
     status, output, error = "succeeded", None, None
     try:
-        output = await asyncio.wait_for(spec.handler(context), timeout=spec.timeout)
+        with span("function", name, trigger=trigger):
+            output = await asyncio.wait_for(spec.handler(context), timeout=spec.timeout)
         return output
     except TimeoutError as exc:
         status, error = "failed", f"function {name!r} exceeded {spec.timeout}s"

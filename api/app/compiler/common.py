@@ -9,7 +9,7 @@ from typing import Any
 from sillo.auth.exceptions import AuthenticationFailed, PermissionDenied
 
 from pawabase_core.policies import PolicyGate, build_policy_context
-from pawabase_core.telemetry import note
+from pawabase_core.telemetry import note, span
 
 PLAN_SCOPE_KEY = "pawabase.plan"
 
@@ -36,7 +36,9 @@ class PlanGate(PolicyGate):
         ):
             raise PermissionDenied(f"This API key lacks the {self.scope_required!r} scope")
         engine = self._engine(ctx)
-        plan = engine.plan(self.policy, build_policy_context(ctx))
+        with span("policy", str(self.policy)) as step:
+            plan = engine.plan(self.policy, build_policy_context(ctx))
+            step.set(allowed=plan.allowed)
         ctx.scope[PLAN_SCOPE_KEY] = plan
         note("policy", plan.policy)
         if not plan.allowed:

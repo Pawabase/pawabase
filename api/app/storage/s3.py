@@ -26,6 +26,8 @@ import httpx
 from sillo.storage.base import Driver, FileInfo, Page, Stored
 from sillo.storage.errors import FileNotFound, StorageError
 
+from pawabase_core.telemetry import span
+
 CHUNK = 64 * 1024
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 NS = "{http://s3.amazonaws.com/doc/2006-03-01/}"
@@ -146,9 +148,12 @@ class S3Driver(Driver):
     ) -> httpx.Response:
         url, path = self._url(key)
         headers = self._headers(method, url, path, query, payload_hash=payload_hash, extra=extra)
-        return await self._client.request(
-            method, url, params=query, content=content, headers=headers
-        )
+        with span("storage", f"s3 {method} {key or self.bucket}") as step:
+            response = await self._client.request(
+                method, url, params=query, content=content, headers=headers
+            )
+            step.set(status=response.status_code)
+            return response
 
     # ── the contract ─────────────────────────────────────────────────────
 

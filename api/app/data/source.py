@@ -15,6 +15,8 @@ from typing import Any
 
 from tortoise.backends.base.config_generator import expand_db_url
 
+from pawabase_core.telemetry import span
+
 from .sql import dialect_of
 
 
@@ -75,17 +77,23 @@ class DataSource:
 
     async def fetch(self, sql: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
         await self.connect()
-        return [dict(row) for row in await self.client.execute_query_dict(sql, params or [])]
+        with span("db", sql, op="fetch", params=len(params or [])) as step:
+            rows = [dict(row) for row in await self.client.execute_query_dict(sql, params or [])]
+            step.set(rows=len(rows))
+            return rows
 
     async def execute(self, sql: str, params: list[Any] | None = None) -> int:
         await self.connect()
-        count, _ = await self.client.execute_query(sql, params or [])
-        return count
+        with span("db", sql, op="execute", params=len(params or [])) as step:
+            count, _ = await self.client.execute_query(sql, params or [])
+            step.set(rows=count)
+            return count
 
     async def insert(self, sql: str, params: list[Any]) -> Any:
         """Run an INSERT; returns the new row id on SQLite and MySQL."""
         await self.connect()
-        return await self.client.execute_insert(sql, params)
+        with span("db", sql, op="insert", params=len(params)):
+            return await self.client.execute_insert(sql, params)
 
     async def script(self, sql: str) -> None:
         await self.connect()

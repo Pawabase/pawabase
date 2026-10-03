@@ -41,7 +41,7 @@ from pawabase_core.functions import (
     load_project_code,
     resolve_function,
 )
-from pawabase_core.telemetry import note
+from pawabase_core.telemetry import note, span
 
 if TYPE_CHECKING:
     from sillo.work.queue import QueueConnection
@@ -208,10 +208,12 @@ class Platform:
         return f"{state.project_ref}:{state.env_name}:{definition}:{tag}"
 
     async def cache_get(self, state: EnvironmentState, key: str) -> Any:
-        value = await self.cache.get(self.cache_key(state, key))
-        # Sillo's cache answers a miss with a sentinel object, not None.
-        if value is getattr(cache_base, "_MISSING", None):
-            value = None
+        with span("cache", f"get {key}") as step:
+            value = await self.cache.get(self.cache_key(state, key))
+            # Sillo's cache answers a miss with a sentinel object, not None.
+            if value is getattr(cache_base, "_MISSING", None):
+                value = None
+            step.set(result="hit" if value is not None else "miss")
         note("cache", "hit" if value is not None else "miss", append=True)
         return value
 
@@ -224,17 +226,21 @@ class Platform:
         ttl: int | None = None,
         tags: list[str] | None = None,
     ) -> None:
-        await self.cache.set(
-            self.cache_key(state, key),
-            value,
-            ttl=ttl,
-            tags=[self.cache_tag(state, t) for t in tags or []],
-        )
+        with span("cache", f"set {key}", ttl=ttl):
+            await self.cache.set(
+                self.cache_key(state, key),
+                value,
+                ttl=ttl,
+                tags=[self.cache_tag(state, t) for t in tags or []],
+            )
 
     async def cache_invalidate(self, state: EnvironmentState, tags: list[str]) -> int:
         if not tags:
             return 0
-        return await self.cache.invalidate_tags(*[self.cache_tag(state, t) for t in tags])
+        with span("cache", "invalidate", tags=list(tags)) as step:
+            removed = await self.cache.invalidate_tags(*[self.cache_tag(state, t) for t in tags])
+            step.set(removed=removed)
+            return removed
 
     # ── jobs ─────────────────────────────────────────────────────────────
 
@@ -262,7 +268,8 @@ class Platform:
             },
             default=str,
         )
-        job_id = await self.queue.push(queue_name, payload, delay=int(delay or 0))
+        with span("job", f"dispatch {job.__name__}", queue=queue_name, delay=int(delay or 0)):
+            job_id = await self.queue.push(queue_name, payload, delay=int(delay or 0))
         now = datetime.now(UTC)
         describe = {
             "target": target,
@@ -303,16 +310,17 @@ class Platform:
         request_id: str | None = None,
     ) -> str:
         note("events", name, append=True)
-        return await self.bus.emit(
-            name,
-            project=state.project_ref,
-            env=state.env_name,
-            payload=payload,
-            actor=actor,
-            request_id=request_id,
-            release_id=state.release_id,
-            api_version=state.api_version,
-        )
+        with span("event", f"emit {name}"):
+            return await self.bus.emit(
+                name,
+                project=state.project_ref,
+                env=state.env_name,
+                payload=payload,
+                actor=actor,
+                request_id=request_id,
+                release_id=state.release_id,
+                api_version=state.api_version,
+            )
 
     # ── realtime ─────────────────────────────────────────────────────────
 
@@ -322,11 +330,12 @@ class Platform:
         """Publish through Angula, the realtime service."""
         context = PlatformContext(project=state.project_ref, env=state.env_name, role="service")
         note("realtime", channel, append=True)
-        return await self.angula.post(
-            "/internal/v1/publish",
-            json={"channel": channel, "event": event, "payload": payload},
-            context=context,
-        )
+        with span("realtime", f"publish {channel}", event=event):
+            return await self.angula.post(
+                "/internal/v1/publish",
+                json={"channel": channel, "event": event, "payload": payload},
+                context=context,
+            )
 
 
 def _truncate(value: Any, limit: int = 4000) -> Any:

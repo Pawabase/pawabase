@@ -16,6 +16,7 @@ from jinja2.sandbox import SandboxedEnvironment
 from sillo.mail import MailClient, MailConfig
 
 from database.models import MailLog
+from pawabase_core.telemetry import span
 
 if TYPE_CHECKING:
     from app.platform import Platform
@@ -90,9 +91,10 @@ class MailManager:
             subject = subject or rendered_subject
             html = html or rendered_html
             text = text or rendered_text
-        result = await self.client(state).send_email(
-            to=to, subject=subject, body=text or "", html_body=html
-        )
+        with span("mail", f"send {template or subject}"[:200], recipients=len(to)):
+            result = await self.client(state).send_email(
+                to=to, subject=subject, body=text or "", html_body=html
+            )
         suppressed = bool((result.provider_response or {}).get("suppressed"))
         await MailLog.create(
             project=state.project_ref,
