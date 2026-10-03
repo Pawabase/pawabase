@@ -179,9 +179,18 @@ Each environment's infrastructure is configured by the developer and stored on t
 |---|---|
 | `database_url` | The developer's database, where Resource data lives |
 | `redis_url` | Cache, queues and events for this environment (optional) |
-| `storage` | Driver (`local`, `s3`) plus bucket, endpoint and credentials (credentials are secret references) |
+| `storage` | Driver (`local`, `s3`) plus bucket, endpoint and credentials (credentials are secret references). Unset, the environment uses the platform default below |
 | `mail` | SMTP settings (the password is a secret reference) |
 | `auth` | Token lifetimes, password policy, enabled providers and their credentials (secret references) |
+
+**Default storage.** An environment that configures no `storage` gets the platform default, set
+by `PAWABASE_STORAGE_*`. The Docker install runs MinIO and points the default at it, so files work
+with no setup; setting `PAWABASE_STORAGE_ENDPOINT` (and credentials) swaps in any S3-compatible
+service. With no endpoint at all (the API run outside Docker) the default is the local disk. The
+API creates the remote bucket on startup or on the first write, and every Pawabase bucket is a key
+prefix (`<project>/<env>/<bucket>/`) inside that one remote bucket. Presigned URLs are signed for
+`PAWABASE_STORAGE_PUBLIC_ENDPOINT`, the address browsers reach, which differs from the internal
+`http://minio:9000` the API talks to.
 
 Values of the form `secret://NAME` are resolved from the environment's encrypted secrets when they
 are used. They are never returned by the API.
