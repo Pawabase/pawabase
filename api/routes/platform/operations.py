@@ -20,6 +20,7 @@ from database.models import (
     EventLog,
     FailedJobRecord,
     FlowRun,
+    FunctionRun,
     JobRun,
     MailLog,
     MetricCounter,
@@ -360,33 +361,68 @@ def register(r: Router, platform: Platform) -> None:
         jobs = await JobRun.filter(project=ref, env=env, request_id=request_id).order_by(
             "created_at"
         )
-        if not request_rows and not runs and not events and not jobs:
+        function_runs = await FunctionRun.filter(
+            project=ref, env=env, request_id=request_id
+        ).order_by("created_at")
+        if not (request_rows or runs or events or jobs or function_runs):
             raise HTTPException(status_code=404, detail="no such request trace")
-        logs = []
+        logs, seen = [], set()
+
+        def add_log(entry: Any, source: str, **extra: Any) -> None:
+            item = dict(entry) if isinstance(entry, dict) else {"message": str(entry)}
+            item.setdefault("request_id", request_id)
+            item.update({k: v for k, v in extra.items() if v is not None})
+            item["source"] = source
+            stamp = (item.get("timestamp") or item.get("at"), item.get("level"), item.get("message"))
+            if stamp in seen:  # a function's own log is also noted on the request it ran in
+                return
+            seen.add(stamp)
+            logs.append(item)
+
+        for row in request_rows:
+            for entry in (row.notes or {}).get("logs", []):
+                add_log(entry, "request")
+        for run in function_runs:
+            for entry in run.logs or []:
+                add_log(entry, f"function:{run.function}", function=run.function, run_id=run.id)
         for run in runs:
             for entry in run.logs or []:
-                item = dict(entry) if isinstance(entry, dict) else {"message": str(entry)}
-                item.setdefault("flow", run.flow)
-                item.setdefault("run_id", run.id)
-                item.setdefault("request_id", request_id)
-                logs.append(item)
+                add_log(entry, f"flow:{run.flow}", flow=run.flow, run_id=run.id)
         logs.sort(key=lambda item: str(item.get("timestamp") or item.get("at") or ""))
+        spans = []
+        for row in request_rows:
+            for item in (row.notes or {}).get("spans", []):
+                spans.append({**item, "service": row.service})
+        db = [item for item in spans if item.get("kind") == "db"]
+        failed_spans = [item for item in spans if item.get("status") == "error"]
+        primary = request_rows[0] if request_rows else None
         return {
             "request_id": request_id,
             "requests": [dump(row) for row in request_rows],
+            "spans": spans,
             "flow_runs": [dump(run) for run in runs],
+            "function_runs": [dump(run) for run in function_runs],
             "events": [dump(event) for event in events],
             "jobs": [dump(job) for job in jobs],
             "logs": logs,
+            "error": primary.error if primary else None,
+            "traceback": (primary.notes or {}).get("traceback") if primary else None,
             "summary": {
                 "services": sorted({row.service for row in request_rows}),
                 "duration_ms": round(sum(row.duration_ms for row in request_rows), 3),
                 "flows": len(runs),
+                "functions": len(function_runs),
                 "events": len(events),
                 "jobs": len(jobs),
                 "logs": len(logs),
+                "spans": len(spans),
+                "db_queries": len(db),
+                "db_ms": round(sum(item.get("duration_ms", 0) for item in db if item.get("parent") is None), 3),
+                "slowest_span": max(spans, key=lambda item: item.get("duration_ms", 0), default=None),
+                "failed_spans": len(failed_spans),
                 "failed": any(row.status >= 500 for row in request_rows)
-                or any(run.status == "failed" for run in runs),
+                or any(run.status == "failed" for run in runs)
+                or any(run.status == "failed" for run in function_runs),
             },
         }
 

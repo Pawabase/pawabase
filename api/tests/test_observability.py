@@ -167,3 +167,23 @@ async def test_routes_and_errors_are_ranked_from_real_traffic(api):
 
     with pytest.raises(ServiceError, match="method and route are required"):
         await api.studio.get(f"{ENV}/observability/routes/detail", params={"method": "GET"})
+
+
+async def test_the_request_trace_merges_spans_logs_and_summary(api):
+    import logging
+
+    anon = await seed(api)
+    assert (await api.http.post("/rest/v1/notes", json={"text": "a"}, headers=anon)).status_code == 201
+    await api.drain()
+    await api.app.state["request_rollup"].flush()
+    history = await api.studio.get(f"{ENV}/requests", params={"search": "/rest/v1/notes"})
+    request_id = next(r for r in history["data"] if r["method"] == "POST")["request_id"]
+
+    trace = await api.studio.get(f"{ENV}/requests/{request_id}")
+    summary = trace["summary"]
+    assert summary["spans"] == len(trace["spans"]) > 0
+    assert summary["db_queries"] >= 1 and summary["db_ms"] >= 0
+    assert summary["slowest_span"]["duration_ms"] == max(s["duration_ms"] for s in trace["spans"])
+    assert summary["failed"] is False and trace["error"] is None
+    assert trace["requests"][0]["route"] == "/rest/v1/notes"
+    assert logging.getLogger().handlers  # the capture handler is installed
