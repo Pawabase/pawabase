@@ -14,7 +14,9 @@ records through ``GET /internal/v1/telemetry/requests``.
 from __future__ import annotations
 
 import contextvars
+import logging
 import time
+import traceback
 from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
@@ -32,7 +34,20 @@ _trace: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
     "pawabase_trace", default=None
 )
 
+#: When the current request started (``perf_counter``), so spans record offsets from it.
+_origin: contextvars.ContextVar[float | None] = contextvars.ContextVar(
+    "pawabase_trace_origin", default=None
+)
+#: The innermost open span's id, so spans nest.
+_open_span: contextvars.ContextVar[int | None] = contextvars.ContextVar(
+    "pawabase_open_span", default=None
+)
+
 SKIP_PREFIXES = ("/internal/v1/telemetry",)
+#: Caps that keep one runaway request (a loop of queries) from bloating its record.
+MAX_SPANS = 200
+MAX_LOGS = 200
+MAX_TEXT = 2_000
 
 
 def should_skip(path: str) -> bool:
@@ -84,6 +99,109 @@ def current_notes() -> dict[str, Any] | None:
     return _trace.get()
 
 
+class span:
+    """Time one step of the current request: ``with span("db", "SELECT ...", rows=3): ...``.
+
+    Spans land in the request record's ``notes["spans"]`` as a flat list with
+    ``start_ms`` (offset from the request's start), ``duration_ms``, ``kind``,
+    ``name``, ``status`` (``ok`` or ``error``), ``parent`` (an enclosing span's
+    id) and free-form ``attrs``. Studio draws them as a waterfall. Outside a
+    request it does nothing, so library code can use it freely. Works in sync
+    and async code, since it never awaits.
+    """
+
+    __slots__ = ("kind", "name", "attrs", "_entry", "_started", "_token")
+
+    def __init__(self, kind: str, name: str, **attrs: Any) -> None:
+        self.kind = kind
+        self.name = name[:MAX_TEXT]
+        self.attrs = attrs
+        self._entry: dict[str, Any] | None = None
+        self._token: Any = None
+
+    def set(self, **attrs: Any) -> None:
+        """Add attributes once they are known (a row count, a status code)."""
+        self.attrs.update(attrs)
+        if self._entry is not None:
+            self._entry["attrs"].update(attrs)
+
+    def __enter__(self) -> span:
+        trace = _trace.get()
+        origin = _origin.get()
+        if trace is None or origin is None:
+            return self
+        spans = trace.setdefault("spans", [])
+        if len(spans) >= MAX_SPANS:
+            trace["spans_dropped"] = trace.get("spans_dropped", 0) + 1
+            return self
+        self._started = time.perf_counter()
+        self._entry = {
+            "id": len(spans) + 1,
+            "parent": _open_span.get(),
+            "kind": self.kind,
+            "name": self.name,
+            "start_ms": round((self._started - origin) * 1000, 3),
+            "duration_ms": 0.0,
+            "status": "ok",
+            "attrs": dict(self.attrs),
+        }
+        spans.append(self._entry)
+        self._token = _open_span.set(self._entry["id"])
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        entry = self._entry
+        if entry is None:
+            return
+        entry["duration_ms"] = round((time.perf_counter() - self._started) * 1000, 3)
+        if exc_type is not None:
+            entry["status"] = "error"
+            entry["attrs"]["error"] = f"{exc_type.__name__}: {exc}"[:MAX_TEXT]
+        _open_span.reset(self._token)
+
+
+class RequestLogHandler(logging.Handler):
+    """Copies log lines emitted while a request is running onto that request's record.
+
+    Anything the platform or a user function logs through Python's ``logging``
+    during a request (INFO and up) shows up in the request's trace, next to
+    the spans, with no change to the code that logs. Errors logged with an
+    exception also give the request its ``error`` and ``traceback``. Lines the
+    runtime already notes itself (``extra={"pawabase": ...}``) are skipped.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.INFO)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        trace = _trace.get()
+        if trace is None or hasattr(record, "pawabase") or record.name.startswith(
+            ("pawabase.telemetry", "pawabase.api.metrics", "httpx", "httpcore")
+        ):
+            return
+        try:
+            logs = trace.setdefault("logs", [])
+            origin = _origin.get()
+            if len(logs) < MAX_LOGS:
+                logs.append(
+                    {
+                        "timestamp": datetime.now(UTC).isoformat(),
+                        "level": record.levelname.lower(),
+                        "message": record.getMessage()[:MAX_TEXT],
+                        "logger": record.name,
+                        "at_ms": round((time.perf_counter() - origin) * 1000, 3) if origin else None,
+                    }
+                )
+            else:
+                trace["logs_dropped"] = trace.get("logs_dropped", 0) + 1
+            if record.exc_info and record.exc_info[0] is not None and "traceback" not in trace:
+                kind, value, tb = record.exc_info
+                trace["traceback"] = "".join(traceback.format_exception(kind, value, tb))[-4_000:]
+                trace.setdefault("error", f"{kind.__name__}: {value}"[:MAX_TEXT])
+        except Exception:  # logging must never fail a request
+            pass
+
+
 class TelemetryRecorder:
     """ASGI middleware that records each HTTP request."""
 
@@ -100,6 +218,7 @@ class TelemetryRecorder:
         status_holder = {"status": 500}
         trace: dict[str, Any] = {}
         token = _trace.set(trace)
+        origin_token = _origin.set(started)
         error: str | None = None
 
         async def capture(message):
@@ -111,9 +230,11 @@ class TelemetryRecorder:
             await self.app(scope, receive, capture)
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
+            trace.setdefault("traceback", traceback.format_exc()[-4_000:])
             raise
         finally:
             _trace.reset(token)
+            _origin.reset(origin_token)
             await self.telemetry.record(
                 self._build(
                     scope, receive, status_holder["status"], started, started_at, trace, error
@@ -175,6 +296,11 @@ class Telemetry:
 
     def install(self, app: Any) -> Telemetry:
         app.state[self.name] = self
+        root = logging.getLogger()
+        if not any(isinstance(handler, RequestLogHandler) for handler in root.handlers):
+            root.addHandler(RequestLogHandler())
+            if root.level == logging.NOTSET or root.level > logging.INFO:
+                root.setLevel(logging.INFO)
         # Registered in this order so the request id middleware is outermost
         # and the recorder can read the id it assigned.
         app.use(TelemetryRecorder(self))
