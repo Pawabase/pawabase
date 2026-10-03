@@ -4,11 +4,11 @@ import { envPath, useApi } from "../../../lib/api";
 import { MethodBadge, RateBar, ms, percent } from "./shared";
 
 const SORTS = [
-  { value: "errors", label: "Most failing" },
-  { value: "error_rate", label: "Error rate" },
-  { value: "slow", label: "Slowest" },
-  { value: "traffic", label: "Busiest" },
-  { value: "time", label: "Most time" },
+  ["errors", "Most failing"],
+  ["error_rate", "Error rate"],
+  ["slow", "Slowest"],
+  ["traffic", "Busiest"],
+  ["time", "Most time"],
 ];
 
 export default function Routes({ project, env, minutes, onRoute, onTrace }) {
