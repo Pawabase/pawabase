@@ -303,3 +303,10 @@ async def test_paths_that_skip_the_api_still_respect_organizations(studio):
     assert explored.status_code == 404
     mine = await studio.http.get("/studio/api/auth/projects/shop/envs/main/users")
     assert mine.status_code == 200
+
+
+def test_mail_is_a_service_page_and_the_mail_templates_page_is_gone():
+    from routes import DEFINITION_KINDS, SECTIONS
+
+    assert SECTIONS["mail"] == "Env/Mail"
+    assert "mail-templates" not in SECTIONS and "mail-templates" not in DEFINITION_KINDS

@@ -53,13 +53,6 @@ export const KINDS = {
     blank: { method: "POST", path: "", name: "", description: "", policy: "authenticated", input_fields: null, handler_type: "flow", handler: "", rate_limit: {}, enabled: true },
     template: { method: "POST", path: "/checkout", name: "checkout", description: "", policy: "authenticated", input_fields: [field("cart_id", "integer", { required: true })], handler_type: "flow", handler: "checkout", rate_limit: { limit: 30, window: 60 } },
   },
-  "mail-templates": {
-    title: "Mail templates",
-    description: "Subjects and bodies with {{ template }} values, sent by flows, functions and Akountz.",
-    columns: ["name", "subject"],
-    blank: { name: "", description: "", subject: "", html: "", text: "" },
-    template: { name: "welcome", description: "", subject: "Welcome, {{ name }}", html: "<p>Hi {{ name }}, welcome aboard.</p>", text: "Hi {{ name }}, welcome aboard." },
-  },
   subscriptions: {
     title: "Event subscriptions",
     description: "Run a flow or function, or broadcast to a realtime channel, when an event is emitted.",
