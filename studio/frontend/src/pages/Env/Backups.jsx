@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import Layout from "../../components/Layout";
+import { Icon } from "../../components/icons";
 import { Badge, Button, Card, Field, Json, PageHead, Segmented, useAction } from "../../components/ui";
 import { envPath, get, post } from "../../lib/api";
 
@@ -27,6 +28,9 @@ export default function Backups({ project, env }) {
   const [strategy, setStrategy] = useState("merge");
   const [confirm, setConfirm] = useState("");
   const [report, setReport] = useState(null);
+  const [over, setOver] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [problem, setProblem] = useState(null);
   const input = useRef(null);
   const [run, busy] = useAction();
 
@@ -40,23 +44,28 @@ export default function Backups({ project, env }) {
     }, "Backup downloaded");
   };
 
-  const choose = async (event) => {
-    const picked = event.target.files?.[0];
+  const readFile = async (picked) => {
     setReport(null);
     setPreview(null);
-    if (!picked) return;
+    setProblem(null);
+    setFile({ name: picked.name, size: picked.size });
     let backup;
     try {
       backup = JSON.parse(await picked.text());
     } catch {
-      setFile(null);
-      return run(async () => { throw new Error("That file is not JSON."); });
+      setProblem("That file is not JSON, so it is not a Pawabase backup.");
+      return;
     }
-    setFile({ name: picked.name, backup });
-    const result = await run(() => post(`${base}/restore`, { backup, dry_run: true }));
-    if (result && result !== true) {
+    setFile({ name: picked.name, size: picked.size, backup });
+    setChecking(true);
+    try {
+      const result = await post(`${base}/restore`, { backup, dry_run: true });
       setPreview(result);
-      setRestoreParts(result.would_restore);
+      setRestoreParts(result.would_restore || []);
+    } catch (error) {
+      setProblem(`This file was refused: ${error.message || "it does not look like a Pawabase backup."}`);
+    } finally {
+      setChecking(false);
     }
   };
 
@@ -69,7 +78,7 @@ export default function Backups({ project, env }) {
   };
 
   const available = preview?.would_restore || [];
-  const ready = file && preview && restoreParts.length && (strategy === "merge" || confirm === env);
+  const ready = Boolean(file?.backup && preview && restoreParts.length && (strategy === "merge" || confirm === env));
 
   return (
     <Layout title="Backups">
@@ -91,18 +100,28 @@ export default function Backups({ project, env }) {
         </Card>
 
         <Card title="Restore from a backup">
-          <div className="stack">
-            <Field label="Backup file" hint="A .pawabase-backup.json file downloaded from Studio or the API.">
-              <input ref={input} type="file" accept="application/json,.json" onChange={choose} />
-            </Field>
+          <div className="restore-step">
+            <label className={`dropzone ${over ? "over" : ""}`} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); setOver(false); const dropped = e.dataTransfer.files?.[0]; if (dropped) readFile(dropped); }}>
+              <input ref={input} type="file" accept="application/json,.json" onChange={(e) => e.target.files?.[0] && readFile(e.target.files[0])} />
+              <Icon name="upload" />
+              <b>{file ? file.name : "Choose a backup file, or drop it here"}</b>
+              <span className="hint">{file ? `${(file.size / 1024).toFixed(0)} KB · choose another to replace it` : "A .pawabase-backup.json file downloaded from Studio or the API."}</span>
+            </label>
+
+            {checking && <div className="alert info">Checking the file…</div>}
+            {problem && <div className="alert error">{problem}</div>}
 
             {preview && (
               <>
                 <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                  <Badge tone="lavender">{preview.source?.project}/{preview.source?.env}</Badge>
-                  <span className="muted">{file.name}</span>
+                  <Badge tone="lavender">from {preview.source?.project}/{preview.source?.env}</Badge>
+                  <span className="muted">Nothing has changed yet: this is what the file holds.</span>
                 </div>
-                <Json value={preview.contents} />
+                <div className="restore-summary">
+                  {Object.entries(preview.contents || {}).flatMap(([part, counts]) =>
+                    typeof counts === "object" && counts ? Object.entries(counts).filter(([, n]) => typeof n === "number" && n > 0).map(([name, n]) => ({ key: `${part}.${name}`, name: name.replace(/_/g, " "), n })) : [{ key: part, name: part, n: counts }],
+                  ).slice(0, 24).map((item) => <div key={item.key}><b>{typeof item.n === "number" ? item.n.toLocaleString() : String(item.n)}</b><span>{item.name}</span></div>)}
+                </div>
                 <Field label="What to restore">
                   <div className="stack" style={{ gap: 6 }}>
                     {PARTS.filter(([key]) => available.includes(key)).map(([key, label]) => (
@@ -120,9 +139,15 @@ export default function Backups({ project, env }) {
                     <input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={env} />
                   </Field>
                 )}
-                <div><Button variant={strategy === "replace" ? "danger" : "primary"} disabled={busy || !ready} onClick={restore}>{strategy === "replace" ? "Replace from backup" : "Restore backup"}</Button></div>
               </>
             )}
+
+            <div className="restore-bar">
+              <span className="what">
+                {!file ? "Choose a file to begin." : checking ? "Checking…" : !preview ? "This file cannot be restored." : !restoreParts.length ? "Pick at least one part to restore." : strategy === "replace" && confirm !== env ? `Type ${env} above to enable Replace.` : <><b>{restoreParts.length}</b> part{restoreParts.length === 1 ? "" : "s"} · {strategy === "replace" ? "replacing" : "merging into"} <b>{env}</b></>}
+              </span>
+              <Button variant={strategy === "replace" ? "danger" : "primary"} disabled={busy || !ready} onClick={restore}>{busy && file ? "Working…" : strategy === "replace" ? "Replace from backup" : "Restore backup"}</Button>
+            </div>
 
             {report && (
               <>
