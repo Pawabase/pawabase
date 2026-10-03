@@ -93,25 +93,27 @@ class EnvironmentState:
         configured = self.infra.get("database_url")
         if configured:
             return self.platform.resolve_value(self, configured)
-        return self.platform.settings.default_data_url.format(
-            project=self.project_ref, env=self.env_name
-        )
+        url = self.platform.settings.default_data_url.format(project=self.project_ref, env=self.env_name)
+        if url.startswith(("postgres://", "postgresql://")) and "schema=" not in url:
+            # One shared Postgres database, one schema per environment (see ``data_schema``).
+            url += ("&" if "?" in url else "?") + f"schema={self.data_schema()}"
+        return url
+
+    def data_schema(self) -> str:
+        """The Postgres schema holding this environment's resource tables in the shared default database."""
+        scope = hashlib.sha256(f"{self.project_ref}:{self.env_name}".encode()).hexdigest()[:12]
+        return f"pb_{scope}"
 
     def database_table(self, table: str) -> str:
-        """Physical table name for the default shared Postgres database.
+        """The physical table name: the resource's own.
 
-        Docker's resource-data database is shared by all Pawabase
-        environments. Prefixing only its default tables prevents identically
-        named resources in development and production from colliding. An
-        explicitly configured database is owned by the developer, so its
-        declared table name is preserved exactly.
+        Environments sharing the default Postgres database are kept apart by
+        *schema* (``database_url`` points each at its own ``search_path``), not by
+        renaming tables. A table keeps the name the developer gave it, so the SQL a
+        function or a flow writes (``SELECT … FROM orders``) means the same thing in
+        every database, whatever hosts it.
         """
-        if self.infra.get("database_url") or not self.database_url().startswith(
-            ("postgres://", "postgresql://")
-        ):
-            return table
-        scope = hashlib.sha256(f"{self.project_ref}:{self.env_name}".encode()).hexdigest()[:12]
-        return f"pb_{scope}_{table}"[:63]
+        return table
 
     async def source(self) -> DataSource:
         return await self.platform.sources.get(

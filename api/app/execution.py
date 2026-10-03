@@ -160,8 +160,9 @@ async def call_function(
                 deployment_id=_deployment_of(platform, spec),
                 trigger=trigger,
                 status=status,
-                input=json_safe(input),
-                output=json_safe(output) if status == "succeeded" else None,
+                input=json_safe(input) if input is not None else {},
+                # The columns are NOT NULL on Postgres (the migration gave them no null=True): a failed run records an empty output, not SQL NULL.
+                output=json_safe(output) if status == "succeeded" and output is not None else {},
                 error=error,
                 logs=json_safe([*context.logs, *runtime.logs]),
                 duration_ms=round((time.perf_counter() - started) * 1000, 3),

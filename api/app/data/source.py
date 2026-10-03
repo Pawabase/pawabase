@@ -64,6 +64,10 @@ class DataSource:
                 raise DataSourceError(
                     f"could not connect to the environment database: {type(exc).__name__}: {exc}"
                 ) from exc
+            schema = credentials.get("schema")
+            if schema:
+                # The environment's own schema on a shared Postgres database: made before anything asks for a table in it.
+                await client.execute_script(f'CREATE SCHEMA IF NOT EXISTS "{str(schema).replace(chr(34), "")}"')
             self.client = client
             self.dialect = dialect_of(client)
             self.query_class = client.query_class
