@@ -45,6 +45,9 @@ class S3Driver(Driver):
         access_key, secret_key: Credentials.
         prefix: A key prefix, so several Pawabase buckets can share one remote bucket.
         path_style: Address the bucket in the path (MinIO, Ceph) instead of the host.
+        public_endpoint: The origin browsers reach the service at, used only for
+            presigned URLs. Set it when ``endpoint`` is an internal address (the
+            ``minio`` container) that a client outside the network cannot resolve.
     """
 
     name = "s3"
@@ -59,6 +62,7 @@ class S3Driver(Driver):
         secret_key: str = "",
         prefix: str = "",
         path_style: bool = True,
+        public_endpoint: str = "",
         timeout: float = 60.0,
     ) -> None:
         super().__init__()
@@ -71,12 +75,13 @@ class S3Driver(Driver):
         self.secret_key = secret_key
         self.prefix = prefix.strip("/") + "/" if prefix.strip("/") else ""
         self.path_style = path_style
+        self.public_endpoint = public_endpoint.rstrip("/")
         self._client = httpx.AsyncClient(timeout=timeout)
 
     # ── addressing and signing ───────────────────────────────────────────
 
-    def _url(self, key: str = "") -> tuple[str, str]:
-        parsed = urlparse(self.endpoint)
+    def _url(self, key: str = "", *, public: bool = False) -> tuple[str, str]:
+        parsed = urlparse((public and self.public_endpoint) or self.endpoint)
         object_path = quote(self.prefix + key, safe="/~") if key else ""
         if self.path_style:
             host = parsed.netloc
@@ -146,6 +151,41 @@ class S3Driver(Driver):
         )
 
     # ── the contract ─────────────────────────────────────────────────────
+
+    async def ensure_bucket(self) -> bool:
+        """Create the remote bucket when it does not exist.
+
+        Idempotent: an existing bucket (``200`` on ``HEAD``, or ``409`` on
+        ``PUT``) is left alone. That is what lets a fresh MinIO work with no
+        setup step.
+
+        Returns:
+            ``True`` when this call created the bucket.
+
+        Raises:
+            StorageError: The service refused (bad credentials, no permission).
+        """
+        head = await self._request("HEAD")
+        if head.status_code < 300:
+            return False
+        if head.status_code in (401, 403):
+            raise StorageError(
+                f"s3 refused access to bucket {self.bucket!r} ({head.status_code}): check the access key and secret"
+            )
+        body = (
+            ""
+            if self.region == "us-east-1"
+            else f"<CreateBucketConfiguration><LocationConstraint>{self.region}</LocationConstraint></CreateBucketConfiguration>"
+        )
+        payload = body.encode()
+        response = await self._request(
+            "PUT", content=payload, payload_hash=hashlib.sha256(payload).hexdigest()
+        )
+        if response.status_code in (200, 409):
+            return response.status_code == 200
+        raise StorageError(
+            f"could not create bucket {self.bucket!r} ({response.status_code}): {response.text[:200]}"
+        )
 
     async def write(
         self,
@@ -280,7 +320,7 @@ class S3Driver(Driver):
         S3 presigned URLs cannot bound the upload size, so uploads that must be
         size-limited go through Pawabase's own signed upload route instead.
         """
-        url, path = self._url(key)
+        url, path = self._url(key, public=True)
         now = dt.datetime.now(dt.UTC)
         stamp = now.strftime("%Y%m%dT%H%M%SZ")
         day = now.strftime("%Y%m%d")
