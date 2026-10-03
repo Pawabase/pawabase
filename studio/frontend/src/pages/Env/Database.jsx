@@ -3,7 +3,7 @@ import Layout from "../../components/Layout";
 import SqlBuilder from "../../components/SqlBuilder";
 import { Icon } from "../../components/icons";
 import { Button, Loading, Modal, PageHead, Table, formatCell, truncate, useAction } from "../../components/ui";
-import { envPath, post, useApi } from "../../lib/api";
+import { envPath, get, post, useApi } from "../../lib/api";
 
 export default function Database({ project, env }) {
   const base = envPath(project.ref, env, "/database");
@@ -11,13 +11,46 @@ export default function Database({ project, env }) {
   const [table, setTable] = useState(null);
   const [sqlOpen, setSqlOpen] = useState(false);
   const [filter, setFilter] = useState("");
+  const [run, busy] = useAction();
+  const [result, setResult] = useState(null);
+  // Every resource gets its table (or the columns it gained). The same call the resource editor's "Create / migrate table" makes, for all of them at once.
+  const syncTables = async () => {
+    const done = await run(async () => {
+      const resources = (await get(envPath(project.ref, env, "/resources"), { params: { limit: 500 } })).data || [];
+      const outcome = { created: [], extended: [], unchanged: 0, failed: [] };
+      for (const resource of resources) {
+        try {
+          const answer = await post(envPath(project.ref, env, `/resources/${resource.name}/migrate`));
+          const statements = answer.statements || [];
+          if (statements.some((sql) => /^\s*CREATE TABLE/i.test(sql))) outcome.created.push(resource.name);
+          else if (statements.some((sql) => /ADD COLUMN/i.test(sql))) outcome.extended.push(resource.name);
+          else outcome.unchanged += 1;
+        } catch (error) {
+          outcome.failed.push(`${resource.name}: ${error.message}`);
+        }
+      }
+      return { resources: resources.length, ...outcome };
+    });
+    if (done && done !== true) { setResult(done); overview.reload(); }
+  };
   return (
     <Layout title="Database">
       <PageHead
         title="Database"
         description="Browse the environment's database. Bring your own with a database URL in Settings."
-        actions={<Button variant="primary" onClick={() => setSqlOpen(true)}><Icon name="code" />SQL</Button>}
+        actions={<>
+          <Button disabled={busy} onClick={syncTables}><Icon name="database" />{busy ? "Working…" : "Create tables"}</Button>
+          <Button variant="primary" onClick={() => setSqlOpen(true)}><Icon name="code" />SQL</Button>
+        </>}
       />
+      {result && (
+        <div className={`alert ${result.failed.length ? "warn" : "ok"}`} style={{ marginBottom: 16 }}>
+          <b>{result.resources} resources checked.</b>{" "}
+          {result.created.length} table{result.created.length === 1 ? "" : "s"} created, {result.extended.length} extended, {result.unchanged} already up to date
+          {result.failed.length > 0 && <> · {result.failed.length} failed: {result.failed.slice(0, 3).join("; ")}{result.failed.length > 3 ? "…" : ""}</>}.
+          <span className="hint" style={{ display: "block" }}>Columns are only ever added: nothing is dropped or retyped.</span>
+        </div>
+      )}
       <div className="db-layout">
         <aside className="card flush db-tables">
           <Loading state={overview} empty="No tables yet.">
