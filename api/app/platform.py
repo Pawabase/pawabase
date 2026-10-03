@@ -123,6 +123,7 @@ class Platform:
     async def start(self) -> None:
         self.bind()
         await self.bus.start()
+        logger.info(await self.storage.prepare_default())
 
     async def stop(self) -> None:
         await self.bus.stop()
