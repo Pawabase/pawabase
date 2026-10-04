@@ -2,6 +2,7 @@
 
 import httpx
 import pytest
+
 from app.config import ApiSettings, default_storage
 from app.storage.manager import StorageManager
 from app.storage.s3 import S3Driver
@@ -52,7 +53,9 @@ def test_no_endpoint_means_local_disk():
 
 def test_an_endpoint_selects_s3():
     config = default_storage(
-        settings(storage_endpoint="http://minio:9000", storage_access_key="a", storage_secret_key="b")
+        settings(
+            storage_endpoint="http://minio:9000", storage_access_key="a", storage_secret_key="b"
+        )
     )
     assert config["driver"] == "s3"
     assert config["endpoint"] == "http://minio:9000"
@@ -61,7 +64,10 @@ def test_an_endpoint_selects_s3():
 
 
 def test_an_explicit_driver_wins_over_the_endpoint():
-    assert default_storage(settings(storage_driver="memory", storage_endpoint="http://x"))["driver"] == "memory"
+    assert (
+        default_storage(settings(storage_driver="memory", storage_endpoint="http://x"))["driver"]
+        == "memory"
+    )
 
 
 def test_an_environment_without_storage_gets_the_default():
@@ -87,7 +93,9 @@ def test_an_endpoint_without_a_driver_means_s3():
 
 
 def test_a_storage_block_without_an_endpoint_stays_local():
-    config = manager(storage_endpoint="http://minio:9000")._config(FakeState({"root": "/srv/files"}))
+    config = manager(storage_endpoint="http://minio:9000")._config(
+        FakeState({"root": "/srv/files"})
+    )
     assert config["driver"] == "local"
 
 
@@ -151,7 +159,9 @@ async def test_a_first_write_creates_the_bucket_and_retries():
 
 
 def test_presigned_urls_use_the_public_endpoint():
-    driver = driver_with(lambda request: httpx.Response(200), public_endpoint="http://localhost:9000")
+    driver = driver_with(
+        lambda request: httpx.Response(200), public_endpoint="http://localhost:9000"
+    )
     url = driver.signed_url("a/b.png")
     assert url.startswith("http://localhost:9000/pawabase/a/b.png?")
     assert "X-Amz-Signature=" in url
@@ -164,7 +174,7 @@ async def test_prepare_default_reports_a_down_service():
     storage = manager(storage_endpoint="http://127.0.0.1:1", storage_bucket="x")
     message = await storage.prepare_default()
     assert "NOT READY" in message
-    assert "storage: local (default)" == await manager().prepare_default()
+    assert await manager().prepare_default() == "storage: local (default)"
 
 
 # ── live (opt-in) ────────────────────────────────────────────────────────
