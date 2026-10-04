@@ -14,10 +14,10 @@ export function singular(kind) {
   return title.endsWith("s") ? title.slice(0, -1) : title;
 }
 
-export function DefinitionSheet({ kind, project, env, editing, onClose, onSave, onDelete, actions, extraTabs = {}, subtitle }) {
+export function DefinitionSheet({ kind, env, editing, onClose, onSave, onDelete, actions, extraTabs = {}, subtitle }) {
   const meta = KINDS[kind];
   const Form = FORMS[kind];
-  const refs = useRefs(project, env);
+  const refs = useRefs(env);
   const [body, setBody] = useState(editing.body);
   const [tab, setTab] = useState("form");
   const [formKey, setFormKey] = useState(0);
@@ -74,7 +74,7 @@ export function DefinitionSheet({ kind, project, env, editing, onClose, onSave, 
               <Button size="sm" variant="soft" onClick={() => { setBody(meta.template); setFormKey((k) => k + 1); }}><Icon name="sparkle" />Use example</Button>
             </div>
           )}
-          <Form key={formKey} body={body} patch={patch} refs={refs} isNew={editing.isNew} project={project} env={env} />
+          <Form key={formKey} body={body} patch={patch} refs={refs} isNew={editing.isNew} env={env} />
         </>
       )}
       {tab === "form" && !body && <div className="alert error">The JSON has an error. Fix it on the JSON tab.</div>}

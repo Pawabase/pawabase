@@ -20,9 +20,9 @@ const RENDER = {
   interval_seconds: (r) => (r.interval_seconds ? `every ${r.interval_seconds}s` : formatCell(null)),
 };
 
-export default function Definitions({ project, env, kind }) {
+export default function Definitions({ env, kind }) {
   const meta = KINDS[kind];
-  const base = envPath(project.ref, env, `/${kind}`);
+  const base = envPath(env, `/${kind}`);
   const list = useApi(base);
   const [editing, setEditing] = useState(null);
   const [reveal, setReveal] = useState(null);
@@ -58,7 +58,6 @@ export default function Definitions({ project, env, kind }) {
       {editing && (
         <DefinitionSheet
           kind={kind}
-          project={project}
           env={env}
           editing={editing}
           onSave={(body) => (editing.isNew ? post(base, body) : put(`${base}/${editing.key}`, body))}
@@ -81,7 +80,7 @@ export default function Definitions({ project, env, kind }) {
             );
           }}
           extraTabs={kind === "resources" && !editing.isNew ? {
-            records: { label: "Records", render: () => <Records base={envPath(project.ref, env, `/resources/${editing.key}/records`)} fields={editing.body.fields || []} /> },
+            records: { label: "Records", render: () => <Records base={envPath(env, `/resources/${editing.key}/records`)} fields={editing.body.fields || []} /> },
           } : {}}
         />
       )}

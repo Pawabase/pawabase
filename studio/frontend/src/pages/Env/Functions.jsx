@@ -3,8 +3,8 @@ import Layout from "../../components/Layout";
 import { Badge, Button, Card, Field, Json, JsonInput, Loading, Modal, PageHead, Table, useAction } from "../../components/ui";
 import { envPath, post, useApi } from "../../lib/api";
 
-export default function Functions({ project, env }) {
-  const base = envPath(project.ref, env, "/functions");
+export default function Functions({ env }) {
+  const base = envPath(env, "/functions");
   const list = useApi(base);
   const [invoking, setInvoking] = useState(null);
   const [run, busy] = useAction();
@@ -12,8 +12,8 @@ export default function Functions({ project, env }) {
     <Layout title="Functions">
       <PageHead
         title="Functions"
-        description={<>Python in <code>projects/{project.ref}/functions/*.py</code>, registered with <code>@function</code>. Call them from routes, flows, schedules and events, or at <code>/functions/v1/&lt;name&gt;</code>.</>}
-        actions={<Button disabled={busy} onClick={async () => { if (await run(() => post(`/projects/${project.ref}/code/reload`), "Code reloaded")) list.reload(); }}>Reload code</Button>}
+        description={<>Python in <code>functions/*.py</code>, registered with <code>@function</code>. Call them from routes, flows, schedules and events, or at <code>/functions/v1/&lt;name&gt;</code>.</>}
+        actions={<Button disabled={busy} onClick={async () => { if (await run(() => post(`/code/reload`), "Code reloaded")) list.reload(); }}>Reload code</Button>}
       />
       <Loading state={list}>
         {(data) => (
@@ -36,7 +36,7 @@ export default function Functions({ project, env }) {
               <div className="row wrap">{(data.modules || []).map((m) => <Badge key={m}>{m}</Badge>)}{data.router && <Badge tone="blue">routes.py router</Badge>}</div>
             </Card>
             <Card title="Example">
-              <pre className="code-block">{`# projects/${project.ref}/functions/orders.py
+              <pre className="code-block">{`# functions/orders.py
 from pawabase_core.functions import FunctionContext, function
 
 @function("order_total", policy="authenticated")

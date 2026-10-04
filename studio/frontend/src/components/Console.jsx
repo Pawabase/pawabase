@@ -21,7 +21,7 @@ const READ_COMMANDS = [
 
 const COMMANDS = [
   ["help", "Show every command and example"], ["clear", "Clear console output"], ["close", "Close the console"],
-  ["status", "Show current project and environment"], ["blocks", "List available Flow blocks"],
+  ["status", "Show the current environment"], ["blocks", "List available Flow blocks"],
   ["flows", "List flows"], ["flows run <name> [json] --confirm", "Run a Flow now"], ["flows runs [name]", "List recent Flow runs"],
   ["data list <resource> [limit]", "List resource records"], ["data get <resource> <id>", "Read one record"],
   ["data create <resource> <json> --confirm", "Create a record"], ["data update <resource> <id> <json> --confirm", "Update a record"],
@@ -65,7 +65,7 @@ function terminalOutput(value) {
 
 const HELP_TEXT = ["PawaBase Console — commands", "", ...COMMANDS.map(([name, description]) => `  ${name.padEnd(44)} ${description}`), "", "Tip: press Tab to complete a command. Add --confirm to commands that run or change state."].join("\n");
 
-export default function Console({ project, env }) {
+export default function Console({ env }) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [lines, setLines] = useState([]);
@@ -74,7 +74,7 @@ export default function Console({ project, env }) {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const inputRef = useRef(null);
   const outputRef = useRef(null);
-  const base = project && env ? envPath(project.ref, env) : null;
+  const base = env ? envPath(env) : null;
   const suggestions = useMemo(() => {
     const query = input.toLowerCase().trim();
     return COMMANDS.filter(([name, description]) => !query || `${name} ${description}`.toLowerCase().includes(query)).slice(0, 7);
@@ -96,7 +96,7 @@ export default function Console({ project, env }) {
   useEffect(() => {
     if (open && outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
   }, [lines, open]);
-  if (!project || !env) return null;
+  if (!env) return null;
 
   const append = (command, output, error = false) => setLines((items) => [...items, { command, output: terminalOutput(output), error }]);
   const requireConfirmation = (raw) => {
@@ -111,7 +111,7 @@ export default function Console({ project, env }) {
     if (trimmed === "clear") { setLines([]); return; }
     if (trimmed === "close") { setOpen(false); return; }
     if (trimmed === "help") { append(trimmed, HELP_TEXT); return; }
-    if (trimmed === "status") { append(trimmed, { project: project.name, ref: project.ref, environment: env }); return; }
+    if (trimmed === "status") { append(trimmed, { environment: env }); return; }
     if (["hello", "hi", "hey"].includes(trimmed.toLowerCase())) { append(trimmed, "PawaBase Console ready. Type help to see 42 commands."); return; }
     const clean = commandLine(trimmed);
     const [first, second, third] = clean.split(/\s+/, 3);
@@ -119,16 +119,16 @@ export default function Console({ project, env }) {
       setBusy(true);
       let output;
       if (first === "open" && SECTIONS.includes(second)) {
-        router.visit(second === "overview" ? `/projects/${project.ref}/${env}` : `/projects/${project.ref}/${env}/${second}`);
+        router.visit(second === "overview" ? `/envs/${env}` : `/envs/${env}/${second}`);
         output = { opened: second };
       } else if (clean === "blocks") output = await get("/blocks");
       else if (READ_COMMANDS.some(([name]) => name === clean)) {
         const [, , path] = READ_COMMANDS.find(([name]) => name === clean);
         output = await get(`${base}/${path}`);
-      } else if (first === "users") output = await get(`/projects/${project.ref}/envs/${env}/users`, { service: "auth", params: second ? { search: second } : {} });
-      else if (clean === "roles") output = await get(`/projects/${project.ref}/envs/${env}/roles`, { service: "auth" });
-      else if (clean === "organizations") output = await get(`/projects/${project.ref}/envs/${env}/orgs`, { service: "auth" });
-      else if (first === "realtime" && ["channels", "connections", "activity"].includes(second || "activity")) output = await get(`/${project.ref}/${env}/${second || "activity"}`, { service: "realtime" });
+      } else if (first === "users") output = await get(`/envs/${env}/users`, { service: "auth", params: second ? { search: second } : {} });
+      else if (clean === "roles") output = await get(`/envs/${env}/roles`, { service: "auth" });
+      else if (clean === "organizations") output = await get(`/envs/${env}/orgs`, { service: "auth" });
+      else if (first === "realtime" && ["channels", "connections", "activity"].includes(second || "activity")) output = await get(`/${env}/${second || "activity"}`, { service: "realtime" });
       else if (clean === "flows") output = await get(`${base}/flows`);
       else if (first === "flows" && second === "runs") output = await get(`${base}/flow-runs`, { params: third ? { flow: third } : {} });
       else if (first === "flows" && second === "run") {

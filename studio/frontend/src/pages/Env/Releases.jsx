@@ -3,11 +3,11 @@ import Layout from "../../components/Layout";
 import { Badge, Button, Card, Field, Loading, PageHead, Segmented, Sheet, Status, Table, useAction, when } from "../../components/ui";
 import { envPath, post, useApi } from "../../lib/api";
 
-export default function Releases({ project, env }) {
-  const base = envPath(project.ref, env);
+export default function Releases({ env }) {
+  const base = envPath(env);
   const revisions = useApi(`${base}/revisions`), versions = useApi(`${base}/api-versions`), releases = useApi(`${base}/releases`), deployments = useApi(`${base}/deployments`);
   const [branch, setBranch] = useState(() => {
-    try { return localStorage.getItem(`pawabase.branch.${project.ref}.${env}`) || "main"; } catch { return "main"; }
+    try { return localStorage.getItem(`pawabase.branch.${env}`) || "main"; } catch { return "main"; }
   }), [newVersion, setNewVersion] = useState(""), [revisionMessage, setRevisionMessage] = useState(""), [view, setView] = useState("releases"), [selected, setSelected] = useState(null), [prepareOpen, setPrepareOpen] = useState(false), [revisionOpen, setRevisionOpen] = useState(false), [versionOpen, setVersionOpen] = useState(false);
   const [release, setRelease] = useState({ revision_id: "", api_version: "", name: "", allow_breaking: false });
   const [run, busy] = useAction();
@@ -40,10 +40,10 @@ export default function Releases({ project, env }) {
     }
   };
   useEffect(() => {
-    const sync = (event) => { if (event.detail?.project === project.ref && event.detail?.env === env) setBranch(event.detail.branch); };
+    const sync = (event) => { if (event.detail?.env === env) setBranch(event.detail.branch); };
     window.addEventListener("pawabase:branch", sync);
     return () => window.removeEventListener("pawabase:branch", sync);
-  }, [project.ref, env]);
+  }, [env]);
 
   return <Layout title="Releases & versions">
     <PageHead title="Releases & versions" description="Freeze definitions into a revision, release them behind a stable API path, and roll traffic back atomically." actions={<Button variant="primary" disabled={busy} onClick={() => setRevisionOpen(true)}>Create revision</Button>} />

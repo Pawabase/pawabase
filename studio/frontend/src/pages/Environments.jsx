@@ -1,72 +1,58 @@
 import { Link, router } from "@inertiajs/react";
 import { useState } from "react";
-import Layout, { atLeast } from "../../components/Layout";
-import { Icon } from "../../components/icons";
-import { Badge, Button, Card, Field, Modal, PageHead, Switch, Table, useAction, when } from "../../components/ui";
-import { del, get, patch, post } from "../../lib/api";
+import Layout from "../components/Layout";
+import { Icon } from "../components/icons";
+import { Badge, Button, Card, Field, Modal, PageHead, Switch, Table, useAction, when } from "../components/ui";
+import { get, post } from "../lib/api";
 
-export default function ProjectShow({ project, envs, orgs = [] }) {
-  const role = orgs.find((o) => o.slug === project.org)?.role;
-  const canEdit = atLeast(role, "developer");
-  const canDelete = atLeast(role, "admin");
+export default function Environments({ runtime, envs }) {
   const [modal, setModal] = useState(null);
   const [run, busy] = useAction();
   const reload = () => router.reload();
   const reloadCode = async () => {
-    const result = await run(() => post(`/projects/${project.ref}/code/reload`), null);
+    const result = await run(() => post("/code/reload"), null);
     if (result) alert(result.errors?.length ? `Loaded with errors:\n${result.errors.join("\n")}` : `Loaded ${result.modules.length} module(s).`);
   };
   return (
-    <Layout title={project.name}>
+    <Layout title="Environments">
       <PageHead
-        title={project.name}
-        description={project.description || `Project ${project.ref}`}
+        title="Environments"
+        description={`${runtime.name} runs as ${envs.length === 1 ? "one environment" : `${envs.length} environments`}. Each has its own definitions, keys, secrets and infrastructure.`}
         actions={<>
-          {canEdit && <Button onClick={reloadCode} disabled={busy}>Reload code</Button>}
+          <Button onClick={reloadCode} disabled={busy}>Reload code</Button>
           <Button onClick={() => setModal("export")}><Icon name="braces" />Export blueprint</Button>
-          {canEdit && <Button onClick={() => setModal("edit")}>Edit</Button>}
-          {canEdit && <Button variant="primary" onClick={() => setModal("env")}>New environment</Button>}
+          <Button onClick={() => setModal("import")}>Import blueprint</Button>
+          <Button variant="primary" onClick={() => setModal("env")}>New environment</Button>
         </>}
       />
       <Card flush title="Environments" actions={<Button size="sm" onClick={() => setModal("promote")}>Promote…</Button>}>
         <Table
           rows={envs}
-          onRowClick={(e) => router.visit(`/projects/${project.ref}/${e.name}`)}
+          onRowClick={(e) => router.visit(`/envs/${e.name}`)}
           columns={[
-            { label: "Name", render: (e) => <span className="row"><b>{e.name}</b>{e.is_default && <Badge tone="green">default</Badge>}</span> },
+            { label: "Name", render: (e) => <span className="row"><b>{e.name}</b>{e.is_default && <Badge tone="green">default</Badge>}{e.preview_source && <Badge tone="yellow">preview of {e.preview_source}</Badge>}</span> },
             { label: "Version", key: "version" },
             { label: "Created", render: (e) => when(e.created_at) },
-            { label: "", render: (e) => <Link onClick={(ev) => ev.stopPropagation()} href={`/projects/${project.ref}/${e.name}/settings`} className="btn sm">Settings</Link> },
+            { label: "", render: (e) => <Link onClick={(ev) => ev.stopPropagation()} href={`/envs/${e.name}/settings`} className="btn sm">Settings</Link> },
           ]}
         />
       </Card>
-      {canDelete && <div style={{ marginTop: 20 }}>
-        <Card title="Danger zone">
-          <div className="spread">
-            <span className="muted">Deleting a project removes its definitions, keys and secrets. Data in your own databases is left alone.</span>
-            <Button variant="danger" onClick={async () => {
-              if (prompt(`Type ${project.ref} to delete the project`) !== project.ref) return;
-              if (await run(() => del(`/projects/${project.ref}`), "Project deleted")) router.visit("/");
-            }}>Delete project</Button>
-          </div>
-        </Card>
-      </div>}
-      {modal === "env" && <NewEnvironment project={project} envs={envs} onClose={() => setModal(null)} onDone={reload} />}
-      {modal === "edit" && <EditProject project={project} onClose={() => setModal(null)} onDone={reload} />}
-      {modal === "promote" && <Promote project={project} envs={envs} onClose={() => setModal(null)} />}
-      {modal === "export" && <ExportBlueprint project={project} envs={envs} onClose={() => setModal(null)} />}
+      {modal === "env" && <NewEnvironment envs={envs} onClose={() => setModal(null)} onDone={reload} />}
+      {modal === "promote" && <Promote envs={envs} onClose={() => setModal(null)} />}
+      {modal === "export" && <ExportBlueprint runtime={runtime} envs={envs} onClose={() => setModal(null)} />}
+      {modal === "import" && <ImportBlueprint onClose={() => setModal(null)} onDone={reload} />}
     </Layout>
   );
 }
 
-function NewEnvironment({ project, envs, onClose, onDone }) {
+function NewEnvironment({ envs, onClose, onDone }) {
   const [data, setData] = useState({ name: "", copy_from: "" });
   const [run, busy] = useAction();
   return (
     <Modal title="New environment" onClose={onClose} footer={<Button variant="primary" disabled={busy || !data.name} onClick={async () => {
-      if (await run(() => post(`/projects/${project.ref}/envs`, { name: data.name, copy_from: data.copy_from || null }), "Environment created")) { onClose(); onDone(); }
+      if (await run(() => post("/envs", { name: data.name, copy_from: data.copy_from || null }), "Environment created")) { onClose(); onDone(); }
     }}>Create</Button>}>
-      <Field label="Name"><input autoFocus value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} placeholder="preview" /></Field>
+      <Field label="Name"><input autoFocus value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} placeholder="staging" /></Field>
       <Field label="Copy definitions from">
         <select value={data.copy_from} onChange={(e) => setData({ ...data, copy_from: e.target.value })}>
           <option value="">Start empty</option>
@@ -77,22 +63,9 @@ function NewEnvironment({ project, envs, onClose, onDone }) {
   );
 }
 
-function EditProject({ project, onClose, onDone }) {
-  const [data, setData] = useState({ name: project.name, description: project.description || "" });
-  const [run, busy] = useAction();
-  return (
-    <Modal title="Edit project" onClose={onClose} footer={<Button variant="primary" disabled={busy} onClick={async () => {
-      if (await run(() => patch(`/projects/${project.ref}`, data), "Saved")) { onClose(); onDone(); }
-    }}>Save</Button>}>
-      <Field label="Name"><input value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} /></Field>
-      <Field label="Description"><input value={data.description} onChange={(e) => setData({ ...data, description: e.target.value })} /></Field>
-    </Modal>
-  );
-}
-
 const KINDS = ["schemas", "transformers", "policies", "resources", "routes", "flows", "buckets", "mail-templates", "subscriptions", "webhooks", "inbound-hooks", "schedules"];
 
-function Promote({ project, envs, onClose }) {
+function Promote({ envs, onClose }) {
   const [from, setFrom] = useState(envs[0]?.name || "");
   const [to, setTo] = useState(envs[1]?.name || "");
   const [include, setInclude] = useState(KINDS);
@@ -100,7 +73,7 @@ function Promote({ project, envs, onClose }) {
   const [run, busy] = useAction();
   return (
     <Modal wide title="Promote definitions" onClose={onClose} footer={<Button variant="primary" disabled={busy || !from || !to || from === to} onClick={async () => {
-      const r = await run(() => post(`/projects/${project.ref}/envs/${from}/promote`, { to, include }), "Promoted");
+      const r = await run(() => post(`/envs/${from}/promote`, { to, include }), "Promoted");
       if (r) setResult(r);
     }}>Promote {from} → {to}</Button>}>
       <p className="muted" style={{ margin: 0 }}>Copies definitions between environments. Secrets, keys and data are never copied.</p>
@@ -120,21 +93,21 @@ function Promote({ project, envs, onClose }) {
   );
 }
 
-function ExportBlueprint({ project, envs, onClose }) {
+function ExportBlueprint({ runtime, envs, onClose }) {
   const [env, setEnv] = useState(envs.find((e) => e.is_default)?.name || envs[0]?.name || "");
   const [withData, setWithData] = useState(false);
   const [maxRows, setMaxRows] = useState(200);
   const [run, busy] = useAction();
   const download = async () => {
     const doc = await run(
-      () => get(`/projects/${project.ref}/envs/${env}/blueprint`, { params: { data: withData, max_rows: maxRows } }),
+      () => get(`/envs/${env}/blueprint`, { params: { data: withData, max_rows: maxRows } }),
       "Blueprint downloaded",
     );
     if (!doc) return;
     const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `${project.ref}-${env}.blueprint.json`;
+    link.download = `${runtime.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${env}.blueprint.json`;
     link.click();
     URL.revokeObjectURL(link.href);
     onClose();
@@ -142,16 +115,16 @@ function ExportBlueprint({ project, envs, onClose }) {
   return (
     <Modal title="Export a blueprint" onClose={onClose} footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={busy || !env} onClick={download}><Icon name="braces" />Download JSON</Button></>}>
       <p className="muted" style={{ margin: 0 }}>
-        A blueprint is this system as one JSON file: resources, policies, flows, routes, schemas, transformers, buckets,
-        mail templates, subscriptions, webhooks, inbound hooks, schedules and roles. Share it, and anyone can create a
-        new project from it. A blueprint can only <b>create</b> projects; it never changes a running one.
+        A blueprint is one environment as a JSON file: resources, policies, flows, routes, schemas, transformers, buckets,
+        mail templates, subscriptions, webhooks, inbound hooks, schedules and roles. Share it, and anyone can create new
+        environments from it. A blueprint only <b>creates</b> environments; it never changes an existing one.
       </p>
       <Field label="Environment">
         <select value={env} onChange={(e) => setEnv(e.target.value)}>
           {envs.map((e) => <option key={e.name} value={e.name}>{e.name}</option>)}
         </select>
       </Field>
-      <Switch checked={withData} onChange={setWithData} label="Include sample data" hint="Records from each resource, so the new project starts with realistic content." />
+      <Switch checked={withData} onChange={setWithData} label="Include sample data" hint="Records from each resource, so the new environment starts with realistic content." />
       {withData && (
         <Field label="Rows per resource" hint="Up to 5,000.">
           <input type="number" min="1" max="5000" value={maxRows} onChange={(e) => setMaxRows(Number(e.target.value))} style={{ maxWidth: 160 }} />
@@ -159,6 +132,29 @@ function ExportBlueprint({ project, envs, onClose }) {
       )}
       <div className="alert info">Never included: secrets, API keys, webhook signing secrets, OAuth credentials, database/storage/mail settings, users.</div>
       {withData && <div className="alert warn">Sample data leaves with the file. Don't include personal data you aren't allowed to share.</div>}
+    </Modal>
+  );
+}
+
+function ImportBlueprint({ onClose, onDone }) {
+  const [text, setText] = useState("");
+  const [names, setNames] = useState("development, production");
+  const [result, setResult] = useState(null);
+  const [run, busy] = useAction();
+  const read = async (file) => file && setText(await file.text());
+  return (
+    <Modal wide title="Import a blueprint" onClose={onClose} footer={!result ? <Button variant="primary" disabled={busy || !text.trim()} onClick={async () => {
+      let blueprint;
+      try { blueprint = JSON.parse(text); } catch { alert("That is not valid JSON."); return; }
+      const environments = names.split(",").map((n) => n.trim()).filter(Boolean);
+      const r = await run(() => post("/blueprints/apply", { blueprint, environments }), "Environments created");
+      if (r) { setResult(r); onDone(); }
+    }}>Create environments</Button> : <Button onClick={onClose}>Done</Button>}>
+      <p className="muted" style={{ margin: 0 }}>Builds new environments from a blueprint. Names that already exist are refused, and a blueprint that fails leaves nothing behind.</p>
+      <Field label="Blueprint file"><input type="file" accept="application/json,.json" onChange={(e) => read(e.target.files?.[0])} /></Field>
+      <Field label="…or paste it"><textarea rows={6} value={text} onChange={(e) => setText(e.target.value)} placeholder='{"format": "pawabase.blueprint", ...}' /></Field>
+      <Field label="New environments" hint="Comma separated."><input value={names} onChange={(e) => setNames(e.target.value)} /></Field>
+      {result && <><div className="alert warn">Keys are shown once. Copy them now.</div><pre className="code-block">{JSON.stringify(result.keys, null, 2)}</pre></>}
     </Modal>
   );
 }

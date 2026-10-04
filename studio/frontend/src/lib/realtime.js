@@ -1,14 +1,14 @@
 // A real client of Angula's own socket protocol (subscribe, publish, presence,
 // history — see services/angula/routes/__init__.py), tunnelled through
-// Studio's operator-only WebSocket bridge. The browser never holds a project
-// key: it fetches a short-lived ticket over a normal, session-checked request,
-// then presents that ticket as the one socket opens. Reconnects with backoff
+// Studio's WebSocket bridge. The browser never holds an
+// API key: it fetches a short-lived ticket over a normal request, then presents
+// that ticket as the one socket opens. Reconnects with backoff
 // and re-subscribes to whatever channels the UI still has open.
 import { useCallback, useEffect, useRef, useState } from "react";
 
 let refCounter = 0;
 
-export function useRealtimeSocket(project, env) {
+export function useRealtimeSocket(env) {
   const [status, setStatus] = useState("connecting"); // connecting | open | closed
   const [stats, setStats] = useState({ sent: 0, received: 0 });
   const socketRef = useRef(null);
@@ -70,7 +70,7 @@ export function useRealtimeSocket(project, env) {
       setStatus("connecting");
       let ticket;
       try {
-        const r = await fetch(`/projects/${project}/${env}/realtime/ticket`, { credentials: "same-origin" });
+        const r = await fetch(`/envs/${env}/realtime/ticket`, { credentials: "same-origin" });
         if (!r.ok) throw new Error(String(r.status));
         ({ ticket } = await r.json());
       } catch {
@@ -128,7 +128,7 @@ export function useRealtimeSocket(project, env) {
       socketRef.current = null;
       try { socket?.close(); } catch { /* already closed */ }
     };
-  }, [project, env]);
+  }, [env]);
 
   return { status, stats, on, subscribe, unsubscribe, publish, trackPresence, history };
 }

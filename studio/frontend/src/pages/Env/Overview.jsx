@@ -19,7 +19,7 @@ const C = {
   failures: "var(--danger)",
 };
 
-export default function Overview({ project, env, overview }) {
+export default function Overview({ runtime, env, overview }) {
   const [range, setRange] = useState(overview.analytics?.range || "24h");
   const [stats, setStats] = useState(overview.analytics);
   const [loading, setLoading] = useState(false);
@@ -30,7 +30,7 @@ export default function Overview({ project, env, overview }) {
     async function load() {
       setLoading(true);
       try {
-        const data = await get(`/projects/${project.ref}/envs/${env}/analytics`, { params: { range } });
+        const data = await get(`/envs/${env}/analytics`, { params: { range } });
         if (alive) setStats(data);
       } catch {
         /* keep what's on screen */
@@ -45,19 +45,19 @@ export default function Overview({ project, env, overview }) {
       alive = false;
       clearInterval(timer);
     };
-  }, [range, project.ref, env]);
+  }, [range, env]);
 
   const s = stats?.summary || {};
   const p = stats?.previous || {};
   const series = stats?.series || [];
   const step = stats?.step_seconds || 3600;
-  const href = (section) => envHref(project.ref, env, section);
+  const href = (section) => envHref(env, section);
 
   return (
-    <Layout title={`${project.name} · ${env}`}>
+    <Layout title={`${runtime.name} · ${env}`}>
       <PageHead
         title="Overview"
-        description={`${project.name} · ${env} · definitions v${overview.version}`}
+        description={`${runtime.name} · ${env} · definitions v${overview.version}`}
         actions={
           <div className="row" style={{ gap: 10 }}>
             {loading && <span className="live-dot busy" title="Refreshing" />}

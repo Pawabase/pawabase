@@ -5,11 +5,11 @@ import { Icon } from "../../components/icons";
 import { Badge, Button, Card, Json, Loading, PageHead, Sheet, Status, Table, when } from "../../components/ui";
 import { envPath, useApi } from "../../lib/api";
 
-export default function Flows({ project, env }) {
-  const base = envPath(project.ref, env);
+export default function Flows({ env }) {
+  const base = envPath(env);
   const flows = useApi(`${base}/flows`);
   const [runsOpen, setRunsOpen] = useState(false);
-  const editor = (name) => envHref(project.ref, env, "flows", name);
+  const editor = (name) => envHref(env, "flows", name);
   return (
     <Layout title="Flows">
       <PageHead

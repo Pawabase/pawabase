@@ -19,8 +19,8 @@ function save(name, content) {
   link.click();
   URL.revokeObjectURL(link.href);
 }
-export default function Backups({ project, env }) {
-  const base = envPath(project.ref, env);
+export default function Backups({ env }) {
+  const base = envPath(env);
   const [chosen, setChosen] = useState(PARTS.map(([key]) => key));
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -40,7 +40,7 @@ export default function Backups({ project, env }) {
     await run(async () => {
       const backup = await get(`${base}/backup`, { params: { include: chosen.join(",") } });
       const stamp = (backup.created_at || "").slice(0, 19).replace(/:/g, "-");
-      save(`${project.ref}-${env}-${stamp}.pawabase-backup.json`, backup);
+      save(`${env}-${stamp}.pawabase-backup.json`, backup);
     }, "Backup downloaded");
   };
 
@@ -114,7 +114,7 @@ export default function Backups({ project, env }) {
             {preview && (
               <>
                 <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                  <Badge tone="lavender">from {preview.source?.project}/{preview.source?.env}</Badge>
+                  <Badge tone="lavender">from {preview.source?.env}</Badge>
                   <span className="muted">Nothing has changed yet: this is what the file holds.</span>
                 </div>
                 <div className="restore-summary">

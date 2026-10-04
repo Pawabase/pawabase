@@ -12,8 +12,8 @@ const WINDOWS = [
   [15, "last 15 minutes"], [60, "last hour"], [360, "last 6 hours"], [1440, "last day"], [10080, "last week"], [20160, "last 2 weeks"],
 ];
 
-export default function Observability({ project, env }) {
-  const base = envPath(project.ref, env);
+export default function Observability({ env }) {
+  const base = envPath(env);
   const [tab, setTab] = useState("routes");
   const [minutes, setMinutes] = useState(60);
   const [route, setRoute] = useState(null);
@@ -31,11 +31,11 @@ export default function Observability({ project, env }) {
         { value: "requests", label: "Requests" },
         { value: "metrics", label: "Metrics and cache" },
       ]} />
-      {tab === "routes" && <Routes project={project} env={env} minutes={minutes} onRoute={setRoute} onTrace={openTrace} />}
-      {tab === "errors" && <Errors project={project} env={env} minutes={minutes} onRoute={setRoute} onTrace={openTrace} />}
+      {tab === "routes" && <Routes env={env} minutes={minutes} onRoute={setRoute} onTrace={openTrace} />}
+      {tab === "errors" && <Errors env={env} minutes={minutes} onRoute={setRoute} onTrace={openTrace} />}
       {tab === "requests" && <Requests base={base} onTrace={openTrace} />}
       {tab === "metrics" && <MetricsAndCache base={base} minutes={minutes} />}
-      {route && <RouteDetail project={project} env={env} route={route} minutes={minutes} onClose={() => setRoute(null)} onTrace={openTrace} />}
+      {route && <RouteDetail env={env} route={route} minutes={minutes} onClose={() => setRoute(null)} onTrace={openTrace} />}
       {detail && <RequestTrace value={detail} onClose={() => setDetail(null)} />}
     </Layout>
   );

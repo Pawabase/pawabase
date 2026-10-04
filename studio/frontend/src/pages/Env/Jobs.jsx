@@ -3,8 +3,8 @@ import Layout from "../../components/Layout";
 import { Badge, Button, Card, Json, Loading, Modal, PageHead, Status, Table, Tabs, useAction, when } from "../../components/ui";
 import { envPath, get, post, useApi } from "../../lib/api";
 
-export default function Jobs({ project, env }) {
-  const base = envPath(project.ref, env);
+export default function Jobs({ env }) {
+  const base = envPath(env);
   const [tab, setTab] = useState("jobs");
   const [status, setStatus] = useState("");
   const queues = useApi(`${base}/queues`, { interval: 5000 });

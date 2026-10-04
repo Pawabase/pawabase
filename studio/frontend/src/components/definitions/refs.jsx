@@ -13,12 +13,12 @@ const SOURCES = {
   resources: "/resources",
 };
 
-export function useRefs(project, env) {
+export function useRefs(env) {
   const [refs, setRefs] = useState({ loaded: false, policies: [], flows: [], functions: [], schemas: [], transformers: [], resources: [], fields: {} });
   useEffect(() => {
     let live = true;
     const entries = Object.entries(SOURCES);
-    Promise.allSettled(entries.map(([, path]) => get(envPath(project.ref, env, path)))).then((results) => {
+    Promise.allSettled(entries.map(([, path]) => get(envPath(env, path)))).then((results) => {
       if (!live) return;
       const next = { loaded: true, fields: {} };
       results.forEach((result, i) => {
@@ -32,7 +32,7 @@ export function useRefs(project, env) {
       setRefs(next);
     });
     return () => { live = false; };
-  }, [project.ref, env]);
+  }, [env]);
   return refs;
 }
 

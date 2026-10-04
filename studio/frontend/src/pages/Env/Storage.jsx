@@ -6,8 +6,8 @@ import { DefinitionSheet } from "../../components/definitions/DefinitionSheet";
 import { KINDS, editable } from "../../lib/kinds";
 import { del, envPath, post, put, useApi } from "../../lib/api";
 
-export default function Storage({ project, env }) {
-  const base = envPath(project.ref, env, "/buckets");
+export default function Storage({ env }) {
+  const base = envPath(env, "/buckets");
   const buckets = useApi(base);
   const [bucket, setBucket] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -37,7 +37,6 @@ export default function Storage({ project, env }) {
       {editing && (
         <DefinitionSheet
           kind="buckets"
-          project={project}
           env={env}
           editing={{ ...editing, key: editing.body.name }}
           onSave={(body) => (editing.isNew ? post(base, body) : put(`${base}/${editing.body.name}`, body))}

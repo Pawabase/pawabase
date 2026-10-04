@@ -9,9 +9,8 @@ class StudioSettings(PlatformSettings):
     """Studio settings.
 
     Attributes:
-        session_secret: Signs the session cookie. Derived from the internal
-            secret when empty.
-        session_ttl: Seconds an idle operator session lasts.
+        csrf_secret: Signs the CSRF cookie. Derived from the internal secret when
+            empty.
         cookie_secure: Mark cookies ``Secure``. Turn on behind HTTPS.
         vite_dev: Load the front end from the Vite dev server (hot reload)
             instead of the built bundle.
@@ -22,8 +21,7 @@ class StudioSettings(PlatformSettings):
     """
 
     service_name: str = "studio"
-    session_secret: str = ""
-    session_ttl: int = 12 * 3600
+    csrf_secret: str = ""
     cookie_secure: bool = False
     vite_dev: bool = False
     vite_dev_server: str = "http://localhost:5173"

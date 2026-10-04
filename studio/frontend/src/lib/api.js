@@ -8,10 +8,10 @@ function xsrf() {
 }
 
 function workingBranch(path, service) {
-  if (service !== "platform" || !path.startsWith("/projects/")) return undefined;
-  const match = path.match(/^\/projects\/([^/]+)\/envs\/([^/]+)/);
+  if (service !== "platform" || !path.startsWith("/envs/")) return undefined;
+  const match = path.match(/^\/envs\/([^/]+)/);
   if (!match) return undefined;
-  try { return localStorage.getItem(`pawabase.branch.${match[1]}.${match[2]}`) || "main"; } catch { return "main"; }
+  try { return localStorage.getItem(`pawabase.branch.${match[1]}`) || "main"; } catch { return "main"; }
 }
 
 export class ApiError extends Error {
@@ -40,10 +40,6 @@ export async function api(method, path, body, { service = "platform", params } =
     headers: { "Content-Type": "application/json", Accept: "application/json", "X-XSRF-TOKEN": xsrf() },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (response.status === 401) {
-    window.location.href = "/login";
-    throw new ApiError(401, { detail: "signed out" });
-  }
   const text = await response.text();
   let data = null;
   try {
@@ -85,6 +81,6 @@ export function useApi(path, { service, params, interval } = {}) {
   return { ...state, reload: load };
 }
 
-export function envPath(ref, env, rest = "") {
-  return `/projects/${ref}/envs/${env}${rest}`;
+export function envPath(env, rest = "") {
+  return `/envs/${env}${rest}`;
 }

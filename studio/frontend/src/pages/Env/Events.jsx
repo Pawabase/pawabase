@@ -4,8 +4,8 @@ import Layout from "../../components/Layout";
 import { Badge, Button, Card, Field, Json, JsonInput, Loading, Modal, PageHead, Status, Table, Tabs, useAction, when } from "../../components/ui";
 import { envPath, get, post, useApi } from "../../lib/api";
 
-export default function Events({ project, env }) {
-  const base = envPath(project.ref, env);
+export default function Events({ env }) {
+  const base = envPath(env);
   const [tab, setTab] = useState("events");
   const [detail, setDetail] = useState(null);
   const [emitting, setEmitting] = useState(false);
@@ -16,7 +16,7 @@ export default function Events({ project, env }) {
       <Tabs value={tab} onChange={setTab} tabs={[{ value: "events", label: "Events" }, { value: "graph", label: "Event map" }, { value: "runs", label: "Flow runs" }, { value: "deliveries", label: "Webhook deliveries" }, { value: "mail", label: "Mail" }]} />
       {tab === "events" && <EventList base={base} onOpen={async (e) => setDetail(await get(`${base}/events/${e.id}`))} />}
       {tab === "graph" && <Graph base={base} />}
-      {tab === "runs" && <Runs base={base} project={project} env={env} onOpen={async (r) => setDetail(await get(`${base}/flow-runs/${r.id}`))} />}
+      {tab === "runs" && <Runs base={base} env={env} onOpen={async (r) => setDetail(await get(`${base}/flow-runs/${r.id}`))} />}
       {tab === "deliveries" && <Deliveries base={base} onOpen={setDetail} />}
       {tab === "mail" && <Mail base={base} />}
       {detail && <Modal wide title="Details" onClose={() => setDetail(null)}><Json value={detail} /></Modal>}
@@ -52,14 +52,14 @@ function Graph({ base }) {
   );
 }
 
-function Runs({ base, project, env, onOpen }) {
+function Runs({ base, env, onOpen }) {
   const [status, setStatus] = useState("");
   const runs = useApi(`${base}/flow-runs`, { params: { status, limit: 100 }, interval: 5000 });
   return (
     <Card flush title={<select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 160 }}><option value="">every status</option><option>succeeded</option><option>failed</option><option>running</option></select>}>
       <Loading state={runs} empty="No runs yet.">
         {(data) => <Table rows={data.data} onRowClick={onOpen} columns={[
-          { label: "Flow", render: (r) => <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.visit(`/projects/${project.ref}/${env}/flows/${r.flow}`); }} style={{ color: "var(--brand)" }}>{r.flow}</a> },
+          { label: "Flow", render: (r) => <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.visit(`/envs/${env}/flows/${r.flow}`); }} style={{ color: "var(--brand)" }}>{r.flow}</a> },
           { label: "Status", render: (r) => <Status value={r.status} /> }, { label: "Trigger", key: "trigger" },
           { label: "Duration", render: (r) => (r.duration_ms != null ? `${Math.round(r.duration_ms)} ms` : "—") },
           { label: "Error", render: (r) => r.error && <span className="error-text">{r.error}</span> }, { label: "When", render: (r) => when(r.created_at) },

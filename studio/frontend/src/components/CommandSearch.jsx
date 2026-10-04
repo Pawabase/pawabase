@@ -1,11 +1,10 @@
 import { router, usePage } from "@inertiajs/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { get } from "../lib/api";
 import { Icon } from "./icons";
 import { ENV_NAV, envHref } from "./Layout";
 
-// Jump to any page: this environment's sections, the project's other
-// environments, every project, and the platform pages. ⌘K or / focuses it.
+// Jump to any page: this environment's sections, the other environments, and
+// the runtime pages. ⌘K or / focuses it.
 
 function score(text, query) {
   if (!query) return 1;
@@ -22,13 +21,10 @@ function score(text, query) {
 
 export default function CommandSearch() {
   const { props } = usePage();
-  const { project, envs, env } = props;
-  const orgs = props.orgs || [];
-  const orgSlug = props.org?.slug || project?.org;
+  const { runtime, envs, env } = props;
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
-  const [projects, setProjects] = useState(null);
   const input = useRef(null);
   const box = useRef(null);
 
@@ -54,44 +50,28 @@ export default function CommandSearch() {
     };
   }, []);
 
-  function load() {
-    setOpen(true);
-    if (projects === null) {
-      setProjects([]);
-      get("/projects").then((r) => setProjects(r.data || r || [])).catch(() => setProjects([]));
-    }
-  }
+  const load = () => setOpen(true);
 
   const items = useMemo(() => {
     const all = [];
-    if (project && env) {
+    if (env) {
       for (const group of ENV_NAV) {
         for (const [key, label] of group.items) {
-          all.push({ group: `${project.name} · ${env}`, label, hint: group.title, icon: key, href: envHref(project.ref, env, key) });
+          all.push({ group: `${runtime?.name || "Pawabase"} · ${env}`, label, hint: group.title, icon: key, href: envHref(env, key) });
         }
       }
-      for (const e of envs || []) {
-        if (e.name !== env) all.push({ group: "Environments", label: `Switch to ${e.name}`, hint: project.name, icon: "layers", href: envHref(project.ref, e.name, "overview") });
-      }
     }
-    for (const p of projects || []) {
-      all.push({ group: "Projects", label: p.name, hint: p.ref, icon: "projects", href: `/projects/${p.ref}` });
+    for (const e of envs || []) {
+      if (e.name !== env) all.push({ group: "Environments", label: `Switch to ${e.name}`, hint: runtime?.name, icon: "layers", href: envHref(e.name, "overview") });
     }
-    for (const o of orgs) {
-      all.push({ group: "Organizations", label: o.name, hint: `${o.slug} · switch`, icon: "org", href: `/orgs/${o.slug}` });
-    }
-    if (orgSlug) {
-      all.push({ group: "Organization", label: "Team", hint: "Members, roles, invitations", icon: "team", href: `/orgs/${orgSlug}/team` });
-      all.push({ group: "Organization", label: "Audit log", hint: "Who changed what", icon: "audit", href: `/orgs/${orgSlug}/audit` });
-      all.push({ group: "Organization", label: "Organization settings", hint: "Name, danger zone", icon: "settings", href: `/orgs/${orgSlug}/settings` });
-    }
-    all.push({ group: "Organizations", label: "New organization", hint: "Create", icon: "plus", href: "/orgs/new" });
+    all.push({ group: "Runtime", label: "Environments", hint: "Create, promote, import, export", icon: "layers", href: "/environments" });
+    all.push({ group: "Runtime", label: "Audit log", hint: "What changed", icon: "audit", href: "/audit" });
     return all
       .map((item) => ({ ...item, rank: Math.max(score(item.label, query), score(item.hint || "", query) * 0.6) }))
       .filter((item) => item.rank > 0)
       .sort((a, b) => (query ? b.rank - a.rank : 0))
       .slice(0, 14);
-  }, [project, env, envs, projects, orgs, orgSlug, query]);
+  }, [runtime, env, envs, query]);
 
   useEffect(() => setActive(0), [query]);
 
