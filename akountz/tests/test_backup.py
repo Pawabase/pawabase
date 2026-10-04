@@ -1,6 +1,6 @@
 """Backing up and restoring an environment's identities."""
 
-BASE = "/admin/v1/projects/acme/envs/development"
+BASE = "/admin/v1/envs/development"
 
 
 async def _seed(akz):

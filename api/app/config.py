@@ -31,8 +31,6 @@ class ApiSettings(PlatformSettings):
             rather than as a subdomain (AWS virtual-hosted style).
         request_retention_days: How long request history (the traces behind route
             statistics) is kept. ``0`` keeps it forever.
-        project_name: What this runtime calls itself: Studio's title and the
-            title of each generated API's documentation.
         code_path: The directory mounted code (``functions/``, ``policies/``,
             ``routes.py``) is read from.
         deployments_path: Where uploaded function artifacts live (a writable volume shared by the API, workers and scheduler); defaults to
@@ -58,7 +56,6 @@ class ApiSettings(PlatformSettings):
     storage_secret_key: str = ""
     storage_prefix: str = ""
     storage_path_style: bool = True
-    project_name: str = "Pawabase"
     code_path: str = "code"
     #: Where ``pawabase deploy`` artifacts are stored: writable, and shared by every API and worker process. Empty means ``<code_path>/.deployments``.
     deployments_path: str = ""

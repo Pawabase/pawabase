@@ -20,11 +20,10 @@ class FakeApi:
 
         parts = path.strip("/").split("/")
         if parts[:3] == ["internal", "v1", "environments"] and parts[-1] == "auth":
-            project, env = parts[3], parts[4]
-            if project != "acme":
+            env = parts[3]
+            if env not in ("development", "production"):
                 raise ServiceError(404, {"detail": "no such environment"})
             return {
-                "project": project,
                 "env": env,
                 "project_name": "Acme",
                 "auth": self.auth,
@@ -65,14 +64,14 @@ class Harness:
     akountz: Any
 
     def headers(
-        self, project: str = "acme", env: str = "development", token: str | None = None
+        self, env: str = "development", token: str | None = None
     ) -> dict[str, str]:
         from pawabase_core.context import CONTEXT_HEADER, PlatformContext
         from pawabase_core.tokens import issue_context_token
 
         headers = {
             CONTEXT_HEADER: issue_context_token(
-                self.settings.internal_secret, PlatformContext(project=project, env=env)
+                self.settings.internal_secret, PlatformContext(env=env)
             )
         }
         if token:
@@ -106,8 +105,6 @@ async def akz(tmp_path):
         database_url=f"sqlite://{tmp_path}/akountz.db",
         db_generate_schemas=True,
         public_url="http://gateway.test",
-        admin_email="root@pawabase.dev",
-        admin_password="Sup3r-secret!pass",
     )
     fake = FakeApi()
     akountz = Akountz(settings, api=fake)

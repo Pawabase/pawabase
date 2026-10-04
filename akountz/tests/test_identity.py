@@ -1,4 +1,4 @@
-"""Social sign-in, organizations, roles, administration and platform operators."""
+"""Social sign-in, application organizations, roles and administration."""
 
 from urllib.parse import parse_qs, urlparse
 
@@ -6,7 +6,6 @@ import httpx
 import pytest
 
 from pawabase_core.clients import ServiceError
-from pawabase_core.settings import PLATFORM_ENV, PLATFORM_PROJECT
 from pawabase_core.tokens import peek_claims, verify_user_token
 
 
@@ -41,7 +40,7 @@ def google(akz):
 async def test_google_sign_in_creates_and_reuses_an_account(google):
     akz = google
     start = await akz.http.get(
-        "/auth/v1/authorize/acme/development/google?redirect_to=https://app.example.com/after"
+        "/auth/v1/authorize/development/google?redirect_to=https://app.example.com/after"
     )
     assert start.status_code in (302, 307), start.text
     location = urlparse(start.headers["location"])
@@ -49,7 +48,7 @@ async def test_google_sign_in_creates_and_reuses_an_account(google):
     state = parse_qs(location.query)["state"][0]
     cookie = start.cookies
     finished = await akz.http.get(
-        f"/auth/v1/callback/acme/development/google?code=abc&state={state}", cookies=cookie
+        f"/auth/v1/callback/development/google?code=abc&state={state}", cookies=cookie
     )
     assert finished.status_code in (302, 307), finished.text
     fragment = parse_qs(urlparse(finished.headers["location"]).fragment)
@@ -57,7 +56,6 @@ async def test_google_sign_in_creates_and_reuses_an_account(google):
     claims = verify_user_token(
         fragment["access_token"][0],
         akz.settings.jwt_master_secret,
-        project="acme",
         env="development",
     )
     me = (
@@ -72,14 +70,14 @@ async def test_google_sign_in_creates_and_reuses_an_account(google):
 
     # A tampered state is refused, and redirect targets outside the allowlist are refused.
     bad = await akz.http.get(
-        f"/auth/v1/callback/acme/development/google?code=abc&state={state}x", cookies=cookie
+        f"/auth/v1/callback/development/google?code=abc&state={state}x", cookies=cookie
     )
     assert "error=state_mismatch" in bad.headers.get("location", "")
     evil = await akz.http.get(
-        "/auth/v1/authorize/acme/development/google?redirect_to=https://evil.example.com"
+        "/auth/v1/authorize/development/google?redirect_to=https://evil.example.com"
     )
     assert evil.status_code == 400
-    disabled = await akz.http.get("/auth/v1/authorize/acme/development/github")
+    disabled = await akz.http.get("/auth/v1/authorize/development/github")
     assert disabled.status_code == 404
 
 
@@ -130,7 +128,7 @@ async def test_admin_roles_and_claims(akz):
     body = await akz.signup()
     user_id = body["user"]["id"]
     await akz.admin.put(
-        "/admin/v1/projects/acme/envs/development/roles",
+        "/admin/v1/envs/development/roles",
         json={
             "name": "editor",
             "description": "Edits posts",
@@ -138,7 +136,7 @@ async def test_admin_roles_and_claims(akz):
         },
     )
     updated = await akz.admin.patch(
-        f"/admin/v1/projects/acme/envs/development/users/{user_id}",
+        f"/admin/v1/envs/development/users/{user_id}",
         json={"roles": ["editor"], "app_metadata": {"plan": "pro"}},
     )
     assert updated["roles"] == ["editor"] and sorted(updated["permissions"]) == [
@@ -153,17 +151,17 @@ async def test_admin_roles_and_claims(akz):
         )
     ).json()
     claims = verify_user_token(
-        signed_in["access_token"], akz.settings.jwt_master_secret, project="acme", env="development"
+        signed_in["access_token"], akz.settings.jwt_master_secret, env="development"
     )
     assert claims["roles"] == ["editor"] and "posts.write" in claims["perms"]
     # Roles are per environment.
-    prod_roles = await akz.admin.get("/admin/v1/projects/acme/envs/production/roles")
+    prod_roles = await akz.admin.get("/admin/v1/envs/production/roles")
     assert prod_roles["data"] == []
 
-    listing = await akz.admin.get("/admin/v1/projects/acme/envs/development/users?search=ada")
+    listing = await akz.admin.get("/admin/v1/envs/development/users?search=ada")
     assert listing["total"] == 1 and listing["data"][0]["app_metadata"] == {"plan": "pro"}
     await akz.admin.patch(
-        f"/admin/v1/projects/acme/envs/development/users/{user_id}", json={"disabled": True}
+        f"/admin/v1/envs/development/users/{user_id}", json={"disabled": True}
     )
     refused = await akz.http.post(
         "/auth/v1/token",
@@ -171,12 +169,12 @@ async def test_admin_roles_and_claims(akz):
         headers=akz.headers(),
     )
     assert refused.status_code == 403
-    stats = await akz.admin.get("/admin/v1/projects/acme/envs/development/stats")
+    stats = await akz.admin.get("/admin/v1/envs/development/stats")
     assert stats["users"] == 1 and stats["disabled"] == 1
-    events = await akz.admin.get("/admin/v1/projects/acme/envs/development/events?failed=true")
+    events = await akz.admin.get("/admin/v1/envs/development/events?failed=true")
     assert events["data"][0]["reason"] == "disabled"
 
-    await akz.admin.delete(f"/admin/v1/projects/acme/envs/development/users/{user_id}")
+    await akz.admin.delete(f"/admin/v1/envs/development/users/{user_id}")
     again = await akz.http.post(
         "/auth/v1/signup",
         json={"email": "ada@example.com", "password": "correct-horse-1"},
@@ -188,36 +186,30 @@ async def test_admin_roles_and_claims(akz):
 async def test_admin_requires_a_service_token(akz):
     body = await akz.signup()
     response = await akz.http.get(
-        "/admin/v1/projects/acme/envs/development/users",
+        "/admin/v1/envs/development/users",
         headers=akz.headers(token=body["access_token"]),
     )
     assert response.status_code == 401
     with pytest.raises(ServiceError) as missing:
-        await akz.admin.get("/admin/v1/projects/nope/envs/development/users/1")
+        await akz.admin.get("/admin/v1/envs/nope/users/1")
     assert missing.value.status == 404
 
 
-async def test_platform_operator_bootstrap(akz):
-    headers = akz.headers(project=PLATFORM_PROJECT, env=PLATFORM_ENV)
-    signed_in = await akz.http.post(
-        "/auth/v1/token",
-        json={"email": "root@pawabase.dev", "password": "Sup3r-secret!pass"},
-        headers=headers,
-    )
-    assert signed_in.status_code == 200
-    claims = verify_user_token(
-        signed_in.json()["access_token"],
-        akz.settings.jwt_master_secret,
-        project=PLATFORM_PROJECT,
-        env=PLATFORM_ENV,
-    )
-    assert claims["roles"] == ["admin"]
-    signup = await akz.http.post(
-        "/auth/v1/signup",
-        json={"email": "x@example.com", "password": "Another-pass1!"},
-        headers=headers,
-    )
-    assert signup.status_code == 403  # nobody signs up to operate the platform
+async def test_there_are_no_platform_operators_and_tokens_name_no_project(akz):
+    body = await akz.signup("ada@example.com")
+    claims = verify_user_token(body["access_token"], akz.settings.jwt_master_secret, env="development")
+    assert "prj" not in claims and claims["env"] == "development"
+    assert claims["iss"] == "pawabase:akountz"
+    # A token is only good in the environment it was issued for.
+    from pawabase_core.tokens import TokenInvalid
+
+    with pytest.raises(TokenInvalid):
+        verify_user_token(body["access_token"], akz.settings.jwt_master_secret, env="production")
+    # No operator account is created at startup any more.
+    from database.models import AuthUser
+
+    assert await AuthUser.all().count() == 1
+
 
 
 async def test_organization_scoped_tokens_and_app_claims(akz):
@@ -271,7 +263,7 @@ async def test_organization_scoped_tokens_and_app_claims(akz):
 
     # app_metadata is admin-controlled and becomes the "app" claim; user_metadata stays "meta".
     await akz.admin.patch(
-        f"/admin/v1/projects/acme/envs/development/users/{owner['user']['id']}",
+        f"/admin/v1/envs/development/users/{owner['user']['id']}",
         json={"app_metadata": {"family_id": "f-12"}},
     )
     await akz.http.patch("/auth/v1/user", json={"data": {"family_id": "forged"}}, headers=owner_h)

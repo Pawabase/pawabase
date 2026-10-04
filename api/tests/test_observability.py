@@ -14,7 +14,7 @@ from app.route_stats import (
 )
 from pawabase_core.clients import ServiceError
 
-ENV = "/platform/v1/projects/acme/envs/development"
+ENV = "/platform/v1/envs/development"
 
 
 def row(i, status=200, ms=10.0, route="/o/{id}", method="GET", error=None, user=None, spans=()):
@@ -115,7 +115,6 @@ def test_route_breakdown_shows_where_the_time_goes_without_double_counting():
 
 
 async def seed(api):
-    await api.studio.post("/platform/v1/projects", json={"ref": "acme", "name": "Acme"})
     await api.studio.post(
         f"{ENV}/resources",
         json={
@@ -128,7 +127,7 @@ async def seed(api):
         },
     )
     await api.studio.post(f"{ENV}/resources/notes/migrate")
-    return api.context_headers("acme", "development")
+    return api.context_headers("development")
 
 
 async def test_a_request_trace_has_timed_spans_for_what_it_did(api):
@@ -215,7 +214,7 @@ async def test_old_request_history_is_pruned_and_zero_keeps_everything(api):
     fresh = datetime.now(UTC).isoformat()
     for stamp in (old, fresh):
         await RequestLog.create(
-            request_id=stamp, service="api", project="acme", env="development",
+            request_id=stamp, service="api", env="development",
             method="GET", path="/x", status=200, started_at=stamp,
         )  # fmt: skip
     rollup = api.app.state["request_rollup"]
@@ -223,4 +222,4 @@ async def test_old_request_history_is_pruned_and_zero_keeps_everything(api):
     assert await rollup.prune() == 0
     rollup.retention_days = 14
     assert await rollup.prune() == 1
-    assert [r.request_id for r in await RequestLog.filter(project="acme")] == [fresh]
+    assert [r.request_id for r in await RequestLog.filter(env="development")] == [fresh]

@@ -423,6 +423,8 @@ def function_context(
         request=request,
         input=input,
         auth=runtime.auth,
+        # The public kit's context still carries a ``project`` string: it is this runtime's name.
+        project=runtime.platform.settings.project_name,
         env=runtime.state.env_name,
         runtime=runtime,
         trigger=trigger,

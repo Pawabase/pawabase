@@ -15,8 +15,7 @@ async def test_proxies_with_signed_context(gateway):
     headers = seen["headers"]
     assert "apikey" not in headers and "x-pawabase-service" not in headers
     context = verify_context_token(headers[CONTEXT_HEADER], gateway.settings.internal_secret)
-    assert (context.project, context.env, context.role, context.key_id) == (
-        "shop",
+    assert (context.env, context.role, context.key_id) == (
         "main",
         "anon",
         "k1",

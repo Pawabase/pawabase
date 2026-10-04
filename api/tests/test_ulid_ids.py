@@ -5,7 +5,7 @@ import pytest
 from pawabase_core.clients import ServiceError
 from pawabase_core.ids import is_ulid
 
-ENV = "/platform/v1/projects/acme/envs/development"
+ENV = "/platform/v1/envs/development"
 ALL = {
     op: {"enabled": True, "policy": "public"}
     for op in ("list", "get", "create", "update", "delete")
@@ -13,7 +13,6 @@ ALL = {
 
 
 async def seed(api, id_type="ulid"):
-    await api.studio.post("/platform/v1/projects", json={"ref": "acme", "name": "Acme"})
     await api.studio.post(
         f"{ENV}/resources",
         json={
@@ -24,7 +23,7 @@ async def seed(api, id_type="ulid"):
         },
     )
     await api.studio.post(f"{ENV}/resources/notes/migrate")
-    return api.context_headers("acme", "development")
+    return api.context_headers("development")
 
 
 async def test_records_get_ulid_ids_that_sort_by_creation(api):
@@ -70,7 +69,6 @@ async def test_the_column_is_a_26_character_key_and_integer_resources_are_unchan
 
 
 async def test_new_resources_default_to_ulid_and_integer_keys_are_refused(api):
-    await api.studio.post("/platform/v1/projects", json={"ref": "acme", "name": "Acme"})
     made = await api.studio.post(f"{ENV}/resources", json={"name": "plain", "fields": []})
     assert made["id_type"] == "ulid"  # nothing said, so ULID
     with pytest.raises(ServiceError) as refused:
@@ -88,7 +86,6 @@ async def test_new_resources_default_to_ulid_and_integer_keys_are_refused(api):
 async def test_an_existing_integer_resource_keeps_working_and_cannot_be_retyped(api):
     from database.models import Environment, Resource
 
-    await api.studio.post("/platform/v1/projects", json={"ref": "acme", "name": "Acme"})
     environment = await Environment.get(name="development")
     await Resource.create(
         environment=environment, name="old", table="old", id_type="integer",
@@ -96,7 +93,7 @@ async def test_an_existing_integer_resource_keeps_working_and_cannot_be_retyped(
         operations={"list": {"enabled": True, "policy": "public"}, "create": {"enabled": True, "policy": "public"}},
     )  # fmt: skip
     await api.studio.post(f"{ENV}/resources/old/migrate")
-    anon = api.context_headers("acme", "development")
+    anon = api.context_headers("development")
     first = (await api.http.post("/rest/v1/old", json={"text": "a"}, headers=anon)).json()
     assert first["id"] == 1  # still auto-increment: records already carry those keys
 

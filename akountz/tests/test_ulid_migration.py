@@ -2,6 +2,7 @@
 
 import sqlite3
 
+import pytest
 from sillo.record.commands import migrate
 
 from app.config import AkountzSettings
@@ -9,6 +10,7 @@ from database.config import database
 from pawabase_core.ids import is_ulid, legacy_ulid
 
 LEGACY = "0002_session_org"
+ULID = "0003_ulid_keys"  # the step under test; 0004 (single runtime) has its own tests below
 
 
 def manager_for(tmp_path, name):
@@ -98,7 +100,7 @@ async def test_users_get_fixed_ulids_and_everything_that_points_at_them_follows(
 
     manager, _ = manager_for(tmp_path, "legacy.db")
     async with manager:
-        await migrate(manager)
+        await migrate(manager, target=ULID)
 
     db = sqlite3.connect(path)
     users = {u["email"]: u["id"] for u in rows(db, "SELECT id, email FROM akz_users")}
@@ -120,35 +122,67 @@ async def test_users_get_fixed_ulids_and_everything_that_points_at_them_follows(
     assert rows(db, "SELECT user_id FROM perm_user_groups")[0]["user_id"] == legacy_ulid(12)
     db.close()
 
-    # The tables are the models now: a user can be loaded by the migrated id and gets tokens.
-    manager, _ = manager_for(tmp_path, "legacy.db")
-    async with manager:
-        from database.models import AuthUser
 
-        ada = await AuthUser.load_user(legacy_ulid(7))
-        assert ada is not None and ada.email == "ada@example.com"
-        pair = await ada.issue_token_pair("s" * 32)
-        assert (
-            pair["access_token"] and await ada.active_token_count() == 2
-        )  # the new pair; the migrated token had expired
-        assert await ada.revoke_all_tokens() == 3
-        fresh = await AuthUser.create(
-            project="acme", env="development", email="new@example.com", username="new", password="x"
+async def test_the_single_runtime_migration_refuses_users_of_the_old_layout(tmp_path):
+    manager, path = manager_for(tmp_path, "old.db")
+    async with manager:
+        await migrate(manager, target=ULID)
+    db = sqlite3.connect(path)
+    insert(db, "akz_users", id=legacy_ulid(7), project="acme", env="development", email="ada@example.com", username="ada", password="x", is_active=1)
+    db.commit()
+    db.close()
+    manager, _ = manager_for(tmp_path, "old.db")
+    async with manager:
+        with pytest.raises(RuntimeError, match="one project"):
+            await migrate(manager)
+    db = sqlite3.connect(path)  # refused atomically: the user is still there
+    assert [r["email"] for r in rows(db, "SELECT email FROM akz_users")] == ["ada@example.com"]
+    db.close()
+
+
+async def test_postgres_drops_the_studio_operators_and_keeps_an_empty_runtime_usable():
+    """Opt-in: PAWABASE_TEST_POSTGRES_URL=postgres://user:pass@host:5432/postgres (a scratch database is made and dropped).
+
+    SQLite cannot drop the unique indexes migration 0004 removes, and Akountz runs on PostgreSQL, so the chain is checked there.
+    """
+    import os
+    import uuid
+
+    import asyncpg
+
+    server = os.environ.get("PAWABASE_TEST_POSTGRES_URL")
+    if not server:
+        pytest.skip("set PAWABASE_TEST_POSTGRES_URL to run the migrations against a real PostgreSQL")
+    name = f"akz_test_{uuid.uuid4().hex[:10]}"
+    admin = await asyncpg.connect(server)
+    await admin.execute(f'CREATE DATABASE "{name}"')
+    url = server.rsplit("/", 1)[0] + f"/{name}"
+    try:
+        manager = database(AkountzSettings(_env_file=None, app_env="testing", database_url=url))
+        async with manager:
+            await migrate(manager, target=ULID)
+        db = await asyncpg.connect(url)
+        operator = legacy_ulid(1)
+        await db.execute(
+            "insert into akz_users (id, project, env, email, username, password, is_active, is_staff, is_superuser, mfa_enabled, failed_logins, "
+            "user_metadata, app_metadata, name, created_at, updated_at) values ($1,'_platform','main','root@x.io','root','x',true,false,false,false,0,'{}','{}','',now(),now())",
+            operator,
         )
-        assert is_ulid(fresh.id) and fresh.id > legacy_ulid(12)
+        await db.close()
+        manager = database(AkountzSettings(_env_file=None, app_env="testing", database_url=url))
+        async with manager:
+            await migrate(manager)  # the operator is dropped, nothing else was there: allowed
+        manager = database(AkountzSettings(_env_file=None, app_env="testing", database_url=url))
+        async with manager:
+            from database.models import AuthUser
 
-
-async def test_a_fresh_akountz_database_goes_straight_through(tmp_path):
-    manager, _ = manager_for(tmp_path, "fresh.db")
-    async with manager:
-        await migrate(manager)
-    manager, _ = manager_for(tmp_path, "fresh.db")
-    async with manager:
-        from database.models import AuthUser, Permission
-
-        user = await AuthUser.create(
-            project="p", env="e", email="a@b.co", username="a", password="x"
-        )
-        await Permission.define("p/e/read")
-        await Permission.assign(user, "p/e/read")
-        assert is_ulid(user.id) and "p/e/read" in await Permission.of(user)
+            assert await AuthUser.all().count() == 0
+            user = await AuthUser.create(env="development", email="a@b.co", username="a", password="x")
+            assert is_ulid(user.id)
+        db = await asyncpg.connect(url)
+        columns = {r["column_name"] for r in await db.fetch("select column_name from information_schema.columns where table_name='akz_users'")}
+        await db.close()
+        assert "env" in columns and "project" not in columns
+    finally:
+        await admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+        await admin.close()

@@ -91,7 +91,9 @@ class EnvironmentState:
         configured = self.infra.get("database_url")
         if configured:
             return self.platform.resolve_value(self, configured)
-        url = self.platform.settings.default_data_url.format(env=self.env_name)
+        # ``{project}`` from an older configuration names nothing now: drop it, with its separator.
+        template = self.platform.settings.default_data_url.replace("{project}__", "").replace("{project}", "")
+        url = template.replace("{env}", self.env_name)
         if url.startswith(("postgres://", "postgresql://")) and "schema=" not in url:
             # One shared Postgres database, one schema per environment (see ``data_schema``).
             url += ("&" if "?" in url else "?") + f"schema={self.data_schema()}"

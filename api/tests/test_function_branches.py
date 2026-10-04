@@ -12,11 +12,8 @@ from app.deployments import Deployments, unpack
 from pawabase import codec
 from pawabase_core.tokens import issue_user_token
 
-PROJECT = "shop"
-
-
-def env(name="development", ref=PROJECT):
-    return f"/platform/v1/projects/{ref}/envs/{name}"
+def env(name="development"):
+    return f"/platform/v1/envs/{name}"
 
 
 def bundle(**files):
@@ -43,13 +40,13 @@ def fn(name, returns, extra=""):
 
 @pytest.fixture
 async def shop(api):
-    await api.studio.post("/platform/v1/projects", json={"ref": PROJECT, "name": "Shop", "environments": ["development", "production"]})
+    await api.studio.post("/platform/v1/envs", json={"name": "production"})
     return api
 
 
 async def call(api, name, branch=None, env_name="development"):
     suffix = f"?branch={branch}" if branch else ""
-    response = await api.http.post(f"/functions/v1/{name}{suffix}", json={}, headers=api.context_headers(PROJECT, env_name))
+    response = await api.http.post(f"/functions/v1/{name}{suffix}", json={}, headers=api.context_headers(env_name))
     return response.status_code, response.json()
 
 
@@ -99,7 +96,7 @@ async def test_code_that_does_not_load_is_refused_and_the_old_code_keeps_serving
 
 
 async def test_what_cannot_be_deployed_is_named(shop):
-    headers = shop.context_headers(PROJECT, "development", role="service")
+    headers = shop.context_headers("development", role="service")
     for files, expected in (
         ({"functions/a.py": fn("a", 1), "routes.py": "router = None\n"}, "routes.py cannot be deployed"),
         ({"other/a.py": "X = 1\n"}, "functions/*.py"),
@@ -127,18 +124,18 @@ async def test_another_process_notices_a_deployment_from_the_stamp_alone(shop):
     other = Deployments(shop.platform.deployments.root)
     from pawabase_core.functions import clear_functions, get_exact
 
-    clear_functions("shop/development")
-    other.ensure_loaded(PROJECT, "development")
-    assert get_exact("shop/development", "a") is not None
+    clear_functions("runtime/development")
+    other.ensure_loaded("development")
+    assert get_exact("runtime/development", "a") is not None
     await shop.studio.post(f"{env()}/function-deployments", json={"archive": bundle(**{"functions/a.py": fn("a", "v2"), "functions/z.py": fn("z", "new")})})
     import app.deployments as module
 
     module.RECHECK_SECONDS = 0
     try:
-        other.ensure_loaded(PROJECT, "development")
+        other.ensure_loaded("development")
     finally:
         module.RECHECK_SECONDS = 1.0
-    assert get_exact("shop/development", "z") is not None
+    assert get_exact("runtime/development", "z") is not None
 
 
 async def test_helper_packages_ship_with_the_functions(shop):
@@ -172,14 +169,12 @@ async def test_a_function_chooses_its_status_and_a_run_is_recorded_per_branch(sh
     assert detail["logs"][0]["message"] == "about to refuse"
 
 
-async def test_a_project_key_manages_only_its_own_project_and_environment(shop):
-    await shop.studio.post("/platform/v1/projects", json={"ref": "other", "name": "Other"})
-    headers = shop.context_headers(PROJECT, "development", role="service")
+async def test_a_key_manages_only_its_own_environment(shop):
+    headers = shop.context_headers("development", role="service")
     own = await shop.http.get(f"{env()}/function-deployments", headers=headers)
     assert own.status_code == 200
-    assert (await shop.http.get(f"{env(ref='other')}/function-deployments", headers=headers)).status_code == 403
     assert (await shop.http.get(f"{env('production')}/function-deployments", headers=headers)).status_code == 403
-    scoped = shop.context_headers(PROJECT, "development", role="service", scopes=("functions:invoke",))
+    scoped = shop.context_headers("development", role="service", scopes=("functions:invoke",))
     assert (await shop.http.get(f"{env()}/function-deployments", headers=scoped)).status_code == 403
 
 
@@ -192,7 +187,7 @@ ORDERS = {"name": "orders", "fields": [{"name": "total", "type": "number"}, {"na
 async def rpc(shop):
     await shop.studio.post(f"{env()}/resources", json=ORDERS)
     await shop.studio.post(f"{env()}/resources/orders/migrate")
-    headers = shop.context_headers(PROJECT, "development", role="service")
+    headers = shop.context_headers("development", role="service")
 
     async def call_(method, *args, as_user=None, expect=200, **kwargs):
         response = await shop.http.post(f"{env()}/runtime/call", json={"method": method, "args": codec.encode(list(args)), "kwargs": codec.encode(kwargs), "as_user": as_user}, headers=headers)
@@ -249,24 +244,24 @@ async def test_remote_sql_sessions_and_transactions(rpc):
 
 
 async def test_the_deployment_vouches_for_a_token_and_nobody_else(rpc):
-    token = issue_user_token(rpc.settings.jwt_master_secret, project=PROJECT, env="development", user_id="42", jti="j", session_id="s", roles=["staff"], permissions=["orders.read"], email="ada@example.com")
-    headers = rpc.context_headers(PROJECT, "development", role="service")
+    token = issue_user_token(rpc.settings.jwt_master_secret, env="development", user_id="42", jti="j", session_id="s", roles=["staff"], permissions=["orders.read"], email="ada@example.com")
+    headers = rpc.context_headers("development", role="service")
     good = (await rpc.http.post(f"{env()}/runtime/identify", json={"token": token}, headers=headers)).json()["auth"]
     assert good["authenticated"] and good["user_id"] == "42" and good["roles"] == ["staff"] and good["email"] == "ada@example.com"
     for bad in (token + "x", "garbage", None):
         answer = (await rpc.http.post(f"{env()}/runtime/identify", json={"token": bad}, headers=headers)).json()["auth"]
         assert answer["authenticated"] is False
-    other_env = issue_user_token(rpc.settings.jwt_master_secret, project=PROJECT, env="production", user_id="1", jti="j", session_id="s")
+    other_env = issue_user_token(rpc.settings.jwt_master_secret, env="production", user_id="1", jti="j", session_id="s")
     assert (await rpc.http.post(f"{env()}/runtime/identify", json={"token": other_env}, headers=headers)).json()["auth"]["authenticated"] is False
 
 
-async def test_the_runtime_needs_its_scope_and_the_right_project(rpc):
+async def test_the_runtime_needs_its_scope_and_the_right_environment(rpc):
     body = {"method": "emit", "args": ["x", {}]}
-    no_scope = rpc.context_headers(PROJECT, "development", role="service", scopes=("resource:read",))
+    no_scope = rpc.context_headers("development", role="service", scopes=("resource:read",))
     assert (await rpc.http.post(f"{env()}/runtime/call", json=body, headers=no_scope)).status_code == 403
-    wrong = rpc.context_headers("other", "development", role="service")
+    wrong = rpc.context_headers("production", role="service")  # a production key against development
     assert (await rpc.http.post(f"{env()}/runtime/call", json=body, headers=wrong)).status_code == 403
-    anonymous = rpc.context_headers(PROJECT, "development")
+    anonymous = rpc.context_headers("development")
     assert (await rpc.http.post(f"{env()}/runtime/call", json=body, headers=anonymous)).status_code in (401, 403)
 
 
@@ -294,9 +289,9 @@ def test_the_unpacker_refuses_unsafe_archives(tmp_path):
 
 async def test_reading_a_secret_needs_its_own_scope_and_runs_can_be_followed(rpc):
     body = {"method": "secret", "args": ["ANY"]}
-    only_runtime = rpc.context_headers(PROJECT, "development", role="service", scopes=("runtime:use",))
+    only_runtime = rpc.context_headers("development", role="service", scopes=("runtime:use",))
     assert (await rpc.http.post(f"{env()}/runtime/call", json=body, headers=only_runtime)).status_code == 403
-    both = rpc.context_headers(PROJECT, "development", role="service", scopes=("runtime:use", "secrets:read"))
+    both = rpc.context_headers("development", role="service", scopes=("runtime:use", "secrets:read"))
     assert (await rpc.http.post(f"{env()}/runtime/call", json=body, headers=both)).status_code == 200
     # `after` returns only runs newer than the last one a follower saw.
     await rpc.studio.post(f"{env()}/function-deployments", json={"archive": bundle(**{"functions/t.py": fn("t", 1)})})

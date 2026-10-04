@@ -1,4 +1,4 @@
-"""Migration 0009: a database with integer keys becomes ULID-keyed, rows and links intact."""
+"""Migrations 0009 and 0010 (integer keys become ULIDs, rows and links intact) and 0011 (one runtime, no projects)."""
 
 import json
 import sqlite3
@@ -11,6 +11,7 @@ from database.config import database
 from pawabase_core.ids import is_ulid, legacy_ulid, ulid_timestamp_ms
 
 LEGACY = "0008_function_branches"
+ULID = "0010_user_ids_are_ulids"  # the step under test; 0011 (single runtime) has its own tests below
 
 
 def manager_for(tmp_path, name):
@@ -99,7 +100,7 @@ async def test_integer_keys_become_ulids_and_every_link_survives(tmp_path):
 
     manager, _ = manager_for(tmp_path, "legacy.db")
     async with manager:
-        await migrate(manager)  # 0009
+        await migrate(manager, target=ULID)
 
     db = sqlite3.connect(path)
     orgs = rows(db, "SELECT * FROM pb_organizations ORDER BY id")
@@ -134,30 +135,61 @@ async def test_integer_keys_become_ulids_and_every_link_survives(tmp_path):
     )
     db.close()
 
-    # The schema is now the models: another run changes nothing, and new rows get ULIDs after the old ones.
-    manager, _ = manager_for(tmp_path, "legacy.db")
-    async with manager:
-        await migrate(manager)
-    manager, _ = manager_for(tmp_path, "legacy.db")
-    async with manager:
-        from database.models import Organization
+async def test_a_fresh_postgres_goes_straight_through_to_the_single_runtime_schema():
+    """Opt-in: PAWABASE_TEST_POSTGRES_URL=postgres://user:pass@host:5432/postgres (a server; a scratch database is made and dropped).
 
-        fresh = await Organization.create(slug="gamma", name="Gamma")
-        assert is_ulid(fresh.id) and fresh.id > orgs[1]["id"]
-        assert (await Organization.get(slug="acme")).id == orgs[0]["id"]
+    SQLite cannot drop the unique index migration 0011 removes, and the platform database is PostgreSQL, so the whole chain is checked there.
+    """
+    import os
+    import uuid
+
+    import asyncpg
+
+    server = os.environ.get("PAWABASE_TEST_POSTGRES_URL")
+    if not server:
+        pytest.skip("set PAWABASE_TEST_POSTGRES_URL to run the migrations against a real PostgreSQL")
+    name = f"pw_test_{uuid.uuid4().hex[:10]}"
+    admin = await asyncpg.connect(server)
+    await admin.execute(f'CREATE DATABASE "{name}"')
+    url = server.rsplit("/", 1)[0] + f"/{name}"
+    try:
+        manager = database(ApiSettings(_env_file=None, app_env="testing", database_url=url))
+        async with manager:
+            await migrate(manager)
+        db = await asyncpg.connect(url)
+        tables = {r["tablename"] for r in await db.fetch("select tablename from pg_tables where schemaname='public'")}
+        await db.close()
+        assert {"pb_environments", "pb_api_keys", "pb_secrets", "pb_audit"} <= tables
+        assert not tables & {"pb_projects", "pb_organizations", "pb_org_members", "pb_org_invitations", "pb_project_keys"}
+        manager = database(ApiSettings(_env_file=None, app_env="testing", database_url=url))
+        async with manager:
+            from database.models import Environment, Secret
+
+            environment = await Environment.create(name="development")
+            secret = await Secret.create(environment=environment, name="TOKEN", ciphertext="x")
+            assert is_ulid(environment.id) and is_ulid(secret.id) and secret.environment_id == environment.id
+    finally:
+        await admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+        await admin.close()
 
 
-async def test_a_fresh_database_goes_straight_through(tmp_path):
-    manager, _ = manager_for(tmp_path, "fresh.db")
+async def test_the_single_runtime_migration_refuses_a_database_that_still_holds_projects(tmp_path):
+    manager, path = manager_for(tmp_path, "old.db")
     async with manager:
-        await migrate(manager)
-    manager, _ = manager_for(tmp_path, "fresh.db")
-    async with manager:
-        from database.models import Organization, Project
+        await migrate(manager, target=ULID)
+    db = sqlite3.connect(path)
+    insert(db, "pb_organizations", id="01ARZ3NDEKTSV4RRFFQ69G5FAV", slug="acme", name="Acme")
+    insert(db, "pb_projects", id="01ARZ3NDEKTSV4RRFFQ69G5FAW", ref="shop", name="Shop", organization_id="01ARZ3NDEKTSV4RRFFQ69G5FAV")
+    db.commit()
+    db.close()
 
-        org = await Organization.create(slug="a", name="A")
-        project = await Project.create(ref="p", name="P", organization=org)
-        assert is_ulid(org.id) and is_ulid(project.id) and project.organization_id == org.id
+    manager, _ = manager_for(tmp_path, "old.db")
+    async with manager:
+        with pytest.raises(RuntimeError, match="one project"):
+            await migrate(manager)
+    db = sqlite3.connect(path)  # refused atomically: nothing was dropped
+    assert rows(db, "SELECT ref FROM pb_projects") == [{"ref": "shop"}]
+    db.close()
 
 
 async def test_an_orphan_row_aborts_the_migration_and_keeps_the_old_tables(tmp_path):

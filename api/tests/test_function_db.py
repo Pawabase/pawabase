@@ -4,7 +4,7 @@ import textwrap
 
 import pytest
 
-ENV = "/platform/v1/projects/shop/envs/development"
+ENV = "/platform/v1/envs/development"
 
 STOCK = {
     "name": "stock",
@@ -66,10 +66,9 @@ CODE = textwrap.dedent(
 
 @pytest.fixture
 async def shop(api, tmp_path):
-    code = tmp_path / "code" / "shop" / "functions"
+    code = tmp_path / "code" / "functions"
     code.mkdir(parents=True)
     (code / "stock.py").write_text(CODE)
-    await api.studio.post("/platform/v1/projects", json={"ref": "shop", "name": "Shop"})
     await api.studio.post(f"{ENV}/resources", json=STOCK)
     await api.studio.post(f"{ENV}/resources/stock/migrate")
     for name, path, method in (("stock.add", "/stock-add", "POST"), ("stock.take", "/stock-take", "POST"), ("stock.move", "/stock-move", "POST"),
@@ -79,7 +78,7 @@ async def shop(api, tmp_path):
 
 
 async def call(api, path, body=None, method="POST", headers=None):
-    response = await api.http.request(method, f"/rest/v1{path}", json=body, headers={**api.context_headers("shop", "development"), **(headers or {})})
+    response = await api.http.request(method, f"/rest/v1{path}", json=body, headers={**api.context_headers("development"), **(headers or {})})
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -110,7 +109,7 @@ async def test_a_transaction_rolls_back_every_write_when_one_fails(shop):
 
 
 async def test_identifiers_are_checked_before_they_reach_sql(shop):
-    response = await shop.http.post("/rest/v1/stock-add", json={"sku": "X"}, headers=shop.context_headers("shop", "development"))
+    response = await shop.http.post("/rest/v1/stock-add", json={"sku": "X"}, headers=shop.context_headers("development"))
     assert response.status_code == 200
     from app.data.sql import check_identifier
 
