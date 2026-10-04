@@ -179,7 +179,8 @@ def register(r: Router, akountz: Akountz) -> None:
         request_model=RoleBody,
         summary="Change a member's role",
     )
-    async def set_role(ctx: HttpContext, slug: str, user_id: int, body: RoleBody):
+    async def set_role(ctx: HttpContext, slug: str, user_id: str, body: RoleBody):
+        user_id = user_id.upper()  # ULIDs are case-insensitive
         user, _ = await signed_in_user(ctx)
         org, me = await membership(user, slug, manage=True)
         _check_role(body.role)
@@ -203,7 +204,8 @@ def register(r: Router, akountz: Akountz) -> None:
         tags=["organizations"],
         summary="Remove a member (or leave)",
     )
-    async def remove_member(ctx: HttpContext, slug: str, user_id: int):
+    async def remove_member(ctx: HttpContext, slug: str, user_id: str):
+        user_id = user_id.upper()  # ULIDs are case-insensitive
         user, _ = await signed_in_user(ctx)
         org, me = await membership(user, slug)
         if user_id != user.id and me.role not in MANAGERS:
@@ -298,7 +300,8 @@ def register(r: Router, akountz: Akountz) -> None:
         tags=["organizations"],
         summary="Revoke an invitation",
     )
-    async def revoke_invitation(ctx: HttpContext, slug: str, invitation_id: int):
+    async def revoke_invitation(ctx: HttpContext, slug: str, invitation_id: str):
+        invitation_id = invitation_id.upper()  # ULIDs are case-insensitive
         user, _ = await signed_in_user(ctx)
         org, _ = await membership(user, slug, manage=True)
         updated = await Invitation.filter(
@@ -380,7 +383,8 @@ def register(r: Router, akountz: Akountz) -> None:
         tags=["organizations"],
         summary="Add a member to a team",
     )
-    async def add_to_team(ctx: HttpContext, slug: str, team: str, user_id: int):
+    async def add_to_team(ctx: HttpContext, slug: str, team: str, user_id: str):
+        user_id = user_id.upper()  # ULIDs are case-insensitive
         user, _ = await signed_in_user(ctx)
         org, _ = await membership(user, slug, manage=True)
         found = await Team.get_or_none(organization=org, slug=team)
@@ -394,7 +398,8 @@ def register(r: Router, akountz: Akountz) -> None:
         tags=["organizations"],
         summary="Remove a member from a team",
     )
-    async def remove_from_team(ctx: HttpContext, slug: str, team: str, user_id: int):
+    async def remove_from_team(ctx: HttpContext, slug: str, team: str, user_id: str):
+        user_id = user_id.upper()  # ULIDs are case-insensitive
         user, _ = await signed_in_user(ctx)
         org, _ = await membership(user, slug, manage=True)
         await TeamMember.filter(team__organization=org, team__slug=team, user_id=user_id).delete()

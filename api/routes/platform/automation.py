@@ -343,7 +343,8 @@ def register(r: Router, platform: Platform) -> None:
         tags=["webhooks"],
         summary="Deliver again",
     )
-    async def redeliver(ctx: HttpContext, ref: str, env: str, delivery_id: int):
+    async def redeliver(ctx: HttpContext, ref: str, env: str, delivery_id: str):
+        delivery_id = delivery_id.upper()  # ULIDs are case-insensitive
         from app.jobs.webhooks import DeliverWebhookJob
 
         environment = await get_environment(ref, env)

@@ -66,7 +66,7 @@ def _revision_view(revision: DefinitionRevision, *, snapshot: bool = False):
     return result
 
 
-async def _release_snapshot(release_id: str | None, environment_id: int):
+async def _release_snapshot(release_id: str | None, environment_id: str):
     if not release_id:
         return None
     release = await Release.get_or_none(id=release_id, environment_id=environment_id)

@@ -212,7 +212,8 @@ def register(r: Router, akountz: Akountz) -> None:
         }
 
     @r.delete("/identities/{identity_id}", summary="Unlink an identity", tags=["oauth"])
-    async def unlink_identity(ctx: HttpContext, identity_id: int):
+    async def unlink_identity(ctx: HttpContext, identity_id: str):
+        identity_id = identity_id.upper()  # ULIDs are case-insensitive
         user, _ = await signed_in_user(ctx)
         identity = await Identity.get_or_none(id=identity_id, user=user)
         if identity is None:
