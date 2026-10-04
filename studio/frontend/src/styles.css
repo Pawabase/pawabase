@@ -687,3 +687,41 @@ tr.clickable:hover td { background: var(--sunken); }
 .restore-bar { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 16px; margin: 4px -4px -4px; border-radius: var(--r-md, 14px); background: var(--surface); border: 1px solid var(--line); box-shadow: 0 -6px 18px rgba(31, 27, 46, 0.06); }
 .restore-bar .what { font-size: 13px; color: var(--muted); }
 .restore-bar .what b { color: var(--text); }
+
+/* Observability: route table, timeline, waterfall, request trace */
+.rate-cell { display: flex; align-items: center; gap: 8px; min-width: 150px; }
+.rate-cell b.bad { color: var(--danger); }
+.rate-bar { flex: 1; height: 6px; background: var(--sunken); border-radius: 99px; overflow: hidden; min-width: 40px; }
+.rate-bar div { height: 100%; border-radius: 99px; }
+.trace-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.trace-stat { background: var(--surface); border: 1px solid var(--border, var(--sunken)); border-radius: 14px; padding: 12px 14px; min-width: 0; }
+.trace-stat-value { font-size: 22px; font-weight: 700; margin-top: 2px; }
+.trace-stat-value.red { color: var(--danger); }
+.trace-stat-hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.timeline { display: flex; align-items: flex-end; gap: 2px; }
+.timeline-col { flex: 1; display: flex; flex-direction: column-reverse; height: 100%; justify-content: flex-start; }
+.timeline-col div { min-height: 0; }
+.timeline-col:hover { outline: 1px solid var(--brand); }
+.legend { margin-top: 8px; gap: 14px; font-size: 12px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; }
+.kind-strip { display: flex; height: 14px; border-radius: 99px; overflow: hidden; gap: 2px; }
+.kind-legend { display: grid; gap: 6px; font-size: 13px; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.waterfall { position: relative; font-size: 12.5px; }
+.waterfall-axis { position: relative; height: 18px; margin-left: 38%; color: var(--faint); font-size: 11px; }
+.waterfall-axis span { position: absolute; transform: translateX(-50%); }
+.waterfall-axis span:first-child { transform: none; }
+.waterfall-axis span:last-child { transform: translateX(-100%); }
+.waterfall-row { display: flex; align-items: center; min-height: 26px; cursor: pointer; border-radius: 8px; }
+.waterfall-row:hover, .waterfall-row.selected { background: var(--sunken); }
+.waterfall-label { width: 38%; flex: none; display: flex; align-items: center; gap: 6px; overflow: hidden; padding-right: 8px; }
+.waterfall-label code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.waterfall-kind { font-weight: 600; color: var(--muted); }
+.waterfall-track { position: relative; flex: 1; height: 16px; background: linear-gradient(to right, transparent calc(25% - 1px), var(--sunken) calc(25% - 1px), var(--sunken) 25%, transparent 25%, transparent calc(50% - 1px), var(--sunken) calc(50% - 1px), var(--sunken) 50%, transparent 50%, transparent calc(75% - 1px), var(--sunken) calc(75% - 1px), var(--sunken) 75%, transparent 75%); }
+.waterfall-bar { position: absolute; top: 3px; height: 10px; border-radius: 4px; min-width: 2px; }
+.waterfall-ms { position: absolute; top: 0; font-size: 11px; color: var(--muted); padding-left: 6px; white-space: nowrap; }
+.waterfall-detail { margin: 4px 0 10px 12px; display: grid; gap: 8px; }
+.log-list { display: grid; gap: 6px; }
+.log-line { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 6px 10px; border-radius: 10px; background: var(--sunken); }
+.log-message { flex: 1; min-width: 200px; word-break: break-word; }
+.log-source { font-size: 11.5px; }

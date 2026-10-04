@@ -19,6 +19,8 @@ from urllib.parse import urlparse
 import httpx
 from sillo.helpers.retry import async_retry
 
+from pawabase_core.telemetry import span
+
 MAX_BODY = 256 * 1024
 RETRYABLE_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 
@@ -112,18 +114,22 @@ async def request_with_retries(
 ) -> dict[str, Any]:
     """One request, retried with Sillo's backoff on transient failures."""
     check_target(url, allow_private=allow_private)
+    parsed = urlparse(url)
+    target = f"{method.upper()} {parsed.hostname}{parsed.path}"
 
     async def attempt() -> dict[str, Any]:
-        response = await request_once(
-            client,
-            method,
-            url,
-            headers=headers,
-            json_body=json_body,
-            content=content,
-            params=params,
-            timeout=timeout,
-        )
+        with span("http", target, retries=retries) as step:
+            response = await request_once(
+                client,
+                method,
+                url,
+                headers=headers,
+                json_body=json_body,
+                content=content,
+                params=params,
+                timeout=timeout,
+            )
+            step.set(status=response["status"])
         if response["status"] in RETRYABLE_STATUSES and retries:
             raise _Retryable(response)
         return response

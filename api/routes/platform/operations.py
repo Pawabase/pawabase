@@ -11,6 +11,7 @@ from sillo import HttpContext, Router, no_content
 from sillo.exceptions import HTTPException
 from tortoise.functions import Count
 
+from app import route_stats
 from app.analytics import DEFAULT_RANGE, environment_analytics
 from app.platform import PLATFORM_QUEUES, Platform
 from database.models import (
@@ -19,6 +20,7 @@ from database.models import (
     EventLog,
     FailedJobRecord,
     FlowRun,
+    FunctionRun,
     JobRun,
     MailLog,
     MetricCounter,
@@ -359,35 +361,118 @@ def register(r: Router, platform: Platform) -> None:
         jobs = await JobRun.filter(project=ref, env=env, request_id=request_id).order_by(
             "created_at"
         )
-        if not request_rows and not runs and not events and not jobs:
+        function_runs = await FunctionRun.filter(
+            project=ref, env=env, request_id=request_id
+        ).order_by("created_at")
+        if not (request_rows or runs or events or jobs or function_runs):
             raise HTTPException(status_code=404, detail="no such request trace")
-        logs = []
+        logs, seen = [], set()
+
+        def add_log(entry: Any, source: str, **extra: Any) -> None:
+            item = dict(entry) if isinstance(entry, dict) else {"message": str(entry)}
+            item.setdefault("request_id", request_id)
+            item.update({k: v for k, v in extra.items() if v is not None})
+            item["source"] = source
+            stamp = (item.get("timestamp") or item.get("at"), item.get("level"), item.get("message"))
+            if stamp in seen:  # a function's own log is also noted on the request it ran in
+                return
+            seen.add(stamp)
+            logs.append(item)
+
+        for row in request_rows:
+            for entry in (row.notes or {}).get("logs", []):
+                add_log(entry, "request")
+        for run in function_runs:
+            for entry in run.logs or []:
+                add_log(entry, f"function:{run.function}", function=run.function, run_id=run.id)
         for run in runs:
             for entry in run.logs or []:
-                item = dict(entry) if isinstance(entry, dict) else {"message": str(entry)}
-                item.setdefault("flow", run.flow)
-                item.setdefault("run_id", run.id)
-                item.setdefault("request_id", request_id)
-                logs.append(item)
+                add_log(entry, f"flow:{run.flow}", flow=run.flow, run_id=run.id)
         logs.sort(key=lambda item: str(item.get("timestamp") or item.get("at") or ""))
+        spans = []
+        for row in request_rows:
+            for item in (row.notes or {}).get("spans", []):
+                spans.append({**item, "service": row.service})
+        db = [item for item in spans if item.get("kind") == "db"]
+        failed_spans = [item for item in spans if item.get("status") == "error"]
+        primary = request_rows[0] if request_rows else None
         return {
             "request_id": request_id,
             "requests": [dump(row) for row in request_rows],
+            "spans": spans,
             "flow_runs": [dump(run) for run in runs],
+            "function_runs": [dump(run) for run in function_runs],
             "events": [dump(event) for event in events],
             "jobs": [dump(job) for job in jobs],
             "logs": logs,
+            "error": primary.error if primary else None,
+            "traceback": (primary.notes or {}).get("traceback") if primary else None,
             "summary": {
                 "services": sorted({row.service for row in request_rows}),
                 "duration_ms": round(sum(row.duration_ms for row in request_rows), 3),
                 "flows": len(runs),
+                "functions": len(function_runs),
                 "events": len(events),
                 "jobs": len(jobs),
                 "logs": len(logs),
+                "spans": len(spans),
+                "db_queries": len(db),
+                "db_ms": round(sum(item.get("duration_ms", 0) for item in db if item.get("parent") is None), 3),
+                "slowest_span": max(spans, key=lambda item: item.get("duration_ms", 0), default=None),
+                "failed_spans": len(failed_spans),
                 "failed": any(row.status >= 500 for row in request_rows)
-                or any(run.status == "failed" for run in runs),
+                or any(run.status == "failed" for run in runs)
+                or any(run.status == "failed" for run in function_runs),
             },
         }
+
+    def minutes_param(ctx: HttpContext, default: int = 60) -> int:
+        try:
+            return max(1, min(int(ctx.query_params.get("minutes", default)), 30 * 24 * 60))
+        except ValueError:
+            raise HTTPException(status_code=422, detail="minutes must be a whole number") from None
+
+    @r.get(
+        f"{base}/observability/routes",
+        auth=OPERATOR,
+        tags=["observability"],
+        summary="Routes ranked by failures, error rate, latency, traffic or time spent",
+    )
+    async def route_ranking(ctx: HttpContext, ref: str, env: str):
+        await get_environment(ref, env)
+        await platform.app.state["request_rollup"].flush()
+        try:
+            limit = max(1, min(int(ctx.query_params.get("limit", 50)), 200))
+        except ValueError:
+            raise HTTPException(status_code=422, detail="limit must be a whole number") from None
+        return await route_stats.routes_for(
+            ref, env, minutes=minutes_param(ctx), sort=ctx.query_params.get("sort", "errors"), limit=limit
+        )
+
+    @r.get(
+        f"{base}/observability/routes/detail",
+        auth=OPERATOR,
+        tags=["observability"],
+        summary="One route: timeline, statuses, errors, slowest requests, time by step kind",
+    )
+    async def route_detail(ctx: HttpContext, ref: str, env: str):
+        await get_environment(ref, env)
+        await platform.app.state["request_rollup"].flush()
+        method, route = ctx.query_params.get("method"), ctx.query_params.get("route")
+        if not method or not route:
+            raise HTTPException(status_code=422, detail="method and route are required")
+        return await route_stats.route_detail_for(ref, env, method, route, minutes=minutes_param(ctx))
+
+    @r.get(
+        f"{base}/observability/errors",
+        auth=OPERATOR,
+        tags=["observability"],
+        summary="Failures grouped by what went wrong and where",
+    )
+    async def error_groups(ctx: HttpContext, ref: str, env: str):
+        await get_environment(ref, env)
+        await platform.app.state["request_rollup"].flush()
+        return await route_stats.errors_for(ref, env, minutes=minutes_param(ctx))
 
     @r.get(f"{base}/metrics", auth=OPERATOR, tags=["observability"], summary="Counters per minute")
     async def metrics(ctx: HttpContext, ref: str, env: str):

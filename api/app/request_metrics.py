@@ -14,8 +14,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from tortoise.expressions import F
 
@@ -24,6 +25,7 @@ from pawabase_core.telemetry import RequestRecord, Telemetry
 
 REQUESTS_METRIC = "pawabase.requests"
 FLUSH_SECONDS = 5.0
+PRUNE_SECONDS = 3600.0
 
 logger = logging.getLogger("pawabase.api.metrics")
 
@@ -33,8 +35,10 @@ Key = tuple[str, str, datetime, str]
 class RequestRollup:
     """Telemetry sink that buffers per-minute request counts and flushes them."""
 
-    def __init__(self, interval: float = FLUSH_SECONDS) -> None:
+    def __init__(self, interval: float = FLUSH_SECONDS, *, retention_days: int = 0) -> None:
         self.interval = interval
+        self.retention_days = retention_days
+        self._last_prune = 0.0
         self.pending: dict[Key, list[float]] = defaultdict(lambda: [0, 0.0])
         self.requests: list[RequestRecord] = []
         self._task: asyncio.Task | None = None
@@ -121,7 +125,25 @@ class RequestRollup:
             self._task = None
         await self.flush()
 
+    async def prune(self) -> int:
+        """Delete request history older than the retention window (``0`` keeps everything).
+
+        Returns:
+            How many request rows were removed.
+        """
+        if self.retention_days <= 0:
+            return 0
+        cutoff = (datetime.now(UTC) - timedelta(days=self.retention_days)).isoformat()
+        try:
+            return await RequestLog.filter(started_at__lt=cutoff).delete()
+        except Exception:
+            logger.exception("could not prune request history")
+            return 0
+
     async def _loop(self) -> None:
         while True:
             await asyncio.sleep(self.interval)
             await self.flush()
+            if time.monotonic() - self._last_prune >= PRUNE_SECONDS:
+                self._last_prune = time.monotonic()
+                await self.prune()

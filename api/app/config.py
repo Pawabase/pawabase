@@ -29,6 +29,8 @@ class ApiSettings(PlatformSettings):
             URLs, when ``storage_endpoint`` is an internal address.
         storage_path_style: Address the bucket in the URL path (MinIO, Ceph)
             rather than as a subdomain (AWS virtual-hosted style).
+        request_retention_days: How long request history (the traces behind route
+            statistics) is kept. ``0`` keeps it forever.
         code_path: Where project code (functions, routes, policies) is mounted.
         deployments_path: Where uploaded function artifacts live (a writable volume shared by the API, workers and scheduler); defaults to
             ``<code_path>/.deployments``, which is wrong when ``code_path`` is a read-only mount.
@@ -67,6 +69,7 @@ class ApiSettings(PlatformSettings):
     inline_scheduler: bool = False
     queue_prefix: str = "pawabase:queue:"
     max_upload_bytes: int = 50 * 1024 * 1024
+    request_retention_days: int = 14
     query_timeout: float = 15.0
     #: Proxies between the gateway and the open internet (a load balancer is 1). The caller's address, as handed to functions, is the entry
     #: ``trusted_proxy_hops`` places from the right of ``X-Forwarded-For``: the gateway appends the address it saw, so the left side is whatever the caller sent.

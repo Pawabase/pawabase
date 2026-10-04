@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+from types import SimpleNamespace
 from typing import Any
 
 from pawabase_core.context import SCOPE_KEY
@@ -19,6 +20,26 @@ from pawabase_core.telemetry import note
 
 FORWARDED_KEYS = ("user", "auth", "auth_scheme", "route", "pawabase.policy", "pawabase.plan")
 REST_PATH = re.compile(r"^/rest/(?P<version>v[1-9][0-9]*)(?:/|$)")
+CONVERTER = re.compile(r"\{(\w+)(?::[^}]*)?\}")
+
+
+def route_template(compiled: Any, scope: dict[str, Any], prefix: str) -> str | None:
+    """The matched route's path template (``/rest/v1/orders/{id}``), for telemetry.
+
+    Sillo's router does not record which route served a request, and without
+    it every request to ``/orders/17`` and ``/orders/18`` would be a different
+    row in route statistics. The compiled app's routes are flat, so the
+    template is the first whose pattern fully matches the request.
+    """
+    probe = dict(scope)
+    for route in getattr(getattr(compiled, "router", None), "routes", ()):
+        try:
+            status, _ = route.match(probe)
+        except Exception:
+            continue
+        if getattr(status, "name", "") == "FULL":
+            return prefix + CONVERTER.sub(r"{\1}", route.raw_path)
+    return None
 
 
 async def _send_json(send, status: int, body: dict[str, Any]) -> None:
@@ -87,3 +108,7 @@ class DataPlaneDispatcher:
             for key in FORWARDED_KEYS:
                 if key in inner:
                     scope[key] = inner[key]
+            if scope.get("route") is None:
+                template = route_template(compiled, inner, prefix)
+                if template:
+                    scope["route"] = SimpleNamespace(path=template)

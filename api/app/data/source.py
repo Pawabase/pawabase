@@ -15,7 +15,25 @@ from typing import Any
 
 from tortoise.backends.base.config_generator import expand_db_url
 
+from pawabase_core.telemetry import span
+
 from .sql import dialect_of
+
+_OPS = {"execute_query_dict": "fetch", "execute_query": "execute", "execute_insert": "insert"}
+
+
+async def timed(client: Any, method: str, sql: str, params: list[Any] | None = None) -> Any:
+    """Run one statement on *client* (a connection or a transaction) as a ``db`` span.
+
+    The span records the statement, how many parameters it bound (never their
+    values) and, for reads, how many rows came back.
+    """
+    params = params or []
+    with span("db", sql, op=_OPS.get(method, method), params=len(params)) as step:
+        result = await getattr(client, method)(sql, params)
+        if method == "execute_query_dict":
+            step.set(rows=len(result))
+        return result
 
 
 class DataSourceError(RuntimeError):
@@ -67,7 +85,9 @@ class DataSource:
             schema = credentials.get("schema")
             if schema:
                 # The environment's own schema on a shared Postgres database: made before anything asks for a table in it.
-                await client.execute_script(f'CREATE SCHEMA IF NOT EXISTS "{str(schema).replace(chr(34), "")}"')
+                await client.execute_script(
+                    f'CREATE SCHEMA IF NOT EXISTS "{str(schema).replace(chr(34), "")}"'
+                )
             self.client = client
             self.dialect = dialect_of(client)
             self.query_class = client.query_class
@@ -75,17 +95,17 @@ class DataSource:
 
     async def fetch(self, sql: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
         await self.connect()
-        return [dict(row) for row in await self.client.execute_query_dict(sql, params or [])]
+        return [dict(row) for row in await timed(self.client, "execute_query_dict", sql, params)]
 
     async def execute(self, sql: str, params: list[Any] | None = None) -> int:
         await self.connect()
-        count, _ = await self.client.execute_query(sql, params or [])
+        count, _ = await timed(self.client, "execute_query", sql, params)
         return count
 
     async def insert(self, sql: str, params: list[Any]) -> Any:
         """Run an INSERT; returns the new row id on SQLite and MySQL."""
         await self.connect()
-        return await self.client.execute_insert(sql, params)
+        return await timed(self.client, "execute_insert", sql, params)
 
     async def script(self, sql: str) -> None:
         await self.connect()
