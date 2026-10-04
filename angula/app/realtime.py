@@ -43,13 +43,13 @@ FANOUT_CHANNEL = "angula.fanout"
 INSTANCE = uuid.uuid4().hex[:12]
 
 
-def room_name(project: str, env: str, channel: str) -> str:
-    return f"{project}/{env}/{channel}"
+def room_name(env: str, channel: str) -> str:
+    return f"{env}/{channel}"
 
 
-def split_room(room: str) -> tuple[str, str, str]:
-    project, env, channel = room.split("/", 2)
-    return project, env, channel
+def split_room(room: str) -> tuple[str, str]:
+    env, channel = room.split("/", 1)
+    return env, channel
 
 
 @dataclass
@@ -111,7 +111,6 @@ class Connection:
     """One client connection, for inspection and presence."""
 
     peer: Peer
-    project: str
     env: str
     user_id: str | None
     role: str
@@ -125,7 +124,6 @@ class Connection:
     def describe(self) -> dict[str, Any]:
         return {
             "id": str(self.peer.id),
-            "project": self.project,
             "env": self.env,
             "user_id": self.user_id,
             "role": self.role,
@@ -176,17 +174,17 @@ class Realtime:
 
     # ── configuration ────────────────────────────────────────────────────
 
-    async def config(self, project: str, env: str) -> ChannelConfig:
-        key = f"channels:{project}:{env}"
+    async def config(self, env: str) -> ChannelConfig:
+        key = f"channels:{env}"
         cached = await self.cache.get(key)
         if cached is not getattr(cache_base, "_MISSING", None) and cached is not None:
             return self._build_config(cached)
         try:
-            payload = await self.api.get(f"/internal/v1/environments/{project}/{env}/realtime")
+            payload = await self.api.get(f"/internal/v1/environments/{env}/realtime")
         except ServiceError as exc:
             if exc.status == 404:
                 raise HTTPException(
-                    status_code=404, detail=f"no environment {project}/{env}"
+                    status_code=404, detail=f"no environment {env!r}"
                 ) from exc
             raise
         await self.cache.set(key, payload, ttl=self.settings.config_ttl)
@@ -227,7 +225,6 @@ class Realtime:
 
     async def authorize(
         self,
-        project: str,
         env: str,
         channel: str,
         action: str,
@@ -239,7 +236,7 @@ class Realtime:
         """Decide *action* (``subscribe``, ``publish``, ``presence``) on *channel*."""
         if not channel or len(channel) > 200 or "/" in channel:
             raise PermissionError("invalid channel name")
-        config = await self.config(project, env)
+        config = await self.config(env)
         rule = config.rule_for(channel, auth)
         if credential.get("is_service"):
             return rule
@@ -254,7 +251,6 @@ class Realtime:
         context = {
             "auth": dict(auth),
             "credential": dict(credential),
-            "project": project,
             "env": env,
             "channel": {
                 "name": channel,
@@ -274,7 +270,6 @@ class Realtime:
 
     async def publish(
         self,
-        project: str,
         env: str,
         channel: str,
         event: str,
@@ -295,7 +290,7 @@ class Realtime:
         self.stats["published"] += 1
         await self.emitter.emit_async(
             FANOUT_CHANNEL,
-            {"room": room_name(project, env, channel), "message": message, "origin": INSTANCE},
+            {"room": room_name(env, channel), "message": message, "origin": INSTANCE},
         )
         return {"id": message["id"], "channel": channel, "event": event}
 
@@ -306,10 +301,9 @@ class Realtime:
         self.stats["delivered"] += report.delivered
         self.stats["dropped"] += report.dropped
         self.stats["failed"] += report.failed
-        project, env, channel = split_room(room)
+        env, channel = split_room(room)
         self.recent.append(
             {
-                "project": project,
                 "env": env,
                 "channel": channel,
                 "event": message.get("event"),
@@ -322,14 +316,13 @@ class Realtime:
 
     async def send_presence(
         self,
-        project: str,
         env: str,
         channel: str,
         *,
         joins: list[dict[str, Any]] | None = None,
         leaves: list[dict[str, Any]] | None = None,
     ) -> None:
-        room = room_name(project, env, channel)
+        room = room_name(env, channel)
         message = {
             "type": "presence_diff",
             "channel": channel,
@@ -342,13 +335,13 @@ class Realtime:
 
     # ── presence ─────────────────────────────────────────────────────────
 
-    def presence_members(self, project: str, env: str, channel: str) -> list[dict[str, Any]]:
-        return list(self.presence.get(room_name(project, env, channel), {}).values())
+    def presence_members(self, env: str, channel: str) -> list[dict[str, Any]]:
+        return list(self.presence.get(room_name(env, channel), {}).values())
 
     async def track(
         self, connection: Connection, channel: str, meta: dict[str, Any]
     ) -> dict[str, Any]:
-        room = room_name(connection.project, connection.env, channel)
+        room = room_name(connection.env, channel)
         entry = {
             "presence_ref": str(connection.peer.id),
             "user_id": connection.user_id,
@@ -356,16 +349,16 @@ class Realtime:
             "online_at": datetime.now(UTC).isoformat(),
         }
         self.presence.setdefault(room, {})[str(connection.peer.id)] = entry
-        await self.send_presence(connection.project, connection.env, channel, joins=[entry])
+        await self.send_presence(connection.env, channel, joins=[entry])
         return entry
 
     async def untrack(self, connection: Connection, channel: str) -> None:
-        room = room_name(connection.project, connection.env, channel)
+        room = room_name(connection.env, channel)
         entry = self.presence.get(room, {}).pop(str(connection.peer.id), None)
         if room in self.presence and not self.presence[room]:
             del self.presence[room]
         if entry is not None:
-            await self.send_presence(connection.project, connection.env, channel, leaves=[entry])
+            await self.send_presence(connection.env, channel, leaves=[entry])
 
     # ── connections ──────────────────────────────────────────────────────
 
@@ -381,12 +374,12 @@ class Realtime:
             raise PermissionError(
                 f"a connection may join at most {self.settings.max_channels} channels"
             )
-        await self.hub.join(connection.peer, room_name(connection.project, connection.env, channel))
+        await self.hub.join(connection.peer, room_name(connection.env, channel))
         connection.channels.setdefault(channel, {})
 
     async def leave(self, connection: Connection, channel: str) -> None:
         await self.hub.leave(
-            connection.peer, room_name(connection.project, connection.env, channel)
+            connection.peer, room_name(connection.env, channel)
         )
         if connection.channels.pop(channel, None) is not None:
             await self.untrack(connection, channel)
@@ -398,9 +391,9 @@ class Realtime:
         await self.hub.disconnect(connection.peer)
 
     async def history(
-        self, project: str, env: str, channel: str, limit: int = 50
+        self, env: str, channel: str, limit: int = 50
     ) -> list[dict[str, Any]]:
-        envelopes = await self.hub.history(room_name(project, env, channel), limit=limit)
+        envelopes = await self.hub.history(room_name(env, channel), limit=limit)
         return [
             {**envelope.payload, "seq": envelope.seq}
             for envelope in envelopes
@@ -409,22 +402,21 @@ class Realtime:
 
     # ── inspection ───────────────────────────────────────────────────────
 
-    def channels(self, project: str | None = None, env: str | None = None) -> list[dict[str, Any]]:
+    def channels(self, env: str | None = None) -> list[dict[str, Any]]:
         result = []
         for room in self.hub.rooms():
-            p, e, channel = split_room(room)
-            if (project and p != project) or (env and e != env):
+            e, channel = split_room(room)
+            if env and e != env:
                 continue
             result.append(
                 {
-                    "project": p,
                     "env": e,
                     "channel": channel,
                     "subscribers": self.hub.count(room),
                     "presence": len(self.presence.get(room, {})),
                 }
             )
-        return sorted(result, key=lambda item: (item["project"], item["env"], item["channel"]))
+        return sorted(result, key=lambda item: (item["env"], item["channel"]))
 
     def summary(self) -> dict[str, Any]:
         return {

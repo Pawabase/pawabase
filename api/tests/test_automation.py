@@ -10,7 +10,7 @@ import pytest
 
 from app.storage.manager import MimePatterns
 
-ENV = "/platform/v1/projects/acme/envs/development"
+ENV = "/platform/v1/envs/development"
 
 ORDERS = {
     "name": "orders",
@@ -143,11 +143,10 @@ ROUTES_CODE = textwrap.dedent(
 
 @pytest.fixture
 async def acme(api, settings, tmp_path):
-    code = tmp_path / "code" / "acme" / "functions"
+    code = tmp_path / "code" / "functions"
     code.mkdir(parents=True)
     (code / "billing.py").write_text(FUNCTION_CODE)
-    (tmp_path / "code" / "acme" / "routes.py").write_text(ROUTES_CODE)
-    await api.studio.post("/platform/v1/projects", json={"ref": "acme", "name": "Acme"})
+    (tmp_path / "code" / "routes.py").write_text(ROUTES_CODE)
     await api.studio.post(f"{ENV}/resources", json=ORDERS)
     await api.studio.post(f"{ENV}/resources/orders/migrate")
     for flow in (PAY_FLOW, NOTIFY_FLOW):
@@ -178,7 +177,7 @@ async def acme(api, settings, tmp_path):
 
 async def test_custom_route_flow_and_event_consumer(acme):
     api = acme
-    ada = api.user_headers("acme", "development", user_id="7")
+    ada = api.user_headers("development", user_id="7")
     order = (await api.http.post("/rest/v1/orders", json={"total": 42.5}, headers=ada)).json()
     paid = await api.http.post(f"/rest/v1/orders/{order['id']}/pay", headers=ada)
     assert paid.status_code == 200, paid.text
@@ -192,13 +191,13 @@ async def test_custom_route_flow_and_event_consumer(acme):
     assert missing.status_code == 404 and missing.json()["error"] == "order_not_found"
     assert (
         await api.http.post(
-            f"/rest/v1/orders/{order['id']}/pay", headers=api.context_headers("acme", "development")
+            f"/rest/v1/orders/{order['id']}/pay", headers=api.context_headers("development")
         )
     ).status_code == 401
 
     await api.drain()
     await api.app.state["request_rollup"].flush()
-    state = await api.platform.state("acme", "development")
+    state = await api.platform.state("development")
     assert await api.platform.cache_get(state, "user:last-paid") == order["id"]
     events = (await api.studio.get(f"{ENV}/events?name=order.paid"))["data"]
     assert events and events[0]["consumers"][0] == {
@@ -233,7 +232,7 @@ async def test_custom_route_flow_and_event_consumer(acme):
 
 async def test_functions_and_python_routes(acme):
     api = acme
-    anon = api.context_headers("acme", "development")
+    anon = api.context_headers("development")
     quote = await api.http.post("/rest/v1/quotes", json={"items": 3}, headers=anon)
     assert quote.status_code == 200 and quote.json()["total"] == 15
     assert (
@@ -247,7 +246,7 @@ async def test_functions_and_python_routes(acme):
     signed_in = await api.http.post(
         "/functions/v1/quote",
         json={"items": 2},
-        headers=api.user_headers("acme", "development", user_id="9"),
+        headers=api.user_headers("development", user_id="9"),
     )
     assert signed_in.json() == {"data": {"total": 10, "user": "9"}}
     tally = await api.http.post("/functions/v1/tally", headers=anon)
@@ -329,11 +328,11 @@ async def test_inbound_hooks_verify_signatures(acme):
     good = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
     assert (
         await api.http.post(
-            "/hooks/v1/acme/development/stripe", content=body, headers={"x-signature": "bad"}
+            "/hooks/v1/development/stripe", content=body, headers={"x-signature": "bad"}
         )
     ).status_code == 401
     ok = await api.http.post(
-        "/hooks/v1/acme/development/stripe",
+        "/hooks/v1/development/stripe",
         content=body,
         headers={"x-signature": f"sha256={good}", "content-type": "application/json"},
     )
@@ -358,7 +357,7 @@ async def test_inbound_hooks_verify_paystack_sha512_signatures(acme):
     body = json.dumps({"event": "charge.success", "data": {"reference": "PAY-1"}}).encode()
     signature = hmac.new(secret.encode(), body, hashlib.sha512).hexdigest()
     response = await api.http.post(
-        "/hooks/v1/acme/development/paystack",
+        "/hooks/v1/development/paystack",
         content=body,
         headers={"x-paystack-signature": signature, "content-type": "application/json"},
     )
@@ -379,8 +378,8 @@ async def test_storage_with_policies_and_signed_urls(acme):
             "accepts": ["image/png"],
         },
     )
-    ada = api.user_headers("acme", "development", user_id="7")
-    anon = api.context_headers("acme", "development")
+    ada = api.user_headers("development", user_id="7")
+    anon = api.context_headers("development")
     png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
     assert (
         await api.http.put(
@@ -480,11 +479,14 @@ async def test_internal_key_resolution_and_config(acme, settings):
     resolved = await gateway.post("/internal/v1/keys/resolve", json={"key": created["key"]})
     assert resolved == {
         **resolved,
-        "project": "acme",
         "env": "development",
         "role": "service",
         "scopes": ["resource:read"],
     }
+    with pytest.raises(ServiceError) as elsewhere:
+        await gateway.post("/internal/v1/keys/resolve", json={"key": created["key"], "env": "production"})
+    assert elsewhere.value.status == 401 and "environment" in str(elsewhere.value)
+    assert (await gateway.post("/internal/v1/keys/resolve", json={"key": created["key"], "env": "development"}))["env"] == "development"
     await api.studio.post(f"{ENV}/keys/{created['id']}/revoke")
     with pytest.raises(ServiceError) as refused:
         await gateway.post("/internal/v1/keys/resolve", json={"key": created["key"]})
@@ -500,7 +502,7 @@ async def test_internal_key_resolution_and_config(acme, settings):
             }
         },
     )
-    config = await gateway.get("/internal/v1/environments/acme/development/auth")
+    config = await gateway.get("/internal/v1/environments/development/auth")
     assert config["auth"]["providers"]["google"]["client_secret"] == "s3cr3t-value-123"
     listing = (await api.studio.get(f"{ENV}/secrets"))["data"]
     assert listing[0]["name"] == "GOOGLE_SECRET" and "s3cr3t" not in json.dumps(listing)
@@ -543,7 +545,7 @@ async def test_bucket_accepts_wildcard_mime_patterns(acme):
         f"{ENV}/buckets",
         json={"name": "photos", "write_policy": "authenticated", "accepts": ["image/*", "application/pdf"]},
     )
-    ada = api.user_headers("acme", "development", user_id="7")
+    ada = api.user_headers("development", user_id="7")
     png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
     raw = await api.http.put(
         "/storage/v1/object/photos/a.png", content=png, headers={**ada, "content-type": "image/png"}
@@ -596,10 +598,10 @@ async def test_input_policies_see_the_body_on_resources_and_routes(acme):
             "input_fields": [{"name": "items", "type": "integer", "required": True}],
         },
     )
-    ada = api.user_headers("acme", "development", user_id="7")
+    ada = api.user_headers("development", user_id="7")
     assert (await api.http.post("/rest/v1/orders", json={"total": 40}, headers=ada)).status_code == 201
     assert (await api.http.post("/rest/v1/orders", json={"total": 400}, headers=ada)).status_code == 403
     assert (await api.http.post("/rest/v1/small-quotes", json={"items": 3}, headers=ada)).status_code == 200
     assert (await api.http.post("/rest/v1/small-quotes", json={"items": 9}, headers=ada)).status_code == 403
-    anonymous = api.context_headers("acme", "development")
+    anonymous = api.context_headers("development")
     assert (await api.http.post("/rest/v1/small-quotes", json={"items": 3}, headers=anonymous)).status_code == 401

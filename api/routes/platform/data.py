@@ -1,7 +1,7 @@
 """Operating on an environment's data from Studio.
 
 Resource schema migration, record browsing and editing, and a database console.
-Operators act with service rights. Every write still goes through the same
+Studio acts with service rights. Every write still goes through the same
 side effects as the public API (cache invalidation, events, realtime).
 """
 
@@ -23,7 +23,7 @@ from app.openapi_scope import add_apikey_security
 from app.platform import Platform
 from app.resources import after_write
 from pawabase_core.context import PlatformContext
-from routes.common import OPERATOR, actor, audit
+from routes.common import MANAGE, actor, audit
 
 
 class QueryBody(BaseModel):
@@ -33,16 +33,16 @@ class QueryBody(BaseModel):
 
 
 def register(r: Router, platform: Platform) -> None:
-    base = "/projects/{ref}/envs/{env}"
+    base = "/envs/{env}"
 
     @r.post(
         f"{base}/resources/{{name}}/migrate",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["resources"],
         summary="Create or extend the resource's table",
     )
-    async def migrate(ctx: HttpContext, ref: str, env: str, name: str):
-        state = await platform.state(ref, env)
+    async def migrate(ctx: HttpContext, env: str, name: str):
+        state = await platform.state(env)
         store = await state.store(name)
         try:
             statements = await store.migrate()
@@ -51,7 +51,6 @@ def register(r: Router, platform: Platform) -> None:
         await audit(
             ctx,
             "resource.migrated",
-            project=ref,
             env=env,
             target=name,
             details={"statements": statements},
@@ -60,12 +59,12 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.get(
         f"{base}/resources/{{name}}/records",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["resources"],
         summary="Browse records",
     )
-    async def browse(ctx: HttpContext, ref: str, env: str, name: str):
-        state = await platform.state(ref, env)
+    async def browse(ctx: HttpContext, env: str, name: str):
+        state = await platform.state(env)
         store = await state.store(name)
         q = ctx.query_params
         page = max(1, int(q.get("page", 1)))
@@ -83,12 +82,12 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.post(
         f"{base}/resources/{{name}}/records",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["resources"],
         summary="Insert a record",
     )
-    async def insert(ctx: HttpContext, ref: str, env: str, name: str):
-        state = await platform.state(ref, env)
+    async def insert(ctx: HttpContext, env: str, name: str):
+        state = await platform.state(env)
         store = await state.store(name)
         data = await ctx.json
         try:
@@ -100,12 +99,12 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.patch(
         f"{base}/resources/{{name}}/records/{{record_id}}",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["resources"],
         summary="Update a record",
     )
-    async def modify(ctx: HttpContext, ref: str, env: str, name: str, record_id: str):
-        state = await platform.state(ref, env)
+    async def modify(ctx: HttpContext, env: str, name: str, record_id: str):
+        state = await platform.state(env)
         store = await state.store(name)
         key: Any = (
             int(record_id) if store.spec.id_type == "integer" and record_id.isdigit() else record_id
@@ -121,12 +120,12 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.delete(
         f"{base}/resources/{{name}}/records/{{record_id}}",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["resources"],
         summary="Delete a record",
     )
-    async def remove(ctx: HttpContext, ref: str, env: str, name: str, record_id: str):
-        state = await platform.state(ref, env)
+    async def remove(ctx: HttpContext, env: str, name: str, record_id: str):
+        state = await platform.state(env)
         store = await state.store(name)
         key: Any = (
             int(record_id) if store.spec.id_type == "integer" and record_id.isdigit() else record_id
@@ -140,30 +139,30 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.get(
         f"{base}/openapi",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["resources"],
         summary="The environment's whole compiled OpenAPI document",
     )
-    async def environment_openapi(ctx: HttpContext, ref: str, env: str):
-        # Operators read the docs whether or not ``public_docs`` publishes them
+    async def environment_openapi(ctx: HttpContext, env: str):
+        # Studio reads the docs whether or not ``public_docs`` publishes them
         # at /docs/v1; that setting only decides what anonymous callers see.
         version = ctx.query_params.get("version", "v1")
         state = await platform.state_for_version(
-            PlatformContext(project=ref, env=env, role="operator"), version
+            PlatformContext(env=env, role="service"), version
         )
         spec = json.loads((await state.compiled()).build_openapi(f"/rest/{version}"))
         return add_apikey_security(spec)
 
     @r.get(
         f"{base}/resources/{{name}}/openapi",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["resources"],
         summary="The resource's compiled routes",
     )
-    async def compiled_routes(ctx: HttpContext, ref: str, env: str, name: str):
+    async def compiled_routes(ctx: HttpContext, env: str, name: str):
         version = ctx.query_params.get("version", "v1")
         state = await platform.state_for_version(
-            PlatformContext(project=ref, env=env, role="operator"), version
+            PlatformContext(env=env, role="service"), version
         )
         document = json.loads((await state.compiled()).build_openapi(f"/rest/{version}"))
         prefix = f"/rest/{version}/{name}"
@@ -177,9 +176,9 @@ def register(r: Router, platform: Platform) -> None:
 
     # ── database console ─────────────────────────────────────────────────
 
-    @r.get(f"{base}/database", auth=OPERATOR, tags=["database"], summary="Database overview")
-    async def database_overview(ctx: HttpContext, ref: str, env: str):
-        state = await platform.state(ref, env)
+    @r.get(f"{base}/database", auth=MANAGE, tags=["database"], summary="Database overview")
+    async def database_overview(ctx: HttpContext, env: str):
+        state = await platform.state(env)
         source = await state.source()
         tables = await db_inspect.list_tables(source)
         managed = {spec.table: name for name, spec in state.specs.items()}
@@ -191,12 +190,12 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.get(
         f"{base}/database/tables/{{table}}",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["database"],
         summary="Describe a table",
     )
-    async def describe(ctx: HttpContext, ref: str, env: str, table: str):
-        state = await platform.state(ref, env)
+    async def describe(ctx: HttpContext, env: str, table: str):
+        state = await platform.state(env)
         source = await state.source()
         if table not in await db_inspect.list_tables(source):
             raise HTTPException(status_code=404, detail=f"no table {table!r}")
@@ -207,12 +206,12 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.get(
         f"{base}/database/tables/{{table}}/rows",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["database"],
         summary="Browse a table",
     )
-    async def table_rows(ctx: HttpContext, ref: str, env: str, table: str):
-        state = await platform.state(ref, env)
+    async def table_rows(ctx: HttpContext, env: str, table: str):
+        state = await platform.state(env)
         source = await state.source()
         if table not in await db_inspect.list_tables(source):
             raise HTTPException(status_code=404, detail=f"no table {table!r}")
@@ -234,13 +233,13 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.post(
         f"{base}/database/query",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["database"],
         request_model=QueryBody,
         summary="Run SQL",
     )
-    async def run_query(ctx: HttpContext, ref: str, env: str, body: QueryBody):
-        state = await platform.state(ref, env)
+    async def run_query(ctx: HttpContext, env: str, body: QueryBody):
+        state = await platform.state(env)
         source = await state.source()
         read_only = is_read_only(body.sql)
         if not read_only and not body.allow_write:
@@ -271,7 +270,7 @@ def register(r: Router, platform: Platform) -> None:
             raise HTTPException(status_code=400, detail=f"{type(exc).__name__}: {exc}") from exc
         if not read_only:
             await audit(
-                ctx, "database.write", project=ref, env=env, details={"sql": body.sql[:2000]}
+                ctx, "database.write", env=env, details={"sql": body.sql[:2000]}
             )
             await platform.cache_invalidate(state, [f"resource:{name}" for name in state.specs])
         return result

@@ -31,10 +31,10 @@ function omitNulls(value) {
   return value;
 }
 
-export default function Settings({ project, env }) {
-  const path = envPath(project.ref, env);
+export default function Settings({ env }) {
+  const path = envPath(env);
   const state = useApi(path);
-  const policiesState = useApi(envPath(project.ref, env, "/policies"));
+  const policiesState = useApi(envPath(env, "/policies"));
   const [draft, setDraft] = useState({});
   const [run, busy] = useAction();
   const save = async (section) => {
@@ -57,7 +57,7 @@ export default function Settings({ project, env }) {
             <Card title="Environment">
               <div className="spread">
                 <div className="row">{data.is_default ? <Badge tone="green">default environment</Badge> : <Button onClick={async () => { if (await run(() => patch(path, { is_default: true }), "Now the default")) state.reload(); }}>Make default</Button>}<span className="muted">Definitions version {data.version}</span></div>
-                {!data.is_default && <Button variant="danger" onClick={async () => { if (prompt(`Type ${env} to delete this environment`) === env && await run(() => del(path), "Environment deleted")) router.visit(`/projects/${project.ref}`); }}>Delete environment</Button>}
+                {!data.is_default && <Button variant="danger" onClick={async () => { if (prompt(`Type ${env} to delete this environment`) === env && await run(() => del(path), "Environment deleted")) router.visit("/environments"); }}>Delete environment</Button>}
               </div>
             </Card>
           </SettingsForm>
@@ -81,7 +81,7 @@ function SettingsForm({ settings, onChange, onSave, dirty, busy, policyNames, ch
     ["docs", "API documentation", "Control public OpenAPI access"],
     ["cors", "CORS", "Configure browser origins"],
     ["realtime", "Realtime", "Set channel and policy rules"],
-    ["custom", "Custom settings", "Add project-specific values"],
+    ["custom", "Custom settings", "Add your own values"],
   ];
   const title = sections.find(([key]) => key === active)?.[1];
   return <div className="stack lg">
@@ -92,7 +92,7 @@ function SettingsForm({ settings, onChange, onSave, dirty, busy, policyNames, ch
       <Card title={title} actions={<Button variant="primary" size="sm" disabled={busy || !dirty} onClick={onSave}>Save changes</Button>} className="grow">
         {active === "docs" && <Switch checked={!!settings.public_docs} onChange={(v) => set({ public_docs: v })} label="Publish generated API docs" hint="Makes the OpenAPI reference public at /docs/v1. Operators can always see it from Studio either way." />}
         {active === "cors" && <Field label="Allowed browser origins" hint="Sites allowed to call the gateway with a publishable key from JavaScript. Leave empty to allow none."><TagInput value={settings.cors_origins || []} onChange={(v) => set({ cors_origins: v })} placeholder="https://app.example.com" /></Field>}
-        {active === "custom" && <Field label="Project values" hint="Extra keys flows and policies can read as $settings.<key>. They are not platform configuration."><KeyValue value={custom} onChange={setCustom} keyLabel="Key" valueLabel="Value" addLabel="Add setting" /></Field>}
+        {active === "custom" && <Field label="Custom values" hint="Extra keys flows and policies can read as $settings.<key>. They are not platform configuration."><KeyValue value={custom} onChange={setCustom} keyLabel="Key" valueLabel="Value" addLabel="Add setting" /></Field>}
         {active === "realtime" && <div className="stack" style={{ gap: 16 }}>
           <Switch checked={realtime.allow_client_publish !== false} onChange={(v) => setRealtime({ allow_client_publish: v })} label="Clients may publish" hint="Off restricts publishing to servers and flows; clients can still subscribe." />
           <Field label="Default policy" hint="Used by any channel that matches no rule below."><PolicyPicker value={realtime.default_policy ?? null} onChange={(v) => setRealtime({ default_policy: v })} policies={policyNames} nullLabel="Default (authenticated)" /></Field>

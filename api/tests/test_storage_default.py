@@ -13,7 +13,6 @@ def settings(**values) -> ApiSettings:
 
 
 class FakeState:
-    project_ref = "acme"
     env_name = "prod"
 
     def __init__(self, storage=None):
@@ -76,7 +75,7 @@ def test_an_environment_without_storage_gets_the_default():
     assert config["driver"] == "s3" and config["bucket"] == "files"
     driver = storage.driver(FakeState(), "avatars")
     assert isinstance(driver, S3Driver)
-    assert driver.prefix == "acme/prod/avatars/"
+    assert driver.prefix == "prod/avatars/"
 
 
 def test_an_environments_own_storage_overrides_the_default():

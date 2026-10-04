@@ -3,15 +3,11 @@
 from pawabase_core.clients import ServiceError
 from pawabase_core.ids import is_ulid
 
-ENV = "/platform/v1/projects/releases/envs/development"
+ENV = "/platform/v1/envs/development"
 PUBLIC = {"list": {"enabled": True, "policy": "public"}}
 
 
 async def test_versioned_releases_and_rollback(api):
-    await api.studio.post(
-        "/platform/v1/projects",
-        json={"ref": "releases", "name": "Releases", "environments": ["development"]},
-    )
     await api.studio.post(
         f"{ENV}/resources",
         json={"name": "posts", "fields": [{"name": "title", "type": "string"}], "operations": PUBLIC},
@@ -42,7 +38,7 @@ async def test_versioned_releases_and_rollback(api):
     )
     await api.studio.post(f"{ENV}/releases/{release2['id']}/activate")
 
-    headers = api.context_headers("releases", "development")
+    headers = api.context_headers("development")
     assert (await api.http.get("/rest/v1/widgets", headers=headers)).status_code == 404
     assert (await api.http.get("/rest/v2/widgets", headers=headers)).status_code == 200
     v2_document = await api.studio.get(f"{ENV}/openapi", params={"version": "v2"})
@@ -80,11 +76,7 @@ async def test_versioned_releases_and_rollback(api):
 
 
 async def test_feature_branch_definition_edits_are_isolated_until_merge(api):
-    await api.studio.post(
-        "/platform/v1/projects",
-        json={"ref": "branching", "name": "Branching", "environments": ["development"]},
-    )
-    env = "/platform/v1/projects/branching/envs/development"
+    env = "/platform/v1/envs/development"
     flow = {
         "name": "notify",
         "description": "main definition",

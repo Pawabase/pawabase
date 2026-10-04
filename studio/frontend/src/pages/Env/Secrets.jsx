@@ -3,8 +3,8 @@ import Layout from "../../components/Layout";
 import { Button, Card, Field, Loading, Modal, PageHead, Table, useAction, when } from "../../components/ui";
 import { del, envPath, put, useApi } from "../../lib/api";
 
-export default function Secrets({ project, env }) {
-  const base = envPath(project.ref, env, "/secrets");
+export default function Secrets({ env }) {
+  const base = envPath(env, "/secrets");
   const secrets = useApi(base);
   const [editing, setEditing] = useState(null);
   const [run] = useAction();

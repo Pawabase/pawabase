@@ -11,8 +11,8 @@ const SORTS = [
   ["time", "Most time"],
 ];
 
-export default function Routes({ project, env, minutes, onRoute, onTrace }) {
-  const base = envPath(project.ref, env);
+export default function Routes({ env, minutes, onRoute, onTrace }) {
+  const base = envPath(env);
   const [sort, setSort] = useState("errors");
   const [search, setSearch] = useState("");
   const state = useApi(`${base}/observability/routes`, { params: { minutes, sort, limit: 200 }, interval: 15000 });

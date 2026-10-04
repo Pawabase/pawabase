@@ -84,7 +84,6 @@ async def queue_deliveries(
         )
         await platform.dispatch(
             DeliverWebhookJob,
-            project=state.project_ref,
             env=state.env_name,
             target=endpoint.name,
             source="webhook",
@@ -96,12 +95,11 @@ async def queue_deliveries(
     return queued
 
 
-def delivery_body(event_id: str, event: str, payload: Any, project: str, env: str) -> bytes:
+def delivery_body(event_id: str, event: str, payload: Any, env: str) -> bytes:
     return json.dumps(
         {
             "id": event_id,
             "event": event,
-            "project": project,
             "env": env,
             "data": payload,
             "sent_at": int(time.time()),

@@ -33,17 +33,17 @@ class KeyResolver:
         self.lookups = 0
 
     @staticmethod
-    def _key(raw: str, project: str | None, env: str | None) -> str:
-        # Scoping the cache key by project/env too means a key resolved once
-        # for the wrong project (or before it existed) can't shadow a later,
+    def _key(raw: str, env: str | None) -> str:
+        # Scoping the cache key by the requested environment too means a key
+        # resolved once for the wrong environment can't shadow a later,
         # correctly-scoped lookup of the same raw key.
-        scope = f"{project or ''}:{env or ''}"
+        scope = env or ""
         return "key:" + hashlib.sha256(f"{scope}:{raw}".encode()).hexdigest()
 
     async def resolve(
-        self, raw: str, *, project: str | None = None, env: str | None = None
+        self, raw: str, *, env: str | None = None
     ) -> tuple[PlatformContext, dict[str, Any]]:
-        cache_key = self._key(raw, project, env)
+        cache_key = self._key(raw, env)
         cached = await self.cache.get(cache_key)
         if cached is not getattr(cache_base, "_MISSING", None) and cached is not None:
             if cached.get("rejected"):
@@ -52,7 +52,7 @@ class KeyResolver:
         self.lookups += 1
         try:
             info = await self.api.post(
-                "/internal/v1/keys/resolve", json={"key": raw, "project": project, "env": env}
+                "/internal/v1/keys/resolve", json={"key": raw, "env": env}
             )
         except ServiceError as exc:
             if exc.status in (401, 404, 422):
@@ -67,7 +67,6 @@ class KeyResolver:
     @staticmethod
     def _context(info: dict[str, Any]) -> PlatformContext:
         return PlatformContext(
-            project=info["project"],
             env=info["env"],
             role=info["role"],
             key_id=info.get("key_id"),

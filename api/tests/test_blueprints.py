@@ -1,4 +1,4 @@
-"""Blueprints: export an environment, create a new project from it."""
+"""Blueprints: export an environment, create new environments from it."""
 
 import json
 
@@ -6,19 +6,19 @@ import pytest
 
 from pawabase_core.clients import ServiceError
 
-SRC = "/platform/v1/projects/src/envs/development"
+SRC = "/platform/v1/envs/development"
 
 
 class FakeAkountz:
     """Roles live in Akountz; the API only reads and writes them over HTTP."""
 
     def __init__(self):
-        self.roles = {("src", "development"): [{"name": "editor", "description": "Edits", "permissions": ["posts.write"]}]}
+        self.roles = {"development": [{"name": "editor", "description": "Edits", "permissions": ["posts.write"]}]}
         self.puts = []
 
     async def get(self, path, **kwargs):
-        _, _, _, _, project, _, env, _ = path.split("/")
-        return {"data": self.roles.get((project, env), []), "permissions": []}
+        _, _, _, _, env, _ = path.split("/")  # /admin/v1/envs/<env>/roles
+        return {"data": self.roles.get(env, []), "permissions": []}
 
     async def put(self, path, json=None, **kwargs):
         self.puts.append((path, json))
@@ -31,7 +31,6 @@ class FakeAkountz:
 @pytest.fixture
 async def source(api):
     api.platform.akountz = FakeAkountz()
-    await api.studio.post("/platform/v1/projects", json={"ref": "src", "name": "Source", "environments": ["development"]})
     definitions = [
         ("schemas", {"name": "PostInput", "fields": [{"name": "title", "type": "string", "required": True}]}),
         ("policies", {"name": "editors", "condition": {"role": "editor"}}),
@@ -88,29 +87,30 @@ async def test_export_and_create_from_blueprint(source):
     assert "secret" not in blueprint["definitions"]["inbound-hooks"][0]
 
     created = await api.studio.post(
-        "/platform/v1/projects",
-        json={"ref": "copy", "name": "Copy", "environments": ["development", "production"], "blueprint": blueprint},
+        "/platform/v1/blueprints/apply",
+        json={"blueprint": blueprint, "environments": ["staging", "production"]},
     )
+    assert set(created["keys"]) == {"staging", "production"}
     report = created["blueprint"]
-    assert report["definitions"]["resources"] == 2 and report["data_environment"] == "development"
-    assert "inbound-hooks:stripe" in report["secrets"]["development"]  # a fresh secret, shown once
+    assert report["definitions"]["resources"] == 2 and report["data_environment"] == "staging"
+    assert "inbound-hooks:stripe" in report["secrets"]["staging"]  # a fresh secret, shown once
     assert any("Webhooks were imported switched off" in w for w in report["warnings"])
 
-    for env in ("development", "production"):
-        base = f"/platform/v1/projects/copy/envs/{env}"
+    for env in ("staging", "production"):
+        base = f"/platform/v1/envs/{env}"
         posts = await api.studio.get(f"{base}/resources/posts")
         assert posts["relations"][0]["resource"] == "comments"
         assert (await api.studio.get(f"{base}/webhooks/crm"))["enabled"] is False
         assert (await api.studio.get(f"{base}/routes"))["data"][0]["handler"] == "echo"
-    roles_written = {path.split("/")[6] for path, body in api.platform.akountz.puts if body["name"] == "editor"}
-    assert roles_written == {"development", "production"}
+    roles_written = {path.split("/")[4] for path, body in api.platform.akountz.puts if body["name"] == "editor"}
+    assert roles_written == {"staging", "production"}
 
     # Data went into the first environment only, with ids preserved, and relations resolve.
-    dev = api.context_headers("copy", "development")
-    rows = (await api.http.get("/rest/v1/posts?expand=comments&sort=id", headers=dev)).json()["data"]
+    staging = api.context_headers("staging")
+    rows = (await api.http.get("/rest/v1/posts?expand=comments&sort=id", headers=staging)).json()["data"]
     assert [p["title"] for p in rows] == ["Hello", "World"]
     assert rows[0]["id"] == blueprint["data"]["posts"][0]["id"] and rows[0]["comments"][0]["text"] == "Nice"
-    prod = api.context_headers("copy", "production")
+    prod = api.context_headers("production")
     assert (await api.http.get("/rest/v1/posts", headers=prod)).json()["data"] == []
 
 
@@ -120,27 +120,28 @@ async def test_bad_blueprints_leave_nothing_behind(source):
     blueprint["definitions"]["resources"][0]["operations"]["create"]["policy"] = "no_such_policy"
     with pytest.raises(ServiceError) as refused:
         await api.studio.post(
-            "/platform/v1/projects", json={"ref": "broken", "name": "Broken", "blueprint": blueprint}
+            "/platform/v1/blueprints/apply", json={"blueprint": blueprint, "environments": ["broken"]}
         )
     assert refused.value.status == 422
     detail = refused.value.body
     assert detail["where"].startswith("definitions.resources[0] (posts)") and "no_such_policy" in detail["problem"]
-    assert "broken" not in [p["ref"] for p in (await api.studio.get("/platform/v1/projects"))["data"]]
+    names = [e["name"] for e in (await api.studio.get("/platform/v1/runtime"))["environments"]]
+    assert names == ["development"]  # the half-built environment is gone
 
     with pytest.raises(ServiceError) as invalid:
         await api.studio.post(
-            "/platform/v1/projects",
-            json={"ref": "nope", "name": "Nope", "blueprint": {"format": "something-else"}},
+            "/platform/v1/blueprints/apply",
+            json={"blueprint": {"format": "something-else"}, "environments": ["nope"]},
         )
     assert invalid.value.status == 422
     assert invalid.value.body["message"] == "this is not a valid blueprint"
 
 
-async def test_blueprints_only_create_new_projects(source):
+async def test_blueprints_only_create_new_environments(source):
     api = source
     blueprint = await api.studio.get(f"{SRC}/blueprint")
     with pytest.raises(ServiceError) as again:
         await api.studio.post(
-            "/platform/v1/projects", json={"ref": "src", "name": "Overwrite", "blueprint": blueprint}
+            "/platform/v1/blueprints/apply", json={"blueprint": blueprint, "environments": ["development"]}
         )
-    assert again.value.status == 409  # an existing project is never touched
+    assert again.value.status == 409  # an existing environment is never touched

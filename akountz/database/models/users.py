@@ -4,7 +4,7 @@
 hashing, verification stamps, ``identity``) with Sillo's
 :class:`~sillo.auth.jwt_auth.JWTUserMixin` (token families, rotation, theft
 detection, revocation). Pawabase adds tenancy: every user belongs to one
-project environment, so an address may sign up once per environment rather
+environment, so an address may sign up once per environment rather
 than once per installation.
 """
 
@@ -21,10 +21,10 @@ from pawabase_core.ulid_auth import UlidJWTUserMixin, UlidUserMixin
 
 
 class AuthUser(PermissionMixin, UlidJWTUserMixin, UlidUserMixin, UserBaseModel):
-    """A project environment's user.
+    """An environment's user.
 
     Attributes:
-        project, env: The environment the account belongs to.
+        env: The environment the account belongs to.
         email, username: Unique per environment (Sillo's base makes them
             globally unique; these redefinitions scope them).
         user_metadata: Profile data the user may edit.
@@ -34,7 +34,6 @@ class AuthUser(PermissionMixin, UlidJWTUserMixin, UlidUserMixin, UserBaseModel):
     """
 
     id = ulid_pk()
-    project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63)
     email = fields.CharField(max_length=255, db_index=True)
     username = fields.CharField(max_length=150, db_index=True)
@@ -51,7 +50,7 @@ class AuthUser(PermissionMixin, UlidJWTUserMixin, UlidUserMixin, UserBaseModel):
 
     class Meta:
         table = "akz_users"
-        unique_together = (("project", "env", "email"), ("project", "env", "username"))
+        unique_together = (("env", "email"), ("env", "username"))
 
     @property
     def is_disabled(self) -> bool:
@@ -65,7 +64,6 @@ class Identity(Model):
     user = fields.ForeignKeyField(
         "models.AuthUser", related_name="identities", on_delete=fields.CASCADE
     )
-    project = fields.CharField(max_length=63)
     env = fields.CharField(max_length=63)
     provider = fields.CharField(max_length=64)
     subject = fields.CharField(max_length=255)
@@ -76,7 +74,7 @@ class Identity(Model):
 
     class Meta:
         table = "akz_identities"
-        unique_together = (("project", "env", "provider", "subject"),)
+        unique_together = (("env", "provider", "subject"),)
 
 
 class MfaFactor(Model):
@@ -118,7 +116,6 @@ class OneTimeToken(Model):
     """
 
     id = ulid_pk()
-    project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63)
     purpose = fields.CharField(max_length=32)
     user = fields.ForeignKeyField(
@@ -144,7 +141,6 @@ class SessionInfo(Model):
     user = fields.ForeignKeyField(
         "models.AuthUser", related_name="sessions", on_delete=fields.CASCADE
     )
-    project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63)
     method = fields.CharField(max_length=32)
     aal = fields.CharField(max_length=8, default="aal1")
@@ -164,7 +160,6 @@ class LoginEvent(Model):
     """Authentication history: sign-ins, failures, refreshes, sign-outs, resets."""
 
     id = ulid_pk()
-    project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63)
     user_id = fields.CharField(max_length=26, null=True, db_index=True)
     email = fields.CharField(max_length=255, null=True)

@@ -1,9 +1,8 @@
 """An environment's authentication settings, as Akountz sees them.
 
-Project configuration belongs to the API: Akountz reads each environment's
+The runtime's configuration belongs to the API: Akountz reads each environment's
 ``auth`` section from it (cached briefly with Sillo's cache) and applies
-defaults. The reserved ``_platform`` environment, Studio's operators, is
-configured here rather than in the API, because the API does not host it.
+defaults.
 """
 
 from __future__ import annotations
@@ -14,7 +13,6 @@ from typing import TYPE_CHECKING, Any
 from sillo.exceptions import HTTPException
 
 from pawabase_core.clients import ServiceError
-from pawabase_core.settings import PLATFORM_ENV, PLATFORM_PROJECT
 
 if TYPE_CHECKING:
     from app.platform import Akountz
@@ -24,7 +22,6 @@ if TYPE_CHECKING:
 class AuthConfig:
     """Authentication settings for one environment, with defaults applied."""
 
-    project: str
     env: str
     project_name: str = ""
     signup_enabled: bool = True
@@ -43,14 +40,13 @@ class AuthConfig:
     public_url: str = ""
 
     @classmethod
-    def from_api(cls, project: str, env: str, payload: dict[str, Any]) -> AuthConfig:
+    def from_api(cls, env: str, payload: dict[str, Any]) -> AuthConfig:
         auth = payload.get("auth") or {}
-        known = set(cls.__dataclass_fields__) - {"project", "env", "project_name", "public_url"}
+        known = set(cls.__dataclass_fields__) - {"env", "project_name", "public_url"}
         values = {key: auth[key] for key in known if key in auth and auth[key] is not None}
         return cls(
-            project=project,
             env=env,
-            project_name=payload.get("project_name", project),
+            project_name=payload.get("project_name", ""),
             public_url=payload.get("public_url", ""),
             **values,
         )
@@ -73,34 +69,17 @@ class AuthConfig:
         )
 
 
-def platform_config(akountz: Akountz) -> AuthConfig:
-    return AuthConfig(
-        project=PLATFORM_PROJECT,
-        env=PLATFORM_ENV,
-        project_name="Pawabase",
-        signup_enabled=False,
-        password_policy="strict",
-        password_min_length=10,
-        access_ttl=3600,
-        refresh_ttl=7 * 24 * 3600,
-        magic_link_enabled=False,
-        public_url=akountz.settings.public_url,
-    )
-
-
-async def load_config(akountz: Akountz, project: str, env: str) -> AuthConfig:
-    if (project, env) == (PLATFORM_PROJECT, PLATFORM_ENV):
-        return platform_config(akountz)
-    key = f"authcfg:{project}:{env}"
+async def load_config(akountz: Akountz, env: str) -> AuthConfig:
+    key = f"authcfg:{env}"
     cached = await akountz.cache_get(key)
     if cached is not None:
         return AuthConfig(**cached)
     try:
-        payload = await akountz.api.get(f"/internal/v1/environments/{project}/{env}/auth")
+        payload = await akountz.api.get(f"/internal/v1/environments/{env}/auth")
     except ServiceError as exc:
         if exc.status == 404:
-            raise HTTPException(status_code=404, detail=f"no environment {project}/{env}") from exc
+            raise HTTPException(status_code=404, detail=f"no environment {env!r}") from exc
         raise
-    config = AuthConfig.from_api(project, env, payload)
+    config = AuthConfig.from_api(env, payload)
     await akountz.cache.set(key, config.__dict__, ttl=akountz.settings.config_ttl)
     return config

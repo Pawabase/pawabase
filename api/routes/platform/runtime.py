@@ -2,11 +2,11 @@
 
 Two endpoints, both for a project's own secret key with the ``runtime:use`` scope:
 
-``POST /projects/{ref}/envs/{env}/runtime/call``
+``POST /envs/{env}/runtime/call``
     ``{"method": "resource_get", "args": [...], "kwargs": {...}, "as_user": {...}, "branch": "main"}``. Only the methods in :data:`METHODS` are callable.
     ``as_user`` is the auth context the call runs as (the emulator passes the real caller's, so audit trails and policies see who acted).
 
-``POST /projects/{ref}/envs/{env}/runtime/db``
+``POST /envs/{env}/runtime/db``
     SQL for ``ctx.runtime.db()`` and ``transaction()``: ``{"op": "fetch|one|scalar|execute|insert|update|delete|begin|commit|rollback", ...}``. A transaction is
     opened with ``begin``, which returns an id the later calls carry, and is rolled back by itself after ``TRANSACTION_SECONDS`` of silence. Transactions live
     in the memory of the process that opened them, so they are meant for one developer's emulator, not for load.
@@ -21,6 +21,7 @@ import time
 import uuid
 from typing import Any
 
+from pawabase.codec import decode, encode
 from pydantic import BaseModel, Field
 from sillo import HttpContext, Router
 from sillo import json as json_response
@@ -28,13 +29,12 @@ from sillo.exceptions import HTTPException
 
 from app.platform import Platform
 from app.runtime import ApiRuntime
-from pawabase.codec import decode, encode
 from pawabase_core.context import current_context
 from pawabase_core.flows import FlowError
 from pawabase_core.functions import FunctionError
 from pawabase_core.principal import ANONYMOUS_POLICY_CONTEXT, Principal
 from pawabase_core.tokens import TokenInvalid, verify_user_token
-from routes.common import OPERATOR, audit, get_environment
+from routes.common import MANAGE, audit, get_environment
 
 TRANSACTION_SECONDS = 60
 MAX_OPEN_TRANSACTIONS = 16
@@ -193,18 +193,18 @@ class _Transactions:
 
 
 def register(r: Router, platform: Platform) -> None:
-    base = "/projects/{ref}/envs/{env}/runtime"
+    base = "/envs/{env}/runtime"
     transactions = _Transactions()
 
-    async def runtime_for(ctx: HttpContext, ref: str, env: str, as_user: dict[str, Any] | None, branch: str | None) -> ApiRuntime:
+    async def runtime_for(ctx: HttpContext, env: str, as_user: dict[str, Any] | None, branch: str | None) -> ApiRuntime:
         _scope(ctx)
-        await get_environment(ref, env)
-        state = await platform.state(ref, env)
+        await get_environment(env)
+        state = await platform.state(env)
         auth = as_user or {"authenticated": True, "kind": "service", "user_id": "pawabase-cli", "roles": ["service"]}
         return ApiRuntime(platform, state, auth=auth, request_id=ctx.headers.get("x-request-id"), branch=branch)
 
-    @r.post(f"{base}/call", auth=OPERATOR, tags=["runtime"], request_model=CallBody, summary="Call one runtime capability")
-    async def call(ctx: HttpContext, ref: str, env: str, body: CallBody):
+    @r.post(f"{base}/call", auth=MANAGE, tags=["runtime"], request_model=CallBody, summary="Call one runtime capability")
+    async def call(ctx: HttpContext, env: str, body: CallBody):
         if body.method not in METHODS:
             raise HTTPException(status_code=404, detail=f"{body.method!r} is not a runtime method")
         if body.method == "secret":
@@ -212,37 +212,37 @@ def register(r: Router, platform: Platform) -> None:
             context = current_context(ctx)
             if context is not None and context.is_service and not context.allows_scope("secrets:read"):
                 raise HTTPException(status_code=403, detail="This API key lacks the 'secrets:read' scope")
-        runtime = await runtime_for(ctx, ref, env, body.as_user, body.branch)
+        runtime = await runtime_for(ctx, env, body.as_user, body.branch)
         try:
             result = await getattr(runtime, body.method)(*decode(body.args), **decode(body.kwargs))
         except Exception as exc:  # noqa: BLE001 - the caller gets the failure, typed
             return _failure(exc)
         if body.method == "secret":
-            await audit(ctx, "runtime.secret_read", project=ref, env=env, target=str(body.args[0] if body.args else ""))
+            await audit(ctx, "runtime.secret_read", env=env, target=str(body.args[0] if body.args else ""))
         return {"result": encode(result), "logs": runtime.logs[-20:] if body.method == "log" else []}
 
-    @r.post(f"{base}/identify", auth=OPERATOR, tags=["runtime"], request_model=IdentifyBody, summary="Who a user access token belongs to")
-    async def identify(ctx: HttpContext, ref: str, env: str, body: IdentifyBody):
+    @r.post(f"{base}/identify", auth=MANAGE, tags=["runtime"], request_model=IdentifyBody, summary="Who a user access token belongs to")
+    async def identify(ctx: HttpContext, env: str, body: IdentifyBody):
         """Verify a user's access token *here* (the platform holds the signing secret) and return the ``auth`` context policies and functions see.
 
         The emulator calls this for every request it serves locally, so a function under emulation sees the same ``ctx.auth`` as when deployed, and a forged
         or expired token is simply anonymous, never trusted.
         """
         _scope(ctx)
-        await get_environment(ref, env)
+        await get_environment(env)
         if not body.token:
             return {"auth": dict(ANONYMOUS_POLICY_CONTEXT)}
         try:
-            claims = verify_user_token(body.token, platform.settings.jwt_master_secret, project=ref, env=env)
+            claims = verify_user_token(body.token, platform.settings.jwt_master_secret, env=env)
         except TokenInvalid:
             return {"auth": dict(ANONYMOUS_POLICY_CONTEXT), "reason": "invalid_token"}
         return {"auth": Principal("user", claims).as_policy_context()}
 
-    @r.post(f"{base}/db", auth=OPERATOR, tags=["runtime"], request_model=DbBody, summary="Run SQL, optionally inside a transaction")
-    async def db(ctx: HttpContext, ref: str, env: str, body: DbBody):
+    @r.post(f"{base}/db", auth=MANAGE, tags=["runtime"], request_model=DbBody, summary="Run SQL, optionally inside a transaction")
+    async def db(ctx: HttpContext, env: str, body: DbBody):
         if body.op not in DB_OPS:
             raise HTTPException(status_code=422, detail=f"{body.op!r} is not a database operation")
-        runtime = await runtime_for(ctx, ref, env, None, None)
+        runtime = await runtime_for(ctx, env, None, None)
         try:
             if body.op == "begin":
                 return {"tx": await transactions.begin(runtime), "expires_in": TRANSACTION_SECONDS}

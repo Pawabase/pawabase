@@ -5,8 +5,8 @@ import { Icon } from "../../components/icons";
 import { Button, Loading, Modal, PageHead, Table, formatCell, truncate, useAction } from "../../components/ui";
 import { envPath, get, post, useApi } from "../../lib/api";
 
-export default function Database({ project, env }) {
-  const base = envPath(project.ref, env, "/database");
+export default function Database({ env }) {
+  const base = envPath(env, "/database");
   const overview = useApi(base);
   const [table, setTable] = useState(null);
   const [sqlOpen, setSqlOpen] = useState(false);
@@ -16,11 +16,11 @@ export default function Database({ project, env }) {
   // Every resource gets its table (or the columns it gained). The same call the resource editor's "Create / migrate table" makes, for all of them at once.
   const syncTables = async () => {
     const done = await run(async () => {
-      const resources = (await get(envPath(project.ref, env, "/resources"), { params: { limit: 500 } })).data || [];
+      const resources = (await get(envPath(env, "/resources"), { params: { limit: 500 } })).data || [];
       const outcome = { created: [], extended: [], unchanged: 0, failed: [] };
       for (const resource of resources) {
         try {
-          const answer = await post(envPath(project.ref, env, `/resources/${resource.name}/migrate`));
+          const answer = await post(envPath(env, `/resources/${resource.name}/migrate`));
           const statements = answer.statements || [];
           if (statements.some((sql) => /^\s*CREATE TABLE/i.test(sql))) outcome.created.push(resource.name);
           else if (statements.some((sql) => /ADD COLUMN/i.test(sql))) outcome.extended.push(resource.name);

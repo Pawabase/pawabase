@@ -54,17 +54,17 @@ def _when(value: Any) -> datetime | None:
 # ── export ───────────────────────────────────────────────────────────────────
 
 
-async def export_identities(project: str, env: str) -> dict[str, Any]:
+async def export_identities(env: str) -> dict[str, Any]:
     roles = [
         {"name": r["name"], "description": r["description"], "permissions": r["permissions"]}
-        for r in await rbac.list_roles(project, env)
+        for r in await rbac.list_roles(env)
     ]
     users: list[dict[str, Any]] = []
-    for user in await AuthUser.filter(project=project, env=env, deleted_at=None).order_by("id"):
+    for user in await AuthUser.filter(env=env, deleted_at=None).order_by("id"):
         identities = await Identity.filter(user=user)
         factors = await MfaFactor.filter(user=user)
         codes = await RecoveryCode.filter(user=user)
-        direct = rbac._strip(project, env, await Permission.of(user))
+        direct = rbac._strip(env, await Permission.of(user))
         users.append(
             {
                 "id": user.id,
@@ -111,7 +111,7 @@ async def export_identities(project: str, env: str) -> dict[str, Any]:
         )
 
     orgs: list[dict[str, Any]] = []
-    for org in await Organization.filter(project=project, env=env).order_by("id"):
+    for org in await Organization.filter(env=env).order_by("id"):
         memberships = await Membership.filter(organization=org)
         teams = []
         for team in await Team.filter(organization=org):
@@ -135,16 +135,16 @@ async def export_identities(project: str, env: str) -> dict[str, Any]:
 # ── restore ──────────────────────────────────────────────────────────────────
 
 
-async def _wipe(project: str, env: str) -> None:
-    await Organization.filter(project=project, env=env).delete()
-    await AuthUser.filter(project=project, env=env).delete()
-    for role in await rbac.list_roles(project, env):
-        await rbac.delete_role(project, env, role["name"])
-    await Permission.filter(name__startswith=f"{project}/{env}/").delete()
+async def _wipe(env: str) -> None:
+    await Organization.filter(env=env).delete()
+    await AuthUser.filter(env=env).delete()
+    for role in await rbac.list_roles(env):
+        await rbac.delete_role(env, role["name"])
+    await Permission.filter(name__startswith=f"{env}/").delete()
 
 
 async def restore_identities(
-    project: str, env: str, document: dict[str, Any], *, replace: bool
+    env: str, document: dict[str, Any], *, replace: bool
 ) -> dict[str, Any]:
     """Apply the identities of a backup. Returns counts and warnings.
 
@@ -161,11 +161,10 @@ async def restore_identities(
     }
     async with in_transaction():
         if replace:
-            await _wipe(project, env)
+            await _wipe(env)
 
         for role in document.get("roles", []):
             await rbac.define_role(
-                project,
                 env,
                 role["name"],
                 description=role.get("description", ""),
@@ -174,7 +173,7 @@ async def restore_identities(
             report["roles"] += 1
 
         id_map: dict[Any, str] = {}  # the id a backup used (a ULID, or an integer in old backups) -> the restored user's
-        taken = {u.email: u for u in await AuthUser.filter(project=project, env=env, deleted_at=None)}
+        taken = {u.email: u for u in await AuthUser.filter(env=env, deleted_at=None)}
         for source in document.get("users", []):
             existing = taken.get(source["email"])
             fields = {
@@ -205,7 +204,7 @@ async def restore_identities(
                 wanted_id = wanted_id.upper() if is_ulid(wanted_id) else None
                 id_free = wanted_id is not None and not await AuthUser.filter(id=wanted_id).exists()
                 clash = await AuthUser.filter(
-                    project=project, env=env, username=fields["username"]
+                    env=env, username=fields["username"]
                 ).exists()
                 if clash:
                     fields["username"] = f"{fields['username']}-restored"
@@ -213,7 +212,6 @@ async def restore_identities(
                         f"{source['email']}: username was taken, restored as {fields['username']}"
                     )
                 user = AuthUser(
-                    project=project,
                     env=env,
                     email=source["email"],
                     **({"id": wanted_id} if id_free else {}),
@@ -232,10 +230,9 @@ async def restore_identities(
             await _restore_user_links(user, source)
 
         for source in document.get("orgs", []):
-            org = await Organization.filter(project=project, env=env, slug=source["slug"]).first()
+            org = await Organization.filter(env=env, slug=source["slug"]).first()
             if org is None:
                 org = await Organization.create(
-                    project=project,
                     env=env,
                     slug=source["slug"],
                     name=source["name"],
@@ -282,7 +279,6 @@ async def _restore_user_links(user: AuthUser, source: dict[str, Any]) -> None:
             provider=item["provider"],
             subject=item["subject"],
             defaults={
-                "project": user.project,
                 "env": user.env,
                 "email": item.get("email"),
                 "email_verified": item.get("email_verified", False),

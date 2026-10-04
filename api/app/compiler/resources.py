@@ -186,7 +186,7 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
         mode="read",
         registry=registry,
     )
-    namespace = f"rl:{state.project_ref}:{state.env_name}:{resource.name}"
+    namespace = f"rl:{state.env_name}:{resource.name}"
     limits = rate_limit_middleware(resource.rate_limit, namespace, platform.settings.redis_url)
     base = f"/{resource.name}"
     item = f"/{resource.name}/{{id}}"

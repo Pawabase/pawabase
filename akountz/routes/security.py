@@ -38,10 +38,10 @@ def register(r: Router, akountz: Akountz) -> None:
     # ── OAuth (browser navigations: the environment is in the path) ──────
 
     @r.get(
-        "/authorize/{project}/{env}/{provider}", summary="Start a social sign-in", tags=["oauth"]
+        "/authorize/{env}/{provider}", summary="Start a social sign-in", tags=["oauth"]
     )
-    async def start(ctx: HttpContext, project: str, env: str, provider: str):
-        config = await load_config(akountz, project, env)
+    async def start(ctx: HttpContext, env: str, provider: str):
+        config = await load_config(akountz, env)
         redirect_to = ctx.query_params.get("redirect_to") or config.site_url or None
         if redirect_to and not config.redirect_allowed(redirect_to):
             raise HTTPException(status_code=400, detail="redirect_to is not an allowed URL")
@@ -59,21 +59,20 @@ def register(r: Router, akountz: Akountz) -> None:
         return redirect(authorize.url).set_cookie(**authorize.cookie_kwargs(secure=secure))
 
     @r.get(
-        "/callback/{project}/{env}/{provider}",
+        "/callback/{env}/{provider}",
         summary="Finish a social sign-in",
         tags=["oauth"],
         exclude_from_schema=True,
     )
-    async def callback(ctx: HttpContext, project: str, env: str, provider: str):
+    async def callback(ctx: HttpContext, env: str, provider: str):
         import json
 
-        config = await load_config(akountz, project, env)
+        config = await load_config(akountz, env)
         provider_obj = oauth.build_provider(akountz, config, provider)
         try:
             profile = await exchange(provider_obj, ctx)
         except OAuthError as exc:
             await log_event(
-                project,
                 env,
                 "sign_in",
                 method=f"oauth:{provider}",
@@ -92,7 +91,7 @@ def register(r: Router, akountz: Akountz) -> None:
 
         identity = (
             await Identity.filter(
-                project=project, env=env, provider=provider, subject=profile.subject
+                env=env, provider=provider, subject=profile.subject
             )
             .prefetch_related("user")
             .first()
@@ -107,14 +106,14 @@ def register(r: Router, akountz: Akountz) -> None:
             user = row.user
         if user is None and profile.email and profile.email_verified:
             # Only a verified address may attach a new identity to an existing account.
-            user = await find_by_email(project, env, profile.email)
+            user = await find_by_email(env, profile.email)
         created = False
         if user is None:
             if not config.signup_enabled:
                 return _error_redirect(target, "signup_disabled")
             if not profile.email:
                 return _error_redirect(target, "email_required")
-            if await find_by_email(project, env, profile.email):
+            if await find_by_email(env, profile.email):
                 return _error_redirect(target, "email_unverified_conflict")
             user = await create_account(
                 config,
@@ -133,7 +132,6 @@ def register(r: Router, akountz: Akountz) -> None:
         if identity is None:
             await Identity.create(
                 user=user,
-                project=project,
                 env=env,
                 provider=provider,
                 subject=profile.subject,
@@ -143,7 +141,6 @@ def register(r: Router, akountz: Akountz) -> None:
                 last_sign_in_at=now,
             )
             await akountz.emit(
-                project,
                 env,
                 "identity.linked",
                 {"user_id": str(user.id), "provider": provider},
@@ -155,7 +152,6 @@ def register(r: Router, akountz: Akountz) -> None:
             await identity.save(update_fields=["last_sign_in_at", "data"])
         if created:
             await akountz.emit(
-                project,
                 env,
                 "user.created",
                 {"user_id": str(user.id), "email": user.email, "method": f"oauth:{provider}"},
@@ -194,7 +190,7 @@ def register(r: Router, akountz: Akountz) -> None:
         from app import links
 
         user, _ = await signed_in_user(ctx)
-        config = await load_config(akountz, user.project, user.env)
+        config = await load_config(akountz, user.env)
         provider = ctx.query_params.get("provider", "")
         oauth.build_provider(akountz, config, provider)
         ticket = await links.issue(akountz, config, "link", user=user, data={"linking": provider})
@@ -208,7 +204,7 @@ def register(r: Router, akountz: Akountz) -> None:
             ),
         }
         return {
-            "url": f"{base}/auth/v1/authorize/{user.project}/{user.env}/{provider}?{urlencode(query)}"
+            "url": f"{base}/auth/v1/authorize/{user.env}/{provider}?{urlencode(query)}"
         }
 
     @r.delete("/identities/{identity_id}", summary="Unlink an identity", tags=["oauth"])
@@ -224,7 +220,6 @@ def register(r: Router, akountz: Akountz) -> None:
             )
         await identity.delete()
         await akountz.emit(
-            user.project,
             user.env,
             "identity.unlinked",
             {"user_id": str(user.id), "provider": identity.provider},
@@ -237,10 +232,10 @@ def register(r: Router, akountz: Akountz) -> None:
     @r.post("/mfa/totp/enroll", summary="Start enrolling an authenticator app", tags=["mfa"])
     async def enroll(ctx: HttpContext):
         user, _ = await signed_in_user(ctx)
-        config = await load_config(akountz, user.project, user.env)
+        config = await load_config(akountz, user.env)
         if not config.mfa_enabled:
-            raise HTTPException(status_code=403, detail="MFA is disabled for this project")
-        return await mfa.enroll(akountz, user, config.project_name or config.project)
+            raise HTTPException(status_code=403, detail="MFA is disabled for this environment")
+        return await mfa.enroll(akountz, user, config.project_name or "Pawabase")
 
     @r.post(
         "/mfa/totp/verify",
@@ -256,9 +251,8 @@ def register(r: Router, akountz: Akountz) -> None:
             raise HTTPException(status_code=400, detail="the code is not valid")
         if principal.claims.get("sid"):
             await elevate(akountz, None, user, principal.claims["sid"])
-        await log_event(user.project, user.env, "mfa_enrolled", user=user, method="totp", ctx=ctx)
+        await log_event(user.env, "mfa_enrolled", user=user, method="totp", ctx=ctx)
         await akountz.emit(
-            user.project,
             user.env,
             "user.mfa_enabled",
             {"user_id": str(user.id)},
@@ -281,7 +275,6 @@ def register(r: Router, akountz: Akountz) -> None:
             raise HTTPException(status_code=400, detail="the code is not valid")
         await mfa.disable(user)
         await akountz.emit(
-            user.project,
             user.env,
             "user.mfa_disabled",
             {"user_id": str(user.id)},
@@ -324,7 +317,6 @@ def register(r: Router, akountz: Akountz) -> None:
         if not await revoke_session(user, session_id):
             raise HTTPException(status_code=404, detail="no such session")
         await akountz.emit(
-            user.project,
             user.env,
             "session.revoked",
             {"user_id": str(user.id), "session_id": session_id},
@@ -336,7 +328,7 @@ def register(r: Router, akountz: Akountz) -> None:
     async def history(ctx: HttpContext):
         user, _ = await signed_in_user(ctx)
         events = (
-            await LoginEvent.filter(project=user.project, env=user.env, user_id=user.id)
+            await LoginEvent.filter(env=user.env, user_id=user.id)
             .order_by("-id")
             .limit(50)
         )

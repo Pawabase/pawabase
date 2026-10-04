@@ -21,7 +21,7 @@ from database.models import (
     WebhookEndpoint,
 )
 from pawabase_core.flows import FlowError, default_registry, validate_flow
-from routes.common import OPERATOR, audit, dump, get_environment, page_params
+from routes.common import MANAGE, audit, dump, get_environment, page_params
 
 
 class RunBody(BaseModel):
@@ -35,7 +35,7 @@ class RunBody(BaseModel):
 
 def _source_of(key: str) -> str:
     """Where a function came from: a branch deployment, the environment's deployment, or code mounted for the project."""
-    return "branch" if "@" in key else "deployment" if "/" in key else "project"
+    return "branch" if "@" in key else "deployment" if "/" in key else "mounted"
 
 
 class EmitBody(BaseModel):
@@ -43,18 +43,18 @@ class EmitBody(BaseModel):
     payload: Any = None
 
 
-def _operator_auth(ctx: HttpContext) -> dict[str, Any]:
+def _caller_auth(ctx: HttpContext) -> dict[str, Any]:
     from pawabase_core.principal import policy_auth
 
     return policy_auth(ctx.scope.get("user"))
 
 
 def register(r: Router, platform: Platform) -> None:
-    base = "/projects/{ref}/envs/{env}"
+    base = "/envs/{env}"
 
     # ── blocks ───────────────────────────────────────────────────────────
 
-    @r.get("/blocks", auth=OPERATOR, tags=["flows"], summary="The block catalogue")
+    @r.get("/blocks", auth=MANAGE, tags=["flows"], summary="The block catalogue")
     async def blocks(ctx: HttpContext):
         catalogue = default_registry().catalogue()
         return {"count": len(catalogue), "data": catalogue}
@@ -63,7 +63,7 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.post(
         "/flows/validate",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["flows"],
         summary="Check a flow definition without saving it",
     )
@@ -73,14 +73,14 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.post(
         f"{base}/flows/{{name}}/run",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["flows"],
         request_model=RunBody,
         summary="Run a flow now and return its trace",
     )
-    async def run_now(ctx: HttpContext, ref: str, env: str, name: str, body: RunBody):
-        state = await platform.state(ref, env)
-        auth = body.as_user or {"authenticated": False, "kind": "operator"}
+    async def run_now(ctx: HttpContext, env: str, name: str, body: RunBody):
+        state = await platform.state(env)
+        auth = body.as_user or {"authenticated": False, "kind": "service"}
         request_id = getattr(ctx.state, "request_id", None)
         try:
             run = await run_flow(
@@ -90,7 +90,7 @@ def register(r: Router, platform: Platform) -> None:
                 body.input,
                 trigger="manual",
                 auth=auth,
-                credential={"is_service": body.as_user is None, "role": "operator"},
+                credential={"is_service": body.as_user is None, "role": "service"},
                 request_id=request_id,
                 entry=body.entry,
             )
@@ -98,7 +98,7 @@ def register(r: Router, platform: Platform) -> None:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except FlowError as exc:
             record = (
-                await FlowRun.filter(project=ref, env=env, flow=name)
+                await FlowRun.filter(env=env, flow=name)
                 .order_by("-created_at")
                 .first()
             )
@@ -111,7 +111,7 @@ def register(r: Router, platform: Platform) -> None:
                 "trace": record.trace if record else [],
                 "logs": record.logs if record else [],
             }
-        await audit(ctx, "flow.run", project=ref, env=env, target=name)
+        await audit(ctx, "flow.run", env=env, target=name)
         response = (
             {
                 "status": run.response.status,
@@ -130,10 +130,10 @@ def register(r: Router, platform: Platform) -> None:
             "logs": run.logs,
         }
 
-    @r.get(f"{base}/flow-runs", auth=OPERATOR, tags=["flows"], summary="Recent flow runs")
-    async def flow_runs(ctx: HttpContext, ref: str, env: str):
+    @r.get(f"{base}/flow-runs", auth=MANAGE, tags=["flows"], summary="Recent flow runs")
+    async def flow_runs(ctx: HttpContext, env: str):
         limit, offset = page_params(ctx)
-        query = FlowRun.filter(project=ref, env=env)
+        query = FlowRun.filter(env=env)
         if ctx.query_params.get("flow"):
             query = query.filter(flow=ctx.query_params["flow"])
         if ctx.query_params.get("status"):
@@ -143,12 +143,12 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.get(
         f"{base}/flow-runs/{{run_id}}",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["flows"],
         summary="One flow run with its trace",
     )
-    async def flow_run(ctx: HttpContext, ref: str, env: str, run_id: str):
-        run = await FlowRun.get_or_none(id=run_id, project=ref, env=env)
+    async def flow_run(ctx: HttpContext, env: str, run_id: str):
+        run = await FlowRun.get_or_none(id=run_id, env=env)
         if run is None:
             raise HTTPException(status_code=404, detail="no such run")
         return dump(run)
@@ -157,16 +157,16 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.get(
         f"{base}/functions",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["functions"],
         summary="Functions loaded for the project",
     )
-    async def functions(ctx: HttpContext, ref: str, env: str):
-        await platform.state(ref, env)
-        code = platform.ensure_code(ref)
+    async def functions(ctx: HttpContext, env: str):
+        await platform.state(env)
+        code = platform.ensure_code()
         branch = ctx.query_params.get("branch") or None
         return {
-            "data": [{**spec.describe(), "source": _source_of(spec.project)} for spec in platform.function_specs(ref, env, branch)],
+            "data": [{**spec.describe(), "source": _source_of(spec.project)} for spec in platform.function_specs(env, branch)],
             "branch": branch or "main",
             "modules": code.modules,
             "errors": code.errors,
@@ -175,13 +175,13 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.post(
         f"{base}/functions/{{name}}/invoke",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["functions"],
         request_model=RunBody,
         summary="Invoke a function now",
     )
-    async def invoke(ctx: HttpContext, ref: str, env: str, name: str, body: RunBody):
-        state = await platform.state(ref, env)
+    async def invoke(ctx: HttpContext, env: str, name: str, body: RunBody):
+        state = await platform.state(env)
         try:
             result = await call_function(
                 platform,
@@ -189,7 +189,7 @@ def register(r: Router, platform: Platform) -> None:
                 name,
                 body.input,
                 trigger="manual",
-                auth=body.as_user or _operator_auth(ctx),
+                auth=body.as_user or _caller_auth(ctx),
                 branch=body.branch,
             )
         except NotFound as exc:
@@ -209,47 +209,47 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.get(
         f"{base}/events",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["events"],
         summary="Recent events and their consumers",
     )
-    async def events(ctx: HttpContext, ref: str, env: str):
+    async def events(ctx: HttpContext, env: str):
         limit, offset = page_params(ctx)
-        query = EventLog.filter(project=ref, env=env)
+        query = EventLog.filter(env=env)
         if ctx.query_params.get("name"):
             query = query.filter(name=ctx.query_params["name"])
         if ctx.query_params.get("source"):
             query = query.filter(source=ctx.query_params["source"])
         return {"data": [dump(e) for e in await query.order_by("-id").offset(offset).limit(limit)]}
 
-    @r.get(f"{base}/events/{{event_id}}", auth=OPERATOR, tags=["events"], summary="One event")
-    async def event(ctx: HttpContext, ref: str, env: str, event_id: str):
-        found = await EventLog.get_or_none(event_id=event_id, project=ref, env=env)
+    @r.get(f"{base}/events/{{event_id}}", auth=MANAGE, tags=["events"], summary="One event")
+    async def event(ctx: HttpContext, env: str, event_id: str):
+        found = await EventLog.get_or_none(event_id=event_id, env=env)
         if found is None:
             raise HTTPException(status_code=404, detail="no such event")
         return dump(found)
 
     @r.post(
         f"{base}/events",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["events"],
         request_model=EmitBody,
         summary="Publish an event (for testing consumers)",
     )
-    async def emit(ctx: HttpContext, ref: str, env: str, body: EmitBody):
-        state = await platform.state(ref, env)
+    async def emit(ctx: HttpContext, env: str, body: EmitBody):
+        state = await platform.state(env)
         event_id = await platform.emit(state, body.name, body.payload, actor="studio")
-        await audit(ctx, "event.emitted", project=ref, env=env, target=body.name)
+        await audit(ctx, "event.emitted", env=env, target=body.name)
         return {"event_id": event_id}
 
     @r.get(
         f"{base}/events-graph",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["events"],
         summary="Where events come from and what consumes them",
     )
-    async def events_graph(ctx: HttpContext, ref: str, env: str):
-        state = await platform.state(ref, env)
+    async def events_graph(ctx: HttpContext, env: str):
+        state = await platform.state(env)
         producers: dict[str, set[str]] = {}
 
         def produce(name: str, source: str) -> None:
@@ -288,7 +288,7 @@ def register(r: Router, platform: Platform) -> None:
         # is still "no ordering given". Postgres then refuses DISTINCT with an
         # ORDER BY column outside the select list, so order by a column that
         # actually is selected instead of trying to clear the ordering.
-        seen = await EventLog.filter(project=ref, env=env).order_by("name").distinct().values_list("name", "source")
+        seen = await EventLog.filter(env=env).order_by("name").distinct().values_list("name", "source")
         for name, source in seen:
             produce(name, f"service:{source}")
 
@@ -307,7 +307,7 @@ def register(r: Router, platform: Platform) -> None:
             from pawabase_core.events import PlatformEvent
 
             for flow_name, node in flow_event_entries(
-                state, PlatformEvent(name=name, project=ref, env=env)
+                state, PlatformEvent(name=name, env=env)
             ):
                 consumers.append({"type": "flow", "target": flow_name, "via": f"trigger:{node}"})
             for endpoint in state.webhooks:
@@ -322,12 +322,12 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.get(
         f"{base}/webhook-deliveries",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["webhooks"],
         summary="Outbound delivery history",
     )
-    async def deliveries(ctx: HttpContext, ref: str, env: str):
-        environment = await get_environment(ref, env)
+    async def deliveries(ctx: HttpContext, env: str):
+        environment = await get_environment(env)
         limit, offset = page_params(ctx)
         query = WebhookDelivery.filter(endpoint__environment=environment)
         if ctx.query_params.get("endpoint"):
@@ -339,15 +339,15 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.post(
         f"{base}/webhook-deliveries/{{delivery_id}}/redeliver",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["webhooks"],
         summary="Deliver again",
     )
-    async def redeliver(ctx: HttpContext, ref: str, env: str, delivery_id: str):
+    async def redeliver(ctx: HttpContext, env: str, delivery_id: str):
         delivery_id = delivery_id.upper()  # ULIDs are case-insensitive
         from app.jobs.webhooks import DeliverWebhookJob
 
-        environment = await get_environment(ref, env)
+        environment = await get_environment(env)
         delivery = (
             await WebhookDelivery.filter(id=delivery_id, endpoint__environment=environment)
             .select_related("endpoint")
@@ -364,7 +364,6 @@ def register(r: Router, platform: Platform) -> None:
         )
         job_id = await platform.dispatch(
             DeliverWebhookJob,
-            project=ref,
             env=env,
             target=delivery.endpoint.name,
             source="studio",
@@ -374,14 +373,14 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.post(
         f"{base}/webhooks/{{name}}/test",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["webhooks"],
         summary="Send a test event to one endpoint",
     )
-    async def test_webhook(ctx: HttpContext, ref: str, env: str, name: str):
+    async def test_webhook(ctx: HttpContext, env: str, name: str):
         from app.jobs.webhooks import DeliverWebhookJob
 
-        environment = await get_environment(ref, env)
+        environment = await get_environment(env)
         endpoint = await WebhookEndpoint.get_or_none(environment=environment, name=name)
         if endpoint is None:
             raise HTTPException(status_code=404, detail="no such webhook")
@@ -394,7 +393,6 @@ def register(r: Router, platform: Platform) -> None:
         )
         job_id = await platform.dispatch(
             DeliverWebhookJob,
-            project=ref,
             env=env,
             target=name,
             source="studio",
@@ -404,42 +402,41 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.get(
         f"{base}/inbound-hooks/{{slug}}/url",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["inbound hooks"],
         summary="The public URL of an inbound hook",
     )
-    async def inbound_url(ctx: HttpContext, ref: str, env: str, slug: str):
-        environment = await get_environment(ref, env)
+    async def inbound_url(ctx: HttpContext, env: str, slug: str):
+        environment = await get_environment(env)
         if not await InboundHook.filter(environment=environment, slug=slug).exists():
             raise HTTPException(status_code=404, detail="no such hook")
-        return {"url": f"{platform.settings.public_url.rstrip('/')}/hooks/v1/{ref}/{env}/{slug}"}
+        return {"url": f"{platform.settings.public_url.rstrip('/')}/hooks/v1/{env}/{slug}"}
 
     # ── schedules ────────────────────────────────────────────────────────
 
     @r.post(
         f"{base}/schedules/{{name}}/run",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["schedules"],
         summary="Fire a schedule now",
     )
-    async def run_schedule(ctx: HttpContext, ref: str, env: str, name: str):
+    async def run_schedule(ctx: HttpContext, env: str, name: str):
         from app.scheduler import PlatformScheduler
 
-        environment = await get_environment(ref, env)
+        environment = await get_environment(env)
         schedule = await Schedule.get_or_none(environment=environment, name=name)
         if schedule is None:
             raise HTTPException(status_code=404, detail="no such schedule")
         spec = {
             "kind": "schedule",
             "id": schedule.id,
-            "project": ref,
             "env": env,
             "cron": schedule.cron,
             "every": schedule.interval_seconds,
             "target_type": schedule.target_type,
             "target": schedule.target,
             "payload": schedule.payload,
-            "name": f"{ref}/{env}/{schedule.name}",
+            "name": f"{env}/{schedule.name}",
         }
         await PlatformScheduler(platform).fire(spec)
         await schedule.refresh_from_db()

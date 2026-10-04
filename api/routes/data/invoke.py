@@ -61,7 +61,7 @@ def register(app: Any, platform: Platform) -> None:
         context = require_context(ctx)
         state = await platform.state_for(context)
         branch = ctx.query_params.get("branch") or None
-        spec = platform.function_spec(context.project, context.env, name, branch)
+        spec = platform.function_spec(context.env, name, branch)
         if spec is None:
             raise HTTPException(status_code=404, detail=f"no function {name!r}")
         if not context.allows_scope("functions:invoke"):

@@ -48,7 +48,7 @@ TRANSPORT: Any = None
 
 def callback_url(akountz: Akountz, config: AuthConfig, provider: str) -> str:
     base = (config.public_url or akountz.settings.public_url).rstrip("/")
-    return f"{base}/auth/v1/callback/{config.project}/{config.env}/{provider}"
+    return f"{base}/auth/v1/callback/{config.env}/{provider}"
 
 
 def build_provider(akountz: Akountz, config: AuthConfig, name: str) -> Any:
@@ -58,7 +58,7 @@ def build_provider(akountz: Akountz, config: AuthConfig, name: str) -> Any:
     options: dict[str, Any] = {
         "client_id": settings["client_id"],
         "client_secret": settings.get("client_secret", ""),
-        "state_secret": akountz.state_secret(config.project, config.env),
+        "state_secret": akountz.state_secret(config.env),
         "redirect_uri": callback_url(akountz, config, name),
     }
     if settings.get("scopes"):

@@ -8,7 +8,7 @@ runs first):
 2. Record (the platform database) and the data-plane dispatcher are installed
    before that outer plumbing. The dispatcher therefore runs inside the context
    and telemetry middleware, and every ``/rest/v1`` request is traced and
-   attributed to its project.
+   attributed to its environment.
 3. Routers are mounted most-specific first.
 """
 
@@ -25,10 +25,27 @@ from app.dispatch import DataPlaneDispatcher
 from app.platform import Platform
 from app.request_metrics import RequestRollup
 from database.config import MODEL_MODULES, database_config
-from pawabase_core.auth import OperatorBackend, ProjectUserBackend
+from pawabase_core.auth import UserBackend
 from pawabase_core.service import create_service
 
 logger = logging.getLogger("pawabase.api")
+
+DEFAULT_ENVIRONMENT = "development"
+
+
+async def ensure_default_environment() -> None:
+    """Give a fresh runtime its first environment, so Studio has something to manage."""
+    from tortoise.exceptions import IntegrityError
+
+    from database.models import Environment
+
+    if await Environment.exists():
+        return
+    try:
+        await Environment.create(name=DEFAULT_ENVIRONMENT, is_default=True)
+        logger.info("created the default environment %r", DEFAULT_ENVIRONMENT)
+    except IntegrityError:  # another API instance created it first
+        pass
 
 
 def create_app(
@@ -41,10 +58,9 @@ def create_app(
         "api",
         settings,
         title="Pawabase API",
-        description="The Pawabase platform API: projects, resources, flows, events, jobs, storage and the management plane.",
+        description="The Pawabase runtime API: resources, flows, events, jobs, storage and the management plane.",
         backends=[
-            OperatorBackend(settings.jwt_master_secret),
-            ProjectUserBackend(settings.jwt_master_secret),
+            UserBackend(settings.jwt_master_secret),
         ],
         inner=[DataPlaneDispatcher(platform)],
         installables=[Record(database_config(settings), tuple(MODEL_MODULES))],
@@ -57,6 +73,7 @@ def create_app(
     @app.on_startup
     async def start_platform() -> None:
         await platform.start()
+        await ensure_default_environment()
         rollup.start()
         from app.events import EventProcessor
 

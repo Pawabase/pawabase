@@ -20,17 +20,16 @@ def _tags(tags: Mapping[str, str]) -> str:
 
 
 async def increment(
-    project: str, env: str, name: str, value: float = 1.0, tags: Mapping[str, str] | None = None
+    env: str, name: str, value: float = 1.0, tags: Mapping[str, str] | None = None
 ) -> None:
     window = _window()
     tag_text = _tags(tags or {})
     updated = await MetricCounter.filter(
-        project=project, env=env, name=name, tags=tag_text, window=window
+        env=env, name=name, tags=tag_text, window=window
     ).update(value=F("value") + value, count=F("count") + 1)
     if not updated:
         try:
             await MetricCounter.create(
-                project=project,
                 env=env,
                 name=name,
                 tags=tag_text,
@@ -40,5 +39,5 @@ async def increment(
             )
         except Exception:  # a concurrent writer created it first
             await MetricCounter.filter(
-                project=project, env=env, name=name, tags=tag_text, window=window
+                env=env, name=name, tags=tag_text, window=window
             ).update(value=F("value") + value, count=F("count") + 1)

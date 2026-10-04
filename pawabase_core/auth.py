@@ -15,7 +15,6 @@ from sillo.auth.model import AuthResult
 
 from .context import CONTEXT_HEADER, SCOPE_KEY, bind_context, reset_context
 from .principal import encode_identity
-from .settings import PLATFORM_ENV, PLATFORM_PROJECT
 from .tokens import (
     TokenInvalid,
     verify_context_token,
@@ -49,7 +48,7 @@ class ContextMiddleware:
     already knows which environment a bearer token must belong to.
 
     A header that fails verification is dropped rather than rejected here, so
-    public routes keep working. Routes that need a project use
+    public routes keep working. Routes that need an environment use
     :func:`~pawabase_core.context.require_context`.
     """
 
@@ -77,8 +76,8 @@ class ContextMiddleware:
             reset_context(token)
 
 
-class ProjectUserBackend(AuthenticationBackend):
-    """A project user's bearer access token, issued by Akountz.
+class UserBackend(AuthenticationBackend):
+    """An application user's bearer access token, issued by Akountz.
 
     The environment comes from the request's platform context, so a token
     issued for another environment fails even if the signature would be valid
@@ -104,60 +103,23 @@ class ProjectUserBackend(AuthenticationBackend):
         if not token or context is None:
             return _FAIL
         try:
-            claims = verify_user_token(
-                token, self.master_secret, project=context.project, env=context.env
-            )
+            claims = verify_user_token(token, self.master_secret, env=context.env)
         except TokenInvalid:
             return _FAIL
         return AuthResult(success=True, identity=encode_identity("user", claims), scope="user")
 
 
-class OperatorBackend(AuthenticationBackend):
-    """A platform operator's bearer token: an Akountz user of ``_platform``.
-
-    Used on the management plane when it is called directly (CLI, automation)
-    rather than through Studio.
-    """
-
-    name = "operatorAuth"
-
-    def __init__(self, master_secret: str, description: str | None = None) -> None:
-        self.master_secret = master_secret
-        self.description = description or "An operator access token for the _platform project."
-
-    def describe(self):
-        from sillo.openapi.models import HTTPBearer
-
-        return HTTPBearer(
-            type="http", scheme="bearer", bearerFormat="JWT", description=self.description
-        )
-
-    async def authenticate(self, ctx) -> AuthResult:
-        token = _bearer(ctx.headers)
-        if not token:
-            return _FAIL
-        try:
-            claims = verify_user_token(
-                token, self.master_secret, project=PLATFORM_PROJECT, env=PLATFORM_ENV
-            )
-        except TokenInvalid:
-            return _FAIL
-        return AuthResult(
-            success=True, identity=encode_identity("operator", claims), scope="operator"
-        )
-
-
 class APIKeyBackend(AuthenticationBackend):
-    """Validates a project API key (apikey header) and sets the platform context.
+    """Validates an API key (apikey header) and sets the platform context.
 
     Used when calling the API directly without going through the gateway.
-    The apikey identifies the project/environment.
+    The apikey identifies the environment.
     """
 
     name = "apiKeyAuth"
 
     def __init__(self, description: str | None = None) -> None:
-        self.description = description or "A project API key (pk_ or sk_) in the apikey header."
+        self.description = description or "An API key (pk_ or sk_) in the apikey header."
 
     def describe(self):
         from sillo.openapi.models import APIKey
@@ -184,7 +146,7 @@ class APIKeyBackend(AuthenticationBackend):
 
 
 class ServiceBackend(AuthenticationBackend):
-    """Another Pawabase service, optionally acting for a Studio operator.
+    """Another Pawabase service, such as Studio, acting for the runtime.
 
     The token is addressed to this service by name, so a token minted for
     Angula cannot be replayed against Akountz.
@@ -217,7 +179,5 @@ class ServiceBackend(AuthenticationBackend):
             claims = verify_service_token(token, self.secret, audience=self.audience)
         except TokenInvalid:
             return _FAIL
-        kind = "operator" if claims.get("sub") else "service"
-        if kind == "service":
-            claims.setdefault("roles", ["admin"])
-        return AuthResult(success=True, identity=encode_identity(kind, claims), scope=kind)
+        claims.setdefault("roles", ["admin"])
+        return AuthResult(success=True, identity=encode_identity("service", claims), scope="service")

@@ -8,14 +8,14 @@ import { useRealtimeSocket } from "../../lib/realtime";
 const RT = { service: "realtime" };
 const STATUS_LABEL = { open: "Live", connecting: "Connecting…", closed: "Reconnecting…" };
 
-export default function Realtime({ project, env }) {
-  const base = `/${project.ref}/${env}`;
+export default function Realtime({ env }) {
+  const base = `/${env}`;
   const channels = useApi(`${base}/channels`, { ...RT, interval: 4000 });
   const connections = useApi(`${base}/connections`, { ...RT, interval: 4000 });
   const activity = useApi(`${base}/activity`, { ...RT, interval: 2500 });
   const [watching, setWatching] = useState(null);
   const [target, setTarget] = useState("");
-  const socket = useRealtimeSocket(project.ref, env);
+  const socket = useRealtimeSocket(env);
 
   return (
     <Layout title="Realtime">

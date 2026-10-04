@@ -32,7 +32,15 @@ from typing import Any
 from pawabase_core.ids import new_ulid
 
 from .source import timed
-from .sql import JSON_TYPES, TIMESTAMP_FIELDS, check_identifier, decode_value, encode_value, now_value, quote
+from .sql import (
+    JSON_TYPES,
+    TIMESTAMP_FIELDS,
+    check_identifier,
+    decode_value,
+    encode_value,
+    now_value,
+    quote,
+)
 
 
 class DbSession:

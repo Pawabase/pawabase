@@ -2,8 +2,8 @@ import { Badge, Card, Empty, Loading, Modal, Table, when } from "../../../compon
 import { envPath, useApi } from "../../../lib/api";
 import { KindBars, MethodBadge, Timeline, ms, statusTone } from "./shared";
 
-export default function RouteDetail({ project, env, route, minutes, onClose, onTrace }) {
-  const base = envPath(project.ref, env);
+export default function RouteDetail({ env, route, minutes, onClose, onTrace }) {
+  const base = envPath(env);
   const state = useApi(`${base}/observability/routes/detail`, { params: { method: route.method, route: route.route, minutes } });
   return (
     <Modal title={<span><MethodBadge method={route.method} /> <code>{route.route}</code></span>} onClose={onClose}>

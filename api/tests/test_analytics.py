@@ -1,10 +1,9 @@
 """Environment analytics: persisted request counts, events and flow runs over time."""
 
-ENV = "/platform/v1/projects/acme/envs/development"
+ENV = "/platform/v1/envs/development"
 
 
 async def test_overview_charts_come_from_recorded_activity(api):
-    await api.studio.post("/platform/v1/projects", json={"ref": "acme", "name": "Acme"})
     await api.studio.post(
         f"{ENV}/resources",
         json={
@@ -14,7 +13,7 @@ async def test_overview_charts_come_from_recorded_activity(api):
         },
     )
     await api.studio.post(f"{ENV}/resources/notes/migrate")
-    anon = api.context_headers("acme", "development")
+    anon = api.context_headers("development")
     for text in ("a", "b", "c"):
         assert (await api.http.post("/rest/v1/notes", json={"text": text}, headers=anon)).status_code == 201
     assert (await api.http.get("/rest/v1/notes", headers=anon)).status_code == 200

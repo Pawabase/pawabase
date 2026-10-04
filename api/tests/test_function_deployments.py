@@ -2,7 +2,7 @@ import base64
 import io
 import tarfile
 
-ENV = "/platform/v1/projects/shop/envs/development"
+ENV = "/platform/v1/envs/development"
 
 
 def bundle() -> str:
@@ -16,7 +16,6 @@ def bundle() -> str:
 
 
 async def test_deployment_activates_an_artifact_and_records_function_runs(api):
-    await api.studio.post("/platform/v1/projects", json={"ref": "shop", "name": "Shop"})
     deployed = await api.studio.post(f"{ENV}/function-deployments", json={"archive": bundle()})
     deployment = deployed["deployment"]
     assert deployment["status"] == "active"

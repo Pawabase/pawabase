@@ -48,7 +48,7 @@ class _Safe(dict):
 
 async def send(akountz: Akountz, config: AuthConfig, kind: str, to: str, **values: Any) -> None:
     template = {**DEFAULTS[kind], **(config.emails.get(kind) or {})}
-    values = _Safe(project=config.project_name or config.project, email=to, **values)
+    values = _Safe(project=config.project_name or "Pawabase", email=to, **values)
     subject = template["subject"].format_map(values)
     text = template["text"].format_map(values)
     escaped = html_lib.escape(text).replace("\n", "<br>")
@@ -59,5 +59,5 @@ async def send(akountz: Akountz, config: AuthConfig, kind: str, to: str, **value
             f'<a href="{html_lib.escape(link, quote=True)}">{html_lib.escape(link)}</a>',
         )
     await akountz.send_mail(
-        config.project, config.env, to=to, subject=subject, text=text, html=f"<p>{escaped}</p>"
+        config.env, to=to, subject=subject, text=text, html=f"<p>{escaped}</p>"
     )

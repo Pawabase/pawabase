@@ -47,23 +47,22 @@ class PlatformScheduler:
     async def desired(self) -> dict[str, dict[str, Any]]:
         """Every schedule that should be registered, by a key that changes with it."""
         wanted: dict[str, dict[str, Any]] = {}
-        for schedule in await Schedule.filter(enabled=True).select_related("environment__project"):
+        for schedule in await Schedule.filter(enabled=True).select_related("environment"):
             env = schedule.environment
             spec = {
                 "kind": "schedule",
                 "id": schedule.id,
-                "project": env.project.ref,
                 "env": env.name,
                 "cron": schedule.cron,
                 "every": schedule.interval_seconds,
                 "target_type": schedule.target_type,
                 "target": schedule.target,
                 "payload": schedule.payload,
-                "name": f"{env.project.ref}/{env.name}/{schedule.name}",
+                "name": f"{env.name}/{schedule.name}",
             }
             wanted[_key(spec)] = spec
-        for env in await Environment.all().select_related("project"):
-            state = await self.platform.state(env.project.ref, env.name)
+        for env in await Environment.all():
+            state = await self.platform.state(env.name)
             for flow in state.flows.values():
                 if not flow.enabled:
                     continue
@@ -76,13 +75,12 @@ class PlatformScheduler:
                         continue
                     spec = {
                         "kind": "flow",
-                        "project": env.project.ref,
                         "env": env.name,
                         "cron": config.get("cron"),
                         "every": config.get("every"),
                         "flow": flow.name,
                         "node": node["id"],
-                        "name": f"{env.project.ref}/{env.name}/flow:{flow.name}",
+                        "name": f"{env.name}/flow:{flow.name}",
                     }
                     wanted[_key(spec)] = spec
         return wanted
@@ -112,12 +110,12 @@ class PlatformScheduler:
     async def _expire_previews(self) -> None:
         """Remove expired preview environments and all their dependent rows."""
         now = datetime.now(UTC)
-        expired = await Environment.filter(preview_expires_at__lte=now).select_related("project")
+        expired = await Environment.filter(preview_expires_at__lte=now)
         for environment in expired:
-            project, name = environment.project.ref, environment.name
+            name = environment.name
             await environment.delete()
-            self.platform.envs.forget(project)
-            logger.info("expired deploy preview %s/%s", project, name)
+            self.platform.envs.forget(name)
+            logger.info("expired deploy preview %s", name)
 
     # ── firing ───────────────────────────────────────────────────────────
 
@@ -126,13 +124,12 @@ class PlatformScheduler:
         from app.jobs.functions import RunFunctionJob
 
         platform = self.platform
-        project, env = spec["project"], spec["env"]
+        env = spec["env"]
         status = "queued"
         try:
             if spec["kind"] == "flow":
                 await platform.dispatch(
                     RunFlowJob,
-                    project=project,
                     env=env,
                     target=spec["flow"],
                     source="schedule",
@@ -145,7 +142,6 @@ class PlatformScheduler:
             elif spec["target_type"] == "flow":
                 await platform.dispatch(
                     RunFlowJob,
-                    project=project,
                     env=env,
                     target=spec["target"],
                     source="schedule",
@@ -157,7 +153,6 @@ class PlatformScheduler:
             elif spec["target_type"] == "function":
                 await platform.dispatch(
                     RunFunctionJob,
-                    project=project,
                     env=env,
                     target=spec["target"],
                     source="schedule",
@@ -169,7 +164,6 @@ class PlatformScheduler:
             elif spec["target_type"] == "event":
                 await platform.bus.emit(
                     spec["target"],
-                    project=project,
                     env=env,
                     payload=spec.get("payload"),
                     actor="scheduler",
@@ -227,7 +221,6 @@ class PlatformScheduler:
 def _key(spec: dict[str, Any]) -> str:
     parts = [
         spec["kind"],
-        spec["project"],
         spec["env"],
         str(spec.get("cron")),
         str(spec.get("every")),

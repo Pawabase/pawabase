@@ -34,11 +34,12 @@ from pawabase_core.context import PlatformContext
 from pawabase_core.events import EventBus
 from pawabase_core.functions import (
     MAIN,
+    RUNTIME,
     FunctionSpec,
     ProjectCode,
     clear_functions,
     list_resolved_functions,
-    load_project_code,
+    load_code_dir,
     resolve_function,
 )
 from pawabase_core.telemetry import note, span
@@ -90,7 +91,7 @@ class Platform:
         self.outbound = httpx.AsyncClient(
             timeout=30.0, follow_redirects=False, headers={"user-agent": "Pawabase/0.1"}
         )
-        self.code: dict[str, ProjectCode] = {}
+        self.code: ProjectCode | None = None
         self.deployments = Deployments(
             settings.deployments_path or Path(settings.code_path) / ".deployments",
             install_requirements=function_install_enabled(settings),
@@ -136,58 +137,57 @@ class Platform:
 
     # ── environments ─────────────────────────────────────────────────────
 
-    async def state(self, project: str, env: str) -> EnvironmentState:
-        state = await self.envs.get(project, env)
-        self.ensure_code(project)
-        self.deployments.ensure_loaded(project, env)
+    async def state(self, env: str) -> EnvironmentState:
+        state = await self.envs.get(env)
+        self.ensure_code()
+        self.deployments.ensure_loaded(env)
         return state
 
     async def state_for(self, context: PlatformContext) -> EnvironmentState:
-        return await self.state(context.project, context.env)
+        return await self.state(context.env)
 
     async def state_for_version(
         self, context: PlatformContext, api_version: str
     ) -> EnvironmentState:
-        state = await self.envs.get_version(context.project, context.env, api_version)
-        self.ensure_code(context.project)
+        state = await self.envs.get_version(context.env, api_version)
+        self.ensure_code()
         return state
 
-    async def state_for_release(self, project: str, env: str, release_id: str) -> EnvironmentState:
-        state = await self.envs.get_release(project, env, release_id)
-        self.ensure_code(project)
+    async def state_for_release(self, env: str, release_id: str) -> EnvironmentState:
+        state = await self.envs.get_release(env, release_id)
+        self.ensure_code()
         return state
 
-    def ensure_code(self, project: str) -> ProjectCode:
-        """Load ``<code_path>/<project>`` once: functions, policies, routes."""
-        loaded = self.code.get(project)
-        if loaded is None:
-            loaded = self.code[project] = load_project_code(self.settings.code_path, project)
-            if loaded.errors:
-                logger.warning("project %s code errors: %s", project, loaded.errors)
-        return loaded
+    def ensure_code(self) -> ProjectCode:
+        """Load the mounted code directory once: functions, policies, routes."""
+        if self.code is None:
+            self.code = load_code_dir(Path(self.settings.code_path), RUNTIME)
+            if self.code.errors:
+                logger.warning("mounted code errors: %s", self.code.errors)
+        return self.code
 
-    def function_spec(self, project: str, env: str, name: str, branch: str | None = None) -> FunctionSpec | None:
-        """The function *name* as *branch* of *project*'s *env* sees it: deployed on the branch, deployed to the environment, then mounted project code."""
-        self.ensure_code(project)
-        self.deployments.ensure_loaded(project, env)
+    def function_spec(self, env: str, name: str, branch: str | None = None) -> FunctionSpec | None:
+        """The function *name* as *branch* of *env* sees it: deployed on the branch, deployed to the environment, then mounted code."""
+        self.ensure_code()
+        self.deployments.ensure_loaded(env)
         if branch and branch != MAIN:
-            self.deployments.ensure_loaded(project, env, branch)
-        return resolve_function(project, env, branch, name)
+            self.deployments.ensure_loaded(env, branch)
+        return resolve_function(env, branch, name)
 
-    def function_specs(self, project: str, env: str, branch: str | None = None) -> list[FunctionSpec]:
-        self.ensure_code(project)
-        self.deployments.ensure_loaded(project, env)
+    def function_specs(self, env: str, branch: str | None = None) -> list[FunctionSpec]:
+        self.ensure_code()
+        self.deployments.ensure_loaded(env)
         if branch and branch != MAIN:
-            self.deployments.ensure_loaded(project, env, branch)
-        return list_resolved_functions(project, env, branch)
+            self.deployments.ensure_loaded(env, branch)
+        return list_resolved_functions(env, branch)
 
-    def reload_code(self, project: str) -> ProjectCode:
-        clear_functions(project)
-        for name in [name for name in list(__import__("sys").modules) if name.startswith(f"pawabase_code.{project}.")]:
+    def reload_code(self) -> ProjectCode:
+        clear_functions(RUNTIME)
+        for name in [name for name in list(__import__("sys").modules) if name.startswith(f"pawabase_code.{RUNTIME}.")]:
             del __import__("sys").modules[name]
-        self.code.pop(project, None)
-        self.envs.forget(project)
-        return self.ensure_code(project)
+        self.code = None
+        self.envs.forget()
+        return self.ensure_code()
 
     def resolve_value(self, state: EnvironmentState, value: Any) -> Any:
         """Replace a ``secret://NAME`` reference with the secret's value."""
@@ -200,12 +200,12 @@ class Platform:
     @staticmethod
     def cache_key(state: EnvironmentState, key: str) -> str:
         definition = state.release_id or f"live-{state.version}"
-        return f"{state.project_ref}:{state.env_name}:{definition}:{key}"
+        return f"{state.env_name}:{definition}:{key}"
 
     @staticmethod
     def cache_tag(state: EnvironmentState, tag: str) -> str:
         definition = state.release_id or f"live-{state.version}"
-        return f"{state.project_ref}:{state.env_name}:{definition}:{tag}"
+        return f"{state.env_name}:{definition}:{tag}"
 
     async def cache_get(self, state: EnvironmentState, key: str) -> Any:
         with span("cache", f"get {key}") as step:
@@ -248,7 +248,6 @@ class Platform:
         self,
         job: type,
         *,
-        project: str,
         env: str,
         queue: str | None = None,
         delay: int = 0,
@@ -264,7 +263,7 @@ class Platform:
             {
                 "job": job.job_reference(),
                 "args": [],
-                "kwargs": {"project": project, "env": env, **kwargs},
+                "kwargs": {"env": env, **kwargs},
             },
             default=str,
         )
@@ -284,7 +283,6 @@ class Platform:
         try:
             await JobRun.create(
                 id=job_id,
-                project=project,
                 env=env,
                 queue=queue_name,
                 job=job.__name__,
@@ -313,7 +311,6 @@ class Platform:
         with span("event", f"emit {name}"):
             return await self.bus.emit(
                 name,
-                project=state.project_ref,
                 env=state.env_name,
                 payload=payload,
                 actor=actor,
@@ -328,7 +325,7 @@ class Platform:
         self, state: EnvironmentState, channel: str, event: str, payload: Any
     ) -> dict[str, Any]:
         """Publish through Angula, the realtime service."""
-        context = PlatformContext(project=state.project_ref, env=state.env_name, role="service")
+        context = PlatformContext(env=state.env_name, role="service")
         note("realtime", channel, append=True)
         with span("realtime", f"publish {channel}", event=event):
             return await self.angula.post(

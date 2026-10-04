@@ -1,9 +1,9 @@
 """Blueprints: a whole backend as one JSON document, for sharing systems.
 
-A blueprint is exported from one environment and can only be used to **create a
-new project**. It never updates a running system: there is no endpoint that
-applies a blueprint to an existing project, so sharing a system can't overwrite
-anyone's live definitions or data.
+A blueprint is exported from one environment and can only be used to **create
+new environments**. It never updates a running one: there is no endpoint that
+applies a blueprint to an existing environment, so sharing a system can't
+overwrite anyone's live definitions or data.
 
 What a blueprint carries:
 
@@ -32,7 +32,7 @@ from sillo.exceptions import HTTPException
 
 from app.data.store import SqlError
 from app.state import bump
-from database.models import Environment, Project, Resource, WebhookEndpoint
+from database.models import Environment, Resource, WebhookEndpoint
 from routes.platform.definitions import KINDS
 
 if TYPE_CHECKING:
@@ -124,7 +124,6 @@ async def export_environment(
     platform: Platform, environment: Environment, *, include_data: bool, max_rows: int
 ) -> dict[str, Any]:
     """Build the blueprint of one environment."""
-    project: Project = environment.project
     definitions: dict[str, list[dict[str, Any]]] = {}
     for path in ORDER:
         kind = KIND_BY_PATH[path]
@@ -134,7 +133,7 @@ async def export_environment(
 
     try:
         roles_page = await platform.akountz.get(
-            f"/admin/v1/projects/{project.ref}/envs/{environment.name}/roles"
+            f"/admin/v1/envs/{environment.name}/roles"
         )
         roles = [
             {
@@ -149,7 +148,7 @@ async def export_environment(
 
     data: dict[str, list[dict[str, Any]]] = {}
     if include_data:
-        state = await platform.state(project.ref, environment.name)
+        state = await platform.state(environment.name)
         limit = max(1, min(max_rows, MAX_ROWS_PER_RESOURCE))
         for resource in definitions.get("resources", []):
             try:
@@ -163,10 +162,10 @@ async def export_environment(
     return {
         "format": FORMAT,
         "version": VERSION,
-        "name": project.name,
-        "description": project.description or "",
+        "name": platform.settings.project_name,
+        "description": "",
         "exported_at": datetime.now(UTC).isoformat(),
-        "source": {"project": project.ref, "env": environment.name, "definitions_version": environment.version},
+        "source": {"env": environment.name, "definitions_version": environment.version},
         "definitions": definitions,
         "roles": roles,
         "auth": {key: (environment.auth or {})[key] for key in AUTH_KEYS if key in (environment.auth or {})},
@@ -218,7 +217,7 @@ async def _create(
         field = ".".join(str(part) for part in first["loc"])
         raise BlueprintError(where, f"{field}: {first['msg']}") from exc
     try:
-        values = await kind["validate"](platform, environment.project.ref, environment.name, body)
+        values = await kind["validate"](platform, environment.name, body)
         if kind.get("on_create"):
             kind["on_create"](values)
     except HTTPException as exc:
@@ -246,14 +245,13 @@ async def _create(
 
 async def apply(
     platform: Platform,
-    project: Project,
     environments: list[Environment],
     blueprint: Blueprint,
 ) -> dict[str, Any]:
-    """Build every environment of a **new** project from *blueprint*.
+    """Build each of the **new** *environments* from *blueprint*.
 
     Raises :class:`BlueprintError` on the first problem; the caller removes the
-    half-built project.
+    half-built environments.
     """
     report: dict[str, Any] = {
         **summarise(blueprint),
@@ -262,7 +260,6 @@ async def apply(
         "data_environment": environments[0].name if environments else None,
     }
     for environment in environments:
-        environment.project = project
         environment.auth = {k: v for k, v in blueprint.auth.items() if k in AUTH_KEYS}
         environment.settings = {
             **(environment.settings or {}),
@@ -287,7 +284,7 @@ async def apply(
                 await Resource.filter(environment=environment, name=name).update(relations=links)
         await bump(environment.id)
 
-        state = await platform.state(project.ref, environment.name)
+        state = await platform.state(environment.name)
         for resource in blueprint.definitions.get("resources", []):
             try:
                 store = await state.store(resource["name"])
@@ -298,7 +295,7 @@ async def apply(
         for role in blueprint.roles:
             try:
                 await platform.akountz.put(
-                    f"/admin/v1/projects/{project.ref}/envs/{environment.name}/roles",
+                    f"/admin/v1/envs/{environment.name}/roles",
                     json={
                         "name": role.get("name"),
                         "description": role.get("description", ""),
@@ -313,7 +310,7 @@ async def apply(
             "Webhooks were imported switched off. Review their URLs, then enable them."
         )
     if blueprint.data and environments:
-        await _load_data(platform, project, environments[0], blueprint)
+        await _load_data(platform, environments[0], blueprint)
         report["warnings"].append(
             f"Sample data was loaded into {environments[0].name} only; other environments start empty."
         )
@@ -321,10 +318,10 @@ async def apply(
 
 
 async def _load_data(
-    platform: Platform, project: Project, environment: Environment, blueprint: Blueprint
+    platform: Platform, environment: Environment, blueprint: Blueprint
 ) -> None:
     """Insert sample rows as they were exported, ids included, without events."""
-    state = await platform.state(project.ref, environment.name)
+    state = await platform.state(environment.name)
     for name, rows in blueprint.data.items():
         try:
             store = await state.store(name)

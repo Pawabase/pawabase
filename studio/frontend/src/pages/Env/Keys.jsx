@@ -5,7 +5,7 @@ import { Badge, Button, Card, CopyText, Field, Loading, Modal, PageHead, Table, 
 import { envPath, post, useApi } from "../../lib/api";
 
 // These are scopes enforced by the current API. TagInput still accepts custom
-// values, so a key can be prepared for project-specific policy scopes too.
+// values, so a key can be prepared for policy scopes too.
 const API_KEY_SCOPES = [
   "resource:read",
   "resource:write",
@@ -13,8 +13,8 @@ const API_KEY_SCOPES = [
   "functions:invoke",
 ];
 
-export default function Keys({ project, env }) {
-  const base = envPath(project.ref, env, "/keys");
+export default function Keys({ env }) {
+  const base = envPath(env, "/keys");
   const keys = useApi(base);
   const [creating, setCreating] = useState(false);
   const [revealed, setRevealed] = useState(null);
@@ -27,7 +27,7 @@ export default function Keys({ project, env }) {
         description="Clients send a key in the apikey header. Publishable keys act as anon and obey policies; secret keys act as the service and bypass them."
         actions={<Button variant="primary" onClick={() => setCreating(true)}>New key</Button>}
       />
-      <HealthCheck gatewayUrl={gateway_url} projectRef={project.ref} env={env} />
+      <HealthCheck gatewayUrl={gateway_url} env={env} />
       <Card flush>
         <Loading state={keys} empty="No keys.">
           {(data) => (
@@ -58,14 +58,14 @@ export default function Keys({ project, env }) {
   );
 }
 
-function HealthCheck({ gatewayUrl, projectRef, env }) {
+function HealthCheck({ gatewayUrl, env }) {
   const url = gatewayUrl || "<gateway-url>";
-  const health = `${url}/health/v1?project_id=${projectRef}&environment=${env}`;
+  const health = `${url}/health/v1?environment=${env}`;
   return (
     <Card>
       <h3 style={{ marginTop: 0 }}>Health check</h3>
       <p className="muted" style={{ fontSize: 12.5, marginTop: -6 }}>
-        Requires a key for this project/environment in the <code>apikey</code> header — a 200 proves the key resolves and the
+        Requires a key for this environment in the <code>apikey</code> header — a 200 proves the key resolves and the
         environment is up.
       </p>
       <CopyText text={health} />

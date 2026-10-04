@@ -2,7 +2,7 @@ import pytest
 from sillo import HttpContext
 from sillo.testclient import AsyncTestClient
 
-from pawabase_core.auth import ProjectUserBackend
+from pawabase_core.auth import UserBackend
 from pawabase_core.clients import ServiceClient, ServiceError
 from pawabase_core.context import CONTEXT_HEADER, PlatformContext, current_context
 from pawabase_core.events import EventBus, PlatformEvent
@@ -19,13 +19,12 @@ from pawabase_core.tokens import (
 )
 
 SETTINGS = PlatformSettings(_env_file=None)
-CTX = PlatformContext(project="acme", env="dev", role="anon", key_id="k1")
+CTX = PlatformContext(env="dev", role="anon", key_id="k1")
 
 
-def user_token(project="acme", env="dev", user_id="7", roles=None):
+def user_token(env="dev", user_id="7", roles=None):
     return issue_user_token(
         SETTINGS.jwt_master_secret,
-        project=project,
         env=env,
         user_id=user_id,
         jti="j",
@@ -40,7 +39,7 @@ def build_app():
         SETTINGS,
         title="Test",
         description="test",
-        backends=[ProjectUserBackend(SETTINGS.jwt_master_secret)],
+        backends=[UserBackend(SETTINGS.jwt_master_secret)],
     )
 
     @app.get("/whoami", auth=PolicyGate("authenticated"))
@@ -49,7 +48,7 @@ def build_app():
         return {
             "user": ctx.user.identity,
             "kind": ctx.user.kind,
-            "project": context.project if context else None,
+            "env": context.env if context else None,
         }
 
     @app.get("/admins", auth=PolicyGate("role:admin"))
@@ -89,7 +88,7 @@ async def test_context_user_and_policy_gate():
             "/whoami", headers={**context_header, "Authorization": f"Bearer {user_token()}"}
         )
         assert ok.status_code == 200, ok.text
-        assert ok.json() == {"user": "7", "kind": "user", "project": "acme"}
+        assert ok.json() == {"user": "7", "kind": "user", "env": "dev"}
         assert ok.headers.get("x-request-id")
 
         # A token for another environment is not accepted in this one.
@@ -160,6 +159,6 @@ async def test_memory_event_bus():
         seen.append(event)
 
     await bus.start()
-    event_id = await bus.emit("order.paid", project="acme", env="dev", payload={"id": 1})
+    event_id = await bus.emit("order.paid", env="dev", payload={"id": 1})
     await bus.stop()
     assert seen[0].id == event_id and seen[0].source == "test" and seen[0].matches("order.*")

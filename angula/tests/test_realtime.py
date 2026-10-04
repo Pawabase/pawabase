@@ -58,23 +58,22 @@ def realtime_app():
         yield client, settings, fake, realtime
 
 
-def context_query(settings, project="acme", env="dev", role="anon") -> dict[str, str]:
+def context_query(settings, env="dev", role="anon") -> dict[str, str]:
     from pawabase_core.context import CONTEXT_HEADER, PlatformContext
     from pawabase_core.tokens import issue_context_token
 
     return {
         CONTEXT_HEADER: issue_context_token(
-            settings.internal_secret, PlatformContext(project=project, env=env, role=role)
+            settings.internal_secret, PlatformContext(env=env, role=role)
         )
     }
 
 
-def token(settings, user_id="1", roles=(), project="acme", env="dev") -> str:
+def token(settings, user_id="1", roles=(), env="dev") -> str:
     from pawabase_core.tokens import issue_user_token
 
     return issue_user_token(
         settings.jwt_master_secret,
-        project=project,
         env=env,
         user_id=user_id,
         jti="j",
@@ -225,7 +224,7 @@ def test_server_publish_reaches_private_channel(realtime_app):
     ).json()
     assert stats["connections"] == 1 and stats["published"] >= 1
     channels = client.get(
-        "/internal/v1/realtime/acme/dev/channels",
+        "/internal/v1/realtime/dev/channels",
         headers={
             SERVICE_HEADER: issue_service_token(
                 settings.internal_secret, issuer="studio", audience="angula"
@@ -233,7 +232,7 @@ def test_server_publish_reaches_private_channel(realtime_app):
         },
     ).json()
     assert channels["data"] == [
-        {"project": "acme", "env": "dev", "channel": "user:1", "subscribers": 1, "presence": 0}
+        {"env": "dev", "channel": "user:1", "subscribers": 1, "presence": 0}
     ]
     ada.close()
 

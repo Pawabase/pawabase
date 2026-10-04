@@ -11,7 +11,7 @@ from sillo.responses import JSONResponse
 
 from app import backups
 from app.platform import Platform
-from routes.common import OPERATOR_ADMIN, audit, get_environment
+from routes.common import MANAGE, audit, get_environment
 
 
 class RestoreRequest(BaseModel):
@@ -31,16 +31,16 @@ class RestoreRequest(BaseModel):
 
 
 def register(r: Router, platform: Platform) -> None:
-    base = "/projects/{ref}/envs/{env}"
+    base = "/envs/{env}"
 
     @r.get(
         f"{base}/backup",
-        auth=OPERATOR_ADMIN,
+        auth=MANAGE,
         tags=["backups"],
         summary="Download a backup of the environment",
     )
-    async def download(ctx: HttpContext, ref: str, env: str):
-        environment = await get_environment(ref, env)
+    async def download(ctx: HttpContext, env: str):
+        environment = await get_environment(env)
         try:
             parts = backups.parse_parts(ctx.query_params.get("include"))
             document = await backups.create_backup(platform, environment, parts)
@@ -49,7 +49,6 @@ def register(r: Router, platform: Platform) -> None:
         await audit(
             ctx,
             "backup.created",
-            project=ref,
             env=env,
             target=env,
             details={"parts": parts, "summary": backups.summarise(document)},
@@ -57,18 +56,18 @@ def register(r: Router, platform: Platform) -> None:
         stamp = document["created_at"][:19].replace(":", "-")
         return JSONResponse(
             document,
-            headers={"Content-Disposition": f'attachment; filename="{ref}-{env}-{stamp}.pawabase-backup.json"'},
+            headers={"Content-Disposition": f'attachment; filename="{env}-{stamp}.pawabase-backup.json"'},
         )
 
     @r.post(
         f"{base}/restore",
-        auth=OPERATOR_ADMIN,
+        auth=MANAGE,
         tags=["backups"],
         request_model=RestoreRequest,
         summary="Restore an environment from a backup",
     )
-    async def restore(ctx: HttpContext, ref: str, env: str, body: RestoreRequest):
-        environment = await get_environment(ref, env)
+    async def restore(ctx: HttpContext, env: str, body: RestoreRequest):
+        environment = await get_environment(env)
         try:
             available = backups.verify(body.backup)
             parts = backups.parse_parts(body.include) if body.include else available
@@ -102,7 +101,6 @@ def register(r: Router, platform: Platform) -> None:
         await audit(
             ctx,
             "backup.restored",
-            project=ref,
             env=env,
             target=env,
             details={"parts": parts, "strategy": body.strategy, "from": body.backup.get("source", {})},

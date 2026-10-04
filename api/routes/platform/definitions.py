@@ -1,7 +1,7 @@
 """CRUD for every kind of definition, validated before it is stored.
 
 Each kind gets the same five routes under
-``/platform/v1/projects/{ref}/envs/{env}/<kind>``: list, create, get, replace,
+``/platform/v1/envs/{env}/<kind>``: list, create, get, replace,
 delete. What differs is the request model and the validation. A policy that
 does not parse, a flow that references a missing block, or a cron expression
 that does not compile is refused with a 422 that says why, rather than being
@@ -43,7 +43,7 @@ from pawabase_core.ids import is_ulid, new_ulid
 from pawabase_core.policies import PolicyEngine, PolicyError, validate_condition
 from pawabase_core.schemas import SchemaError, validate_fields
 from pawabase_core.transformers import TransformerError, validate_transformer
-from routes.common import NAME_PATTERN, OPERATOR, audit, changed, dump, get_environment
+from routes.common import MANAGE, NAME_PATTERN, audit, changed, dump, get_environment
 
 RESERVED_RESOURCE_NAMES = {"docs", "openapi.json", "x", "rpc", "health", "internal", "platform"}
 ROUTE_PATH = re.compile(r"^(/[A-Za-z0-9_.\-]+|/\{[A-Za-z_][A-Za-z0-9_]*(:path)?\})+$")
@@ -202,11 +202,11 @@ def _check_policy_ref(engine: PolicyEngine, ref: Any, where: str) -> None:
         raise _invalid(f"{where}: {exc}") from exc
 
 
-async def _engine(platform: Platform, ref: str, env: str) -> PolicyEngine:
-    return (await platform.state(ref, env)).engine
+async def _engine(platform: Platform, env: str) -> PolicyEngine:
+    return (await platform.state(env)).engine
 
 
-async def validate_schema(platform, ref, env, body: SchemaBody) -> dict[str, Any]:
+async def validate_schema(platform, env, body: SchemaBody) -> dict[str, Any]:
     try:
         validate_fields(body.fields)
     except SchemaError as exc:
@@ -214,7 +214,7 @@ async def validate_schema(platform, ref, env, body: SchemaBody) -> dict[str, Any
     return {"name": body.name, "description": body.description, "fields_": body.fields}
 
 
-async def validate_transformer_body(platform, ref, env, body: TransformerBody) -> dict[str, Any]:
+async def validate_transformer_body(platform, env, body: TransformerBody) -> dict[str, Any]:
     try:
         validate_transformer(body.definition)
     except TransformerError as exc:
@@ -222,7 +222,7 @@ async def validate_transformer_body(platform, ref, env, body: TransformerBody) -
     return body.model_dump()
 
 
-async def validate_policy(platform, ref, env, body: PolicyBody) -> dict[str, Any]:
+async def validate_policy(platform, env, body: PolicyBody) -> dict[str, Any]:
     try:
         validate_condition(body.condition)
     except PolicyError as exc:
@@ -230,14 +230,14 @@ async def validate_policy(platform, ref, env, body: PolicyBody) -> dict[str, Any
     return body.model_dump()
 
 
-async def validate_resource(platform, ref, env, body: ResourceBody) -> dict[str, Any]:
+async def validate_resource(platform, env, body: ResourceBody) -> dict[str, Any]:
     if body.name in RESERVED_RESOURCE_NAMES:
         raise _invalid(f"{body.name!r} is reserved")
     try:
         validate_fields(body.fields)
     except SchemaError as exc:
         raise _invalid(str(exc)) from exc
-    engine = await _engine(platform, ref, env)
+    engine = await _engine(platform, env)
     for operation, settings in body.operations.items():
         _check_policy_ref(engine, settings.policy, f"operations.{operation}.policy")
     if isinstance(body.transformer, dict):
@@ -287,10 +287,10 @@ def keep_key_type(existing_id_type: str | None, data: dict[str, Any], body: Any)
         )
 
 
-async def validate_route(platform, ref, env, body: RouteBody) -> dict[str, Any]:
+async def validate_route(platform, env, body: RouteBody) -> dict[str, Any]:
     if not ROUTE_PATH.match(body.path):
         raise _invalid("path must look like /orders/{id}/pay")
-    state = await platform.state(ref, env)
+    state = await platform.state(env)
     _check_policy_ref(state.engine, body.policy, "policy")
     if body.input_fields:
         try:
@@ -312,7 +312,7 @@ async def validate_route(platform, ref, env, body: RouteBody) -> dict[str, Any]:
     return body.model_dump()
 
 
-async def validate_flow_body(platform, ref, env, body: FlowBody) -> dict[str, Any]:
+async def validate_flow_body(platform, env, body: FlowBody) -> dict[str, Any]:
     problems = validate_flow(body.definition)
     if problems:
         raise HTTPException(
@@ -321,8 +321,8 @@ async def validate_flow_body(platform, ref, env, body: FlowBody) -> dict[str, An
     return body.model_dump()
 
 
-async def validate_bucket(platform, ref, env, body: BucketBody) -> dict[str, Any]:
-    engine = await _engine(platform, ref, env)
+async def validate_bucket(platform, env, body: BucketBody) -> dict[str, Any]:
+    engine = await _engine(platform, env)
     for label in ("read_policy", "write_policy"):
         value = getattr(body, label)
         _check_policy_ref(engine, value, label)
@@ -331,7 +331,7 @@ async def validate_bucket(platform, ref, env, body: BucketBody) -> dict[str, Any
     return body.model_dump()
 
 
-async def validate_mail_template(platform, ref, env, body: MailTemplateBody) -> dict[str, Any]:
+async def validate_mail_template(platform, env, body: MailTemplateBody) -> dict[str, Any]:
     from jinja2 import TemplateSyntaxError
 
     from app.mail import _jinja
@@ -344,7 +344,7 @@ async def validate_mail_template(platform, ref, env, body: MailTemplateBody) -> 
     return body.model_dump()
 
 
-async def validate_subscription(platform, ref, env, body: SubscriptionBody) -> dict[str, Any]:
+async def validate_subscription(platform, env, body: SubscriptionBody) -> dict[str, Any]:
     if body.condition is not None:
         try:
             validate_condition(body.condition)
@@ -355,7 +355,7 @@ async def validate_subscription(platform, ref, env, body: SubscriptionBody) -> d
     return body.model_dump()
 
 
-async def validate_webhook(platform, ref, env, body: WebhookBody) -> dict[str, Any]:
+async def validate_webhook(platform, env, body: WebhookBody) -> dict[str, Any]:
     data = body.model_dump(exclude={"secret"})
     secret = body.secret or f"whsec_{token_source.token_urlsafe(24)}"
     data["secret_ciphertext"] = platform.box.seal(secret)
@@ -363,7 +363,7 @@ async def validate_webhook(platform, ref, env, body: WebhookBody) -> dict[str, A
     return data
 
 
-async def validate_inbound(platform, ref, env, body: InboundHookBody) -> dict[str, Any]:
+async def validate_inbound(platform, env, body: InboundHookBody) -> dict[str, Any]:
     data = body.model_dump(exclude={"secret"})
     data["name"] = body.name or body.slug
     data["_reveal"] = {}
@@ -375,7 +375,7 @@ async def validate_inbound(platform, ref, env, body: InboundHookBody) -> dict[st
     return data
 
 
-async def validate_schedule(platform, ref, env, body: ScheduleBody) -> dict[str, Any]:
+async def validate_schedule(platform, env, body: ScheduleBody) -> dict[str, Any]:
     if bool(body.cron) == bool(body.interval_seconds):
         raise _invalid("give exactly one of cron or interval_seconds")
     if body.cron:
@@ -459,7 +459,7 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
     view: Callable[[Any], dict[str, Any]] = kind.get("view", dump)
     validate: Callable[..., Awaitable[dict[str, Any]]] = kind["validate"]
     tag = path.replace("-", " ")
-    base = f"/projects/{{ref}}/envs/{{env}}/{path}"
+    base = f"/envs/{{env}}/{path}"
 
     snapshot_key = path.replace("-", "_")
     columns = DEFINITIONS[snapshot_key][1]
@@ -511,17 +511,17 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
             raise HTTPException(status_code=404, detail=f"no {path[:-1]} {key!r}")
         return item
 
-    async def list_items(ctx: HttpContext, ref: str, env: str):
-        environment = await get_environment(ref, env)
+    async def list_items(ctx: HttpContext, env: str):
+        environment = await get_environment(env)
         branch = await working_branch(ctx, environment)
         if branch is not None:
             return {"data": [draft_view(environment, row) for row in draft_rows(branch)]}
         return {"data": [view(item) for item in await model.filter(environment=environment)]}
 
-    async def create_item(ctx: HttpContext, ref: str, env: str, body):
-        environment = await get_environment(ref, env)
+    async def create_item(ctx: HttpContext, env: str, body):
+        environment = await get_environment(env)
         branch = await working_branch(ctx, environment)
-        data = await validate(platform, ref, env, body)
+        data = await validate(platform, env, body)
         if kind.get("on_create"):
             kind["on_create"](data)
         reveal = data.pop("_reveal", {})
@@ -551,7 +551,7 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
                 row.setdefault("id", None)
             draft_rows(branch).append(row)
             await record_branch_change(ctx, branch, f"{path}.created", str(getattr(body, key_field, data.get("name", ""))))
-            await audit(ctx, f"branch.{path}.created", project=ref, env=env, target=str(getattr(body, key_field, data.get("name", ""))), details={"branch": branch.name})
+            await audit(ctx, f"branch.{path}.created", env=env, target=str(getattr(body, key_field, data.get("name", ""))), details={"branch": branch.name})
             return created({**draft_view(environment, row), **reveal})
         if await model.filter(environment=environment, **natural).exists():
             raise HTTPException(status_code=409, detail=f"{path[:-1]} already exists")
@@ -559,8 +559,8 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
         await changed(ctx, environment, f"{path}.created", str(getattr(item, key_field)))
         return created({**view(item), **reveal})
 
-    async def get_item(ctx: HttpContext, ref: str, env: str, key: str):
-        environment = await get_environment(ref, env)
+    async def get_item(ctx: HttpContext, env: str, key: str):
+        environment = await get_environment(env)
         branch = await working_branch(ctx, environment)
         if branch is not None:
             row = next((item for item in draft_rows(branch) if row_matches(item, key)), None)
@@ -569,14 +569,14 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
             return draft_view(environment, row)
         return view(await lookup(environment, key))
 
-    async def replace_item(ctx: HttpContext, ref: str, env: str, key: str, body):
-        environment = await get_environment(ref, env)
+    async def replace_item(ctx: HttpContext, env: str, key: str, body):
+        environment = await get_environment(env)
         branch = await working_branch(ctx, environment)
         if branch is not None:
             row = next((item for item in draft_rows(branch) if row_matches(item, key)), None)
             if row is None:
                 raise HTTPException(status_code=404, detail=f"no {path[:-1]} {key!r} in branch {branch.name!r}")
-            data = await validate(platform, ref, env, body)
+            data = await validate(platform, env, body)
             if model is Resource:
                 keep_key_type(row.get("id_type"), data, body)
             reveal = data.pop("_reveal", {})
@@ -585,10 +585,10 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
                 reveal = {}
             row.update(copy.deepcopy(data))
             await record_branch_change(ctx, branch, f"{path}.updated", key)
-            await audit(ctx, f"branch.{path}.updated", project=ref, env=env, target=key, details={"branch": branch.name})
+            await audit(ctx, f"branch.{path}.updated", env=env, target=key, details={"branch": branch.name})
             return {**draft_view(environment, row), **reveal}
         item = await lookup(environment, key)
-        data = await validate(platform, ref, env, body)
+        data = await validate(platform, env, body)
         if model is Resource:
             keep_key_type(item.id_type, data, body)
         reveal = data.pop("_reveal", {})
@@ -602,8 +602,8 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
         await changed(ctx, environment, f"{path}.updated", key)
         return {**view(item), **reveal}
 
-    async def delete_item(ctx: HttpContext, ref: str, env: str, key: str):
-        environment = await get_environment(ref, env)
+    async def delete_item(ctx: HttpContext, env: str, key: str):
+        environment = await get_environment(env)
         branch = await working_branch(ctx, environment)
         if branch is not None:
             rows = draft_rows(branch)
@@ -612,7 +612,7 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
                 raise HTTPException(status_code=404, detail=f"no {path[:-1]} {key!r} in branch {branch.name!r}")
             rows.pop(index)
             await record_branch_change(ctx, branch, f"{path}.deleted", key)
-            await audit(ctx, f"branch.{path}.deleted", project=ref, env=env, target=key, details={"branch": branch.name})
+            await audit(ctx, f"branch.{path}.deleted", env=env, target=key, details={"branch": branch.name})
             return no_content()
         item = await lookup(environment, key)
         await item.delete()
@@ -622,7 +622,7 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
     r.get(
         base,
         handler=list_items,
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=[tag],
         name=f"{path}.list",
         summary=f"List {tag}",
@@ -630,7 +630,7 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
     r.post(
         base,
         handler=create_item,
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=[tag],
         name=f"{path}.create",
         request_model=body_model,
@@ -639,7 +639,7 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
     r.get(
         f"{base}/{{key}}",
         handler=get_item,
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=[tag],
         name=f"{path}.get",
         summary=f"Get {tag[:-1]}",
@@ -647,7 +647,7 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
     r.put(
         f"{base}/{{key}}",
         handler=replace_item,
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=[tag],
         name=f"{path}.replace",
         request_model=body_model,
@@ -656,7 +656,7 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
     r.delete(
         f"{base}/{{key}}",
         handler=delete_item,
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=[tag],
         name=f"{path}.delete",
         summary=f"Delete {tag[:-1]}",

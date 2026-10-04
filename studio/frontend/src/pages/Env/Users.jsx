@@ -6,9 +6,9 @@ import { api, del, envPath, patch, post, put, useApi } from "../../lib/api";
 
 const AUTH = { service: "auth" };
 
-export default function Users({ project, env }) {
+export default function Users({ env }) {
   const [tab, setTab] = useState("users");
-  const base = `/projects/${project.ref}/envs/${env}`;
+  const base = `/envs/${env}`;
   return (
     <Layout title="Users & auth">
       <PageHead title="Users & auth" description="End users of this environment, managed by Akountz: accounts, sessions, MFA, roles and organizations." />
@@ -17,7 +17,7 @@ export default function Users({ project, env }) {
       {tab === "roles" && <Roles base={base} />}
       {tab === "orgs" && <Orgs base={base} />}
       {tab === "events" && <Events base={base} />}
-      {tab === "config" && <AuthConfig project={project} env={env} />}
+      {tab === "config" && <AuthConfig env={env} />}
     </Layout>
   );
 }
@@ -223,8 +223,8 @@ const EMAIL_KINDS = [
   ["email_change", "Email change", "Confirm your new email for {project}"],
 ];
 
-function AuthConfig({ project, env }) {
-  const envState = useApi(envPath(project.ref, env));
+function AuthConfig({ env }) {
+  const envState = useApi(envPath(env));
   const [auth, setAuth] = useState(undefined);
   const [run, busy] = useAction();
   const value = auth ?? envState.data?.auth ?? {};
@@ -234,7 +234,7 @@ function AuthConfig({ project, env }) {
   return (
     <Card
       title="Akountz configuration"
-      actions={<Button variant="primary" size="sm" disabled={busy || !dirty} onClick={async () => { if (await run(() => patch(envPath(project.ref, env), { auth: { ...AUTH_DEFAULTS, ...value } }), "Saved")) { envState.reload(); setAuth(undefined); } }}>Save</Button>}
+      actions={<Button variant="primary" size="sm" disabled={busy || !dirty} onClick={async () => { if (await run(() => patch(envPath(env), { auth: { ...AUTH_DEFAULTS, ...value } }), "Saved")) { envState.reload(); setAuth(undefined); } }}>Save</Button>}
     >
       <Loading state={envState}>
         {() => (

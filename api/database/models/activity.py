@@ -15,7 +15,6 @@ class RequestLog(Model):
     id = ulid_pk()
     request_id = fields.CharField(max_length=64, db_index=True)
     service = fields.CharField(max_length=32, db_index=True)
-    project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63, db_index=True)
     method = fields.CharField(max_length=16)
     path = fields.TextField()
@@ -39,7 +38,6 @@ class FlowRun(Model):
     """One execution of a flow, with its step trace."""
 
     id = fields.CharField(max_length=32, primary_key=True)
-    project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63)
     flow = fields.CharField(max_length=128, db_index=True)
     trigger = fields.CharField(max_length=32)
@@ -63,7 +61,6 @@ class EventLog(Model):
 
     id = ulid_pk()
     event_id = fields.CharField(max_length=64, unique=True, db_index=True)
-    project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63)
     name = fields.CharField(max_length=128, db_index=True)
     source = fields.CharField(max_length=32)
@@ -108,7 +105,6 @@ class JobRun(Model):
     """
 
     id = fields.CharField(max_length=64, primary_key=True)
-    project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63)
     queue = fields.CharField(max_length=128, db_index=True)
     job = fields.CharField(max_length=128)
@@ -152,7 +148,6 @@ class MetricCounter(Model):
     """A per-minute counter written by ``metric.increment`` and platform code."""
 
     id = ulid_pk()
-    project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63)
     name = fields.CharField(max_length=128, db_index=True)
     tags = fields.CharField(max_length=512, default="")
@@ -162,7 +157,7 @@ class MetricCounter(Model):
 
     class Meta:
         table = "pb_metrics"
-        unique_together = (("project", "env", "name", "tags", "window"),)
+        unique_together = (("env", "name", "tags", "window"),)
         ordering = ["-window"]
 
 
@@ -170,7 +165,6 @@ class MailLog(Model):
     """A message sent (or suppressed) through an environment's mail settings."""
 
     id = ulid_pk()
-    project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63)
     to = AnyJSONField(default=list)
     subject = fields.CharField(max_length=255, default="")

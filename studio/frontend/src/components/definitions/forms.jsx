@@ -368,11 +368,11 @@ function WebhookForm({ body, patch, refs, isNew }) {
 
 const VERIFY = [["hmac-sha256", "HMAC-SHA256"], ["hmac-sha512", "HMAC-SHA512"], ["pawabase", "Pawabase signature"], ["token", "Shared token"], ["none", "None"]];
 
-function InboundForm({ body, patch, refs, isNew, project, env }) {
+function InboundForm({ body, patch, refs, isNew, env }) {
   const verification = body.verification || "hmac-sha256";
   return (
     <>
-      <Identity body={body} patch={patch} isNew={isNew} nameKey="slug" namePlaceholder="stripe" nameHint={`Received at /hooks/v1/${project.ref}/${env}/${body.slug || "<slug>"}`}>
+      <Identity body={body} patch={patch} isNew={isNew} nameKey="slug" namePlaceholder="stripe" nameHint={`Received at /hooks/v1/${env}/${body.slug || "<slug>"}`}>
         <Field label="Display name" optional><input placeholder="Stripe" {...text(body, "name", patch)} /></Field>
       </Identity>
       <Section title="Verification" description="Requests that fail verification are refused before anything runs.">

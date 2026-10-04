@@ -2,7 +2,7 @@
 
 :class:`Telemetry` is a Sillo installable. It adds Sillo's
 :class:`~sillo.http.RequestIdMiddleware` (so every hop carries ``X-Request-ID``)
-and a recorder that captures, per request: route, status, duration, project,
+and a recorder that captures, per request: route, status, duration,
 environment, caller, credential role, the policy decision, and whatever the
 handler noted along the way (cache hits, events emitted, jobs dispatched).
 
@@ -67,7 +67,6 @@ class RequestRecord:
     status: int
     duration_ms: float
     started_at: str
-    project: str | None = None
     env: str | None = None
     role: str | None = None
     user: str | None = None
@@ -263,7 +262,6 @@ class TelemetryRecorder:
             status=status,
             duration_ms=round((time.perf_counter() - started) * 1000, 3),
             started_at=started_at,
-            project=getattr(context, "project", None),
             env=getattr(context, "env", None),
             role=getattr(context, "role", None) or getattr(user, "kind", None),
             user=getattr(user, "identity", None)
@@ -326,7 +324,6 @@ class Telemetry:
         self,
         *,
         limit: int = 100,
-        project: str | None = None,
         env: str | None = None,
         status_min: int | None = None,
         request_id: str | None = None,
@@ -335,8 +332,6 @@ class Telemetry:
         """Recent records, newest first, filtered."""
         results = []
         for item in reversed(self.records):
-            if project and item.project != project:
-                continue
             if env and item.env != env:
                 continue
             if status_min and item.status < status_min:

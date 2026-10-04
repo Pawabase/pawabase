@@ -77,20 +77,19 @@ class EventProcessor:
     async def handle(self, event: PlatformEvent) -> list[dict[str, Any]]:
         try:
             state = (
-                await self.platform.state_for_release(event.project, event.env, event.release_id)
+                await self.platform.state_for_release(event.env, event.release_id)
                 if event.release_id
-                else await self.platform.state(event.project, event.env)
+                else await self.platform.state(event.env)
             )
         except HTTPException:
             logger.warning(
-                "event %s for unknown environment %s/%s", event.name, event.project, event.env
+                "event %s for unknown environment %s", event.name, event.env
             )
             return []
         if await EventLog.filter(event_id=event.id).exists():
             return []  # at-least-once delivery: this one was already handled
         log = await EventLog.create(
             event_id=event.id,
-            project=event.project,
             env=event.env,
             name=event.name,
             source=event.source,
@@ -137,7 +136,6 @@ class EventProcessor:
                     subscription.target,
                     lambda s=subscription: platform.dispatch(
                         RunFlowJob,
-                        project=state.project_ref,
                         env=state.env_name,
                         target=s.target,
                         source="event",
@@ -156,7 +154,6 @@ class EventProcessor:
                     subscription.target,
                     lambda s=subscription: platform.dispatch(
                         RunFunctionJob,
-                        project=state.project_ref,
                         env=state.env_name,
                         target=s.target,
                         source="event",
@@ -185,7 +182,6 @@ class EventProcessor:
                 flow_name,
                 lambda f=flow_name, n=node_id: platform.dispatch(
                     RunFlowJob,
-                    project=state.project_ref,
                     env=state.env_name,
                     target=f,
                     source="event",

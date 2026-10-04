@@ -142,19 +142,17 @@ class GatewayProxy:
         return None
 
     @classmethod
-    def _scope(cls, scope: dict[str, Any], headers: dict[str, str]) -> tuple[str | None, str | None]:
-        project = headers.get("x-project-id")
+    def _scope(cls, scope: dict[str, Any], headers: dict[str, str]) -> str | None:
+        """The environment the caller says the key is for, if it says: optional, since a key names its own."""
         env = headers.get("x-environment")
         for name, value in parse_qsl(scope.get("query_string", b"").decode("latin-1")):
-            if name == "project_id" and value:
-                project = value
-            elif name == "environment" and value:
+            if name == "environment" and value:
                 env = value
-        return project, env
+        return env
 
     @classmethod
     def _query_without_key(cls, scope: dict[str, Any]) -> str:
-        # Only the apikey itself is a secret; project_id/environment are kept
+        # Only the apikey itself is a secret; the environment hint is kept
         # so upstream handlers (e.g. the health check) that read them
         # themselves still see them.
         dropped = {"apikey"}
@@ -176,9 +174,9 @@ class GatewayProxy:
             return None, None, ("missing_api_key" if mode == "required" else None)
         if mode == "none":
             return None, None, None
-        project, env = self._scope(scope, headers)
+        env = self._scope(scope, headers)
         try:
-            context, info = await self.resolver.resolve(raw, project=project, env=env)
+            context, info = await self.resolver.resolve(raw, env=env)
         except KeyRejected as exc:
             self.stats["rejected_keys"] += 1
             return None, None, str(exc) or "invalid_api_key"
@@ -267,14 +265,14 @@ class GatewayProxy:
             KNOWN_CODES = ("missing_api_key", "invalid_api_key", "key_service_unavailable")
             status = 503 if error == "key_service_unavailable" else 401
             # `error` is either a fixed code, or (from KeyRejected) a specific,
-            # user-facing reason such as a project/environment mismatch.
+            # user-facing reason such as an environment mismatch.
             code = error if error in KNOWN_CODES else "invalid_api_key"
             message = (
                 error
                 if code not in ("missing_api_key", "key_service_unavailable") and error != code
                 else {
-                    "missing_api_key": "Send a valid project API key in the apikey header.",
-                    "invalid_api_key": "Send a valid project API key in the apikey header.",
+                    "missing_api_key": "Send a valid API key in the apikey header.",
+                    "invalid_api_key": "Send a valid API key in the apikey header.",
                     "key_service_unavailable": "Try again shortly.",
                 }[code]
             )

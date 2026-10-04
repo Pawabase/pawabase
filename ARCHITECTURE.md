@@ -23,7 +23,7 @@ ships the primitive, Pawabase uses it and adds the product around it.
                            │         │         │
           ┌────────────────▼──┐ ┌────▼──────┐ ┌▼──────────────┐
           │   Pawabase API    │ │  Akountz  │ │    Angula     │
-          │ projects·resources│ │ identity  │ │ realtime      │
+          │ resources·routes │ │ identity  │ │ realtime      │
           │ routes·flows·jobs │ │ OAuth·MFA │ │ pub/sub       │
           │ storage·events…   │ │ orgs·RBAC │ │ presence      │
           └──┬──────┬─────────┘ └───────────┘ └───────────────┘
@@ -37,10 +37,10 @@ ships the primitive, Pawabase uses it and adds the product around it.
 | Service | Directory | Owns |
 |---|---|---|
 | **Gateway** | `gateway` | Public routing, API-key resolution, signed platform context, CORS, rate limiting, request ids, WebSocket proxying. No business logic. |
-| **Pawabase API** | `api` | Projects and environments, the project-configuration authority, Resources and the data plane, custom routes, schemas, transformers, policies, functions, flows, events, webhooks, queues, jobs, scheduler, cache, storage, secrets, API keys, mail, Atlas docs. |
+| **Pawabase API** | `api` | Environments, the runtime-configuration authority, Resources and the data plane, custom routes, schemas, transformers, policies, functions, flows, events, webhooks, queues, jobs, scheduler, cache, storage, secrets, API keys, mail, Atlas docs. |
 | **Worker** | `api` (`python -m app.worker`) | Runs Sillo `QueueWorker`s: flows, functions, webhook delivery, mail, event processing. |
 | **Scheduler** | `api` (`python -m app.scheduler`) | Runs Sillo's `SchedulerManager`, loading schedules from the database. |
-| **Akountz** | `akountz` | Identity: users, passwords, tokens, sessions, verification, reset, magic links, OAuth/OIDC, MFA (TOTP), recovery codes, organizations, teams, invitations, roles, permissions, login history. |
+| **Akountz** | `akountz` | Identity: users, passwords, tokens, sessions, verification, reset, magic links, OAuth/OIDC, MFA (TOTP), recovery codes, your application's organizations, teams and invitations, roles, permissions, login history. |
 | **Angula** | `angula` | Realtime: channels, topics, publish/subscribe, presence, channel authorization, inspection. |
 | **Studio** | `studio` | The control plane UI (Sillo + `sillo-inertia` + React). |
 | **Kit** | `pawabase_core/` | Shared code, not a service or an installable package: policy engine, flow engine and blocks, schema compiler, transformers, service authentication, context propagation, telemetry and service bootstrap. |
@@ -66,31 +66,31 @@ The gateway presents one origin. Internal topology never leaks into client code:
 | `/flows/v1/*` | API flow invocation (HTTP-triggered flows) |
 | `/hooks/v1/*` | API inbound webhooks |
 | `/realtime/v1/*` | Angula (HTTP and WebSocket) |
-| `/docs/v1/*` | API: Atlas documentation for the calling project |
+| `/docs/v1/*` | API: Atlas documentation for an environment |
 | `/platform/v1/*` | API management plane (Studio, CLI, automation) |
 
 ### 2.2 Credentials
 
-* **Project API keys.** Keys come in two roles: `publishable` (`pk_…`, safe in browsers, anonymous
+* **API keys.** Keys come in two roles: `publishable` (`pk_…`, safe in browsers, anonymous
   role, subject to policies) and `secret` (`sk_…`, server-side, the `service` role). A key belongs to one
-  project **environment**, carries optional scopes and expiry, and is revocable. Keys are
+  **environment**, carries optional scopes and expiry, and is revocable. Keys are
   generated and hashed with Sillo's `sillo.auth.apikey.generate_api_key` / `hash_api_key`.
-* **User access tokens.** These are issued by Akountz. Each project environment has its own signing key,
-  derived from the platform master secret (`HMAC(master, "<project>:<env>")`), so tokens from
-  one environment can never be accepted by another.
-* **Platform operators** (people using Studio) are Akountz users of the reserved `_platform`
-  project.
+* **User access tokens.** These are issued by Akountz to your application's users. Each environment
+  has its own signing key, derived from the platform master secret (`HMAC(master, "<env>")`), so
+  tokens from one environment can never be accepted by another.
+* **Studio** needs no credential of its own: it calls the other services with short-lived service
+  tokens. The CLI and automation use a scoped secret API key.
 
 ### 2.3 Context propagation
 
 The gateway resolves `apikey` against the API (the result is cached with Sillo's cache) and forwards
 the request with an **`X-Pawabase-Context`** header: a short-lived JWT signed with the internal
-secret, carrying `{project, env, key_id, role, scopes}`. Internal services trust only this
+secret, carrying `{env, key_id, role, scopes}`. Internal services trust only this
 signed header, never a raw key, and verify it with the kit's `ContextBackend`, a Sillo
 `AuthenticationBackend`.
 
 User tokens travel untouched in `Authorization: Bearer …`. Any service validates them statelessly
-with the kit's `ProjectUserBackend`, another Sillo `AuthenticationBackend`, using the environment's
+with the kit's `UserBackend`, another Sillo `AuthenticationBackend`, using the environment's
 derived key.
 
 Service-to-service calls (Studio → API/Akountz/Angula, API → Angula/Akountz) use short-lived
@@ -106,7 +106,7 @@ across services in Studio.
 | Pawabase capability | Sillo / Sillo package used |
 |---|---|
 | HTTP routing, validation, DI | `SilloApp`, `Router`, `request_model`/`response_model`, `Depend`, parameter markers |
-| Per-project APIs | A **compiled `SilloApp` per project environment**: resources and custom routes become real Sillo routes with Pydantic request/response models, so validation and OpenAPI come from Sillo |
+| Per-project APIs | A **compiled `SilloApp` per environment**: resources and custom routes become real Sillo routes with Pydantic request/response models, so validation and OpenAPI come from Sillo |
 | API documentation | Sillo OpenAPI generation, rendered with Sillo's `Atlas` UI |
 | Auth backends and gates | `AuthenticationBackend`, `SilloApp(auth=[…])`, `useAuth` (the policy gate subclasses `useAuth`) |
 | Users and passwords | `sillo.users.UserBaseModel`, `UserManager`, Sillo hashing |
@@ -153,25 +153,28 @@ Pawabase adds code only where Sillo has no primitive:
 
 ---
 
-## 4. Organizations, projects, environments, infrastructure
+## 4. One runtime, its environments, infrastructure
 
-An **organization** is the top level: a team of operators (Akountz users of `_platform`) and the
-projects they own. Nothing exists outside one; Studio sends a new operator to create one before
-anything else. The API owns the tables (`pb_organizations`, `pb_org_members`, `pb_org_invitations`)
-and a project's `organization` column. Members hold one of four roles (`viewer` < `developer` <
-`admin` < `owner`) that apply to every project in the organization.
+**One Pawabase installation is one project.** There is no list of projects to pick from, no
+organization above it and no team to invite: you start Pawabase and open Studio, and you are
+managing that backend. The surrounding hierarchy (Cloud user, organization, team, projects) is the
+business of Pawabase Cloud, which will run many of these runtimes and sit entirely outside this
+code. Core does not know it exists, so a runtime can later be provisioned and managed remotely
+without Core changing.
 
-Access is enforced in one place: `OperatorGate` (`api/routes/common.py`) checks the operator's
-membership for every management route that names a `{ref}`, so a route cannot forget to. Non-members
-get a `404`. Service credentials are not tied to an organization. Studio forwards a few paths without
-the API (realtime, identities, telemetry, the Explorer) and checks project membership itself first.
-Invitations are one-time tokens (only the hash is stored); accepting one creates the invitee's
-operator account when they have none. Platform organizations are unrelated to the per-project
-end-user organizations in Akountz.
+Studio has no sign-in for the same reason: it manages the runtime it is deployed with. It acts on the
+API, Akountz and Angula with service tokens, never as a person, and the Docker install publishes it on
+localhost only. Put an authenticating proxy in front of it, or tunnel to it, before exposing it. The
+management API is reached by Studio, or by the CLI with a scoped secret API key.
 
-A **project** is one application backend, and lives in one organization. It has one or more **environments** (`development`,
-`production`, …). Everything the platform stores is keyed by `(project, environment)`, and
-environments never share data, keys, secrets, signing keys or queues.
+What is *not* removed is **application Auth**: Akountz still serves the users of the application you
+build (sign-up, sessions, OAuth, MFA, roles) and the organizations and teams *those* users create.
+Those belong to the application; they are unrelated to administering Pawabase.
+
+A runtime has one or more **environments** (`development`, `production`, …), the unit of isolation.
+Everything the platform stores is keyed by environment, and environments never share data, keys,
+secrets, signing keys or queues. A fresh runtime starts with `development`. What the runtime calls
+itself (Studio's title, API docs, emails) is `PAWABASE_PROJECT_NAME`.
 
 Each environment's infrastructure is configured by the developer and stored on the environment:
 
@@ -188,7 +191,7 @@ by `PAWABASE_STORAGE_*`. The Docker install runs MinIO and points the default at
 with no setup; setting `PAWABASE_STORAGE_ENDPOINT` (and credentials) swaps in any S3-compatible
 service. With no endpoint at all (the API run outside Docker) the default is the local disk. The
 API creates the remote bucket on startup or on the first write, and every Pawabase bucket is a key
-prefix (`<project>/<env>/<bucket>/`) inside that one remote bucket. Presigned URLs are signed for
+prefix (`<env>/<bucket>/`) inside that one remote bucket. Presigned URLs are signed for
 `PAWABASE_STORAGE_PUBLIC_ENDPOINT`, the address browsers reach, which differs from the internal
 `http://minio:9000` the API talks to.
 
@@ -203,12 +206,12 @@ A **Resource** is an application entity plus its behaviour: fields, relationship
 operations are exposed, per-operation policies, request and response schemas, a transformer,
 cache TTL, rate limit, event publication, realtime publication and documentation.
 
-On change, the API **compiles** a project environment into a `SilloApp`:
+On change, the API **compiles** an environment into a `SilloApp`:
 
 * each exposed operation (`list`, `get`, `create`, `update`, `delete`) becomes a Sillo route whose
   `request_model` and `response_model` are generated from the Resource's fields;
 * each custom route becomes a Sillo route whose handler runs a Flow or a Python function;
-* each project's Python extension router (normal Sillo code) is mounted;
+* the runtime's Python extension router (normal Sillo code) is mounted;
 * policies are enforced through a `useAuth` subclass on every route;
 * Sillo generates the OpenAPI document, and Atlas renders it.
 
@@ -266,7 +269,7 @@ Angula instances share traffic through Sillo's Redis `EventEmitter`.
 ## 9. Observability
 
 Every service installs the kit's `Telemetry` installable. It records each request (request id,
-route, status, duration, project, environment, identity, credential role, cache outcome, events
+route, status, duration, environment, identity, credential role, cache outcome, events
 emitted, jobs dispatched, error) and exposes it on an internal endpoint. Studio merges these
 records across services, alongside subsystem statistics: cache hit rates, queue depths and
 in-flight jobs, failed jobs, scheduler runs, event deliveries, webhook deliveries, realtime
@@ -276,9 +279,9 @@ connections and presence.
 
 ## 10. Extending Pawabase
 
-* **Python functions**: `code/<project>/functions/*.py`, decorated with `@function`.
-* **Sillo routers**: `code/<project>/routes.py` exporting `router = Router(...)`, served under
-  `/rest/v1/x/…` for that project.
+* **Python functions**: `code/functions/*.py`, decorated with `@function`.
+* **Sillo routers**: `code/routes.py` exporting `router = Router(...)`, served under
+  `/rest/v1/x/…`.
 * **Python policies and transformers**: `@policy`, `@transformer`.
 * **Blocks**: any installed package exposing a `pawabase.blocks` entry point.
 * **Storage and OAuth providers**: Sillo storage drivers and `sillo-oauth` `OAuthProvider`s.

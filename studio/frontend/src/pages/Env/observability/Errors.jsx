@@ -2,8 +2,8 @@ import { Badge, Card, Loading, Table, when } from "../../../components/ui";
 import { envPath, useApi } from "../../../lib/api";
 import { MethodBadge, statusTone } from "./shared";
 
-export default function Errors({ project, env, minutes, onTrace, onRoute }) {
-  const base = envPath(project.ref, env);
+export default function Errors({ env, minutes, onTrace, onRoute }) {
+  const base = envPath(env);
   const state = useApi(`${base}/observability/errors`, { params: { minutes }, interval: 15000 });
   return (
     <Card flush title="Failures grouped by what went wrong" actions={state.data ? <span className="faint">{state.data.failures.toLocaleString()} failed requests</span> : null}>

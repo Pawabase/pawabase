@@ -33,7 +33,7 @@ async def test_publish_only_buses_do_not_consume():
         await bus.start()
     try:
         for i in range(12):
-            await publishers[i % 3].emit(f"e.{i}", project="p", env="e")
+            await publishers[i % 3].emit(f"e.{i}", env="e")
         for _ in range(100):
             if len(received) == 12:
                 break
@@ -55,7 +55,7 @@ async def test_handlers_added_after_start_still_consume():
 
     bus.subscribe(handle)
     try:
-        await bus.emit("late.subscriber", project="p", env="e")
+        await bus.emit("late.subscriber", env="e")
         for _ in range(100):
             if received:
                 break

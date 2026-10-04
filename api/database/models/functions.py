@@ -41,7 +41,6 @@ class FunctionRun(Model):
     """An invocation record, including safe structured logs and failures."""
 
     id = fields.CharField(max_length=32, primary_key=True)
-    project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63, db_index=True)
     branch = fields.CharField(max_length=63, default="main")
     function = fields.CharField(max_length=128, db_index=True)

@@ -1,4 +1,4 @@
-"""Assembling Studio: sessions, CSRF, Inertia, the built front end, and routes."""
+"""Assembling Studio: CSRF, Inertia, the built front end, and routes."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ from typing import Any
 from sillo import SilloApp
 from sillo.security.csrf import CSRFMiddleware
 from sillo.security.csrf.config import CSRFConfig
-from sillo.session import SessionMiddleware
 from sillo_inertia import Inertia, vite_react
 
 from app.config import StudioSettings
@@ -33,8 +32,8 @@ def create_app(
 ) -> SilloApp:
     settings = settings or StudioSettings()
     secret = (
-        settings.session_secret
-        or hashlib.sha256(f"studio-session:{settings.internal_secret}".encode()).hexdigest()
+        settings.csrf_secret
+        or hashlib.sha256(f"studio-csrf:{settings.internal_secret}".encode()).hexdigest()
     )
     clients = clients or {
         "api": ServiceClient(
@@ -42,7 +41,7 @@ def create_app(
             secret=settings.internal_secret,
             issuer="studio",
             audience="api",
-            # Creating a project from a blueprint builds every environment in one call.
+            # Creating environments from a blueprint builds each of them in one call.
             timeout=120.0,
         ),
         "akountz": ServiceClient(
@@ -64,11 +63,9 @@ def create_app(
         "studio",
         settings,
         title="Pawabase Studio",
-        description="The Pawabase control plane.",
+        description="Studio: manage this Pawabase backend.",
         docs=[],
     )
-    # Middleware added later runs first: sessions must exist before CSRF and
-    # Inertia look at the request.
     inertia = Inertia(
         root_view=ROOT / "resources" / "views" / "app.html",
         base_dir=frontend,
@@ -94,15 +91,6 @@ def create_app(
                 cookie_samesite="lax",
                 exempt_urls=["/health", "/internal/*"],
             )
-        )
-    )
-    app.use(
-        SessionMiddleware(
-            secret_key=secret,
-            session_cookie_name="pawabase_studio",
-            session_expiration_time=settings.session_ttl,
-            session_cookie_secure=settings.cookie_secure,
-            session_cookie_samesite="lax",
         )
     )
     app.state["clients"] = clients

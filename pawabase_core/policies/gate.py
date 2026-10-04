@@ -29,13 +29,13 @@ def credential_context(ctx: Any) -> dict[str, Any]:
     if platform is None:
         return {
             "role": kind or "none",
-            "is_service": kind in ("service", "operator"),
+            "is_service": kind == "service",
             "scopes": [],
             "key_id": None,
         }
     return {
         "role": platform.role,
-        "is_service": platform.is_service or kind in ("service", "operator"),
+        "is_service": platform.is_service or kind == "service",
         "scopes": list(platform.scopes),
         "key_id": platform.key_id,
     }
@@ -73,7 +73,6 @@ def build_policy_context(
         "auth": policy_auth(_safe_user(ctx)),
         "credential": credential_context(ctx),
         "request": request_context(ctx),
-        "project": platform.project if platform else None,
         "env": platform.env if platform else None,
         "record": dict(record) if record is not None else None,
         "input": input,
@@ -89,7 +88,7 @@ class PolicyGate(useAuth):
     Args:
         policy: A policy reference (see :class:`PolicyEngine`).
         engine: Where references are resolved. A callable receiving the context
-            is accepted so a gate can pick the engine of the request's project.
+            is accepted so a gate can pick the engine of the request's environment.
         schemes: Accepted credentials, as for ``useAuth``.
         scope: An API-key scope required as well (``resource:write``).
     """

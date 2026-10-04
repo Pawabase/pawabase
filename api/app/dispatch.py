@@ -75,7 +75,7 @@ class DataPlaneDispatcher:
                 401,
                 {
                     "error": "missing_api_key",
-                    "message": "Send a project API key in the apikey header.",
+                    "message": "Send an API key in the apikey header.",
                 },
             )
             return

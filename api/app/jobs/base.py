@@ -42,9 +42,8 @@ class PawabaseJob(Job):
     backoff: ClassVar[int] = 1
     timeout: ClassVar[float | None] = 120.0
 
-    def __init__(self, project: str, env: str, **kwargs: Any) -> None:
+    def __init__(self, env: str, **kwargs: Any) -> None:
         super().__init__()
-        self.project = project
         self.env = env
         self.params = kwargs
 
@@ -108,7 +107,6 @@ class PawabaseJob(Job):
         try:
             await JobRun.create(
                 id=job_id,
-                project=self.project,
                 env=self.env,
                 queue=self.queue,
                 job=type(self).__name__,
@@ -128,7 +126,7 @@ class PawabaseJob(Job):
             job_id=self._job_id or "unknown",
             job_class=self.job_reference(),
             payload=json.dumps(
-                {"project": self.project, "env": self.env, **self.params}, default=str
+                {"env": self.env, **self.params}, default=str
             ),
             exception=error,
         )
@@ -137,8 +135,8 @@ class PawabaseJob(Job):
         platform = get_platform()
         release_id = self.params.get("release_id")
         state = (
-            await platform.state_for_release(self.project, self.env, release_id)
+            await platform.state_for_release(self.env, release_id)
             if release_id
-            else await platform.state(self.project, self.env)
+            else await platform.state(self.env)
         )
         return platform, state

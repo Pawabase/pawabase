@@ -54,7 +54,6 @@ async def run_flow(
         runtime=runtime,
         input=input,
         auth=auth,
-        project=state.project_ref,
         env=state.env_name,
         trigger=entry,
         name=name,
@@ -88,7 +87,6 @@ async def run_flow(
         if flow.record_runs:
             await FlowRunRecord.create(
                 id=run.id,
-                project=state.project_ref,
                 env=state.env_name,
                 flow=name,
                 trigger=trigger,
@@ -118,7 +116,7 @@ async def call_function(
     branch: str | None = None,
 ) -> Any:
     """Call a Python function visible to this environment (on *branch*, when given) and retain its run log."""
-    spec = platform.function_spec(state.project_ref, state.env_name, name, branch)
+    spec = platform.function_spec(state.env_name, name, branch)
     if spec is None:
         raise NotFound(f"no function {name!r}")
     if spec.input_fields:
@@ -155,7 +153,6 @@ async def call_function(
         try:
             await FunctionRun.create(
                 id=new_ulid(),
-                project=state.project_ref,
                 env=state.env_name,
                 branch=branch or MAIN,
                 function=name,
@@ -177,10 +174,10 @@ async def call_function(
 
 
 def _deployment_of(platform: Platform, spec: Any) -> str | None:
-    """The id of the deployment a function came from (``None`` for code mounted on the project)."""
+    """The id of the deployment a function came from (``None`` for code mounted on the runtime)."""
     if "/" not in spec.project:
         return None
-    project, rest = spec.project.split("/", 1)
+    _, rest = spec.project.split("/", 1)
     env, _, branch = rest.partition("@")
-    stamp = platform.deployments.stamp(project, env, branch or MAIN)
+    stamp = platform.deployments.stamp(env, branch or MAIN)
     return stamp["id"] if stamp else None

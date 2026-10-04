@@ -21,7 +21,7 @@ export default function FlowEditor(props) {
   );
 }
 
-function Editor({ project, env, flow, blocks }) {
+function Editor({ env, flow, blocks }) {
   const byKey = useMemo(() => Object.fromEntries(blocks.map((b) => [b.key, b])), [blocks]);
   const isNew = !flow;
   const [meta, setMeta] = useState(() => ({
@@ -40,7 +40,7 @@ function Editor({ project, env, flow, blocks }) {
   const [run, busy] = useAction();
   const wrapper = useRef(null);
   const flowApi = useReactFlow();
-  const base = envPath(project.ref, env, "/flows");
+  const base = envPath(env, "/flows");
 
   const trace = useMemo(() => {
     const map = {};
@@ -94,14 +94,14 @@ function Editor({ project, env, flow, blocks }) {
   const save = async () => {
     const body = { ...meta, timeout: Number(meta.timeout), definition: definition() };
     const result = await run(() => (isNew ? post(base, body) : put(`${base}/${flow.name}`, body)), "Flow saved");
-    if (result && isNew) router.visit(envHref(project.ref, env, "flows", result.name));
+    if (result && isNew) router.visit(envHref(env, "flows", result.name));
   };
 
   const selectedNode = nodes.find((n) => n.id === selected);
   const nodeTypes = useMemo(() => ({ block: BlockNode }), []);
 
   return (
-    <Layout title={meta.name || "New flow"} crumbs={[<a key="f" href={envHref(project.ref, env, "flows")}>flows</a>, meta.name || "new"]} full>
+    <Layout title={meta.name || "New flow"} crumbs={[<a key="f" href={envHref(env, "flows")}>flows</a>, meta.name || "new"]} full>
       <BlocksContext.Provider value={{ byKey, trace }}>
         <div className="flow-shell">
           <Palette blocks={blocks} onAdd={addBlock} />

@@ -2,11 +2,11 @@
 
 * **Service tokens**: one service calling another. Short-lived and addressed to one
   audience.
-* **Context tokens**: the gateway telling a service which project, environment and
+* **Context tokens**: the gateway telling a service which environment and
   credential a request carries.
-* **User tokens**: access tokens Akountz issues to a project's users, signed with
-  a key derived per environment, so a token from ``acme/dev`` can never be used
-  against ``acme/production``.
+* **User tokens**: access tokens Akountz issues to your application's users, signed
+  with a key derived per environment, so a token from ``development`` can never be
+  used against ``production``.
 
 All three are JWTs encoded with :mod:`sillo.helpers.jwt`.
 """
@@ -31,13 +31,13 @@ class TokenInvalid(Exception):
     """A token was missing, expired, tampered with, or addressed elsewhere."""
 
 
-def derive_env_secret(master: str, project: str, env: str) -> str:
-    """The signing key for one project environment's user tokens.
+def derive_env_secret(master: str, env: str) -> str:
+    """The signing key for one environment's user tokens.
 
     Deterministic, so every service can verify without asking Akountz, and
     independent per environment, so compromising one key exposes one environment.
     """
-    message = f"pawabase:user-token:{project}:{env}".encode()
+    message = f"pawabase:user-token:{env}".encode()
     return hmac.new(master.encode(), message, hashlib.sha256).hexdigest()
 
 
@@ -68,8 +68,8 @@ def issue_service_token(
         secret: The installation's internal secret.
         issuer: The calling service.
         audience: The service being called.
-        subject: Who the call is on behalf of, e.g. a Studio operator id.
-        claims: Extra claims, e.g. the operator's roles.
+        subject: Who the call is on behalf of, when it is on behalf of someone.
+        claims: Extra claims.
         ttl: Lifetime in seconds. Keep it short: the token is re-minted per call.
     """
     now = int(time.time())
@@ -120,7 +120,6 @@ def verify_context_token(token: str, secret: str) -> PlatformContext:
 def issue_user_token(
     master: str,
     *,
-    project: str,
     env: str,
     user_id: str,
     jti: str,
@@ -135,11 +134,11 @@ def issue_user_token(
     extra: dict[str, Any] | None = None,
     app: dict[str, Any] | None = None,
 ) -> str:
-    """Mint a user access token for one project environment.
+    """Mint a user access token for one environment.
 
     Args:
         master: The platform JWT master secret.
-        project, env: The environment the token is valid for.
+        env: The environment the token is valid for.
         user_id: The user's id, as ``sub``.
         jti: The token id. Akountz reuses the id Sillo's token family tracks, so
             revocation and rotation line up with Sillo's ``JWTToken`` rows.
@@ -158,8 +157,7 @@ def issue_user_token(
     payload: dict[str, Any] = {
         "sub": str(user_id),
         "aud": USER_AUDIENCE,
-        "iss": f"pawabase:akountz:{project}",
-        "prj": project,
+        "iss": "pawabase:akountz",
         "env": env,
         "sid": session_id,
         "jti": jti,
@@ -177,15 +175,15 @@ def issue_user_token(
         payload["meta"] = extra
     if app:
         payload["app"] = app
-    return sillo_jwt.encode(payload, derive_env_secret(master, project, env))
+    return sillo_jwt.encode(payload, derive_env_secret(master, env))
 
 
-def verify_user_token(token: str, master: str, *, project: str, env: str) -> dict[str, Any]:
-    """Verify a user access token for *project*/*env*. Raises :class:`TokenInvalid`."""
-    claims = _decode(token, derive_env_secret(master, project, env), audience=USER_AUDIENCE)
+def verify_user_token(token: str, master: str, *, env: str) -> dict[str, Any]:
+    """Verify a user access token for *env*. Raises :class:`TokenInvalid`."""
+    claims = _decode(token, derive_env_secret(master, env), audience=USER_AUDIENCE)
     if claims.get("typ") != "access":
         raise TokenInvalid("not an access token")
-    if claims.get("prj") != project or claims.get("env") != env:
+    if claims.get("env") != env:
         raise TokenInvalid("token belongs to another environment")
     return claims
 

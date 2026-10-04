@@ -9,7 +9,7 @@
 # (`docker compose -f docker-compose.dev.yml up --build`).
 #
 # Needs no .env: every secret has a development default. Create one to override.
-# Studio: http://localhost:8090 (admin@pawabase.local / Pawabase!admin1)
+# Studio: http://localhost:8090 (no sign-in: it manages this one backend)
 # Gateway: http://localhost:8080
 
 x-pawabase: &pawabase
@@ -29,8 +29,6 @@ x-pawabase: &pawabase
     PAWABASE_INTERNAL_SECRET: ${PAWABASE_INTERNAL_SECRET:-dev-internal-secret-change-me-please}
     PAWABASE_JWT_MASTER_SECRET: ${PAWABASE_JWT_MASTER_SECRET:-dev-jwt-master-secret-change-me-please}
     PAWABASE_MASTER_KEY: ${PAWABASE_MASTER_KEY:-dev-master-key-change-me-please-0000}
-    PAWABASE_ADMIN_EMAIL: ${PAWABASE_ADMIN_EMAIL:-admin@pawabase.local}
-    PAWABASE_ADMIN_PASSWORD: ${PAWABASE_ADMIN_PASSWORD:-Pawabase!admin1}
     PAWABASE_PUBLIC_URL: http://localhost:8080
     PAWABASE_PUBLIC_GATEWAY_URL: http://localhost:8080
     PAWABASE_REDIS_URL: redis://redis:6379/0
@@ -39,11 +37,12 @@ x-pawabase: &pawabase
     PAWABASE_ANGULA_URL: http://angula:8003
     PAWABASE_GATEWAY_URL: http://gateway:8080
     PAWABASE_STUDIO_URL: http://studio:8090
+    PAWABASE_PROJECT_NAME: ${PAWABASE_PROJECT_NAME:-Pawabase}
 
 x-api-env: &api-env
   <<: *env
   PAWABASE_DATABASE_URL: postgres://pawabase:pawabase@postgres:5432/pawabase
-  PAWABASE_DEFAULT_DATA_URL: sqlite:///data/envs/{project}__{env}.db
+  PAWABASE_DEFAULT_DATA_URL: sqlite:///data/envs/{env}.db
   PAWABASE_STORAGE_ROOT: /data/objects
   # File storage: the bundled MinIO unless .env points these at your own S3-compatible service.
   PAWABASE_STORAGE_ENDPOINT: ${PAWABASE_STORAGE_ENDPOINT:-http://minio:9000}
@@ -182,7 +181,7 @@ services:
       PORT: "8090"
       PAWABASE_VITE_DEV: "true"
       PAWABASE_VITE_DEV_SERVER: http://localhost:5173
-    ports: ["${PAWABASE_STUDIO_PORT:-8090}:8090"]
+    ports: ["127.0.0.1:${PAWABASE_STUDIO_PORT:-8090}:8090"]
     depends_on:
       api: { condition: service_healthy }
       akountz: { condition: service_healthy }

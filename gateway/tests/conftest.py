@@ -10,7 +10,6 @@ os.environ.setdefault("SILLO_ENV_FILE", "")
 
 KEYS = {
     "pk_anon": {
-        "project": "shop",
         "env": "main",
         "role": "anon",
         "key_id": "k1",
@@ -18,14 +17,12 @@ KEYS = {
         "cors_origins": ["https://shop.example"],
     },
     "sk_service": {
-        "project": "shop",
         "env": "main",
         "role": "service",
         "key_id": "k2",
         "scopes": ["*"],
     },
     "sk_restricted": {
-        "project": "shop",
         "env": "main",
         "role": "service",
         "key_id": "k3",

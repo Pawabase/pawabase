@@ -8,170 +8,69 @@ from sillo import HttpContext
 from sillo.exceptions import HTTPException
 
 from app.state import bump
-from database.models import ORG_ROLES, AuditEntry, Environment, Organization, OrgMember, Project
+from database.models import AuditEntry, Environment
 from pawabase_core.context import current_context
 from pawabase_core.policies import PolicyGate
 
 
-#: Studio (a service token acting for an operator), CLI operators and other
-#: services. Project end users are refused, anonymous callers get a 401.
-class OperatorGate(PolicyGate):
-    """The management-plane gate, and the one place organization access is enforced.
+class ManagementGate(PolicyGate):
+    """The management-plane gate: Studio and scoped service API keys.
 
-    Every route under ``/projects/{ref}`` passes through here, so a route can
-    not forget to check that the operator's organization owns the project.
+    Studio reaches the API with a service token. The CLI reaches it with a
+    secret API key, which arrives from the gateway as a signed context. A key
+    manages *its own* environment and nothing else: the gateway proves whose
+    key it is, and this is where the path is held to it. Without that check a
+    secret key for one environment could administer any other.
     """
-
-    def __init__(self, policy: Any, *, need: str | None = None, **kwargs: Any) -> None:
-        super().__init__(policy, **kwargs)
-        self.need = need
 
     async def authenticate(self, ctx: HttpContext) -> bool:
         platform = current_context(ctx)
-        # A secret/scoped project API key reaches the API only as a gateway
-        # signed context. This is what lets the CLI manage its own project
-        # without ever converting that key into an operator bearer token.
         if platform is not None and platform.is_service:
-            # A project key manages *its own* project and environment, nothing else: the gateway proves whose key it is, and this is where the path is
-            # held to it. Without the check a secret key for one project could administer any other.
-            params = ctx.path_params or {}
-            if params.get("ref") not in (None, platform.project) or params.get("env") not in (None, platform.env):
-                raise HTTPException(status_code=403, detail="This API key belongs to a different project or environment")
+            env = (ctx.path_params or {}).get("env")
+            if env not in (None, platform.env):
+                raise HTTPException(
+                    status_code=403, detail="This API key belongs to a different environment"
+                )
             return True
         await super().authenticate(ctx)
-        ref = (ctx.path_params or {}).get("ref")
-        if ref is not None:
-            await authorize_project(ctx, str(ref), self.need)
         return True
 
 
-_OPERATORS = {"any": [{"kind": "operator"}, {"kind": "service"}]}
-OPERATOR = OperatorGate(_OPERATORS, schemes=None)
-#: For actions that change who or what a project is: deleting it.
-OPERATOR_ADMIN = OperatorGate(_OPERATORS, schemes=None, need="admin")
+MANAGE = ManagementGate({"any": [{"kind": "service"}]}, schemes=None)
 
-PROJECT_REF_PATTERN = r"^[a-z][a-z0-9-]{1,62}$"
 NAME_PATTERN = r"^[a-z][a-z0-9_-]{0,62}$"
+ENV_PATTERN = NAME_PATTERN
 
 
 def actor(ctx: HttpContext) -> str | None:
+    """Who is acting: Studio's service identity, or the API key that was presented."""
     user = ctx.scope.get("user")
-    if user is None or not getattr(user, "is_authenticated", False):
-        return None
-    claims = getattr(user, "claims", {}) or {}
-    return claims.get("email") or user.identity
+    if user is not None and getattr(user, "is_authenticated", False):
+        claims = getattr(user, "claims", {}) or {}
+        return claims.get("email") or user.identity
+    platform = current_context(ctx)
+    if platform is not None and platform.key_id:
+        return f"key:{platform.key_id}"
+    return None
 
 
-ROLE_RANK = {role: rank for rank, role in enumerate(ORG_ROLES)}
-READ_METHODS = ("GET", "HEAD", "OPTIONS")
-
-
-def operator_of(ctx: HttpContext) -> tuple[str, str | None] | None:
-    """``(user id, email)`` of the signed-in operator; ``None`` for services.
-
-    A service credential (another Pawabase service, no operator named) is not
-    bound to an organization and may reach every one.
-    """
-    user = ctx.scope.get("user")
-    if user is None or getattr(user, "kind", None) != "operator":
-        return None
-    return user.identity, user.email
-
-
-async def membership(ctx: HttpContext, org: Organization) -> OrgMember | None:
-    operator = operator_of(ctx)
-    if operator is None:
-        return None
-    return await OrgMember.get_or_none(organization=org, user_id=operator[0])
-
-
-async def require_role(ctx: HttpContext, org: Organization, need: str = "viewer") -> str:
-    """The caller's role in *org*, refusing anyone below *need*.
-
-    Operators who are not members get a 404, so an organization's existence is
-    not disclosed to outsiders.
-    """
-    if operator_of(ctx) is None:
-        return "owner"
-    member = await membership(ctx, org)
-    if member is None:
-        raise HTTPException(status_code=404, detail=f"no organization {org.slug!r}")
-    if ROLE_RANK.get(member.role, -1) < ROLE_RANK[need]:
-        raise HTTPException(status_code=403, detail=f"this needs the {need} role or higher")
-    return member.role
-
-
-async def get_org(ctx: HttpContext, slug: str, need: str = "viewer") -> Organization:
-    org = await Organization.get_or_none(slug=slug)
-    if org is None or (operator_of(ctx) is not None and await membership(ctx, org) is None):
-        raise HTTPException(status_code=404, detail=f"no organization {slug!r}")
-    await require_role(ctx, org, need)
-    return org
-
-
-async def authorize_project(ctx: HttpContext, ref: str, need: str | None = None) -> None:
-    """Refuse an operator who may not use project *ref* this way.
-
-    Reading needs ``viewer``; changing anything needs ``developer``, unless
-    the route asks for more. Non-members get a 404 so a project's existence is
-    not disclosed. Services are not bound to an organization.
-    """
-    if operator_of(ctx) is None:
-        return
-    project = await Project.filter(ref=ref).prefetch_related("organization").first()
-    member = (
-        await membership(ctx, project.organization)
-        if project is not None and project.organization is not None
-        else None
-    )
-    if member is None:
-        raise HTTPException(status_code=404, detail=f"no project {ref!r}")
-    need = need or ("viewer" if ctx.method in READ_METHODS else "developer")
-    if ROLE_RANK.get(member.role, -1) < ROLE_RANK[need]:
-        raise HTTPException(status_code=403, detail=f"this needs the {need} role or higher")
-
-
-async def get_project(ref: str) -> Project:
-    project = await Project.get_or_none(ref=ref)
-    if project is None:
-        raise HTTPException(status_code=404, detail=f"no project {ref!r}")
-    return project
-
-
-async def get_environment(ref: str, env: str) -> Environment:
-    environment = (
-        await Environment.filter(project__ref=ref, name=env).select_related("project").first()
-    )
+async def get_environment(env: str) -> Environment:
+    environment = await Environment.filter(name=env).first()
     if environment is None:
-        raise HTTPException(status_code=404, detail=f"no environment {ref}/{env}")
+        raise HTTPException(status_code=404, detail=f"no environment {env!r}")
     return environment
-
-
-async def my_org_ids(ctx: HttpContext) -> list[int] | None:
-    """The organizations the caller belongs to; ``None`` when unrestricted."""
-    operator = operator_of(ctx)
-    if operator is None:
-        return None
-    return await OrgMember.filter(user_id=operator[0]).values_list("organization_id", flat=True)
 
 
 async def audit(
     ctx: HttpContext,
     action: str,
     *,
-    project: str | None = None,
     env: str | None = None,
     target: str = "",
     details: dict[str, Any] | None = None,
-    org: str | None = None,
 ) -> None:
-    if org is None and project is not None:
-        row = await Project.filter(ref=project).select_related("organization").first()
-        org = row.organization.slug if row and row.organization else None
     await AuditEntry.create(
-        project=project,
         env=env,
-        org=org,
         actor=actor(ctx),
         action=action,
         target=target,
@@ -188,14 +87,7 @@ async def changed(
 ) -> None:
     """A definition changed: bump the version and audit it."""
     await bump(environment.id)
-    await audit(
-        ctx,
-        action,
-        project=environment.project.ref,
-        env=environment.name,
-        target=target,
-        details=details,
-    )
+    await audit(ctx, action, env=environment.name, target=target, details=details)
 
 
 def page_params(ctx: HttpContext, *, default: int = 50, maximum: int = 500) -> tuple[int, int]:

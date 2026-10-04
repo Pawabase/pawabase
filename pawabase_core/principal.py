@@ -22,11 +22,11 @@ def encode_identity(kind: str, claims: dict[str, Any]) -> str:
 
 
 class Principal(UserProtocol):
-    """An authenticated caller: a project user, an operator, or a service.
+    """An authenticated caller: an application user, or a service.
 
     Attributes:
-        kind: ``user`` (a project's end user), ``operator`` (a Studio user) or
-            ``service`` (another Pawabase service).
+        kind: ``user`` (an end user of your application) or ``service``
+            (another Pawabase service, such as Studio).
         claims: The verified token claims.
     """
 
@@ -70,7 +70,7 @@ class Principal(UserProtocol):
         return self.claims.get("org")
 
     def has_permission(self, permission: str) -> bool:
-        if self.kind in ("service", "operator") and "admin" in self.roles:
+        if self.kind == "service" and "admin" in self.roles:
             return True
         perms = self.permissions
         return permission in perms or "*" in perms

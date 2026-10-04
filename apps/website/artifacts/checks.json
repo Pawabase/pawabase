@@ -1,0 +1,110 @@
+[
+  {
+    "width": 1440,
+    "theme": "light",
+    "errors": [],
+    "accessibility": [
+      {
+        "id": "aria-hidden-focus",
+        "nodes": [
+          {
+            "target": [
+              ".auth-panel"
+            ],
+            "summary": "Fix all of the following:\n  Focusable content should be disabled or be removed from the DOM"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "width": 1440,
+    "theme": "dark",
+    "errors": [],
+    "accessibility": [
+      {
+        "id": "aria-hidden-focus",
+        "nodes": [
+          {
+            "target": [
+              ".auth-panel"
+            ],
+            "summary": "Fix all of the following:\n  Focusable content should be disabled or be removed from the DOM"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "width": 768,
+    "theme": "light",
+    "errors": [],
+    "accessibility": [
+      {
+        "id": "aria-hidden-focus",
+        "nodes": [
+          {
+            "target": [
+              ".auth-panel"
+            ],
+            "summary": "Fix all of the following:\n  Focusable content should be disabled or be removed from the DOM"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "width": 768,
+    "theme": "dark",
+    "errors": [],
+    "accessibility": [
+      {
+        "id": "aria-hidden-focus",
+        "nodes": [
+          {
+            "target": [
+              ".auth-panel"
+            ],
+            "summary": "Fix all of the following:\n  Focusable content should be disabled or be removed from the DOM"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "width": 390,
+    "theme": "light",
+    "errors": [],
+    "accessibility": [
+      {
+        "id": "aria-hidden-focus",
+        "nodes": [
+          {
+            "target": [
+              ".auth-panel"
+            ],
+            "summary": "Fix all of the following:\n  Focusable content should be disabled or be removed from the DOM"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "width": 390,
+    "theme": "dark",
+    "errors": [],
+    "accessibility": [
+      {
+        "id": "aria-hidden-focus",
+        "nodes": [
+          {
+            "target": [
+              ".auth-panel"
+            ],
+            "summary": "Fix all of the following:\n  Focusable content should be disabled or be removed from the DOM"
+          }
+        ]
+      }
+    ]
+  }
+]

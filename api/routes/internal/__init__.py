@@ -1,6 +1,6 @@
 """Endpoints other Pawabase services call. Service tokens only.
 
-The API is the authority on project configuration, so the gateway resolves
+The API is the authority on the runtime's configuration, so the gateway resolves
 keys here, Akountz reads each environment's auth settings and sends mail
 through here, and Angula reads realtime channel rules from here.
 """
@@ -16,18 +16,16 @@ from sillo.auth.apikey import hash_api_key
 from sillo.exceptions import HTTPException
 
 from app.platform import Platform
-from database.models import Environment, PolicyDef, ProjectKey
+from database.models import ApiKey, Environment, PolicyDef
 from pawabase_core.service import SERVICE_ONLY
 
 
 class ResolveBody(BaseModel):
     key: str = Field(min_length=8, max_length=512)
-    project: str | None = None
     env: str | None = None
 
 
 class MailBody(BaseModel):
-    project: str
     env: str
     to: list[str]
     subject: str = ""
@@ -39,7 +37,6 @@ class MailBody(BaseModel):
 
 
 class EventBody(BaseModel):
-    project: str
     env: str
     name: str
     payload: Any = None
@@ -54,26 +51,16 @@ def register(app: Any, platform: Platform) -> None:
 
     @r.post("/keys/resolve", auth=SERVICE_ONLY, request_model=ResolveBody)
     async def resolve_key(ctx: HttpContext, body: ResolveBody):
-        query = ProjectKey.filter(key_hash=hash_api_key(body.key)).select_related(
-            "environment__project"
-        )
-        # When the caller names a project/environment, scope the lookup to it
-        # directly (an indexed join, not a global hash scan) and reject a key
-        # that resolves but belongs elsewhere with a distinct, useful message.
-        if body.project or body.env:
-            scoped = query
-            if body.project:
-                scoped = scoped.filter(environment__project__ref=body.project)
-            if body.env:
-                scoped = scoped.filter(environment__name=body.env)
-            key = await scoped.first()
-            if key is None and await query.first() is not None:
-                raise HTTPException(
-                    status_code=401,
-                    detail=f"this key does not belong to project={body.project!r} env={body.env!r}",
-                )
-        else:
-            key = await query.first()
+        query = ApiKey.filter(key_hash=hash_api_key(body.key)).select_related("environment")
+        # A key belongs to one environment and names it. When the caller also
+        # names one, hold the key to it and say so, rather than serving another
+        # environment's data under a key meant for this one.
+        key = await query.first()
+        if key is not None and body.env and key.environment.name != body.env:
+            raise HTTPException(
+                status_code=401,
+                detail=f"this key does not belong to environment {body.env!r}",
+            )
         now = datetime.now(UTC)
         if (
             key is None
@@ -82,10 +69,9 @@ def register(app: Any, platform: Platform) -> None:
         ):
             raise HTTPException(status_code=401, detail="invalid API key")
         if key.last_used_at is None or now - key.last_used_at > USAGE_WRITE_INTERVAL:
-            await ProjectKey.filter(id=key.id).update(last_used_at=now, use_count=key.use_count + 1)
+            await ApiKey.filter(id=key.id).update(last_used_at=now, use_count=key.use_count + 1)
         environment = key.environment
         return {
-            "project": environment.project.ref,
             "env": environment.name,
             "role": "service" if key.role == "secret" else "anon",
             "scopes": key.scopes or [],
@@ -96,9 +82,9 @@ def register(app: Any, platform: Platform) -> None:
             "expires_at": key.expires_at.isoformat() if key.expires_at else None,
         }
 
-    @r.get("/environments/{project}/{env}/auth", auth=SERVICE_ONLY)
-    async def auth_config(ctx: HttpContext, project: str, env: str):
-        state = await platform.state(project, env)
+    @r.get("/environments/{env}/auth", auth=SERVICE_ONLY)
+    async def auth_config(ctx: HttpContext, env: str):
+        state = await platform.state(env)
         config = dict(state.environment.auth or {})
         providers = {}
         for name, provider in (config.get("providers") or {}).items():
@@ -107,16 +93,15 @@ def register(app: Any, platform: Platform) -> None:
             }
         config["providers"] = providers
         return {
-            "project": project,
             "env": env,
-            "project_name": state.project_name,
+            "project_name": platform.settings.project_name,
             "auth": config,
             "public_url": platform.settings.public_url,
         }
 
-    @r.get("/environments/{project}/{env}/realtime", auth=SERVICE_ONLY)
-    async def realtime_config(ctx: HttpContext, project: str, env: str):
-        state = await platform.state(project, env)
+    @r.get("/environments/{env}/realtime", auth=SERVICE_ONLY)
+    async def realtime_config(ctx: HttpContext, env: str):
+        state = await platform.state(env)
         environment = state.environment
         policies = await PolicyDef.filter(environment_id=environment.id)
         realtime = dict((environment.settings or {}).get("realtime") or {})
@@ -147,10 +132,9 @@ def register(app: Any, platform: Platform) -> None:
     async def send_mail(ctx: HttpContext, body: MailBody):
         from app.jobs.mail import SendMailJob
 
-        await platform.state(body.project, body.env)
+        await platform.state(body.env)
         job_id = await platform.dispatch(
             SendMailJob,
-            project=body.project,
             env=body.env,
             target=",".join(body.to),
             source=body.source,
@@ -165,15 +149,13 @@ def register(app: Any, platform: Platform) -> None:
 
     @r.post("/events", auth=SERVICE_ONLY, request_model=EventBody)
     async def publish_event(ctx: HttpContext, body: EventBody):
-        state = await platform.state(body.project, body.env)
+        state = await platform.state(body.env)
         event_id = await platform.emit(state, body.name, body.payload, actor=body.actor)
         return accepted({"event_id": event_id})
 
     @r.get("/environments", auth=SERVICE_ONLY)
     async def environments(ctx: HttpContext):
-        rows = await Environment.all().select_related("project")
-        return {
-            "data": [{"project": e.project.ref, "env": e.name, "version": e.version} for e in rows]
-        }
+        rows = await Environment.all()
+        return {"data": [{"env": e.name, "version": e.version} for e in rows]}
 
     app.mount_router(r)

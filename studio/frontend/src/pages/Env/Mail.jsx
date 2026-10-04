@@ -14,8 +14,8 @@ const PROVIDERS = [
 const PASSWORD_SECRET = "MAIL_SMTP_PASSWORD";
 const STATUSES = [["all", "All"], ["sent", "Sent"], ["suppressed", "Suppressed"], ["failed", "Failed"]];
 
-export default function Mail({ project, env }) {
-  const base = envPath(project.ref, env);
+export default function Mail({ env }) {
+  const base = envPath(env);
   const log = useApi(`${base}/mail/log`, { params: { limit: 200 }, interval: 10000 });
   const environment = useApi(base);
   const [filter, setFilter] = useState("all");

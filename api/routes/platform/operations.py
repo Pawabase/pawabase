@@ -15,6 +15,7 @@ from app import route_stats
 from app.analytics import DEFAULT_RANGE, environment_analytics
 from app.platform import PLATFORM_QUEUES, Platform
 from database.models import (
+    ApiKey,
     AuditEntry,
     Environment,
     EventLog,
@@ -24,19 +25,14 @@ from database.models import (
     JobRun,
     MailLog,
     MetricCounter,
-    Organization,
-    Project,
-    ProjectKey,
     RequestLog,
     WorkerHeartbeat,
 )
 from routes.common import (
-    OPERATOR,
+    MANAGE,
     audit,
     dump,
     get_environment,
-    get_org,
-    my_org_ids,
     page_params,
 )
 
@@ -61,16 +57,16 @@ class MailTestBody(BaseModel):
 
 
 def register(r: Router, platform: Platform) -> None:
-    base = "/projects/{ref}/envs/{env}"
+    base = "/envs/{env}"
 
     # ── queues and jobs ──────────────────────────────────────────────────
 
     @r.get(
-        f"{base}/queues", auth=OPERATOR, tags=["queues"], summary="Queues with depth and job counts"
+        f"{base}/queues", auth=MANAGE, tags=["queues"], summary="Queues with depth and job counts"
     )
-    async def queues(ctx: HttpContext, ref: str, env: str):
+    async def queues(ctx: HttpContext, env: str):
         rows = (
-            await JobRun.filter(project=ref, env=env)
+            await JobRun.filter(env=env)
             .group_by("queue", "status")
             .annotate(n=Count("id"))
             .values("queue", "status", "n")
@@ -98,10 +94,10 @@ def register(r: Router, platform: Platform) -> None:
             )
         return {"data": result, "backend": type(platform.queue).__name__}
 
-    @r.get(f"{base}/jobs", auth=OPERATOR, tags=["queues"], summary="Jobs, newest first")
-    async def jobs(ctx: HttpContext, ref: str, env: str):
+    @r.get(f"{base}/jobs", auth=MANAGE, tags=["queues"], summary="Jobs, newest first")
+    async def jobs(ctx: HttpContext, env: str):
         limit, offset = page_params(ctx)
-        query = JobRun.filter(project=ref, env=env)
+        query = JobRun.filter(env=env)
         for field in ("queue", "status", "job", "source"):
             if ctx.query_params.get(field):
                 query = query.filter(**{field: ctx.query_params[field]})
@@ -111,9 +107,9 @@ def register(r: Router, platform: Platform) -> None:
             ]
         }
 
-    @r.get(f"{base}/jobs/{{job_id}}", auth=OPERATOR, tags=["queues"], summary="One job")
-    async def job(ctx: HttpContext, ref: str, env: str, job_id: str):
-        found = await JobRun.get_or_none(id=job_id, project=ref, env=env)
+    @r.get(f"{base}/jobs/{{job_id}}", auth=MANAGE, tags=["queues"], summary="One job")
+    async def job(ctx: HttpContext, env: str, job_id: str):
+        found = await JobRun.get_or_none(id=job_id, env=env)
         if found is None:
             raise HTTPException(status_code=404, detail="no such job")
         failure = await FailedJobRecord.filter(job_id=job_id).first()
@@ -121,14 +117,14 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.post(
         f"{base}/jobs/{{job_id}}/retry",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["queues"],
         summary="Queue a failed job again",
     )
-    async def retry(ctx: HttpContext, ref: str, env: str, job_id: str):
+    async def retry(ctx: HttpContext, env: str, job_id: str):
         import app.jobs as job_classes
 
-        found = await JobRun.get_or_none(id=job_id, project=ref, env=env)
+        found = await JobRun.get_or_none(id=job_id, env=env)
         if found is None:
             raise HTTPException(status_code=404, detail="no such job")
         job_class = getattr(job_classes, found.job, None)
@@ -142,7 +138,6 @@ def register(r: Router, platform: Platform) -> None:
             )
         new_id = await platform.dispatch(
             job_class,
-            project=ref,
             env=env,
             queue=found.queue,
             target=found.target,
@@ -150,14 +145,14 @@ def register(r: Router, platform: Platform) -> None:
             **found.payload,
         )
         await audit(
-            ctx, "job.retried", project=ref, env=env, target=job_id, details={"new_job": new_id}
+            ctx, "job.retried", env=env, target=job_id, details={"new_job": new_id}
         )
         return {"job_id": new_id}
 
-    @r.get(f"{base}/failed-jobs", auth=OPERATOR, tags=["queues"], summary="Permanently failed jobs")
-    async def failed_jobs(ctx: HttpContext, ref: str, env: str):
+    @r.get(f"{base}/failed-jobs", auth=MANAGE, tags=["queues"], summary="Permanently failed jobs")
+    async def failed_jobs(ctx: HttpContext, env: str):
         limit, offset = page_params(ctx)
-        ids = await JobRun.filter(project=ref, env=env, status="failed").values_list(
+        ids = await JobRun.filter(env=env, status="failed").values_list(
             "id", flat=True
         )
         rows = (
@@ -169,7 +164,7 @@ def register(r: Router, platform: Platform) -> None:
         return {"data": [dump(row) for row in rows]}
 
     @r.get(
-        "/workers", auth=OPERATOR, tags=["queues"], summary="Workers and schedulers, as last seen"
+        "/workers", auth=MANAGE, tags=["queues"], summary="Workers and schedulers, as last seen"
     )
     async def workers(ctx: HttpContext):
         cutoff = datetime.now(UTC) - timedelta(seconds=45)
@@ -198,7 +193,7 @@ def register(r: Router, platform: Platform) -> None:
 
     # ── cache ────────────────────────────────────────────────────────────
 
-    @r.get("/cache", auth=OPERATOR, tags=["cache"], summary="Cache statistics")
+    @r.get("/cache", auth=MANAGE, tags=["cache"], summary="Cache statistics")
     async def cache_stats(ctx: HttpContext):
         stats = platform.cache.stats
         return {
@@ -208,28 +203,28 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.post(
         f"{base}/cache/invalidate",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["cache"],
         request_model=InvalidateBody,
         summary="Invalidate cached entries by tag",
     )
-    async def invalidate(ctx: HttpContext, ref: str, env: str, body: InvalidateBody):
-        state = await platform.state(ref, env)
+    async def invalidate(ctx: HttpContext, env: str, body: InvalidateBody):
+        state = await platform.state(env)
         tags = list(body.tags) + [f"resource:{name}" for name in body.resources]
         removed = await platform.cache_invalidate(state, tags)
-        await audit(ctx, "cache.invalidated", project=ref, env=env, details={"tags": tags})
+        await audit(ctx, "cache.invalidated", env=env, details={"tags": tags})
         return {"invalidated": removed}
 
     # ── storage objects ──────────────────────────────────────────────────
 
     @r.get(
         f"{base}/buckets/{{bucket}}/objects",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["storage"],
         summary="List objects in a bucket",
     )
-    async def objects(ctx: HttpContext, ref: str, env: str, bucket: str):
-        state = await platform.state(ref, env)
+    async def objects(ctx: HttpContext, env: str, bucket: str):
+        state = await platform.state(env)
         held = platform.storage.bucket(state, bucket, credential={"is_service": True})
         page = await held.page(
             ctx.query_params.get("prefix", ""),
@@ -253,27 +248,27 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.delete(
         f"{base}/buckets/{{bucket}}/objects/{{key:path}}",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["storage"],
         summary="Delete an object",
     )
-    async def delete_object(ctx: HttpContext, ref: str, env: str, bucket: str, key: str):
-        state = await platform.state(ref, env)
+    async def delete_object(ctx: HttpContext, env: str, bucket: str, key: str):
+        state = await platform.state(env)
         held = platform.storage.bucket(state, bucket, credential={"is_service": True})
         if not await held.delete(key, signed=True):
             raise HTTPException(status_code=404, detail="no such object")
-        await audit(ctx, "storage.deleted", project=ref, env=env, target=f"{bucket}/{key}")
+        await audit(ctx, "storage.deleted", env=env, target=f"{bucket}/{key}")
         return no_content()
 
     @r.post(
         f"{base}/buckets/{{bucket}}/sign",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["storage"],
         request_model=SignBody,
         summary="A signed URL for one object",
     )
-    async def sign(ctx: HttpContext, ref: str, env: str, bucket: str, body: SignBody):
-        state = await platform.state(ref, env)
+    async def sign(ctx: HttpContext, env: str, bucket: str, body: SignBody):
+        state = await platform.state(env)
         held = platform.storage.bucket(state, bucket, credential={"is_service": True})
         return {
             "url": held.signed_url(body.key, method=body.method.upper(), expires_in=body.expires_in)
@@ -281,23 +276,23 @@ def register(r: Router, platform: Platform) -> None:
 
     # ── mail ─────────────────────────────────────────────────────────────
 
-    @r.get(f"{base}/mail/log", auth=OPERATOR, tags=["mail"], summary="Messages sent or suppressed")
-    async def mail_log(ctx: HttpContext, ref: str, env: str):
+    @r.get(f"{base}/mail/log", auth=MANAGE, tags=["mail"], summary="Messages sent or suppressed")
+    async def mail_log(ctx: HttpContext, env: str):
         limit, offset = page_params(ctx)
         rows = (
-            await MailLog.filter(project=ref, env=env).order_by("-id").offset(offset).limit(limit)
+            await MailLog.filter(env=env).order_by("-id").offset(offset).limit(limit)
         )
         return {"data": [dump(row) for row in rows]}
 
     @r.post(
         f"{base}/mail/test",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["mail"],
         request_model=MailTestBody,
         summary="Send a message now",
     )
-    async def mail_test(ctx: HttpContext, ref: str, env: str, body: MailTestBody):
-        state = await platform.state(ref, env)
+    async def mail_test(ctx: HttpContext, env: str, body: MailTestBody):
+        state = await platform.state(env)
         try:
             return await platform.mail.send(
                 state,
@@ -315,15 +310,15 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.get(
         f"{base}/requests",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["observability"],
         summary="Persisted request history with correlation ids",
     )
-    async def requests(ctx: HttpContext, ref: str, env: str):
-        await get_environment(ref, env)
+    async def requests(ctx: HttpContext, env: str):
+        await get_environment(env)
         await platform.app.state["request_rollup"].flush()
         limit, offset = page_params(ctx)
-        query = RequestLog.filter(project=ref, env=env)
+        query = RequestLog.filter(env=env)
         if ctx.query_params.get("request_id"):
             query = query.filter(request_id=ctx.query_params["request_id"])
         if ctx.query_params.get("method"):
@@ -342,27 +337,27 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.get(
         f"{base}/requests/{{request_id}}",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["observability"],
         summary="One correlated request with flows, events and user logs",
     )
-    async def request_trace(ctx: HttpContext, ref: str, env: str, request_id: str):
-        await get_environment(ref, env)
+    async def request_trace(ctx: HttpContext, env: str, request_id: str):
+        await get_environment(env)
         await platform.app.state["request_rollup"].flush()
         request_rows = await RequestLog.filter(
-            project=ref, env=env, request_id=request_id
+            env=env, request_id=request_id
         ).order_by("id")
-        runs = await FlowRun.filter(project=ref, env=env, request_id=request_id).order_by(
+        runs = await FlowRun.filter(env=env, request_id=request_id).order_by(
             "created_at"
         )
-        events = await EventLog.filter(project=ref, env=env, request_id=request_id).order_by(
+        events = await EventLog.filter(env=env, request_id=request_id).order_by(
             "id"
         )
-        jobs = await JobRun.filter(project=ref, env=env, request_id=request_id).order_by(
+        jobs = await JobRun.filter(env=env, request_id=request_id).order_by(
             "created_at"
         )
         function_runs = await FunctionRun.filter(
-            project=ref, env=env, request_id=request_id
+            env=env, request_id=request_id
         ).order_by("created_at")
         if not (request_rows or runs or events or jobs or function_runs):
             raise HTTPException(status_code=404, detail="no such request trace")
@@ -434,51 +429,51 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.get(
         f"{base}/observability/routes",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["observability"],
         summary="Routes ranked by failures, error rate, latency, traffic or time spent",
     )
-    async def route_ranking(ctx: HttpContext, ref: str, env: str):
-        await get_environment(ref, env)
+    async def route_ranking(ctx: HttpContext, env: str):
+        await get_environment(env)
         await platform.app.state["request_rollup"].flush()
         try:
             limit = max(1, min(int(ctx.query_params.get("limit", 50)), 200))
         except ValueError:
             raise HTTPException(status_code=422, detail="limit must be a whole number") from None
         return await route_stats.routes_for(
-            ref, env, minutes=minutes_param(ctx), sort=ctx.query_params.get("sort", "errors"), limit=limit
+            env, minutes=minutes_param(ctx), sort=ctx.query_params.get("sort", "errors"), limit=limit
         )
 
     @r.get(
         f"{base}/observability/routes/detail",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["observability"],
         summary="One route: timeline, statuses, errors, slowest requests, time by step kind",
     )
-    async def route_detail(ctx: HttpContext, ref: str, env: str):
-        await get_environment(ref, env)
+    async def route_detail(ctx: HttpContext, env: str):
+        await get_environment(env)
         await platform.app.state["request_rollup"].flush()
         method, route = ctx.query_params.get("method"), ctx.query_params.get("route")
         if not method or not route:
             raise HTTPException(status_code=422, detail="method and route are required")
-        return await route_stats.route_detail_for(ref, env, method, route, minutes=minutes_param(ctx))
+        return await route_stats.route_detail_for(env, method, route, minutes=minutes_param(ctx))
 
     @r.get(
         f"{base}/observability/errors",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["observability"],
         summary="Failures grouped by what went wrong and where",
     )
-    async def error_groups(ctx: HttpContext, ref: str, env: str):
-        await get_environment(ref, env)
+    async def error_groups(ctx: HttpContext, env: str):
+        await get_environment(env)
         await platform.app.state["request_rollup"].flush()
-        return await route_stats.errors_for(ref, env, minutes=minutes_param(ctx))
+        return await route_stats.errors_for(env, minutes=minutes_param(ctx))
 
-    @r.get(f"{base}/metrics", auth=OPERATOR, tags=["observability"], summary="Counters per minute")
-    async def metrics(ctx: HttpContext, ref: str, env: str):
+    @r.get(f"{base}/metrics", auth=MANAGE, tags=["observability"], summary="Counters per minute")
+    async def metrics(ctx: HttpContext, env: str):
         minutes = max(1, min(int(ctx.query_params.get("minutes", 60)), 7 * 24 * 60))
         since = datetime.now(UTC) - timedelta(minutes=minutes)
-        query = MetricCounter.filter(project=ref, env=env, window__gte=since)
+        query = MetricCounter.filter(env=env, window__gte=since)
         if ctx.query_params.get("name"):
             query = query.filter(name=ctx.query_params["name"])
         rows = await query.order_by("window")
@@ -495,35 +490,29 @@ def register(r: Router, platform: Platform) -> None:
             ]
         }
 
-    @r.get("/audit", auth=OPERATOR, tags=["observability"], summary="Management-plane audit log")
+    @r.get("/audit", auth=MANAGE, tags=["observability"], summary="Management-plane audit log")
     async def audit_log(ctx: HttpContext):
         limit, offset = page_params(ctx)
         query = AuditEntry.all()
-        if slug := ctx.query_params.get("org"):
-            query = query.filter(org=(await get_org(ctx, slug)).slug)
-        elif (mine := await my_org_ids(ctx)) is not None:
-            slugs = await Organization.filter(id__in=mine).values_list("slug", flat=True)
-            query = query.filter(org__in=list(slugs))
-        if ctx.query_params.get("project"):
-            query = query.filter(project=ctx.query_params["project"])
+        if ctx.query_params.get("env"):
+            query = query.filter(env=ctx.query_params["env"])
         return {
             "data": [dump(row) for row in await query.order_by("-id").offset(offset).limit(limit)]
         }
 
     @r.get(
         f"{base}/overview",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["observability"],
         summary="Everything about an environment at a glance",
     )
-    async def overview(ctx: HttpContext, ref: str, env: str):
-        environment = await get_environment(ref, env)
-        state = await platform.state(ref, env)
+    async def overview(ctx: HttpContext, env: str):
+        environment = await get_environment(env)
+        state = await platform.state(env)
         day = datetime.now(UTC) - timedelta(days=1)
         compiled = await state.compiled()
         telemetry = platform.app.state.get("pawabase.telemetry")
         return {
-            "project": ref,
             "env": env,
             "version": environment.version,
             "counts": {
@@ -537,25 +526,25 @@ def register(r: Router, platform: Platform) -> None:
                 "subscriptions": len(state.subscriptions),
                 "schedules": len(state.schedules),
                 "secrets": len(state.secret_values),
-                "keys": await ProjectKey.filter(environment=environment, revoked_at=None).count(),
+                "keys": await ApiKey.filter(environment=environment, revoked_at=None).count(),
             },
             "last_24h": {
-                "events": await EventLog.filter(project=ref, env=env, created_at__gte=day).count(),
+                "events": await EventLog.filter(env=env, created_at__gte=day).count(),
                 "flow_runs": await FlowRun.filter(
-                    project=ref, env=env, created_at__gte=day
+                    env=env, created_at__gte=day
                 ).count(),
                 "flow_failures": await FlowRun.filter(
-                    project=ref, env=env, created_at__gte=day, status="failed"
+                    env=env, created_at__gte=day, status="failed"
                 ).count(),
-                "jobs": await JobRun.filter(project=ref, env=env, created_at__gte=day).count(),
+                "jobs": await JobRun.filter(env=env, created_at__gte=day).count(),
                 "job_failures": await JobRun.filter(
-                    project=ref, env=env, created_at__gte=day, status="failed"
+                    env=env, created_at__gte=day, status="failed"
                 ).count(),
-                "mail": await MailLog.filter(project=ref, env=env, created_at__gte=day).count(),
+                "mail": await MailLog.filter(env=env, created_at__gte=day).count(),
             },
             "requests": telemetry.summary() if telemetry else None,
             "analytics": await environment_analytics(
-                ref, env, ctx.query_params.get("range", DEFAULT_RANGE)
+                env, ctx.query_params.get("range", DEFAULT_RANGE)
             ),
             "problems": compiled.state.get("problems", []),
             "infrastructure": {
@@ -572,27 +561,19 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.get(
         f"{base}/analytics",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["observability"],
         summary="Requests, errors, latency, events and flow runs over time",
     )
-    async def analytics(ctx: HttpContext, ref: str, env: str):
-        await get_environment(ref, env)
-        return await environment_analytics(ref, env, ctx.query_params.get("range", DEFAULT_RANGE))
+    async def analytics(ctx: HttpContext, env: str):
+        await get_environment(env)
+        return await environment_analytics(env, ctx.query_params.get("range", DEFAULT_RANGE))
 
-    @r.get("/overview", auth=OPERATOR, tags=["observability"], summary="Installation overview")
+    @r.get("/overview", auth=MANAGE, tags=["observability"], summary="Runtime overview")
     async def installation(ctx: HttpContext):
-        projects, environments = Project.all(), Environment.all()
-        if slug := ctx.query_params.get("org"):
-            org = await get_org(ctx, slug)
-            projects = projects.filter(organization=org)
-            environments = environments.filter(project__organization=org)
-        elif (mine := await my_org_ids(ctx)) is not None:
-            projects = projects.filter(organization_id__in=mine)
-            environments = environments.filter(project__organization_id__in=mine)
         return {
-            "projects": await projects.count(),
-            "environments": await environments.count(),
+            "name": platform.settings.project_name,
+            "environments": await Environment.all().count(),
             "started_at": platform.started_at.isoformat(),
             "events_backend": platform.bus.backend,
             "queue_backend": type(platform.queue).__name__,

@@ -2,7 +2,7 @@
 
 import pytest
 
-ENV = "/platform/v1/projects/acme/envs/development"
+ENV = "/platform/v1/envs/development"
 
 POSTS = {
     "name": "posts",
@@ -46,7 +46,6 @@ COMMENTS = {
 
 @pytest.fixture
 async def acme(api):
-    await api.studio.post("/platform/v1/projects", json={"ref": "acme", "name": "Acme"})
     for resource in (POSTS, COMMENTS):
         await api.studio.post(f"{ENV}/resources", json=resource)
         migrated = await api.studio.post(f"{ENV}/resources/{resource['name']}/migrate")
@@ -56,9 +55,9 @@ async def acme(api):
 
 async def test_crud_with_owner_policies(acme):
     api = acme
-    ada = api.user_headers("acme", "development", user_id="1")
-    bob = api.user_headers("acme", "development", user_id="2")
-    anon = api.context_headers("acme", "development")
+    ada = api.user_headers("development", user_id="1")
+    bob = api.user_headers("development", user_id="2")
+    anon = api.context_headers("development")
 
     assert (await api.http.get("/rest/v1/posts")).status_code == 401  # no key at all
     refused = await api.http.post("/rest/v1/posts", json={"title": "x"}, headers=anon)
@@ -104,7 +103,7 @@ async def test_crud_with_owner_policies(acme):
     assert bad_filter.status_code == 400
 
     # A secret key (service role) bypasses policies.
-    service = api.context_headers("acme", "development", role="service")
+    service = api.context_headers("development", role="service")
     everything = (await api.http.get("/rest/v1/posts", headers=service)).json()
     assert everything["total"] == 2
 
@@ -125,8 +124,8 @@ async def test_events_and_cache_invalidation(acme):
     api = acme
     from database.models import EventLog
 
-    ada = api.user_headers("acme", "development", user_id="1")
-    anon = api.context_headers("acme", "development")
+    ada = api.user_headers("development", user_id="1")
+    anon = api.context_headers("development")
     await api.http.post("/rest/v1/posts", json={"title": "one", "status": "live"}, headers=ada)
     first = (await api.http.get("/rest/v1/posts", headers=anon)).json()
     await api.http.post("/rest/v1/posts", json={"title": "two", "status": "live"}, headers=ada)
@@ -141,7 +140,7 @@ async def test_events_and_cache_invalidation(acme):
 
 async def test_openapi_and_docs(acme):
     api = acme
-    anon = api.context_headers("acme", "development")
+    anon = api.context_headers("development")
     document = (await api.http.get("/rest/v1/openapi.json", headers=anon)).json()
     assert "/rest/v1/posts" in document["paths"] and "/rest/v1/posts/{id}" in document["paths"]
     create_schema = document["paths"]["/rest/v1/posts"]["post"]["requestBody"]["content"][
@@ -154,7 +153,7 @@ async def test_openapi_and_docs(acme):
 
 async def test_scoped_keys(acme):
     api = acme
-    read_only = api.context_headers("acme", "development", role="service", scopes=["resource:read"])
+    read_only = api.context_headers("development", role="service", scopes=["resource:read"])
     assert (await api.http.get("/rest/v1/posts", headers=read_only)).status_code == 200
     assert (
         await api.http.post("/rest/v1/posts", json={"title": "x"}, headers=read_only)
@@ -169,7 +168,7 @@ async def test_requests_outside_the_startup_context(acme):
     import contextvars
 
     api = acme
-    headers = api.context_headers("acme", "development")
+    headers = api.context_headers("development")
 
     async def request():
         return await api.http.get("/rest/v1/comments", headers=headers)
@@ -183,7 +182,7 @@ async def test_store_applies_declared_defaults(acme):
     """Flows and functions write through the store, not the compiled model,
     and still get the resource's defaults."""
     api = acme
-    state = await api.platform.state("acme", "development")
+    state = await api.platform.state("development")
     store = await state.store("posts")
     row = await store.create({"title": "from a flow", "owner_id": "1"})
     assert (row["status"], row["views"]) == ("draft", 0)
@@ -206,7 +205,7 @@ async def test_each_write_checks_its_own_policy(acme):
     }
     await api.studio.post(f"{ENV}/resources", json=ledger)
     await api.studio.post(f"{ENV}/resources/ledger/migrate")
-    ada = api.user_headers("acme", "development", user_id="1")
+    ada = api.user_headers("development", user_id="1")
 
     created = await api.http.post("/rest/v1/ledger", json={"note": "paid"}, headers=ada)
     assert created.status_code == 201, created.text
@@ -247,13 +246,13 @@ async def test_expand_respects_the_related_resources_read_policy(acme):
     posts["relations"] = [*posts["relations"], {"name": "receipts", "type": "has_many", "resource": "receipts", "field": "post_id"}]
     await api.studio.put(f"{ENV}/resources/posts", json=posts)
 
-    ada = api.user_headers("acme", "development", user_id="1")
+    ada = api.user_headers("development", user_id="1")
     post = (await api.http.post("/rest/v1/posts", json={"title": "t", "status": "live"}, headers=ada)).json()
     await api.studio.post(f"{ENV}/resources/receipts/records", json={"post_id": post["id"], "amount": 9})
 
     assert (await api.http.get("/rest/v1/receipts", headers=ada)).status_code == 403
     expanded = (await api.http.get(f"/rest/v1/posts/{post['id']}?expand=receipts", headers=ada)).json()
     assert expanded["receipts"] == []
-    service = api.context_headers("acme", "development", role="service")
+    service = api.context_headers("development", role="service")
     as_service = (await api.http.get(f"/rest/v1/posts/{post['id']}?expand=receipts", headers=service)).json()
     assert [r["amount"] for r in as_service["receipts"]] == [9]

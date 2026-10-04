@@ -1,11 +1,12 @@
 """Studio's pages and its JSON bridge to the other services.
 
-Pages are Inertia responses: the server resolves who is signed in and the data
-a page opens with, React renders it. Everything a page does afterwards goes
-through ``/studio/api/<service>/...``, which forwards to the management
-endpoints of the API, Akountz or Angula with a service token naming the
-operator. The browser never talks to those services and never holds a token
-they would accept.
+Studio manages the one runtime it is deployed with, so there is nothing to
+sign in to and no project to pick: opening it shows the runtime's default
+environment. Pages are Inertia responses (the server loads the data a page
+opens with, React renders it). Everything a page does afterwards goes through
+``/studio/api/<service>/...``, which forwards to the management endpoints of
+the API, Akountz or Angula with a service token. The browser never talks to
+those services and never holds a token they would accept.
 """
 
 from __future__ import annotations
@@ -26,15 +27,12 @@ from sillo import HttpContext, SilloApp, WebSocketContext, html
 from sillo.openapi.ui import ATLAS_JS
 from sillo.responses import JSONResponse
 from sillo.static import StaticFiles
-from sillo_inertia import Inertia, back, redirect, render, set_errors
+from sillo_inertia import Inertia, redirect, render
 
-from app import operators
 from app.config import StudioSettings
 from pawabase_core.clients import ServiceClient, ServiceError
 from pawabase_core.context import CONTEXT_HEADER, PlatformContext
 from pawabase_core.tokens import TokenInvalid, issue_context_token, verify_context_token
-
-OPERATOR_SCOPE = "studio.operator"
 
 #: Studio section → (Inertia component, extra props). Definition sections share
 #: one generic editor, driven by the kind.
@@ -68,9 +66,6 @@ SECTIONS: dict[str, str] = {
     "settings": "Env/Settings",
 }
 
-#: How long a "this operator may use that project" answer is trusted.
-ACCESS_TTL = 15.0
-
 #: Bridge targets: which service, and the path prefix calls are confined to.
 BRIDGE: dict[str, tuple[str, str]] = {
     "platform": ("api", "/platform/v1/"),
@@ -88,20 +83,11 @@ def register_routes(
     frontend: Path,
 ) -> None:
     api, akountz = clients["api"], clients["akountz"]
-    master = settings.jwt_master_secret
 
     inertia.share(
-        operator=lambda ctx: (
-            operators.public(ctx.scope[OPERATOR_SCOPE]) if ctx.scope.get(OPERATOR_SCOPE) else None
-        ),
+        runtime_name=settings.project_name,
         gateway_url=settings.public_gateway_url,
     )
-
-    async def signed_in(ctx: HttpContext) -> dict[str, Any] | None:
-        operator = await operators.current_operator(ctx, akountz, master)
-        if operator is not None:
-            ctx.scope[OPERATOR_SCOPE] = operator
-        return operator
 
     async def call(ctx: HttpContext, method: str, path: str, **kwargs: Any) -> Any:
         # Inertia pages are rendered on the server, unlike follow-up browser
@@ -109,101 +95,15 @@ def register_routes(
         # here too so the first render of an editor cannot accidentally show
         # main while its saves go to a feature branch.
         branch = ctx.query_params.get("branch")
-        if branch and path.startswith("/projects/") and "/envs/" in path:
+        if branch and path.startswith("/envs/"):
             separator = "&" if "?" in path else "?"
             path = f"{path}{separator}branch={quote(branch, safe='')}"
-        return await api.request(
-            method, "/platform/v1" + path, operator=ctx.scope[OPERATOR_SCOPE], **kwargs
-        )
-
-    # ── organizations ────────────────────────────────────────────────────
-
-    access: dict[tuple[str, str], float] = {}
-
-    async def may_use_project(ctx: HttpContext, ref: str) -> bool:
-        """Whether the operator's organizations include the project.
-
-        The API enforces this on every management call; Studio asks too for the
-        paths it forwards without the API (realtime, telemetry, identities, the
-        Explorer), so those cannot reach another organization's project.
-        """
-        key = (str(ctx.scope[OPERATOR_SCOPE]["sub"]), ref)
-        if access.get(key, 0) > time.monotonic():
-            return True
-        try:
-            await call(ctx, "GET", f"/projects/{ref}")
-        except ServiceError:
-            return False
-        access[key] = time.monotonic() + ACCESS_TTL
-        return True
-
-    async def my_orgs(ctx: HttpContext) -> list[dict[str, Any]]:
-        return (await call(ctx, "GET", "/orgs")).get("data", [])
-
-    def remember_org(ctx: HttpContext, slug: str | None) -> None:
-        session = ctx.scope.get("session")
-        if session is not None and slug:
-            session.set("org", slug)
-
-    def safe_next(target: str | None) -> str:
-        """A same-site path to return to after signing in."""
-        if target and target.startswith("/") and not target.startswith("//"):
-            return target
-        return "/"
-
-    # ── sign-in ──────────────────────────────────────────────────────────
-
-    @app.get("/login", exclude_from_schema=True)
-    async def login_page(ctx: HttpContext):
-        if await signed_in(ctx):
-            return redirect(safe_next(ctx.query_params.get("next")))
-        return await render(
-            "Auth/Login",
-            {"mfa_token": ctx.query_params.get("mfa_token"), "next": ctx.query_params.get("next")},
-        )
-
-    @app.post("/login", exclude_from_schema=True)
-    async def login(ctx: HttpContext):
-        body = await _body(ctx)
-        after = safe_next(str(body.get("next") or "") or None)
-        payload: dict[str, Any]
-        if body.get("mfa_token"):
-            payload = {
-                "grant_type": "mfa",
-                "mfa_token": body["mfa_token"],
-                "code": str(body.get("code") or ""),
-            }
-        else:
-            payload = {
-                "grant_type": "password",
-                "email": str(body.get("email") or ""),
-                "password": str(body.get("password") or ""),
-            }
-        try:
-            await operators.sign_in(ctx, akountz, master, payload)
-        except operators.SignInFailed as exc:
-            if exc.mfa_token:
-                suffix = f"&next={quote(after)}" if after != "/" else ""
-                return redirect(f"/login?mfa_token={exc.mfa_token}{suffix}")
-            set_errors(ctx, {"code" if payload["grant_type"] == "mfa" else "email": exc.message})
-            return back(fallback="/login")
-        return redirect(after)
-
-    @app.post("/logout", exclude_from_schema=True)
-    async def logout(ctx: HttpContext):
-        await operators.revoke(ctx, akountz)
-        return redirect("/login")
+        return await api.request(method, "/platform/v1" + path, **kwargs)
 
     # ── pages ────────────────────────────────────────────────────────────
 
-    async def page(ctx: HttpContext, component: str, loader, *, org_required: bool = True) -> Any:
-        if not await signed_in(ctx):
-            return redirect("/login")
+    async def page(ctx: HttpContext, component: str, loader) -> Any:
         try:
-            orgs = await my_orgs(ctx)
-            if not orgs and org_required:
-                # Nothing exists outside an organization: make one first.
-                return redirect("/setup")
             props = await loader()
         except ServiceError as exc:
             if exc.status == 404:
@@ -213,198 +113,58 @@ def register_routes(
                 {"message": _detail(exc), "service": exc.service},
                 status_code=502,
             )
-        slug = (props.get("project") or {}).get("org") or (props.get("org") or {}).get("slug")
-        remember_org(ctx, slug)
-        return await render(component, {"orgs": orgs, **props})
+        return await render(component, props)
 
-    def role_of(orgs: list[dict[str, Any]], slug: str) -> str | None:
-        return next((o["role"] for o in orgs if o["slug"] == slug), None)
+    async def env_props(ctx: HttpContext) -> dict[str, Any]:
+        runtime = await call(ctx, "GET", "/runtime")
+        return {"runtime": runtime, "envs": runtime["environments"]}
 
-    async def landing(ctx: HttpContext, suffix: str = "") -> Any:
-        """Send the operator to their organization (the last one they used)."""
-        if not await signed_in(ctx):
-            return redirect("/login")
+    @app.get("/", exclude_from_schema=True)
+    async def home(ctx: HttpContext):
+        """Open straight into the runtime's default environment."""
         try:
-            orgs = await my_orgs(ctx)
+            runtime = await call(ctx, "GET", "/runtime")
         except ServiceError as exc:
             return await render(
                 "Errors/Unavailable",
                 {"message": _detail(exc), "service": exc.service},
                 status_code=502,
             )
-        if not orgs:
-            return redirect("/setup")
-        session = ctx.scope.get("session")
-        last = session.get("org") if session is not None else None
-        slug = last if any(o["slug"] == last for o in orgs) else orgs[0]["slug"]
-        return redirect(f"/orgs/{slug}{suffix}")
+        environments = runtime["environments"]
+        chosen = next((e for e in environments if e.get("is_default")), None) or (
+            environments[0] if environments else None
+        )
+        return redirect(f"/envs/{chosen['name']}" if chosen else "/environments")
 
-    @app.get("/", exclude_from_schema=True)
-    async def home(ctx: HttpContext):
-        return await landing(ctx)
-
-    @app.get("/setup", exclude_from_schema=True)
-    async def setup(ctx: HttpContext):
-        """The first thing an operator does: create the organization projects live in."""
-
-        async def load():
-            return {"first": True}
-
-        if await signed_in(ctx) and await my_orgs(ctx):
-            return redirect("/")
-        return await page(ctx, "Org/Create", load, org_required=False)
-
-    @app.get("/orgs/new", exclude_from_schema=True)
-    async def new_org(ctx: HttpContext):
-        async def load():
-            return {"first": False}
-
-        return await page(ctx, "Org/Create", load, org_required=False)
-
-    async def org_props(ctx: HttpContext, slug: str) -> dict[str, Any]:
-        return {"org": await call(ctx, "GET", f"/orgs/{slug}")}
-
-    @app.get("/orgs/{slug}", exclude_from_schema=True)
-    async def org_home(ctx: HttpContext, slug: str):
-        async def load():
-            projects = await call(ctx, "GET", "/projects", params={"org": slug})
-            return {**await org_props(ctx, slug), "projects": projects.get("data", projects)}
-
-        return await page(ctx, "Projects/Index", load)
-
-    @app.get("/orgs/{slug}/team", exclude_from_schema=True)
-    async def org_team(ctx: HttpContext, slug: str):
-        async def load():
-            props = await org_props(ctx, slug)
-            members = await call(ctx, "GET", f"/orgs/{slug}/members")
-            invitations = []
-            if props["org"]["role"] in ("admin", "owner"):
-                invitations = (await call(ctx, "GET", f"/orgs/{slug}/invitations")).get("data", [])
-            return {
-                **props,
-                "members": members.get("data", []),
-                "invitations": invitations,
-                "me": ctx.scope[OPERATOR_SCOPE]["sub"],
-            }
-
-        return await page(ctx, "Org/Team", load)
-
-    @app.get("/orgs/{slug}/settings", exclude_from_schema=True)
-    async def org_settings(ctx: HttpContext, slug: str):
-        return await page(ctx, "Org/Settings", lambda: org_props(ctx, slug))
-
-    @app.get("/orgs/{slug}/audit", exclude_from_schema=True)
-    async def org_audit(ctx: HttpContext, slug: str):
-        async def load():
-            entries = await call(ctx, "GET", "/audit", params={"limit": 200, "org": slug})
-            return {**await org_props(ctx, slug), "entries": entries.get("data", [])}
-
-        return await page(ctx, "Audit", load)
+    @app.get("/environments", exclude_from_schema=True)
+    async def environments_page(ctx: HttpContext):
+        return await page(ctx, "Environments", lambda: env_props(ctx))
 
     @app.get("/audit", exclude_from_schema=True)
     async def audit(ctx: HttpContext):
-        return await landing(ctx, "/audit")
-
-    # ── invitations ──────────────────────────────────────────────────────
-    #
-    # An invitation link works before sign-in, so its page is public: the
-    # token is the credential, and it only ever offers the one address it was
-    # sent to. Accepting signs the invitee in, creating their operator account
-    # first when they have none.
-
-    async def invitation_page(ctx: HttpContext, token: str, **extra: Any):
-        try:
-            invitation = await api.request("GET", f"/platform/v1/invitations/{quote(token)}")
-        except ServiceError as exc:
-            if exc.status != 404:
-                raise
-            return await render("Auth/Invite", {"token": token, "invitation": None})
-        operator = await signed_in(ctx)
-        return await render(
-            "Auth/Invite",
-            {
-                "token": token,
-                "invitation": invitation,
-                "mismatch": bool(operator and operator["email"].lower() != invitation["email"]),
-                **extra,
-            },
-        )
-
-    @app.get("/invite/{token}", exclude_from_schema=True)
-    async def invite_page(ctx: HttpContext, token: str):
-        return await invitation_page(ctx, token)
-
-    @app.post("/invite/{token}", exclude_from_schema=True)
-    async def accept_invite(ctx: HttpContext, token: str):
-        body = await _body(ctx)
-        try:
-            invitation = await api.request("GET", f"/platform/v1/invitations/{quote(token)}")
-        except ServiceError:
-            return redirect(f"/invite/{token}")
-        operator = await signed_in(ctx)
-        if operator is None:
-            password = str(body.get("password") or "")
-            try:
-                await akountz.request(
-                    "POST",
-                    "/admin/v1/projects/_platform/envs/main/users",
-                    json={
-                        "email": invitation["email"],
-                        "password": password,
-                        "name": str(body.get("name") or ""),
-                        "email_verified": True,
-                    },
-                )
-            except ServiceError as exc:
-                if exc.status == 409:
-                    # They already have an account: sign in, then come back.
-                    return redirect(f"/login?next={quote(f'/invite/{token}')}")
-                set_errors(ctx, {"password": _detail(exc)})
-                return back(fallback=f"/invite/{token}")
-            try:
-                await operators.sign_in(
-                    ctx,
-                    akountz,
-                    master,
-                    {"grant_type": "password", "email": invitation["email"], "password": password},
-                )
-            except operators.SignInFailed as exc:
-                set_errors(ctx, {"password": exc.message})
-                return back(fallback=f"/invite/{token}")
-            operator = await signed_in(ctx)
-        try:
-            joined = await call(ctx, "POST", f"/invitations/{quote(token)}/accept")
-        except ServiceError as exc:
-            set_errors(ctx, {"invitation": _detail(exc)})
-            return back(fallback=f"/invite/{token}")
-        return redirect(f"/orgs/{joined['slug']}")
-
-    async def project_props(ctx: HttpContext, ref: str) -> dict[str, Any]:
-        project = await call(ctx, "GET", f"/projects/{ref}")
-        envs = await call(ctx, "GET", f"/projects/{ref}/envs")
-        return {"project": project, "envs": envs.get("data", envs)}
-
-    @app.get("/projects/{ref}", exclude_from_schema=True)
-    async def project_page(ctx: HttpContext, ref: str):
-        return await page(ctx, "Projects/Show", lambda: project_props(ctx, ref))
-
-    @app.get("/projects/{ref}/{env}", exclude_from_schema=True)
-    async def env_page(ctx: HttpContext, ref: str, env: str):
         async def load():
-            props = await project_props(ctx, ref)
-            overview = await call(ctx, "GET", f"/projects/{ref}/envs/{env}/overview")
+            entries = await call(ctx, "GET", "/audit", params={"limit": 200})
+            return {**await env_props(ctx), "entries": entries.get("data", [])}
+
+        return await page(ctx, "Audit", load)
+
+    @app.get("/envs/{env}", exclude_from_schema=True)
+    async def env_page(ctx: HttpContext, env: str):
+        async def load():
+            props = await env_props(ctx)
+            overview = await call(ctx, "GET", f"/envs/{env}/overview")
             return {**props, "env": env, "section": "overview", "overview": overview}
 
         return await page(ctx, "Env/Overview", load)
 
-    @app.get("/projects/{ref}/{env}/flows/{name}", exclude_from_schema=True)
-    async def flow_editor(ctx: HttpContext, ref: str, env: str, name: str):
+    @app.get("/envs/{env}/flows/{name}", exclude_from_schema=True)
+    async def flow_editor(ctx: HttpContext, env: str, name: str):
         async def load():
-            props = await project_props(ctx, ref)
+            props = await env_props(ctx)
             blocks = await call(ctx, "GET", "/blocks")
             flow = None
             if name != "new":
-                flow = await call(ctx, "GET", f"/projects/{ref}/envs/{env}/flows/{name}")
+                flow = await call(ctx, "GET", f"/envs/{env}/flows/{name}")
             return {
                 **props,
                 "env": env,
@@ -417,30 +177,26 @@ def register_routes(
 
     # ── API docs ─────────────────────────────────────────────────────────
     #
-    # The public page at <gateway>/docs/v1/<ref>/<env> exists only while the
-    # environment sets ``public_docs``. Operators get the same document here,
-    # signed in, whatever that setting says, with "try it" aimed at the gateway.
+    # The public page at <gateway>/docs/v1/<env> exists only while the
+    # environment sets ``public_docs``. Studio shows the same document whatever
+    # that setting says, with "try it" aimed at the gateway.
 
-    async def environment_openapi(ctx: HttpContext, ref: str, env: str) -> dict[str, Any]:
-        document = await call(ctx, "GET", f"/projects/{ref}/envs/{env}/openapi")
-        document["servers"] = [{"url": settings.public_gateway_url, "description": f"Gateway · {ref} · {env}"}]
+    async def environment_openapi(ctx: HttpContext, env: str) -> dict[str, Any]:
+        document = await call(ctx, "GET", f"/envs/{env}/openapi")
+        document["servers"] = [{"url": settings.public_gateway_url, "description": f"Gateway · {env}"}]
         return document
 
-    @app.get("/projects/{ref}/{env}/api-docs/openapi.json", exclude_from_schema=True)
-    async def api_docs_spec(ctx: HttpContext, ref: str, env: str):
-        if await signed_in(ctx) is None:
-            return JSONResponse({"detail": "sign in first"}, status_code=401)
+    @app.get("/envs/{env}/api-docs/openapi.json", exclude_from_schema=True)
+    async def api_docs_spec(ctx: HttpContext, env: str):
         try:
-            return JSONResponse(await environment_openapi(ctx, ref, env))
+            return JSONResponse(await environment_openapi(ctx, env))
         except ServiceError as exc:
             return JSONResponse({"detail": str(exc.body)}, status_code=exc.status)
 
-    @app.get("/projects/{ref}/{env}/api-docs", exclude_from_schema=True)
-    async def api_docs(ctx: HttpContext, ref: str, env: str):
-        if await signed_in(ctx) is None:
-            return redirect("/login")
+    @app.get("/envs/{env}/api-docs", exclude_from_schema=True)
+    async def api_docs(ctx: HttpContext, env: str):
         try:
-            document = await environment_openapi(ctx, ref, env)
+            document = await environment_openapi(ctx, env)
         except ServiceError as exc:
             return JSONResponse({"detail": str(exc.body)}, status_code=exc.status)
         # The spec is embedded rather than fetched by URL: Atlas offers the
@@ -448,7 +204,7 @@ def register_routes(
         # whenever the spec came from that origin, which would aim every
         # "try it" request at Studio instead of the gateway.
         spec = json.dumps(document).replace("</", "<\\/")
-        title = html_escape(f"{document.get('info', {}).get('title', ref)} · {env}")
+        title = html_escape(f"{document.get('info', {}).get('title', 'API')} · {env}")
         return html(
             f"""<!DOCTYPE html>
 <html lang="en">
@@ -466,14 +222,14 @@ def register_routes(
 </html>"""
         )
 
-    @app.get("/projects/{ref}/{env}/{section}", exclude_from_schema=True)
-    async def section_page(ctx: HttpContext, ref: str, env: str, section: str):
+    @app.get("/envs/{env}/{section}", exclude_from_schema=True)
+    async def section_page(ctx: HttpContext, env: str, section: str):
         component = SECTIONS.get(section)
 
         async def load():
             if component is None:
                 raise ServiceError(404, {"detail": f"no section {section!r}"}, service="studio")
-            props = await project_props(ctx, ref)
+            props = await env_props(ctx)
             return {
                 **props,
                 "env": env,
@@ -506,9 +262,6 @@ def register_routes(
     @app.get("/studio/status", exclude_from_schema=True)
     async def status(ctx: HttpContext):
         """Every service's health, for the status lights in Studio's top bar."""
-        operator = await signed_in(ctx)
-        if operator is None:
-            return JSONResponse({"detail": "sign in first"}, status_code=401)
         services = list(
             await asyncio.gather(
                 probe("Gateway", gateway_health),
@@ -546,27 +299,24 @@ def register_routes(
     # with a *service* platform context. A service credential bypasses every
     # channel policy (see ``Realtime.authorize``), so the console can watch,
     # subscribe to presence on, and publish to any channel in the
-    # environment — an operator's tool, the same way an Ably control-plane
+    # environment: a developer's tool, the same way an Ably control-plane
     # key can see every channel.
     #
-    # Sillo's session middleware only runs on HTTP scopes, so a WebSocket
-    # handshake carries no session. The browser instead fetches a short-lived,
-    # signed ticket over a normal (session-checked) HTTP call first, then
-    # presents that ticket as the socket opens; the ticket alone proves an
-    # operator asked for this project and environment a few seconds ago.
+    # A WebSocket handshake cannot carry Studio's CSRF header, so the browser
+    # first fetches a short-lived, signed ticket over a normal HTTP call, then
+    # presents it as the socket opens; the ticket alone proves Studio issued it
+    # for this environment a few seconds ago.
 
     angula_ws_base = (
         settings.angula_url.replace("https://", "wss://", 1).replace("http://", "ws://", 1).rstrip("/")
         + "/realtime/v1/socket"
     )
 
-    @app.get("/projects/{ref}/{env}/realtime/ticket", exclude_from_schema=True)
-    async def realtime_ticket(ctx: HttpContext, ref: str, env: str):
-        if await signed_in(ctx) is None:
-            return JSONResponse({"detail": "sign in first"}, status_code=401)
-        if not await may_use_project(ctx, ref):
-            return JSONResponse({"detail": f"no project {ref!r}"}, status_code=404)
-        context = PlatformContext(project=ref, env=env, role="operator", key_id="studio-console")
+    TICKET = "studio-console-ticket"
+
+    @app.get("/envs/{env}/realtime/ticket", exclude_from_schema=True)
+    async def realtime_ticket(ctx: HttpContext, env: str):
+        context = PlatformContext(env=env, role="anon", key_id=TICKET)
         return JSONResponse({"ticket": issue_context_token(settings.internal_secret, context, ttl=20)})
 
     @app.ws_route("/studio/ws/realtime")
@@ -574,15 +324,13 @@ def register_routes(
         try:
             context = verify_context_token(ws.query_params.get("ticket") or "", settings.internal_secret)
         except TokenInvalid:
-            await ws.close(code=4001, reason="sign in first")
+            await ws.close(code=4001, reason="invalid ticket")
             return
-        if context.role != "operator":
-            await ws.close(code=4001, reason="sign in first")
+        if context.key_id != TICKET:
+            await ws.close(code=4001, reason="invalid ticket")
             return
         await ws.accept()
-        service_context = PlatformContext(
-            project=context.project, env=context.env, role="service", key_id="studio-console"
-        )
+        service_context = PlatformContext(env=context.env, role="service", key_id="studio-console")
         header = issue_context_token(settings.internal_secret, service_context, ttl=60)
         try:
             remote = await websockets.connect(
@@ -626,18 +374,11 @@ def register_routes(
 
     @app.post("/studio/api/explorer/sign-in", exclude_from_schema=True)
     async def explorer_sign_in(ctx: HttpContext):
-        """Obtain a project-user token for Explorer without a project API key."""
-        if await signed_in(ctx) is None:
-            return JSONResponse({"detail": "sign in first"}, status_code=401)
+        """Obtain an application-user token for Explorer without an API key."""
         body = await _body(ctx)
-        project = str(body.get("project") or "")
         env = str(body.get("env") or "")
-        if not re.fullmatch(r"[a-z][a-z0-9-]{1,62}", project) or not re.fullmatch(
-            r"[a-z][a-z0-9_-]{0,62}", env
-        ):
-            return JSONResponse({"detail": "invalid project or environment"}, status_code=400)
-        if not await may_use_project(ctx, project):
-            return JSONResponse({"detail": f"no project {project!r}"}, status_code=404)
+        if not re.fullmatch(r"[a-z][a-z0-9_-]{0,62}", env):
+            return JSONResponse({"detail": "invalid environment"}, status_code=400)
         if body.get("mfa_token"):
             payload = {
                 "grant_type": "mfa",
@@ -655,9 +396,7 @@ def register_routes(
                 "POST",
                 "/auth/v1/token",
                 json=payload,
-                context=PlatformContext(
-                    project=project, env=env, role="anon", key_id="studio-explorer"
-                ),
+                context=PlatformContext(env=env, role="anon", key_id="studio-explorer"),
             )
         except ServiceError as exc:
             return JSONResponse(
@@ -675,27 +414,20 @@ def register_routes(
     async def explorer_request(ctx: HttpContext):
         """Run one data-plane request with a signed anonymous context.
 
-        Studio proves the caller is an operator, but deliberately uses an
-        ``anon`` project context for the explored request. This keeps policy
-        behavior honest: public endpoints work immediately and authenticated
-        endpoints only work when the operator supplies a project-user token.
+        Studio deliberately uses an ``anon`` context for the explored request.
+        This keeps policy behavior honest: public endpoints work immediately and
+        authenticated endpoints only work when an application-user token is
+        supplied.
         """
-        if await signed_in(ctx) is None:
-            return JSONResponse({"detail": "sign in first"}, status_code=401)
         body = await _body(ctx)
-        project = str(body.get("project") or "")
         env = str(body.get("env") or "")
         version = str(body.get("version") or "v1")
         method = str(body.get("method") or "GET").upper()
         requested_path = str(body.get("path") or "/")
-        if not re.fullmatch(r"[a-z][a-z0-9-]{1,62}", project):
-            return JSONResponse({"detail": "invalid project"}, status_code=400)
         if not re.fullmatch(r"[a-z][a-z0-9_-]{0,62}", env):
             return JSONResponse({"detail": "invalid environment"}, status_code=400)
         if not re.fullmatch(r"v[1-9][0-9]*", version):
             return JSONResponse({"detail": "invalid API version"}, status_code=400)
-        if not await may_use_project(ctx, project):
-            return JSONResponse({"detail": f"no project {project!r}"}, status_code=404)
         if method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
             return JSONResponse({"detail": "unsupported method"}, status_code=400)
         expected_prefix = f"/rest/{version}"
@@ -736,9 +468,7 @@ def register_routes(
                 expected_prefix + requested_path,
                 json=payload,
                 params=query,
-                context=PlatformContext(
-                    project=project, env=env, role="anon", key_id="studio-explorer"
-                ),
+                context=PlatformContext(env=env, role="anon", key_id="studio-explorer"),
                 headers=forwarded_headers,
             )
         except Exception as exc:
@@ -777,9 +507,6 @@ def register_routes(
     async def bridge(ctx: HttpContext, target: str, path: str):
         if target not in BRIDGE:
             return JSONResponse({"detail": "unknown service"}, status_code=404)
-        operator = await signed_in(ctx)
-        if operator is None:
-            return JSONResponse({"detail": "sign in first"}, status_code=401)
         service, prefix = BRIDGE[target]
         clean = path.lstrip("/")
         if ".." in clean.split("/"):
@@ -793,27 +520,18 @@ def register_routes(
                 except ValueError:
                     return JSONResponse({"detail": "send JSON"}, status_code=400)
         params = dict(ctx.query_params)
-        call: dict[str, Any] = {"json": body, "params": params or None, "operator": operator}
+        call: dict[str, Any] = {"json": body, "params": params or None}
         segments = clean.split("/")
-        # The API checks organization access itself. These services do not
-        # know organizations, so Studio confirms the project is the operator's.
-        project = _bridge_project(target, segments, params)
-        if target != "platform" and (project is None or project.startswith("_")):
-            return JSONResponse({"detail": "name a project of yours"}, status_code=404)
-        if project is not None and target != "platform" and not await may_use_project(ctx, project):
-            return JSONResponse({"detail": f"no project {project!r}"}, status_code=404)
         if (
             target == "realtime"
             and ctx.method == "POST"
-            and len(segments) == 3
-            and segments[2] == "publish"
+            and len(segments) == 2
+            and segments[1] == "publish"
         ):
             # Broadcasting acts inside one environment, which Angula reads from
             # the platform context rather than from the path.
             prefix, clean = "/internal/v1/publish", ""
-            call["context"] = PlatformContext(
-                project=segments[0], env=segments[1], role="service", key_id="studio"
-            )
+            call["context"] = PlatformContext(env=segments[0], role="service", key_id="studio")
         try:
             result = await clients[service].request(ctx.method, prefix + clean, **call)
         except ServiceError as exc:
@@ -855,20 +573,6 @@ async def _body(ctx: HttpContext) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
     form = await ctx.form()
     return {k: form.get(k) for k in form}
-
-
-def _bridge_project(target: str, segments: list[str], params: dict[str, Any]) -> str | None:
-    """The project a bridged call to a project-agnostic service is about."""
-    if target == "auth":
-        # /admin/v1/projects/<project>/envs/<env>/...
-        return segments[1] if len(segments) > 3 and segments[0] == "projects" else None
-    if target == "realtime":
-        # /internal/v1/realtime/<project>/<env>/...
-        return segments[0] if segments and segments[0] else None
-    if target == "telemetry":
-        value = params.get("project")
-        return str(value) if value else None
-    return None
 
 
 def _recent(worker: dict[str, Any], seconds: float = 600) -> bool:

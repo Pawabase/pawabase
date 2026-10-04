@@ -22,6 +22,7 @@ from pawabase_core.telemetry import note
 
 from .s3 import S3Driver
 
+
 class MimePatterns(tuple):
     """A bucket's ``accepts`` list that understands wildcards.
 
@@ -81,19 +82,19 @@ class StorageManager:
         return {key: self.platform.resolve_value(state, value) for key, value in config.items()}
 
     def signer(self, state: EnvironmentState, bucket: str) -> Signer:
-        key = (state.project_ref, state.env_name, bucket)
+        key = (state.env_name, bucket)
         signer = self._signers.get(key)
         if signer is None:
-            secret = f"{self.platform.settings.internal_secret}:storage:{state.project_ref}:{state.env_name}"
+            secret = f"{self.platform.settings.internal_secret}:storage:{state.env_name}"
             signer = self._signers[key] = Signer(
-                secret, f"{state.project_ref}/{state.env_name}/{bucket}"
+                secret, f"{state.env_name}/{bucket}"
             )
         return signer
 
     def driver(self, state: EnvironmentState, bucket: str) -> Any:
         config = self._config(state)
         fingerprint = repr(sorted(config.items()))
-        key = (state.project_ref, state.env_name, bucket, fingerprint)
+        key = (state.env_name, bucket, fingerprint)
         driver = self._drivers.get(key)
         if driver is not None:
             return driver
@@ -103,7 +104,7 @@ class StorageManager:
         elif kind == "s3":
             base_prefix = str(config.get("prefix") or "").strip("/")
             prefix = "/".join(
-                part for part in (base_prefix, state.project_ref, state.env_name, bucket) if part
+                part for part in (base_prefix, state.env_name, bucket) if part
             )
             driver = S3Driver(
                 bucket=config.get("bucket", ""),
@@ -118,13 +119,13 @@ class StorageManager:
         elif kind == "local":
             root = config.get("root") or self.platform.settings.storage_root
             driver = LocalDriver(
-                f"{root.rstrip('/')}/{state.project_ref}/{state.env_name}/{bucket}",
+                f"{root.rstrip('/')}/{state.env_name}/{bucket}",
                 signer=self.signer(state, bucket),
-                base_url=f"{self.platform.settings.public_url.rstrip('/')}/storage/v1/signed/{state.project_ref}/{state.env_name}/{bucket}",
+                base_url=f"{self.platform.settings.public_url.rstrip('/')}/storage/v1/signed/{state.env_name}/{bucket}",
             )
         else:
             raise ValueError(f"unknown storage driver {kind!r}")
-        driver.listen(self._listener(state.project_ref, state.env_name))
+        driver.listen(self._listener(state.env_name))
         self._drivers[key] = driver
         return driver
 
@@ -159,7 +160,7 @@ class StorageManager:
             await driver.close()
         return f"storage: s3 {where} ({'bucket created' if created else 'ready'})"
 
-    def _listener(self, project: str, env: str):
+    def _listener(self, env: str):
         async def listener(event: StorageEvent) -> None:
             self.operations += 1
             note("storage", f"{event.action.value}:{event.bucket}/{event.key}", append=True)
@@ -167,7 +168,6 @@ class StorageManager:
             if name and event.outcome == "ok":
                 await self.platform.bus.emit(
                     name,
-                    project=project,
                     env=env,
                     payload={
                         "bucket": event.bucket,
@@ -193,7 +193,6 @@ class StorageManager:
             read="public" if model.public else (model.read_policy or "authenticated"),
             write=model.write_policy or "authenticated",
             credential=credential,
-            project=state.project_ref,
             env=state.env_name,
             signed_writes=model.signed_uploads,
         )

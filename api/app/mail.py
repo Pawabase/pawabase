@@ -45,7 +45,7 @@ class MailManager:
             smtp_password=raw.get("password") or None,
             use_ssl=use_ssl,
             use_tls=bool(raw.get("use_tls", not use_ssl and port == 587)),
-            default_from=raw.get("from") or f"no-reply@{state.project_ref}.pawabase.local",
+            default_from=raw.get("from") or "no-reply@pawabase.local",
             default_reply_to=raw.get("reply_to") or None,
             suppress_send=not configured or bool(raw.get("suppress")),
             template_directory=None,
@@ -53,7 +53,7 @@ class MailManager:
 
     def client(self, state: EnvironmentState) -> MailClient:
         config = self._config(state)
-        key = (state.project_ref, state.env_name, repr(sorted(vars(config).items())))
+        key = (state.env_name, repr(sorted(vars(config).items())))
         client = self._clients.get(key)
         if client is None:
             client = self._clients[key] = MailClient(config)
@@ -97,7 +97,6 @@ class MailManager:
             )
         suppressed = bool((result.provider_response or {}).get("suppressed"))
         await MailLog.create(
-            project=state.project_ref,
             env=state.env_name,
             to=to,
             subject=subject,

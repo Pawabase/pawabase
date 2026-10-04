@@ -40,11 +40,11 @@ class PublishBody(BaseModel):
 
 
 def _auth_from_token(
-    realtime: Realtime, token: str | None, project: str, env: str
+    realtime: Realtime, token: str | None, env: str
 ) -> tuple[dict[str, Any], str | None]:
     if not token:
         return dict(ANONYMOUS_POLICY_CONTEXT), None
-    claims = verify_user_token(token, realtime.settings.jwt_master_secret, project=project, env=env)
+    claims = verify_user_token(token, realtime.settings.jwt_master_secret, env=env)
     from pawabase_core.principal import Principal
 
     principal = Principal("user", claims)
@@ -60,7 +60,7 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
             return
         try:
             auth, user_id = _auth_from_token(
-                realtime, ws.query_params.get("token"), context.project, context.env
+                realtime, ws.query_params.get("token"), context.env
             )
         except TokenInvalid:
             await ws.close(code=4003, reason="invalid access token")
@@ -77,7 +77,6 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
         peer.start()
         connection = Connection(
             peer=peer,
-            project=context.project,
             env=context.env,
             user_id=user_id,
             role=context.role,
@@ -126,7 +125,7 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
             elif kind == "auth":
                 try:
                     connection.auth, connection.user_id = _auth_from_token(
-                        realtime, message.get("token"), connection.project, connection.env
+                        realtime, message.get("token"), connection.env
                     )
                     peer.identity = connection.user_id
                     await ack(user_id=connection.user_id)
@@ -134,7 +133,6 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
                     await ack(False, error="invalid_token")
             elif kind == "subscribe":
                 rule = await realtime.authorize(
-                    connection.project,
                     connection.env,
                     channel,
                     "subscribe",
@@ -145,7 +143,7 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
                 await ack(channel=channel)
                 if message.get("since") is not None:
                     missed = await realtime.history(
-                        connection.project, connection.env, channel, limit=rule.history
+                        connection.env, channel, limit=rule.history
                     )
                     for item in missed:
                         if item["seq"] > int(message["since"]):
@@ -156,7 +154,7 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
                             "type": "presence_state",
                             "channel": channel,
                             "members": realtime.presence_members(
-                                connection.project, connection.env, channel
+                                connection.env, channel
                             ),
                         }
                     )
@@ -168,7 +166,6 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
             elif kind == "publish":
                 if channel not in connection.channels and not credential.get("is_service"):
                     await realtime.authorize(
-                        connection.project,
                         connection.env,
                         channel,
                         "subscribe",
@@ -177,7 +174,6 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
                     )
                 payload = message.get("payload")
                 await realtime.authorize(
-                    connection.project,
                     connection.env,
                     channel,
                     "publish",
@@ -187,7 +183,6 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
                 )
                 event = str(message.get("event") or "message")[:100]
                 result = await realtime.publish(
-                    connection.project,
                     connection.env,
                     channel,
                     event,
@@ -200,7 +195,6 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
                 if channel not in connection.channels:
                     raise PermissionError("subscribe to the channel first")
                 await realtime.authorize(
-                    connection.project,
                     connection.env,
                     channel,
                     "presence",
@@ -211,7 +205,6 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
                 await ack()
             elif kind == "history":
                 rule = await realtime.authorize(
-                    connection.project,
                     connection.env,
                     channel,
                     "subscribe",
@@ -225,7 +218,7 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
                         "ref": ref,
                         "channel": channel,
                         "messages": await realtime.history(
-                            connection.project, connection.env, channel, limit
+                            connection.env, channel, limit
                         ),
                     }
                 )
@@ -234,7 +227,6 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
         except PermissionError as exc:
             realtime.errors.append(
                 {
-                    "project": connection.project,
                     "env": connection.env,
                     "channel": channel,
                     "type": kind,
@@ -253,7 +245,6 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
             await realtime.api.post(
                 "/internal/v1/events",
                 json={
-                    "project": connection.project,
                     "env": connection.env,
                     "name": "realtime.message",
                     "payload": {
@@ -268,7 +259,6 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
         except Exception as exc:
             realtime.errors.append(
                 {
-                    "project": connection.project,
                     "env": connection.env,
                     "channel": channel,
                     "type": "forward",
@@ -287,7 +277,6 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
         auth = policy_auth(ctx.scope.get("user"))
         try:
             await realtime.authorize(
-                context.project,
                 context.env,
                 body.channel,
                 "publish",
@@ -298,7 +287,6 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
         except PermissionError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         return await realtime.publish(
-            context.project,
             context.env,
             body.channel,
             body.event,
@@ -311,7 +299,6 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
         context = require_context(ctx)
         try:
             await realtime.authorize(
-                context.project,
                 context.env,
                 channel,
                 "subscribe",
@@ -322,7 +309,7 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         return {
             "channel": channel,
-            "members": realtime.presence_members(context.project, context.env, channel),
+            "members": realtime.presence_members(context.env, channel),
         }
 
     @r.get("/channels/{channel}/history", summary="Recent messages on a channel")
@@ -330,7 +317,6 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
         context = require_context(ctx)
         try:
             rule = await realtime.authorize(
-                context.project,
                 context.env,
                 channel,
                 "subscribe",
@@ -342,7 +328,7 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
         limit = max(1, min(int(ctx.query_params.get("limit", 50)), rule.history))
         return {
             "channel": channel,
-            "messages": await realtime.history(context.project, context.env, channel, limit),
+            "messages": await realtime.history(context.env, channel, limit),
         }
 
     app.mount_router(r)
@@ -355,22 +341,22 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
     async def internal_publish(ctx: HttpContext, body: PublishBody):
         context = require_context(ctx)
         return await realtime.publish(
-            context.project, context.env, body.channel, body.event, body.payload, sender="server"
+            context.env, body.channel, body.event, body.payload, sender="server"
         )
 
     @i.get("/realtime/summary", auth=SERVICE_ONLY)
     async def summary(ctx: HttpContext):
         return realtime.summary()
 
-    @i.get("/realtime/{project}/{env}/channels", auth=SERVICE_ONLY)
-    async def channels(ctx: HttpContext, project: str, env: str):
-        return {"data": realtime.channels(project, env)}
+    @i.get("/realtime/{env}/channels", auth=SERVICE_ONLY)
+    async def channels(ctx: HttpContext, env: str):
+        return {"data": realtime.channels(env)}
 
-    @i.get("/realtime/{project}/{env}/channels/{channel}", auth=SERVICE_ONLY)
-    async def channel_detail(ctx: HttpContext, project: str, env: str, channel: str):
+    @i.get("/realtime/{env}/channels/{channel}", auth=SERVICE_ONLY)
+    async def channel_detail(ctx: HttpContext, env: str, channel: str):
         from app.realtime import room_name
 
-        room = room_name(project, env, channel)
+        room = room_name(env, channel)
         subscribers = [
             realtime.connections[str(peer.id)].describe()
             for peer in realtime.hub.members(room)
@@ -379,32 +365,32 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
         return {
             "channel": channel,
             "subscribers": subscribers,
-            "presence": realtime.presence_members(project, env, channel),
-            "history": await realtime.history(project, env, channel, 20),
+            "presence": realtime.presence_members(env, channel),
+            "history": await realtime.history(env, channel, 20),
         }
 
-    @i.get("/realtime/{project}/{env}/connections", auth=SERVICE_ONLY)
-    async def connections(ctx: HttpContext, project: str, env: str):
+    @i.get("/realtime/{env}/connections", auth=SERVICE_ONLY)
+    async def connections(ctx: HttpContext, env: str):
         return {
             "data": [
                 c.describe()
                 for c in realtime.connections.values()
-                if c.project == project and c.env == env
+                if c.env == env
             ]
         }
 
-    @i.get("/realtime/{project}/{env}/activity", auth=SERVICE_ONLY)
-    async def activity(ctx: HttpContext, project: str, env: str):
+    @i.get("/realtime/{env}/activity", auth=SERVICE_ONLY)
+    async def activity(ctx: HttpContext, env: str):
         return {
             "deliveries": [
                 item
                 for item in reversed(realtime.recent)
-                if item["project"] == project and item["env"] == env
+                if item["env"] == env
             ][:100],
             "errors": [
                 item
                 for item in reversed(realtime.errors)
-                if item["project"] == project and item["env"] == env
+                if item["env"] == env
             ][:100],
         }
 

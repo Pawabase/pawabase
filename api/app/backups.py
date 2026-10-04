@@ -14,15 +14,13 @@ ciphertext exists, and ciphertext is useless without the installation's key),
 stored files, sessions, logs or jobs. Infrastructure comes from the
 installation's environment file, so it is not part of a backup either.
 
-Unlike a blueprint, which can only create a new project from a shared design,
+Unlike a blueprint, which can only create new environments from a shared design,
 a backup is for restoring the *same* system: ids are preserved so rows keep
 pointing at the users and records they belonged to.
 """
 
 from __future__ import annotations
 
-import hashlib
-import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -55,8 +53,8 @@ def _checksum(document: dict[str, Any]) -> str:
     return snapshot_checksum(body)
 
 
-def _users_path(project: str, env: str) -> str:
-    return f"/admin/v1/projects/{project}/envs/{env}"
+def _users_path(env: str) -> str:
+    return f"/admin/v1/envs/{env}"
 
 
 def parse_parts(value: str | list[str] | None) -> list[str]:
@@ -73,13 +71,11 @@ def parse_parts(value: str | list[str] | None) -> list[str]:
 async def create_backup(
     platform: Platform, environment: Environment, parts: list[str]
 ) -> dict[str, Any]:
-    project = environment.project.ref
     document: dict[str, Any] = {
         "format": FORMAT,
         "version": VERSION,
         "created_at": datetime.now(UTC).isoformat(),
         "source": {
-            "project": project,
             "env": environment.name,
             "definitions_version": environment.version,
         },
@@ -95,7 +91,7 @@ async def create_backup(
         }
     if "users" in parts:
         document["users"] = await platform.akountz.get(
-            f"{_users_path(project, environment.name)}/backup"
+            f"{_users_path(environment.name)}/backup"
         )
     if "data" in parts:
         document["data"] = await _export_data(platform, environment, snapshot["definitions"])
@@ -113,7 +109,7 @@ async def create_backup(
 async def _export_data(
     platform: Platform, environment: Environment, definitions: dict[str, Any]
 ) -> dict[str, Any]:
-    state = await platform.state(environment.project.ref, environment.name)
+    state = await platform.state(environment.name)
     tables: dict[str, Any] = {}
     total = 0
     for resource in definitions.get("resources", []):
@@ -177,7 +173,6 @@ async def restore_backup(
     *,
     replace: bool,
 ) -> dict[str, Any]:
-    project = environment.project.ref
     report: dict[str, Any] = {"restored": parts, "strategy": "replace" if replace else "merge", "warnings": []}
 
     if "definitions" in parts:
@@ -195,7 +190,7 @@ async def restore_backup(
 
     if "users" in parts:
         result = await platform.akountz.post(
-            f"{_users_path(project, environment.name)}/restore",
+            f"{_users_path(environment.name)}/restore",
             json={"identities": document["users"], "replace": replace},
         )
         report["users"] = result
@@ -234,7 +229,7 @@ async def _restore_data(
     replace: bool,
     warnings: list[str],
 ) -> dict[str, int]:
-    state = await platform.state(environment.project.ref, environment.name)
+    state = await platform.state(environment.name)
     source = await state.source()
     counts: dict[str, int] = {}
     for name, rows in data.items():

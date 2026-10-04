@@ -9,7 +9,7 @@ async def test_signup_signin_refresh_and_token_claims(akz):
     body = await akz.signup(name="Ada")
     assert body["user"]["email"] == "ada@example.com" and body["access_token"]
     claims = verify_user_token(
-        body["access_token"], akz.settings.jwt_master_secret, project="acme", env="development"
+        body["access_token"], akz.settings.jwt_master_secret, env="development"
     )
     assert (
         claims["sub"] == body["user"]["id"]
@@ -24,7 +24,7 @@ async def test_signup_signin_refresh_and_token_claims(akz):
         headers=akz.headers(),
     )
     assert duplicate.status_code == 409
-    # The same address is free in another environment of the same project.
+    # The same address is free in another environment.
     other = await akz.http.post(
         "/auth/v1/signup",
         json={"email": "ada@example.com", "password": "correct-horse-1"},
@@ -203,7 +203,7 @@ async def test_keyless_link_page(akz):
         "/auth/v1/magic-link", json={"email": "ada@example.com"}, headers=akz.headers()
     )
     link = akz.api.last_link()
-    assert link.startswith("http://gateway.test/auth/v1/links/acme/development/magic?")
+    assert link.startswith("http://gateway.test/auth/v1/links/development/magic?")
     page = await akz.http.get(link.replace("http://gateway.test", ""))
     assert page.status_code == 200 and "all set" in page.text
 
@@ -245,7 +245,6 @@ async def test_mfa(akz):
     claims = verify_user_token(
         done.json()["access_token"],
         akz.settings.jwt_master_secret,
-        project="acme",
         env="development",
     )
     assert claims["aal"] == "aal2"

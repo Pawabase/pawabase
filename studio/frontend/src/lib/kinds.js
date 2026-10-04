@@ -69,7 +69,7 @@ export const KINDS = {
   },
   "inbound-hooks": {
     title: "Inbound hooks",
-    description: "Receive webhooks from other services at /hooks/v1/<project>/<env>/<slug>, verified, then emitted as events or run as flows.",
+    description: "Receive webhooks from other services at /hooks/v1/<env>/<slug>, verified, then emitted as events or run as flows.",
     key: "slug",
     columns: ["slug", "verification", "target_type", "target", "enabled"],
     blank: { slug: "", name: "", description: "", verification: "hmac-sha256", signature_header: "x-signature", target_type: "event", target: "", enabled: true },

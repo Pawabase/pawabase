@@ -9,7 +9,7 @@ from sillo import SilloApp
 
 from app.config import AngulaSettings
 from app.realtime import Realtime
-from pawabase_core.auth import ProjectUserBackend
+from pawabase_core.auth import UserBackend
 from pawabase_core.service import create_service
 
 PRUNE_SECONDS = 30
@@ -25,7 +25,7 @@ def create_app(
         settings,
         title="Angula",
         description="Pawabase realtime: channels, publish/subscribe and presence over WebSockets.",
-        backends=[ProjectUserBackend(settings.jwt_master_secret)],
+        backends=[UserBackend(settings.jwt_master_secret)],
     )
     app.state["realtime"] = realtime
     tasks: list[asyncio.Task] = []

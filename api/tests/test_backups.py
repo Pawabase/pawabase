@@ -6,7 +6,7 @@ import pytest
 
 from pawabase_core.clients import ServiceError
 
-ENV = "/platform/v1/projects/shop/envs/development"
+ENV = "/platform/v1/envs/development"
 
 
 class FakeAkountz:
@@ -34,7 +34,6 @@ class FakeAkountz:
 @pytest.fixture
 async def shop(api):
     api.platform.akountz = FakeAkountz()
-    await api.studio.post("/platform/v1/projects", json={"ref": "shop", "name": "Shop", "environments": ["development"]})
     await api.studio.post(f"{ENV}/policies", json={"name": "staff", "condition": {"role": "editor"}})
     await api.studio.post(
         f"{ENV}/resources",

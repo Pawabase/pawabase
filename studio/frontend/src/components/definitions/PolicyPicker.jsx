@@ -1,4 +1,4 @@
-// Choose who may do something: a built-in policy, one of the project's
+// Choose who may do something: a built-in policy, one of this environment's
 // policies, a parameterised built-in ("role:admin"), or a custom condition.
 import { useState } from "react";
 import { Icon } from "../icons";
@@ -10,7 +10,7 @@ const BUILTINS = [
   ["authenticated", "Signed-in users"],
   ["owner", "Record owner (owner_id)"],
   ["mfa", "Signed in with 2FA"],
-  ["service", "Secret keys & operators"],
+  ["service", "Secret keys & Studio"],
   ["deny", "Nobody"],
 ];
 const PARAMS = [["role", "Users with role…", "admin"], ["permission", "Users with permission…", "posts.write"], ["owner", "Owner via field…", "author_id"], ["scope", "Keys with scope…", "resource:write"]];
@@ -44,7 +44,7 @@ export function PolicyPicker({ value, onChange, policies = [], nullLabel = "Defa
             {BUILTINS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
           </optgroup>
           {policies.length > 0 && (
-            <optgroup label="This project">
+            <optgroup label="This environment">
               {policies.map((p) => <option key={p} value={p}>{p}</option>)}
             </optgroup>
           )}
