@@ -1,3 +1,12 @@
+from database.models.framework import (
+    Group,
+    GroupPermission,
+    JWTToken,
+    Permission,
+    TokenBlacklist,
+    UserGroup,
+    UserPermission,
+)
 from database.models.orgs import Invitation, Membership, Organization, Team, TeamMember
 from database.models.users import (
     AuthUser,
@@ -11,15 +20,22 @@ from database.models.users import (
 
 __all__ = [
     "AuthUser",
+    "Group",
+    "GroupPermission",
     "Identity",
+    "JWTToken",
     "Invitation",
     "LoginEvent",
     "Membership",
     "MfaFactor",
     "OneTimeToken",
     "Organization",
+    "Permission",
     "RecoveryCode",
     "SessionInfo",
     "Team",
     "TeamMember",
+    "TokenBlacklist",
+    "UserGroup",
+    "UserPermission",
 ]

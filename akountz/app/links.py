@@ -7,7 +7,6 @@ unforgeable and time-limited; the row makes it single-use and revocable.
 
 from __future__ import annotations
 
-import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlencode
@@ -18,6 +17,7 @@ from sillo.helpers.signing import BadSignature
 from app.environment import AuthConfig
 from app.platform import Akountz
 from database.models import AuthUser, OneTimeToken
+from pawabase_core.ids import new_ulid
 
 LIFETIMES = {
     "verify": 24 * 3600,
@@ -41,7 +41,7 @@ async def issue(
 ) -> str:
     lifetime = LIFETIMES[purpose]
     row = await OneTimeToken.create(
-        id=secrets.token_hex(16),
+        id=new_ulid(),
         project=config.project,
         env=config.env,
         purpose=purpose,

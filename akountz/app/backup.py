@@ -19,8 +19,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sillo.permissions import Permission
-from tortoise import connections
 from tortoise.transactions import in_transaction
 
 from app import rbac
@@ -30,10 +28,12 @@ from database.models import (
     Membership,
     MfaFactor,
     Organization,
+    Permission,
     RecoveryCode,
     Team,
     TeamMember,
 )
+from pawabase_core.ids import is_ulid
 
 FORMAT = 1
 
@@ -143,18 +143,6 @@ async def _wipe(project: str, env: str) -> None:
     await Permission.filter(name__startswith=f"{project}/{env}/").delete()
 
 
-async def _reset_sequences() -> None:
-    """Make auto-increment counters pass the ids a restore inserted explicitly."""
-    connection = connections.get("default")
-    if "postgres" not in type(connection).__module__ and "asyncpg" not in type(connection).__module__:
-        return
-    for table in ("akz_users", "akz_organizations"):
-        await connection.execute_query(
-            f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
-            f"COALESCE((SELECT MAX(id) FROM {table}), 1))"
-        )
-
-
 async def restore_identities(
     project: str, env: str, document: dict[str, Any], *, replace: bool
 ) -> dict[str, Any]:
@@ -185,7 +173,7 @@ async def restore_identities(
             )
             report["roles"] += 1
 
-        id_map: dict[int, int] = {}
+        id_map: dict[Any, str] = {}  # the id a backup used (a ULID, or an integer in old backups) -> the restored user's
         taken = {u.email: u for u in await AuthUser.filter(project=project, env=env, deleted_at=None)}
         for source in document.get("users", []):
             existing = taken.get(source["email"])
@@ -213,6 +201,8 @@ async def restore_identities(
                 report["users"]["updated"] += 1
             else:
                 wanted_id = source.get("id")
+                # A backup's ULID is kept when free. An old backup's integer id is not a key any more.
+                wanted_id = wanted_id.upper() if is_ulid(wanted_id) else None
                 id_free = wanted_id is not None and not await AuthUser.filter(id=wanted_id).exists()
                 clash = await AuthUser.filter(
                     project=project, env=env, username=fields["username"]
@@ -230,14 +220,14 @@ async def restore_identities(
                     **fields,
                 )
                 await user.save(force_create=True)
-                if not id_free:
+                if wanted_id is not None and not id_free:
                     report["warnings"].append(
                         f"{source['email']}: id {wanted_id} is in use, restored as {user.id}; "
                         "records that refer to the old id will not follow"
                     )
                 report["users"]["created"] += 1
             if source.get("id") is not None:
-                id_map[int(source["id"])] = user.id
+                id_map[source["id"]] = user.id
 
             await _restore_user_links(user, source)
 
@@ -274,7 +264,6 @@ async def restore_identities(
                     if user_id is not None:
                         await TeamMember.get_or_create(team=team, user_id=user_id)
             report["organizations"] += 1
-    await _reset_sequences()
     return report
 
 

@@ -13,14 +13,14 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sillo.auth.jwt_auth import JWTToken
 from sillo.exceptions import HTTPException
 
 from app import rbac
 from app.accounts import user_view
 from app.environment import AuthConfig
 from app.platform import Akountz
-from database.models import AuthUser, LoginEvent, Membership, Organization, SessionInfo
+from database.models import AuthUser, JWTToken, LoginEvent, Membership, Organization, SessionInfo
+from pawabase_core.ids import is_ulid
 from pawabase_core.tokens import issue_user_token, peek_claims
 
 
@@ -202,12 +202,12 @@ async def refresh_session(
     claims = peek_claims(refresh_token) or {}
     user = (
         await AuthUser.filter(
-            id=int(claims.get("sub", 0) or 0),
+            id=str(claims["sub"]).upper(),
             project=config.project,
             env=config.env,
             deleted_at=None,
         ).first()
-        if str(claims.get("sub", "")).isdigit()
+        if is_ulid(claims.get("sub"))
         else None
     )
     if user is None or user.is_disabled:
