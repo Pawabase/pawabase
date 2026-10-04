@@ -1,7 +1,0 @@
-# Python libraries that the functions you deploy with `pawabase deploy` import, installed into the image the API, workers and scheduler run.
-# `pawabase deploy` tells you which one is missing ("No module named ...") and refuses the deployment until it is here.
-#
-# Sell4me (the Sell4me product):
-Pillow>=10.3        # product images, receipts
-openpyxl>=3.1       # the Excel export
-httpx>=0.27
