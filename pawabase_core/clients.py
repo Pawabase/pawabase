@@ -3,7 +3,7 @@
 :class:`ServiceClient` wraps Sillo's :class:`~sillo.http.client.HTTPClient`
 (connection pooling, timeouts, statistics) and adds what every internal call
 needs: a fresh service token addressed to the callee, the platform context when
-acting for a project, and the operator's identity when acting for Studio.
+acting for an environment.
 
 In tests, pass ``app=`` to route calls in-process through Sillo's
 :class:`~sillo.testclient.AsyncTestClient` instead of the network.
@@ -105,22 +105,12 @@ class ServiceClient:
         self,
         *,
         context: PlatformContext | None = None,
-        operator: dict[str, Any] | None = None,
         extra: dict[str, str] | None = None,
     ) -> dict[str, str]:
         """Headers authenticating one call."""
-        claims = None
-        subject = None
-        if operator:
-            subject = str(operator.get("sub") or operator.get("user_id") or "")
-            claims = {"email": operator.get("email"), "roles": operator.get("roles") or []}
         headers = {
             SERVICE_HEADER: issue_service_token(
-                self.secret,
-                issuer=self.issuer,
-                audience=self.audience,
-                subject=subject,
-                claims=claims,
+                self.secret, issuer=self.issuer, audience=self.audience
             )
         }
         if context is not None:
@@ -137,12 +127,11 @@ class ServiceClient:
         json: Any = None,
         params: dict[str, Any] | None = None,
         context: PlatformContext | None = None,
-        operator: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
     ) -> Any:
         """Call the service and return the decoded body. Raises :class:`ServiceError`."""
         client = await self._client()
-        all_headers = self.headers(context=context, operator=operator, extra=headers)
+        all_headers = self.headers(context=context, extra=headers)
         kwargs: dict[str, Any] = {"headers": all_headers}
         if json is not None:
             kwargs["json"] = json
@@ -178,7 +167,6 @@ class ServiceClient:
         json: Any = None,
         params: dict[str, Any] | None = None,
         context: PlatformContext | None = None,
-        operator: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Call a service and preserve status and headers, including error responses.
@@ -187,7 +175,7 @@ class ServiceClient:
         service-to-service calls should use :meth:`request` and its exceptions.
         """
         kwargs: dict[str, Any] = {
-            "headers": self.headers(context=context, operator=operator, extra=headers)
+            "headers": self.headers(context=context, extra=headers)
         }
         if json is not None:
             kwargs["json"] = json

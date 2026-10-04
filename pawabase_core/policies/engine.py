@@ -2,8 +2,8 @@
 
 A policy answers "may this caller do this?" from what is known about the
 request: the caller (``auth``), the record being touched (``record``), the
-submitted data (``input``), the request itself (``request``) and the project
-(``project``, ``env``).
+submitted data (``input``), the request itself (``request``) and the environment
+(``env``).
 
 Policies are data, so Studio can edit them and Pawabase can store them. A
 condition is JSON::
@@ -390,7 +390,7 @@ BUILTIN_POLICIES: dict[str, Policy] = {
     "public": Policy("public", True, "Anyone, including anonymous callers."),
     "deny": Policy("deny", False, "Nobody except service credentials."),
     "authenticated": Policy("authenticated", {"authenticated": True}, "Any signed-in user."),
-    "service": Policy("service", {"service": True}, "Secret keys and operators only."),
+    "service": Policy("service", {"service": True}, "Secret keys and Studio only."),
     "owner": Policy(
         "owner", {"owner": "owner_id"}, "The user whose id is in the record's owner_id."
     ),
@@ -411,7 +411,7 @@ class PolicyEngine:
     that must all pass.
 
     Args:
-        policies: The project's stored policies by name.
+        policies: The environment's stored policies by name.
         python: Python policies registered with ``@policy``.
     """
 

@@ -1,4 +1,4 @@
-"""Which project and environment a request belongs to, and with what credential.
+"""Which environment a request belongs to, and with what credential.
 
 The gateway resolves an API key into a :class:`PlatformContext`, signs it, and
 forwards it in the ``X-Pawabase-Context`` header. Internal services read it back
@@ -16,9 +16,8 @@ CONTEXT_HEADER = "x-pawabase-context"
 SCOPE_KEY = "pawabase.context"
 
 #: Credential roles. ``anon`` is a publishable key with no elevated rights;
-#: ``service`` is a secret key and bypasses policies; ``operator`` is a platform
-#: operator acting through Studio.
-ROLES = ("anon", "service", "operator")
+#: ``service`` is a secret key (or Studio, acting for the runtime) and bypasses policies.
+ROLES = ("anon", "service")
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,14 +25,12 @@ class PlatformContext:
     """The resolved credential of a request.
 
     Attributes:
-        project: Project reference, e.g. ``"acme"``.
         env: Environment name, e.g. ``"production"``.
-        role: ``anon``, ``service`` or ``operator``.
+        role: ``anon`` or ``service``.
         key_id: The API key that was presented, if any.
         scopes: Scopes granted to that key. Empty means unrestricted within the role.
     """
 
-    project: str
     env: str
     role: str = "anon"
     key_id: str | None = None
@@ -42,7 +39,7 @@ class PlatformContext:
     @property
     def is_service(self) -> bool:
         """Whether this credential bypasses policies."""
-        return self.role in ("service", "operator")
+        return self.role == "service"
 
     def allows_scope(self, scope: str) -> bool:
         """Whether the key's scopes permit *scope* (``resource:read`` etc.)."""
@@ -61,7 +58,6 @@ class PlatformContext:
     def from_claims(cls, claims: dict[str, Any]) -> PlatformContext:
         """Rebuild a context from verified claims."""
         return cls(
-            project=str(claims["project"]),
             env=str(claims["env"]),
             role=str(claims.get("role", "anon")),
             key_id=claims.get("key_id"),
@@ -94,7 +90,7 @@ def require_context(ctx: Any = None) -> PlatformContext:
 
     found = current_context(ctx)
     if found is None:
-        raise HTTPException(status_code=401, detail="A project API key is required")
+        raise HTTPException(status_code=401, detail="An API key is required")
     return found
 
 

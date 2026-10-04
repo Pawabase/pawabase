@@ -11,9 +11,6 @@ from typing import Literal
 
 from sillo.config import Config
 
-#: The reserved project whose users operate the platform through Studio.
-PLATFORM_PROJECT = "_platform"
-PLATFORM_ENV = "main"
 
 
 class PlatformSettings(Config):
@@ -21,11 +18,11 @@ class PlatformSettings(Config):
 
     Attributes:
         service_name: How this service names itself in tokens and telemetry.
-        app_env: The deployment stage of the platform itself, not of a project.
+        app_env: The deployment stage of the runtime itself, not of one of its environments.
         debug: Sillo debug mode.
         internal_secret: Signs service tokens and the gateway's context header.
             Every service in one installation must share it.
-        jwt_master_secret: The root from which each project environment's
+        jwt_master_secret: The root from which each environment's
             user-token signing key is derived.
         master_key: Encrypts stored secrets. Rotating it makes existing secrets
             unreadable, so it must be backed up with the database.

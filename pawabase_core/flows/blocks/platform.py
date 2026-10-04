@@ -88,7 +88,6 @@ class CheckPolicy(Block):
         context = {
             "auth": run.state.get("auth") or {},
             "credential": run.state.get("credential") or {"is_service": False},
-            "project": run.state.get("project"),
             "env": run.state.get("env"),
             "record": config.get("record"),
             "input": config.get("input"),

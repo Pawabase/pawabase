@@ -19,7 +19,7 @@ raises follows its ``error`` edge if it has one, and otherwise fails the run.
 Blocks share state:
 
 * ``input``: what triggered the run;
-* ``auth``, ``project``, ``env``: who and where;
+* ``auth``, ``env``: who and where;
 * ``vars``: values set with ``control.set``;
 * ``steps.<node id>.output``: each finished block's output;
 * ``item`` and ``index``: inside a loop body;
@@ -167,7 +167,7 @@ class FlowRun:
         runtime: Platform capabilities for blocks.
         input: The trigger payload.
         auth: The caller's policy context.
-        project, env: Where the run belongs.
+        env: The environment the run belongs to.
         secrets: Resolved lazily through the runtime, never stored in traces.
         registry: Blocks; the process default when omitted.
         trigger: Which trigger node to start from, when a flow has several.
@@ -181,7 +181,6 @@ class FlowRun:
         runtime: Runtime | None = None,
         input: Any = None,
         auth: Mapping[str, Any] | None = None,
-        project: str | None = None,
         env: str | None = None,
         registry: BlockRegistry | None = None,
         trigger: str | None = None,
@@ -197,7 +196,6 @@ class FlowRun:
         self.state: dict[str, Any] = {
             "input": input,
             "auth": dict(auth or {}),
-            "project": project,
             "env": env,
             "vars": {},
             "steps": {},

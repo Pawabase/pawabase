@@ -120,7 +120,6 @@ def internal_router(name: str, telemetry: Telemetry) -> Router:
             "service": name,
             "requests": telemetry.query(
                 limit=min(int(q.get("limit", 100)), 1000),
-                project=q.get("project"),
                 env=q.get("env"),
                 status_min=int(q["status_min"]) if q.get("status_min") else None,
                 request_id=q.get("request_id"),

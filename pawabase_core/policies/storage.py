@@ -39,7 +39,6 @@ class PolicyStorage:
         read: Any = "authenticated",
         write: Any = "authenticated",
         credential: dict[str, Any] | None = None,
-        project: str | None = None,
         env: str | None = None,
         signed_reads: bool = True,
         signed_writes: bool = True,
@@ -51,7 +50,6 @@ class PolicyStorage:
             if resolved.handler is not None:
                 raise ValueError("storage policies must be JSON conditions")
         self.credential = credential or {"is_service": False, "role": "anon", "scopes": []}
-        self.project = project
         self.env = env
         self.signed_reads = signed_reads
         self.signed_writes = signed_writes
@@ -64,7 +62,6 @@ class PolicyStorage:
         context = {
             "auth": policy_auth(user),
             "credential": self.credential,
-            "project": self.project,
             "env": self.env,
             "object": {"key": key, "segments": key.split("/"), "action": name},
         }

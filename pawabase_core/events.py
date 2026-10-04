@@ -42,7 +42,7 @@ class PlatformEvent:
 
     Attributes:
         name: Dotted name, ``<noun>.<verb>`` by convention (``order.paid``).
-        project, env: Where it happened.
+        env: Where it happened.
         payload: Event data. Keep it JSON and keep it small; consumers fetch
             full records when they need them.
         source: The service that published it.
@@ -54,7 +54,6 @@ class PlatformEvent:
     """
 
     name: str
-    project: str
     env: str
     payload: Any = None
     source: str = "unknown"
@@ -152,7 +151,6 @@ class EventBus:
         self,
         name: str,
         *,
-        project: str,
         env: str,
         payload: Any = None,
         actor: str | None = None,
@@ -164,7 +162,6 @@ class EventBus:
         return await self.publish(
             PlatformEvent(
                 name=name,
-                project=project,
                 env=env,
                 payload=payload,
                 actor=actor,
