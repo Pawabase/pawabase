@@ -4,7 +4,7 @@ import json
 import sqlite3
 
 import pytest
-from pawabase_core.ids import is_ulid, ulid_timestamp_ms
+from pawabase_core.ids import is_ulid, legacy_ulid, ulid_timestamp_ms
 from sillo.record.commands import migrate
 
 from app.config import ApiSettings
@@ -46,9 +46,9 @@ async def test_integer_keys_become_ulids_and_every_link_survives(tmp_path):
     async with manager:
         await migrate(manager, target=LEGACY)
     db = sqlite3.connect(path)
-    insert(db, "pb_organizations", id=7, slug="acme", name="Acme", created_at="2026-03-01T10:00:00+00:00")
+    insert(db, "pb_organizations", id=7, slug="acme", name="Acme", created_at="2026-03-01T10:00:00+00:00", created_by="42")
     insert(db, "pb_organizations", id=9, slug="beta", name="Beta", created_at="2026-04-01T10:00:00+00:00")
-    insert(db, "pb_projects", id=3, ref="shop", name="Shop", organization_id=7)
+    insert(db, "pb_projects", id=3, ref="shop", name="Shop", organization_id=7, created_by="ops@example.com")
     insert(db, "pb_environments", id=11, project_id=3, name="development", version=4)
     insert(db, "pb_environments", id=12, project_id=3, name="production", version=1)
     insert(db, "pb_org_members", id=1, organization_id=7, user_id="42", role="owner")
@@ -77,7 +77,10 @@ async def test_integer_keys_become_ulids_and_every_link_survives(tmp_path):
     assert {e["project_id"] for e in envs} == {project["id"]} and envs[0]["version"] == 4
 
     member = rows(db, "SELECT * FROM pb_org_members")[0]
-    assert member["organization_id"] == orgs[0]["id"] and member["user_id"] == "42"  # an Akountz id: not this DB's to change
+    # User ids are Akountz's, held here as text: they become the same fixed ULIDs Akountz's migration gives them.
+    assert member["organization_id"] == orgs[0]["id"] and member["user_id"] == legacy_ulid(42)
+    assert orgs[0]["created_by"] == legacy_ulid(42)
+    assert project["created_by"] == "ops@example.com"  # not an id: left alone
 
     resource = rows(db, "SELECT * FROM pb_resources")[0]
     assert resource["environment_id"] == envs[0]["id"] and json.loads(resource["fields"]) == [{"name": "t"}]
