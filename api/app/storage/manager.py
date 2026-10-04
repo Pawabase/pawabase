@@ -16,12 +16,11 @@ from sillo.storage import Bucket, LocalDriver, MemoryDriver
 from sillo.storage.base import Action, StorageEvent
 from sillo.storage.signing import Signer
 
+from app.config import default_storage
 from pawabase_core.policies import PolicyStorage
 from pawabase_core.telemetry import note
 
 from .s3 import S3Driver
-
-
 
 class MimePatterns(tuple):
     """A bucket's ``accepts`` list that understands wildcards.
@@ -73,8 +72,12 @@ class StorageManager:
         self.operations = 0
 
     def _config(self, state: EnvironmentState) -> dict[str, Any]:
+        """The environment's storage: its own ``infra.storage``, else the platform default."""
         config = dict(state.infra.get("storage") or {})
-        config.setdefault("driver", "local")
+        if not config:
+            config = default_storage(self.platform.settings)
+        elif not config.get("driver"):
+            config["driver"] = "s3" if config.get("endpoint") else "local"
         return {key: self.platform.resolve_value(state, value) for key, value in config.items()}
 
     def signer(self, state: EnvironmentState, bucket: str) -> Signer:
@@ -110,6 +113,7 @@ class StorageManager:
                 secret_key=config.get("secret_key", ""),
                 prefix=prefix,
                 path_style=bool(config.get("path_style", True)),
+                public_endpoint=config.get("public_endpoint", ""),
             )
         elif kind == "local":
             root = config.get("root") or self.platform.settings.storage_root
@@ -123,6 +127,37 @@ class StorageManager:
         driver.listen(self._listener(state.project_ref, state.env_name))
         self._drivers[key] = driver
         return driver
+
+    async def prepare_default(self) -> str:
+        """Ready the platform default storage at startup.
+
+        For an S3-compatible default, create the remote bucket when missing so
+        the bundled MinIO needs no setup. A service that is down or refuses the
+        credentials is reported, not raised: the API still starts, and uploads
+        fail with that same reason until it is fixed.
+
+        Returns:
+            A one-line description of the default storage, for the startup log.
+        """
+        config = default_storage(self.platform.settings)
+        if config["driver"] != "s3":
+            return f"storage: {config['driver']} (default)"
+        driver = S3Driver(
+            bucket=str(config["bucket"]),
+            endpoint=str(config["endpoint"]),
+            region=str(config["region"]),
+            access_key=str(config["access_key"]),
+            secret_key=str(config["secret_key"]),
+            path_style=bool(config["path_style"]),
+        )
+        where = f"{config['endpoint'] or 'aws'}/{config['bucket']}"
+        try:
+            created = await driver.ensure_bucket()
+        except Exception as error:
+            return f"storage: s3 {where} NOT READY ({error})"
+        finally:
+            await driver.close()
+        return f"storage: s3 {where} ({'bucket created' if created else 'ready'})"
 
     def _listener(self, project: str, env: str):
         async def listener(event: StorageEvent) -> None:

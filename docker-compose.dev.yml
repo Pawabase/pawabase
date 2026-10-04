@@ -45,6 +45,14 @@ x-api-env: &api-env
   PAWABASE_DATABASE_URL: postgres://pawabase:pawabase@postgres:5432/pawabase
   PAWABASE_DEFAULT_DATA_URL: sqlite:///data/envs/{project}__{env}.db
   PAWABASE_STORAGE_ROOT: /data/objects
+  # File storage: the bundled MinIO unless .env points these at your own S3-compatible service.
+  PAWABASE_STORAGE_ENDPOINT: ${PAWABASE_STORAGE_ENDPOINT:-http://minio:9000}
+  PAWABASE_STORAGE_PUBLIC_ENDPOINT: ${PAWABASE_STORAGE_PUBLIC_ENDPOINT:-${PAWABASE_STORAGE_ENDPOINT:-http://localhost:9000}}
+  PAWABASE_STORAGE_BUCKET: ${PAWABASE_STORAGE_BUCKET:-pawabase}
+  PAWABASE_STORAGE_REGION: ${PAWABASE_STORAGE_REGION:-us-east-1}
+  PAWABASE_STORAGE_ACCESS_KEY: ${PAWABASE_STORAGE_ACCESS_KEY:-pawabase}
+  PAWABASE_STORAGE_SECRET_KEY: ${PAWABASE_STORAGE_SECRET_KEY:-pawabase-dev-minio}
+  PAWABASE_STORAGE_PATH_STYLE: ${PAWABASE_STORAGE_PATH_STYLE:-true}
   PAWABASE_CODE_PATH: /app/code
   PAWABASE_INLINE_WORKER: "false"
   PAWABASE_INLINE_SCHEDULER: "false"
@@ -75,6 +83,20 @@ services:
       timeout: 3s
       retries: 20
 
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: pawabase
+      MINIO_ROOT_PASSWORD: pawabase-dev-minio
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [minio:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   api:
     <<: *pawabase
     command: ["api"]
@@ -86,6 +108,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      minio: { condition: service_healthy, required: false }
     healthcheck: &health
       test: ["CMD", "python", "-c", "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % os.environ.get('PORT', '8001'), timeout=3)"]
       interval: 5s
@@ -180,5 +203,6 @@ services:
 
 volumes:
   postgres:
+  minio:
   api-data:
   vite-modules:

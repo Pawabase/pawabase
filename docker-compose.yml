@@ -26,6 +26,15 @@ x-api-env: &api-env
   PAWABASE_DATABASE_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase
   PAWABASE_DEFAULT_DATA_URL: ${PAWABASE_DEFAULT_DATA_URL:-postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase}
   PAWABASE_STORAGE_ROOT: /data/objects
+  # File storage: the bundled MinIO unless .env points these at your own S3-compatible
+  # service (AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces, Wasabi, ...).
+  PAWABASE_STORAGE_ENDPOINT: ${PAWABASE_STORAGE_ENDPOINT:-http://minio:9000}
+  PAWABASE_STORAGE_PUBLIC_ENDPOINT: ${PAWABASE_STORAGE_PUBLIC_ENDPOINT:-${PAWABASE_STORAGE_ENDPOINT:-http://localhost:${PAWABASE_MINIO_PORT:-9000}}}
+  PAWABASE_STORAGE_BUCKET: ${PAWABASE_STORAGE_BUCKET:-pawabase}
+  PAWABASE_STORAGE_REGION: ${PAWABASE_STORAGE_REGION:-us-east-1}
+  PAWABASE_STORAGE_ACCESS_KEY: ${PAWABASE_STORAGE_ACCESS_KEY:-${MINIO_ROOT_USER:-pawabase}}
+  PAWABASE_STORAGE_SECRET_KEY: ${PAWABASE_STORAGE_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-}}
+  PAWABASE_STORAGE_PATH_STYLE: ${PAWABASE_STORAGE_PATH_STYLE:-true}
   PAWABASE_CODE_PATH: /code
   # `pawabase deploy` uploads land here: /code is a read-only mount, /data is the volume the api, worker and scheduler share.
   PAWABASE_DEPLOYMENTS_PATH: /data/deployments
@@ -60,6 +69,27 @@ services:
       timeout: 3s
       retries: 20
 
+  # Object storage. Pawabase creates its bucket on first start, so there is nothing to set
+  # up. Using your own S3-compatible service instead? Set PAWABASE_STORAGE_* in .env and run
+  # `docker compose up -d --scale minio=0`.
+  minio:
+    image: ${MINIO_IMAGE:-minio/minio:latest}
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pawabase}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+    # The S3 port is published so browsers can use presigned URLs; the console is local only.
+    ports:
+      - "${PAWABASE_MINIO_PORT:-9000}:9000"
+      - "127.0.0.1:${PAWABASE_MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes: [minio:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   api:
     <<: *pawabase
     command: ["api"]
@@ -68,6 +98,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      minio: { condition: service_healthy, required: false }
     healthcheck: &health
       test: ["CMD", "python", "-c", "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % os.environ.get('PORT', '8001'), timeout=3)"]
       interval: 10s
@@ -142,4 +173,5 @@ services:
 volumes:
   postgres:
   redis:
+  minio:
   api-data:
