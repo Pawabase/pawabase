@@ -26,7 +26,13 @@ from sillo.auth.jwt_auth.tokens import TokenForUser
 #: Sillo modules that bind the model classes by name, and which names each binds.
 _BOUND = {
     "sillo.permissions": ("Group", "GroupPermission", "Permission", "UserGroup", "UserPermission"),
-    "sillo.permissions.models": ("Group", "GroupPermission", "Permission", "UserGroup", "UserPermission"),
+    "sillo.permissions.models": (
+        "Group",
+        "GroupPermission",
+        "Permission",
+        "UserGroup",
+        "UserPermission",
+    ),
     "sillo.permissions.mixins": ("Group", "GroupPermission", "UserPermission"),
     "sillo.auth.jwt_auth": ("JWTToken", "TokenBlacklist"),
     "sillo.auth.jwt_auth.models": ("JWTToken", "TokenBlacklist"),
@@ -61,7 +67,9 @@ class UlidJWTUserMixin(JWTUserMixin):
     def _subject(self) -> str:
         return str(self.identity)  # ty: ignore[unresolved-attribute]
 
-    async def _record_pair(self, family: str, access: tuple[str, datetime], refresh: tuple[str, datetime]) -> None:
+    async def _record_pair(
+        self, family: str, access: tuple[str, datetime], refresh: tuple[str, datetime]
+    ) -> None:
         token = _jwt_token()
         for kind, (jti, expires) in (("access", access), ("refresh", refresh)):
             await token.create(
@@ -88,10 +96,19 @@ class UlidJWTUserMixin(JWTUserMixin):
         access = tokens.access_token(access_ttl, jti=access_jti)
         refresh = tokens.refresh_token(refresh_ttl, jti=refresh_jti)
         now = datetime.now(UTC)
-        await self._record_pair(family, (access_jti, now + access_ttl), (refresh_jti, now + refresh_ttl))
-        return {"access_token": access, "refresh_token": refresh, "token_type": "bearer", "token_family": family}
+        await self._record_pair(
+            family, (access_jti, now + access_ttl), (refresh_jti, now + refresh_ttl)
+        )
+        return {
+            "access_token": access,
+            "refresh_token": refresh,
+            "token_type": "bearer",
+            "token_family": family,
+        }
 
-    async def refresh_token_pair(self, refresh_token: str, secret: str, algorithm: str = "HS256") -> dict:
+    async def refresh_token_pair(
+        self, refresh_token: str, secret: str, algorithm: str = "HS256"
+    ) -> dict:
         token = _jwt_token()
         tokens = TokenForUser(self, secret=secret, algorithm=algorithm)
         try:
@@ -127,9 +144,11 @@ class UlidJWTUserMixin(JWTUserMixin):
         return await _jwt_token().revoke_all_for_user(self._subject())
 
     async def active_token_count(self) -> int:
-        return await _jwt_token().filter(
-            user_id=self._subject(), revoked=False, expires_at__gt=datetime.now(UTC)
-        ).count()
+        return (
+            await _jwt_token()
+            .filter(user_id=self._subject(), revoked=False, expires_at__gt=datetime.now(UTC))
+            .count()
+        )
 
 
 class UlidUserMixin:

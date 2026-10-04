@@ -1,11 +1,15 @@
 """Resources keyed by ULID: generated ids, sortable, case-insensitive, 404 for malformed ones."""
 
 import pytest
+
 from pawabase_core.clients import ServiceError
 from pawabase_core.ids import is_ulid
 
 ENV = "/platform/v1/projects/acme/envs/development"
-ALL = {op: {"enabled": True, "policy": "public"} for op in ("list", "get", "create", "update", "delete")}
+ALL = {
+    op: {"enabled": True, "policy": "public"}
+    for op in ("list", "get", "create", "update", "delete")
+}
 
 
 async def seed(api, id_type="ulid"):
@@ -47,7 +51,9 @@ async def test_a_record_is_found_by_its_ulid_in_either_case_and_malformed_ids_ar
     for bad in ("1", "not-a-ulid", key[:-1]):
         assert (await api.http.get(f"/rest/v1/notes/{bad}", headers=anon)).status_code == 404
 
-    patched = await api.http.patch(f"/rest/v1/notes/{key.lower()}", json={"text": "y"}, headers=anon)
+    patched = await api.http.patch(
+        f"/rest/v1/notes/{key.lower()}", json={"text": "y"}, headers=anon
+    )
     assert patched.status_code == 200 and patched.json()["text"] == "y"
     assert (await api.http.delete(f"/rest/v1/notes/{key}", headers=anon)).status_code == 204
     assert (await api.http.get(f"/rest/v1/notes/{key}", headers=anon)).status_code == 404
@@ -68,9 +74,15 @@ async def test_new_resources_default_to_ulid_and_integer_keys_are_refused(api):
     made = await api.studio.post(f"{ENV}/resources", json={"name": "plain", "fields": []})
     assert made["id_type"] == "ulid"  # nothing said, so ULID
     with pytest.raises(ServiceError) as refused:
-        await api.studio.post(f"{ENV}/resources", json={"name": "legacy", "id_type": "integer", "fields": []})
+        await api.studio.post(
+            f"{ENV}/resources", json={"name": "legacy", "id_type": "integer", "fields": []}
+        )
     assert refused.value.status == 422 and "ulid" in str(refused.value)
-    assert (await api.studio.post(f"{ENV}/resources", json={"name": "ids", "id_type": "uuid", "fields": []}))["id_type"] == "uuid"
+    assert (
+        await api.studio.post(
+            f"{ENV}/resources", json={"name": "ids", "id_type": "uuid", "fields": []}
+        )
+    )["id_type"] == "uuid"
 
 
 async def test_an_existing_integer_resource_keeps_working_and_cannot_be_retyped(api):
@@ -96,7 +108,9 @@ async def test_an_existing_integer_resource_keeps_working_and_cannot_be_retyped(
     }
     resaved = await api.studio.put(f"{ENV}/resources/old", json=body)  # id_type not named: kept
     assert resaved["id_type"] == "integer" and resaved["description"] == "edited"
-    assert (await api.studio.put(f"{ENV}/resources/old", json={**body, "id_type": "integer"}))["id_type"] == "integer"
+    assert (await api.studio.put(f"{ENV}/resources/old", json={**body, "id_type": "integer"}))[
+        "id_type"
+    ] == "integer"
     with pytest.raises(ServiceError) as retyped:
         await api.studio.put(f"{ENV}/resources/old", json={**body, "id_type": "ulid"})
     assert retyped.value.status == 409

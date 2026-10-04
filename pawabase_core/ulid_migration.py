@@ -122,7 +122,9 @@ class UlidRebuild:
         remap: dict[str, dict[Any, str]] = {}
         for table, rows in self._rows.items():
             key = keys[table]
-            if rows and not all(isinstance(row[key], int) and not isinstance(row[key], bool) for row in rows):
+            if rows and not all(
+                isinstance(row[key], int) and not isinstance(row[key], bool) for row in rows
+            ):
                 continue  # string or UUID keys stay as they are
             mapping: dict[Any, str] = {}
             if table in self.fixed:
@@ -153,7 +155,9 @@ class UlidRebuild:
                         continue
                     soft = column in self.references.get(table, {})
                     # A soft reference may hold the integer as text ("7"), as Sillo's permission tables do.
-                    lookup = int(value) if soft and isinstance(value, str) and value.isdigit() else value
+                    lookup = (
+                        int(value) if soft and isinstance(value, str) and value.isdigit() else value
+                    )
                     if lookup not in mapping:
                         if soft:
                             continue  # a reference to a row that is gone: keep it as it was

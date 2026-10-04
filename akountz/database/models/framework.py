@@ -16,7 +16,6 @@ from tortoise import fields
 from pawabase_core.records import ulid_pk
 from pawabase_core.ulid_auth import adopt
 
-
 # Sillo's own classes, kept by name: adopt() rebinds the module attributes to the subclasses below.
 _SilloGroup = _permissions.Group
 
