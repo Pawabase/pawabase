@@ -1,4 +1,4 @@
-"""Akountz's routers: ``/auth/v1`` for users, ``/admin/v1`` for operators and services."""
+"""Akountz's routers: ``/auth/v1`` for users, ``/admin/v1`` for Studio and the other services."""
 
 from __future__ import annotations
 

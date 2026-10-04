@@ -23,7 +23,7 @@ from database.models import FunctionDeployment, FunctionRun
 from pawabase_core.context import current_context
 from pawabase_core.functions import MAIN
 from pawabase_core.ids import new_ulid
-from routes.common import NAME_PATTERN, MANAGE, actor, audit, dump, get_environment, page_params
+from routes.common import MANAGE, NAME_PATTERN, actor, audit, dump, get_environment, page_params
 
 
 def _manage_scope(ctx: HttpContext) -> None:

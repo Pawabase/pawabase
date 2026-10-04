@@ -5,7 +5,7 @@
 #   STUDIO_VITE=1 scripts/dev.sh   # Studio loads the front end from `npm run dev`
 #
 # State lives in ./.dev (delete it to start over). Studio is on :8090, the
-# gateway on :8080. Sign in as admin@pawabase.local / Pawabase!admin1.
+# gateway on :8080.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STATE="${PAWABASE_DEV_DIR:-$ROOT/.dev}"
@@ -20,8 +20,6 @@ export PAWABASE_MASTER_KEY="${PAWABASE_MASTER_KEY:-dev-master-key-change-me-plea
 export PAWABASE_DB_GENERATE_SCHEMAS=true
 export PAWABASE_PUBLIC_URL="http://127.0.0.1:8080"
 export PAWABASE_PUBLIC_GATEWAY_URL="http://127.0.0.1:8080"
-export PAWABASE_ADMIN_EMAIL="${PAWABASE_ADMIN_EMAIL:-admin@pawabase.local}"
-export PAWABASE_ADMIN_PASSWORD="${PAWABASE_ADMIN_PASSWORD:-Pawabase!admin1}"
 export PAWABASE_INLINE_SCHEDULER=true
 [ -n "${STUDIO_VITE:-}" ] && export PAWABASE_VITE_DEV=true
 
@@ -42,10 +40,10 @@ start() {
 trap 'kill "${pids[@]}" 2>/dev/null; wait' EXIT INT TERM
 
 echo "Starting Pawabase:"
-start api 8001 PAWABASE_DATABASE_URL="sqlite://$STATE/api.db" PAWABASE_DEFAULT_DATA_URL="sqlite://$STATE/data/{project}__{env}.db" PAWABASE_STORAGE_ROOT="$STATE/objects" PAWABASE_CODE_PATH="$ROOT/code"
+start api 8001 PAWABASE_DATABASE_URL="sqlite://$STATE/api.db" PAWABASE_DEFAULT_DATA_URL="sqlite://$STATE/data/{env}.db" PAWABASE_STORAGE_ROOT="$STATE/objects" PAWABASE_CODE_PATH="$ROOT/code"
 start akountz 8002 PAWABASE_DATABASE_URL="sqlite://$STATE/akountz.db"
 start angula 8003
 start gateway 8080
 start studio 8090
-echo "Studio: http://127.0.0.1:8090  ($PAWABASE_ADMIN_EMAIL / $PAWABASE_ADMIN_PASSWORD)"
+echo "Studio: http://127.0.0.1:8090"
 wait

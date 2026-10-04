@@ -12,6 +12,7 @@ from app.deployments import Deployments, unpack
 from pawabase import codec
 from pawabase_core.tokens import issue_user_token
 
+
 def env(name="development"):
     return f"/platform/v1/envs/{name}"
 

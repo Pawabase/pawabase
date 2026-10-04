@@ -34,8 +34,8 @@ from pawabase_core.context import PlatformContext
 from pawabase_core.events import EventBus
 from pawabase_core.functions import (
     MAIN,
-    FunctionSpec,
     RUNTIME,
+    FunctionSpec,
     ProjectCode,
     clear_functions,
     list_resolved_functions,

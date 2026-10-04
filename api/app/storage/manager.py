@@ -22,6 +22,7 @@ from pawabase_core.telemetry import note
 
 from .s3 import S3Driver
 
+
 class MimePatterns(tuple):
     """A bucket's ``accepts`` list that understands wildcards.
 

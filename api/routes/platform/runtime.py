@@ -21,6 +21,7 @@ import time
 import uuid
 from typing import Any
 
+from pawabase.codec import decode, encode
 from pydantic import BaseModel, Field
 from sillo import HttpContext, Router
 from sillo import json as json_response
@@ -28,7 +29,6 @@ from sillo.exceptions import HTTPException
 
 from app.platform import Platform
 from app.runtime import ApiRuntime
-from pawabase.codec import decode, encode
 from pawabase_core.context import current_context
 from pawabase_core.flows import FlowError
 from pawabase_core.functions import FunctionError

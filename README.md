@@ -4,11 +4,14 @@
 
 Pawabase is a self-hostable backend platform built on [Sillo](https://github.com/sillohq/core).
 You bring the database, Redis, object storage, SMTP and OAuth credentials; Pawabase gives you
-the backend around them, operated from one control plane:
+the backend around them, operated from Studio. **One Pawabase installation is one project**:
+start it, open Studio, and you are managing that backend. There is no sign-in, no organization
+and no project to create first.
+
 
 - **Resources**: tables exposed as REST with filtering, sorting, relations and OpenAPI docs.
 - **Policies**: JSON conditions, with equality checks pushed down to SQL.
-- **Auth**: Akountz handles accounts, sessions, OAuth, TOTP MFA, organizations, roles and permissions.
+- **Auth**: Akountz handles your application's users: accounts, sessions, OAuth, TOTP MFA, the organizations they create, roles and permissions.
 - **Realtime**: Angula channels with broadcast, presence and history.
 - **Flows**: a visual workflow editor with 58 blocks.
 - **Code**: Python functions and custom routes.
@@ -27,7 +30,7 @@ listed in [`docs/sillo-gaps.md`](docs/sillo-gaps.md).
 |---|---|---|
 | Gateway | 8080 (public) | The only public entry point. It resolves API keys, signs the platform context, applies CORS and rate limits, and proxies HTTP and WebSockets. |
 | Studio | 8090 (public) | The control plane: Sillo, sillo-inertia and React. |
-| API | 8001 | Projects, environments, resources, routes, flows, functions, events, storage, keys, secrets and docs. |
+| API | 8001 | Environments, resources, routes, flows, functions, events, storage, keys, secrets and docs. |
 | Worker | — | Queue workers: flows, functions, event processing, webhooks and mail. |
 | Scheduler | — | Cron and interval schedules. Run exactly one. |
 | Akountz | 8002 | Identity. |
@@ -46,7 +49,7 @@ docker compose -f docker-compose.dev.yml up
 Runs every service plus Postgres and Redis, with the repository bind-mounted into the
 containers. Edit Python in any service or `pawabase_core/` and only that service restarts;
 edit Studio's front end and Vite hot-reloads the browser. No `.env` needed. Studio is on
-<http://localhost:8090> (`admin@pawabase.local` / `Pawabase!admin1`), the gateway on `:8080`.
+<http://localhost:8090> (it opens straight into the backend), the gateway on `:8080`.
 Rebuild (`up --build`) only when a `pyproject.toml` or `uv.lock` changes.
 
 ## Run it with Docker (production)
@@ -58,21 +61,24 @@ cp .env.test .env
 docker compose up -d
 ```
 
-Then open Studio at <http://localhost:8090> and sign in as `admin@pawabase.test` /
-`Pawabase!test1`. The values in `.env.test` are public, so use them only locally.
+Then open Studio at <http://localhost:8090>. The values in `.env.test` are public, so use them
+only locally.
 
 For a real deployment, start from `.env.example` instead:
 
 ```sh
 cp .env.example .env
-# Fill in the secrets: openssl rand -hex 32 for each, and an admin password
-# with upper- and lower-case letters, a digit and a symbol.
+# Fill in the secrets: openssl rand -hex 32 for each.
 docker compose up -d
 ```
 
-Open Studio at <http://localhost:8090> and sign in with `PAWABASE_ADMIN_EMAIL` /
-`PAWABASE_ADMIN_PASSWORD`. Create a project; it comes with `development`, `staging` and
-`production` environments, each with a publishable and a secret key.
+Open Studio at <http://localhost:8090>. A fresh runtime starts with a `development` environment;
+add `staging` and `production` from Studio's Environments page. Every environment has its own
+publishable and secret key (Keys).
+
+Studio has **no sign-in**, so the compose file publishes it on localhost only. Reach it over an
+SSH tunnel, or put a proxy that authenticates people in front of it before exposing it. Name
+the backend with `PAWABASE_PROJECT_NAME`.
 
 Clients call the gateway:
 
@@ -83,7 +89,7 @@ curl -X POST http://localhost:8080/auth/v1/signup -H "apikey: <publishable key>"
 ```
 
 The bundled Postgres holds the platform's own data, Akountz, and default resource tables.
-Default resource tables are namespaced by project and environment; configure
+Default resource tables are namespaced by environment; configure
 `database_url` in Studio → Settings → Infrastructure when an environment should use its own
 database. Redis carries the queue, events, cache and rate limits. The
 same goes for storage and mail (SMTP). File storage runs on a bundled MinIO by default; set
@@ -101,8 +107,8 @@ Containers apply database migrations on start (Sillo Record migrations). Set
 - `PAWABASE_APP_ENV=production` (the compose default) makes every service refuse to start while
   a development secret is still in place.
 - Scale `api`, `worker`, `akountz`, `angula` and `gateway` horizontally. Keep one `scheduler`.
-- Mount your project code (functions, policies, routes) at `/code/<project>`. The compose file
-  mounts `code/`.
+- Mount your code (`functions/`, `policies/`, `routes.py`) at `/code`. The compose file mounts
+  `code/`.
 
 ## Develop without Docker
 
@@ -114,9 +120,7 @@ scripts/dev.sh                  # every service on SQLite, Studio on :8090
 STUDIO_VITE=1 scripts/dev.sh    # …with Studio's front end from `npm run dev`
 ```
 
-Sign in as `admin@pawabase.local` / `Pawabase!admin1`. Studio first asks you to create an
-organization (every project lives in one, and you manage your team there); then create a project
-with any reference.
+Open Studio on <http://localhost:8090>: it starts in the `development` environment.
 
 Tests and lint:
 

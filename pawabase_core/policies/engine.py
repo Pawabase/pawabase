@@ -455,7 +455,7 @@ class PolicyEngine:
     async def check(self, ref: Any, context: Mapping[str, Any]) -> Decision:
         """Decide one operation.
 
-        Service credentials (secret keys, operators, services) always pass: they
+        Service credentials (secret keys, Studio, services) always pass: they
         are how a developer's own servers and Studio operate on the data.
         """
         if lookup(context, "credential.is_service"):

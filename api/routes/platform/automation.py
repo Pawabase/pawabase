@@ -43,7 +43,7 @@ class EmitBody(BaseModel):
     payload: Any = None
 
 
-def _operator_auth(ctx: HttpContext) -> dict[str, Any]:
+def _caller_auth(ctx: HttpContext) -> dict[str, Any]:
     from pawabase_core.principal import policy_auth
 
     return policy_auth(ctx.scope.get("user"))
@@ -80,7 +80,7 @@ def register(r: Router, platform: Platform) -> None:
     )
     async def run_now(ctx: HttpContext, env: str, name: str, body: RunBody):
         state = await platform.state(env)
-        auth = body.as_user or {"authenticated": False, "kind": "operator"}
+        auth = body.as_user or {"authenticated": False, "kind": "service"}
         request_id = getattr(ctx.state, "request_id", None)
         try:
             run = await run_flow(
@@ -90,7 +90,7 @@ def register(r: Router, platform: Platform) -> None:
                 body.input,
                 trigger="manual",
                 auth=auth,
-                credential={"is_service": body.as_user is None, "role": "operator"},
+                credential={"is_service": body.as_user is None, "role": "service"},
                 request_id=request_id,
                 entry=body.entry,
             )
@@ -189,7 +189,7 @@ def register(r: Router, platform: Platform) -> None:
                 name,
                 body.input,
                 trigger="manual",
-                auth=body.as_user or _operator_auth(ctx),
+                auth=body.as_user or _caller_auth(ctx),
                 branch=body.branch,
             )
         except NotFound as exc:

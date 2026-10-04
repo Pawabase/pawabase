@@ -12,7 +12,6 @@ from typing import Literal
 from sillo.config import Config
 
 
-
 class PlatformSettings(Config):
     """Configuration shared by every service.
 

@@ -15,6 +15,7 @@ from app import route_stats
 from app.analytics import DEFAULT_RANGE, environment_analytics
 from app.platform import PLATFORM_QUEUES, Platform
 from database.models import (
+    ApiKey,
     AuditEntry,
     Environment,
     EventLog,
@@ -24,7 +25,6 @@ from database.models import (
     JobRun,
     MailLog,
     MetricCounter,
-    ApiKey,
     RequestLog,
     WorkerHeartbeat,
 )

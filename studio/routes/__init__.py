@@ -299,7 +299,7 @@ def register_routes(
     # with a *service* platform context. A service credential bypasses every
     # channel policy (see ``Realtime.authorize``), so the console can watch,
     # subscribe to presence on, and publish to any channel in the
-    # environment — an operator's tool, the same way an Ably control-plane
+    # environment: a developer's tool, the same way an Ably control-plane
     # key can see every channel.
     #
     # A WebSocket handshake cannot carry Studio's CSRF header, so the browser

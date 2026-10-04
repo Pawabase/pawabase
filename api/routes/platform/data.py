@@ -1,7 +1,7 @@
 """Operating on an environment's data from Studio.
 
 Resource schema migration, record browsing and editing, and a database console.
-Operators act with service rights. Every write still goes through the same
+Studio acts with service rights. Every write still goes through the same
 side effects as the public API (cache invalidation, events, realtime).
 """
 
@@ -144,7 +144,7 @@ def register(r: Router, platform: Platform) -> None:
         summary="The environment's whole compiled OpenAPI document",
     )
     async def environment_openapi(ctx: HttpContext, env: str):
-        # Operators read the docs whether or not ``public_docs`` publishes them
+        # Studio reads the docs whether or not ``public_docs`` publishes them
         # at /docs/v1; that setting only decides what anonymous callers see.
         version = ctx.query_params.get("version", "v1")
         state = await platform.state_for_version(

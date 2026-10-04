@@ -1,7 +1,7 @@
 """Administering an environment's identities: Studio, secret keys and other services.
 
 Every route takes the environment from its path and requires a service token
-(Studio acting for an operator, or the API). This is the whole of "Studio must
+(Studio, or the API). This is the whole of "Studio must
 provide complete operational management of Akountz".
 """
 

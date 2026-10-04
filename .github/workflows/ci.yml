@@ -64,13 +64,11 @@ jobs:
             echo "PAWABASE_JWT_MASTER_SECRET=$(openssl rand -hex 32)"
             echo "PAWABASE_MASTER_KEY=$(openssl rand -hex 32)"
             echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)"
-            echo "PAWABASE_ADMIN_EMAIL=admin@example.com"
-            echo "PAWABASE_ADMIN_PASSWORD=Ci!admin-pass1"
           } > .env
       - run: docker compose build
       - run: docker compose up -d --wait --wait-timeout 180
       - name: Smoke test
-        run: scripts/smoke.sh admin@example.com 'Ci!admin-pass1'
+        run: scripts/smoke.sh
       - name: Logs
         if: failure()
         run: docker compose logs --no-color

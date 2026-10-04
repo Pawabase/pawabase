@@ -20,7 +20,7 @@ from app.releases import (
 )
 from database.models import ApiVersion, Branch, DefinitionRevision, Deployment, Release
 from pawabase_core.ids import new_ulid
-from routes.common import NAME_PATTERN, MANAGE, actor, audit, dump, get_environment
+from routes.common import MANAGE, NAME_PATTERN, actor, audit, dump, get_environment
 
 VERSION_PATTERN = r"^v[1-9][0-9]*$"
 

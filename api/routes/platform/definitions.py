@@ -43,7 +43,7 @@ from pawabase_core.ids import is_ulid, new_ulid
 from pawabase_core.policies import PolicyEngine, PolicyError, validate_condition
 from pawabase_core.schemas import SchemaError, validate_fields
 from pawabase_core.transformers import TransformerError, validate_transformer
-from routes.common import NAME_PATTERN, MANAGE, audit, changed, dump, get_environment
+from routes.common import MANAGE, NAME_PATTERN, audit, changed, dump, get_environment
 
 RESERVED_RESOURCE_NAMES = {"docs", "openapi.json", "x", "rpc", "health", "internal", "platform"}
 ROUTE_PATH = re.compile(r"^(/[A-Za-z0-9_.\-]+|/\{[A-Za-z_][A-Za-z0-9_]*(:path)?\})+$")
