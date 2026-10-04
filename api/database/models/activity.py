@@ -6,12 +6,13 @@ from sillo.record import Model
 from tortoise import fields
 
 from database.fields import AnyJSONField
+from pawabase_core.records import ulid_pk
 
 
 class RequestLog(Model):
     """One persisted data-plane request and its structured trace notes."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     request_id = fields.CharField(max_length=64, db_index=True)
     service = fields.CharField(max_length=32, db_index=True)
     project = fields.CharField(max_length=63, db_index=True)
@@ -60,7 +61,7 @@ class FlowRun(Model):
 class EventLog(Model):
     """A published event and what consumed it."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     event_id = fields.CharField(max_length=64, unique=True, db_index=True)
     project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63)
@@ -80,7 +81,7 @@ class EventLog(Model):
 class WebhookDelivery(Model):
     """One attempt series to deliver an event to an outbound webhook."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     endpoint = fields.ForeignKeyField(
         "models.WebhookEndpoint", related_name="deliveries", on_delete=fields.CASCADE
     )
@@ -134,7 +135,7 @@ class JobRun(Model):
 class FailedJobRecord(Model):
     """Sillo's failed-job store, persisted (see ``app.jobs.failed``)."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     job_id = fields.CharField(max_length=64, db_index=True)
     queue = fields.CharField(max_length=128, db_index=True)
     job_class = fields.CharField(max_length=255)
@@ -150,7 +151,7 @@ class FailedJobRecord(Model):
 class MetricCounter(Model):
     """A per-minute counter written by ``metric.increment`` and platform code."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63)
     name = fields.CharField(max_length=128, db_index=True)
@@ -168,7 +169,7 @@ class MetricCounter(Model):
 class MailLog(Model):
     """A message sent (or suppressed) through an environment's mail settings."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63)
     to = AnyJSONField(default=list)
@@ -187,7 +188,7 @@ class MailLog(Model):
 class WorkerHeartbeat(Model):
     """A queue worker or scheduler process, as last seen."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     name = fields.CharField(max_length=255, unique=True)
     kind = fields.CharField(max_length=16, default="worker")
     queues = AnyJSONField(default=list)

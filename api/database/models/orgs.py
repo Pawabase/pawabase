@@ -6,6 +6,7 @@ from sillo.record import Model
 from tortoise import fields
 
 from database.fields import AnyJSONField
+from pawabase_core.records import ulid_pk
 
 #: Least to most privileged. A role can do everything the ones before it can.
 #:
@@ -16,9 +17,9 @@ ORG_ROLES = ("viewer", "developer", "admin", "owner")
 
 
 class Organization(Model):
-    """A company or team. Members are platform operators; projects belong to it."""
+    """A company or team. Members are platform operators, and projects belong to it."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     slug = fields.CharField(max_length=63, unique=True, db_index=True)
     name = fields.CharField(max_length=200)
     created_by = fields.CharField(max_length=255, null=True)
@@ -31,7 +32,7 @@ class Organization(Model):
 class OrgMember(Model):
     """An operator (an Akountz user of ``_platform``) in an organization."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     organization = fields.ForeignKeyField(
         "models.Organization", related_name="members", on_delete=fields.CASCADE
     )
@@ -49,7 +50,7 @@ class OrgMember(Model):
 class OrgInvitation(Model):
     """An invitation to join. Only the token's hash is stored."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     organization = fields.ForeignKeyField(
         "models.Organization", related_name="invitations", on_delete=fields.CASCADE
     )

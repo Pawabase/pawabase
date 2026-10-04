@@ -11,10 +11,11 @@ from sillo.record import Model
 from tortoise import fields
 
 from database.fields import AnyJSONField
+from pawabase_core.records import ulid_pk
 
 
 class _Definition(Model):
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     name = fields.CharField(max_length=128)
     description = fields.TextField(default="")
 

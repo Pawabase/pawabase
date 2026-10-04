@@ -6,12 +6,13 @@ from sillo.record import Model
 from tortoise import fields
 
 from database.fields import AnyJSONField
+from pawabase_core.records import ulid_pk
 
 
 class Branch(Model):
     """A movable authoring pointer within one environment."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     environment = fields.ForeignKeyField(
         "models.Environment", related_name="branches", on_delete=fields.CASCADE
     )
@@ -58,7 +59,7 @@ class DefinitionRevision(Model):
 class ApiVersion(Model):
     """A stable public URL namespace such as ``v1`` or ``v2``."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     environment = fields.ForeignKeyField(
         "models.Environment", related_name="api_versions", on_delete=fields.CASCADE
     )
@@ -99,7 +100,7 @@ class Release(Model):
 class Deployment(Model):
     """Append-only history of activations and rollbacks."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     environment = fields.ForeignKeyField(
         "models.Environment", related_name="deployments", on_delete=fields.CASCADE
     )

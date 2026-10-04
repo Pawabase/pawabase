@@ -9,9 +9,7 @@ revoke, and resolve a user's direct and group permissions.
 
 from __future__ import annotations
 
-from sillo.permissions import Group, Permission, UserGroup
-
-from database.models import AuthUser
+from database.models import AuthUser, Group, Permission, UserGroup
 
 
 def scoped(project: str, env: str, name: str) -> str:

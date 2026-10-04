@@ -12,7 +12,18 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from tortoise import fields
 from tortoise.exceptions import IntegrityError
+
+from .ids import new_ulid
+
+
+def ulid_pk() -> fields.CharField:
+    """A ULID primary key: 26 characters, generated when the row is created.
+
+    Every Pawabase table keys on this, never on an auto-increment integer.
+    """
+    return fields.CharField(max_length=26, primary_key=True, default=new_ulid)
 
 
 async def upsert(

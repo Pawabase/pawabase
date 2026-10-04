@@ -310,6 +310,6 @@ class EnvironmentCache:
             del self._release_states[key]
 
 
-async def bump(environment_id: int) -> None:
+async def bump(environment_id: str) -> None:
     """Mark an environment's definitions as changed."""
     await Environment.filter(id=environment_id).update(version=F("version") + 1)

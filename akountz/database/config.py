@@ -1,15 +1,15 @@
 """How Akountz connects to its database.
 
-Sillo's own models are registered alongside Akountz's: ``JWTToken`` and
-``TokenBlacklist`` hold token families, and Sillo's permission models hold
-roles and permissions.
+Akountz's models include ULID-keyed versions of Sillo's ``JWTToken``,
+``TokenBlacklist`` and permission models (``database.models.framework``), so
+Sillo's own modules are not registered: their tables key on integers.
 """
 
 from __future__ import annotations
 
 from sillo.record import DatabaseConfig, DatabaseManager
 
-MODEL_MODULES = ["database.models", "sillo.auth.jwt_auth.models", "sillo.permissions.models"]
+MODEL_MODULES = ["database.models"]
 MIGRATIONS_MODULE = "database.migrations"
 
 

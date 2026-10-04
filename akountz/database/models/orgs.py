@@ -6,18 +6,19 @@ from sillo.record import Model
 from tortoise import fields
 
 from database.fields import AnyJSONField
+from pawabase_core.records import ulid_pk
 
 ORG_ROLES = ("owner", "admin", "member", "viewer")
 
 
 class Organization(Model):
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63)
     slug = fields.CharField(max_length=63)
     name = fields.CharField(max_length=200)
     metadata = AnyJSONField(default=dict)
-    created_by = fields.IntField(null=True)
+    created_by = fields.CharField(max_length=26, null=True)
 
     class Meta:
         table = "akz_organizations"
@@ -25,7 +26,7 @@ class Organization(Model):
 
 
 class Membership(Model):
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     organization = fields.ForeignKeyField(
         "models.Organization", related_name="memberships", on_delete=fields.CASCADE
     )
@@ -40,7 +41,7 @@ class Membership(Model):
 
 
 class Team(Model):
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     organization = fields.ForeignKeyField(
         "models.Organization", related_name="teams", on_delete=fields.CASCADE
     )
@@ -53,7 +54,7 @@ class Team(Model):
 
 
 class TeamMember(Model):
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     team = fields.ForeignKeyField("models.Team", related_name="members", on_delete=fields.CASCADE)
     user = fields.ForeignKeyField(
         "models.AuthUser", related_name="team_memberships", on_delete=fields.CASCADE
@@ -65,14 +66,14 @@ class TeamMember(Model):
 
 
 class Invitation(Model):
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     organization = fields.ForeignKeyField(
         "models.Organization", related_name="invitations", on_delete=fields.CASCADE
     )
     email = fields.CharField(max_length=255)
     role = fields.CharField(max_length=32, default="member")
     token_id = fields.CharField(max_length=32)
-    invited_by = fields.IntField(null=True)
+    invited_by = fields.CharField(max_length=26, null=True)
     accepted_at = fields.DatetimeField(null=True)
     revoked_at = fields.DatetimeField(null=True)
     expires_at = fields.DatetimeField()

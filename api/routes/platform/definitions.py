@@ -39,6 +39,7 @@ from database.models import (
     WebhookEndpoint,
 )
 from pawabase_core.flows import validate_flow
+from pawabase_core.ids import is_ulid, new_ulid
 from pawabase_core.policies import PolicyEngine, PolicyError, validate_condition
 from pawabase_core.schemas import SchemaError, validate_fields
 from pawabase_core.transformers import TransformerError, validate_transformer
@@ -83,7 +84,7 @@ class ResourceBody(BaseModel):
     description: str = ""
     table: str | None = Field(default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
     primary_key: str = Field(default="id", pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
-    id_type: Literal["integer", "uuid"] = "integer"
+    id_type: Literal["ulid", "uuid", "integer"] = "ulid"
     fields: list[dict[str, Any]] = Field(default_factory=list)
     operations: dict[Literal["list", "get", "create", "update", "delete"], OperationSettings] = (
         Field(default_factory=dict)
@@ -258,6 +259,34 @@ async def validate_resource(platform, ref, env, body: ResourceBody) -> dict[str,
     return data
 
 
+def refuse_integer_keys(data: dict[str, Any]) -> None:
+    """New resources are keyed by ULID or UUID, never an auto-increment integer.
+
+    Existing integer-keyed resources keep working and can be re-saved; only
+    creating one is refused.
+    """
+    if data.get("id_type") == "integer":
+        raise _invalid(
+            "id_type 'integer' is not available for new resources: use 'ulid' (the default) or 'uuid'"
+        )
+
+
+def keep_key_type(existing_id_type: str | None, data: dict[str, Any], body: Any) -> None:
+    """A replacement that does not name ``id_type`` keeps the resource's; naming a different one is refused.
+
+    Records already carry keys of the old type, and migrate never retypes a column.
+    """
+    if existing_id_type is None:
+        return
+    if "id_type" not in getattr(body, "model_fields_set", ()):
+        data["id_type"] = existing_id_type
+    elif data.get("id_type") != existing_id_type:
+        raise HTTPException(
+            status_code=409,
+            detail=f"id_type cannot change from {existing_id_type!r} once a resource exists; create a new resource and copy the records",
+        )
+
+
 async def validate_route(platform, ref, env, body: RouteBody) -> dict[str, Any]:
     if not ROUTE_PATH.match(body.path):
         raise _invalid("path must look like /orders/{id}/pay")
@@ -375,7 +404,13 @@ KINDS: list[dict[str, Any]] = [
         "validate": validate_transformer_body,
     },
     {"path": "policies", "model": PolicyDef, "body": PolicyBody, "validate": validate_policy},
-    {"path": "resources", "model": Resource, "body": ResourceBody, "validate": validate_resource},
+    {
+        "path": "resources",
+        "model": Resource,
+        "body": ResourceBody,
+        "validate": validate_resource,
+        "on_create": refuse_integer_keys,
+    },
     {
         "path": "routes",
         "model": RouteDef,
@@ -468,9 +503,9 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
     async def lookup(environment, key: str):
         value: Any = key
         if key_field == "id":
-            if not key.isdigit():
+            if not is_ulid(key):
                 raise HTTPException(status_code=404, detail="not found")
-            value = int(key)
+            value = key.upper()
         item = await model.get_or_none(environment=environment, **{key_field: value})
         if item is None:
             raise HTTPException(status_code=404, detail=f"no {path[:-1]} {key!r}")
@@ -487,6 +522,8 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
         environment = await get_environment(ref, env)
         branch = await working_branch(ctx, environment)
         data = await validate(platform, ref, env, body)
+        if kind.get("on_create"):
+            kind["on_create"](data)
         reveal = data.pop("_reveal", {})
         natural = (
             {"slug": data["slug"]}
@@ -506,12 +543,10 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
             if exists:
                 raise HTTPException(status_code=409, detail=f"{path[:-1]} already exists in this branch")
             row = {column: copy.deepcopy(data.get(column)) for column in columns if column in data}
-            # Routes are normally addressed by a database id. New branch-only
-            # routes do not have one until merge, so give them a stable
-            # negative draft id that can still be edited or deleted in Studio.
+            # Routes are addressed by id. A branch-only route gets one now, so it
+            # can be edited or deleted in Studio; merging gives the live row its own.
             if key_field == "id":
-                ids = [int(item["id"]) for item in draft_rows(branch) if item.get("id") is not None]
-                row["id"] = min([0, *ids]) - 1
+                row["id"] = new_ulid()
             else:
                 row.setdefault("id", None)
             draft_rows(branch).append(row)
@@ -542,6 +577,8 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
             if row is None:
                 raise HTTPException(status_code=404, detail=f"no {path[:-1]} {key!r} in branch {branch.name!r}")
             data = await validate(platform, ref, env, body)
+            if model is Resource:
+                keep_key_type(row.get("id_type"), data, body)
             reveal = data.pop("_reveal", {})
             if model in (WebhookEndpoint, InboundHook) and getattr(body, "secret", None) is None:
                 data.pop("secret_ciphertext", None)
@@ -552,6 +589,8 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
             return {**draft_view(environment, row), **reveal}
         item = await lookup(environment, key)
         data = await validate(platform, ref, env, body)
+        if model is Resource:
+            keep_key_type(item.id_type, data, body)
         reveal = data.pop("_reveal", {})
         if model in (WebhookEndpoint, InboundHook) and getattr(body, "secret", None) is None:
             # Keep the existing secret unless a new one was given.

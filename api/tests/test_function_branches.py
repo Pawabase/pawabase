@@ -243,9 +243,9 @@ async def test_remote_sql_sessions_and_transactions(rpc):
     assert await rpc.db("scalar", sql="SELECT SUM(amount) FROM ledger") == 40
     assert (await rpc.db("scalar", tx="not-open", sql="SELECT 1", expect=409))["error"]["code"] == "no_transaction"
     created = await rpc.rpc("resource_create", "orders", {"total": 1})
-    assert await rpc.db("update", table="orders", id=int(created["id"]), data={"total": 2}) == 1
-    assert await rpc.db("scalar", sql="SELECT total FROM orders WHERE id = ?", params=[int(created["id"])]) == 2
-    assert await rpc.db("delete", table="orders", id=int(created["id"])) == 1
+    assert await rpc.db("update", table="orders", id=created["id"], data={"total": 2}) == 1
+    assert await rpc.db("scalar", sql="SELECT total FROM orders WHERE id = ?", params=[created["id"]]) == 2
+    assert await rpc.db("delete", table="orders", id=created["id"]) == 1
 
 
 async def test_the_deployment_vouches_for_a_token_and_nobody_else(rpc):

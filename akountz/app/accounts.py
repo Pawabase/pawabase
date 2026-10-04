@@ -12,6 +12,7 @@ from sillo.hashing import validate_password
 
 from app.environment import AuthConfig
 from database.models import AuthUser, Identity
+from pawabase_core.ids import is_ulid
 
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -49,11 +50,11 @@ async def find_by_email(project: str, env: str, email: str) -> AuthUser | None:
 
 
 async def get_user(project: str, env: str, user_id: Any) -> AuthUser | None:
-    try:
-        uid = int(user_id)
-    except (TypeError, ValueError):
+    if not is_ulid(user_id):
         return None
-    return await AuthUser.filter(id=uid, project=project, env=env, deleted_at=None).first()
+    return await AuthUser.filter(
+        id=str(user_id).upper(), project=project, env=env, deleted_at=None
+    ).first()
 
 
 async def unique_username(project: str, env: str, wanted: str | None, email: str) -> str:

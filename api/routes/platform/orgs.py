@@ -339,7 +339,8 @@ def register(r: Router, platform: Platform) -> None:
         tags=["organizations"],
         summary="Revoke an invitation",
     )
-    async def revoke(ctx: HttpContext, slug: str, invitation_id: int):
+    async def revoke(ctx: HttpContext, slug: str, invitation_id: str):
+        invitation_id = invitation_id.upper()  # ULIDs are case-insensitive
         org = await get_org(ctx, slug, "admin")
         updated = await OrgInvitation.filter(
             id=invitation_id, organization=org, accepted_at=None, revoked_at=None

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-import uuid
 from collections.abc import Mapping
 from typing import Any
 
@@ -18,6 +17,7 @@ from database.models import FlowRun as FlowRunRecord
 from database.models import FunctionRun
 from pawabase_core.flows import FlowError, FlowRun
 from pawabase_core.functions import MAIN, FunctionError
+from pawabase_core.ids import new_ulid
 from pawabase_core.schemas import validate_payload
 from pawabase_core.telemetry import note, span
 
@@ -154,7 +154,7 @@ async def call_function(
     finally:
         try:
             await FunctionRun.create(
-                id=uuid.uuid4().hex,
+                id=new_ulid(),
                 project=state.project_ref,
                 env=state.env_name,
                 branch=branch or MAIN,

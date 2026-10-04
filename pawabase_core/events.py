@@ -20,13 +20,14 @@ from __future__ import annotations
 import asyncio
 import fnmatch
 import logging
-import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
 from sillo.events import EventEmitter
+
+from .ids import new_ulid
 
 logger = logging.getLogger("pawabase.events")
 
@@ -58,7 +59,7 @@ class PlatformEvent:
     payload: Any = None
     source: str = "unknown"
     actor: str | None = None
-    id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    id: str = field(default_factory=new_ulid)
     occurred_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     request_id: str | None = None
     release_id: str | None = None

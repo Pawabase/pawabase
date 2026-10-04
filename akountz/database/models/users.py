@@ -10,16 +10,17 @@ than once per installation.
 
 from __future__ import annotations
 
-from sillo.auth.jwt_auth import JWTUserMixin
 from sillo.permissions import PermissionMixin
 from sillo.record import Model
 from sillo.users.base import UserBaseModel
 from tortoise import fields
 
 from database.fields import AnyJSONField
+from pawabase_core.records import ulid_pk
+from pawabase_core.ulid_auth import UlidJWTUserMixin, UlidUserMixin
 
 
-class AuthUser(PermissionMixin, JWTUserMixin, UserBaseModel):
+class AuthUser(PermissionMixin, UlidJWTUserMixin, UlidUserMixin, UserBaseModel):
     """A project environment's user.
 
     Attributes:
@@ -32,6 +33,7 @@ class AuthUser(PermissionMixin, JWTUserMixin, UserBaseModel):
         failed_logins, locked_until: Brute-force lockout.
     """
 
+    id = ulid_pk()
     project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63)
     email = fields.CharField(max_length=255, db_index=True)
@@ -59,7 +61,7 @@ class AuthUser(PermissionMixin, JWTUserMixin, UserBaseModel):
 class Identity(Model):
     """An external identity (OAuth/OIDC) linked to a user."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     user = fields.ForeignKeyField(
         "models.AuthUser", related_name="identities", on_delete=fields.CASCADE
     )
@@ -80,7 +82,7 @@ class Identity(Model):
 class MfaFactor(Model):
     """A second factor. TOTP secrets are encrypted at rest."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     user = fields.ForeignKeyField(
         "models.AuthUser", related_name="factors", on_delete=fields.CASCADE
     )
@@ -97,7 +99,7 @@ class MfaFactor(Model):
 class RecoveryCode(Model):
     """A single-use MFA recovery code, stored as a SHA-256 hash."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     user = fields.ForeignKeyField(
         "models.AuthUser", related_name="recovery_codes", on_delete=fields.CASCADE
     )
@@ -115,7 +117,7 @@ class OneTimeToken(Model):
     carries this row's id; the row makes it single-use.
     """
 
-    id = fields.CharField(max_length=32, primary_key=True)
+    id = ulid_pk()
     project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63)
     purpose = fields.CharField(max_length=32)
@@ -161,10 +163,10 @@ class SessionInfo(Model):
 class LoginEvent(Model):
     """Authentication history: sign-ins, failures, refreshes, sign-outs, resets."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63)
-    user_id = fields.IntField(null=True, db_index=True)
+    user_id = fields.CharField(max_length=26, null=True, db_index=True)
     email = fields.CharField(max_length=255, null=True)
     kind = fields.CharField(max_length=32)
     method = fields.CharField(max_length=32, default="password")
