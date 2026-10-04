@@ -11,6 +11,7 @@ helper for backoff and jitter.
 from __future__ import annotations
 
 import ipaddress
+import json
 import socket
 from collections.abc import Collection, Mapping
 from typing import Any
@@ -92,8 +93,9 @@ async def request_once(
                 break
     text = body.decode("utf-8", "replace")
     try:
+        # The body was read in chunks above, so decode the text we hold: response.json() would raise ResponseNotRead.
         parsed: Any = (
-            response.json() if text and "json" in response.headers.get("content-type", "") else text
+            json.loads(text) if text and "json" in response.headers.get("content-type", "") else text
         )
     except ValueError:
         parsed = text

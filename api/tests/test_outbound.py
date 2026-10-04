@@ -21,3 +21,20 @@ def test_an_allowed_host_may_be_private_and_nothing_else_may():
 def test_the_scheme_is_checked_even_for_an_allowed_host():
     with pytest.raises(OutboundRefused):
         check_target("file://localhost/etc/passwd", allow_hosts=["localhost"])
+
+
+async def test_a_json_answer_is_parsed_and_a_text_answer_is_kept():
+    import httpx
+
+    from app.outbound import request_once
+
+    def answer(request):
+        if request.url.path == "/json":
+            return httpx.Response(200, json={"status": True, "data": {"id": 7}})
+        return httpx.Response(502, text="bad gateway", headers={"content-type": "text/plain"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer)) as client:
+        ok = await request_once(client, "GET", "http://upstream.test/json")
+        bad = await request_once(client, "GET", "http://upstream.test/text")
+    assert ok["status"] == 200 and ok["body"] == {"status": True, "data": {"id": 7}}
+    assert bad["status"] == 502 and bad["body"] == "bad gateway"
