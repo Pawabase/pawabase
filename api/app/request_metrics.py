@@ -14,8 +14,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from collections import defaultdict
 import time
+from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 from tortoise.expressions import F

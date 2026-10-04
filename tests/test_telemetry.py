@@ -40,9 +40,8 @@ def test_spans_nest_and_time_their_work(request_scope):
 
 
 def test_a_span_that_raises_is_marked_and_the_exception_still_propagates(request_scope):
-    with pytest.raises(ValueError):
-        with span("http", "GET x"):
-            raise ValueError("boom")
+    with pytest.raises(ValueError), span("http", "GET x"):
+        raise ValueError("boom")
     entry = request_scope["spans"][0]
     assert entry["status"] == "error" and entry["attrs"]["error"] == "ValueError: boom"
     # The failure does not leave a stale parent behind.
@@ -100,7 +99,9 @@ def test_logs_outside_a_request_and_runtime_noted_lines_are_ignored(request_scop
     log_capture.info("no request")  # must not raise
 
 
-def test_an_error_with_an_exception_gives_the_request_its_error_and_traceback(request_scope, log_capture):
+def test_an_error_with_an_exception_gives_the_request_its_error_and_traceback(
+    request_scope, log_capture
+):
     try:
         raise KeyError("sku")
     except KeyError:

@@ -3,8 +3,15 @@
 from datetime import datetime
 
 import pytest
-from app.route_stats import NO_ROUTE, aggregate_routes, error_groups, percentile, route_breakdown, signature
 
+from app.route_stats import (
+    NO_ROUTE,
+    aggregate_routes,
+    error_groups,
+    percentile,
+    route_breakdown,
+    signature,
+)
 from pawabase_core.clients import ServiceError
 
 ENV = "/platform/v1/projects/acme/envs/development"
@@ -42,7 +49,9 @@ def test_signatures_fold_ids_numbers_and_quoted_values():
 
 def test_routes_rank_by_server_errors_then_rate():
     rows = [row(i) for i in range(20)]  # a busy, healthy route
-    rows += [row(100 + i, status=500, route="/pay", method="POST", error="Timeout 30s") for i in range(3)]
+    rows += [
+        row(100 + i, status=500, route="/pay", method="POST", error="Timeout 30s") for i in range(3)
+    ]
     rows += [row(200 + i, route="/pay", method="POST") for i in range(3)]
     rows += [row(300, status=500, route="/rare")]
     ranked = aggregate_routes(rows, window_seconds=3600)
@@ -58,7 +67,9 @@ def test_routes_rank_by_server_errors_then_rate():
 
 
 def test_slow_sort_uses_p95_and_time_sort_uses_total():
-    rows = [row(i, ms=5) for i in range(30)] + [row(100 + i, ms=900, route="/export") for i in range(2)]
+    rows = [row(i, ms=5) for i in range(30)] + [
+        row(100 + i, ms=900, route="/export") for i in range(2)
+    ]
     assert aggregate_routes(rows, window_seconds=60, sort="slow")[0]["route"] == "/export"
     assert aggregate_routes(rows, window_seconds=60, sort="time")[0]["route"] == "/export"
     assert aggregate_routes(rows, window_seconds=60, sort="traffic")[0]["route"] == "/o/{id}"
@@ -122,7 +133,9 @@ async def seed(api):
 
 async def test_a_request_trace_has_timed_spans_for_what_it_did(api):
     anon = await seed(api)
-    assert (await api.http.post("/rest/v1/notes", json={"text": "a"}, headers=anon)).status_code == 201
+    assert (
+        await api.http.post("/rest/v1/notes", json={"text": "a"}, headers=anon)
+    ).status_code == 201
     await api.drain()
     await api.app.state["request_rollup"].flush()
 
@@ -147,7 +160,9 @@ async def test_routes_and_errors_are_ranked_from_real_traffic(api):
         assert (await api.http.post("/rest/v1/notes", json={}, headers=anon)).status_code == 422
     await api.drain()
 
-    ranking = await api.studio.get(f"{ENV}/observability/routes", params={"minutes": 5, "sort": "traffic"})
+    ranking = await api.studio.get(
+        f"{ENV}/observability/routes", params={"minutes": 5, "sort": "traffic"}
+    )
     assert ranking["requests"] == 6 and not ranking["truncated"]
     top = ranking["routes"][0]
     assert (top["method"], top["requests"]) == ("POST", 5) and top["client_errors"] == 3
@@ -173,7 +188,9 @@ async def test_the_request_trace_merges_spans_logs_and_summary(api):
     import logging
 
     anon = await seed(api)
-    assert (await api.http.post("/rest/v1/notes", json={"text": "a"}, headers=anon)).status_code == 201
+    assert (
+        await api.http.post("/rest/v1/notes", json={"text": "a"}, headers=anon)
+    ).status_code == 201
     await api.drain()
     await api.app.state["request_rollup"].flush()
     history = await api.studio.get(f"{ENV}/requests", params={"search": "/rest/v1/notes"})

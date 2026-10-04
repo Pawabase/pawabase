@@ -19,7 +19,6 @@ from pawabase_core.telemetry import span
 
 from .sql import dialect_of
 
-
 _OPS = {"execute_query_dict": "fetch", "execute_query": "execute", "execute_insert": "insert"}
 
 
@@ -86,7 +85,9 @@ class DataSource:
             schema = credentials.get("schema")
             if schema:
                 # The environment's own schema on a shared Postgres database: made before anything asks for a table in it.
-                await client.execute_script(f'CREATE SCHEMA IF NOT EXISTS "{str(schema).replace(chr(34), "")}"')
+                await client.execute_script(
+                    f'CREATE SCHEMA IF NOT EXISTS "{str(schema).replace(chr(34), "")}"'
+                )
             self.client = client
             self.dialect = dialect_of(client)
             self.query_class = client.query_class
