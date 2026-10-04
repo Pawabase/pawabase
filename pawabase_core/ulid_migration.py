@@ -45,9 +45,8 @@ class UlidRebuild:
             instead of minting one (see :func:`pawabase_core.ids.legacy_ulid`).
         references: Per table, columns that hold an old integer key of another
             table without being a foreign key: ``{"login_events": {"user_id": "users"}}``
-            (the value names the *table* referred to). A referenced key with no
-            mapping is kept as it is.
-        stringify: Columns that held an integer and now hold a ULID string.
+            (the value names the *table* referred to). The integer may be stored as
+            text. A referenced key with no matching row is kept as it is.
     """
 
     def __init__(
@@ -152,14 +151,17 @@ class UlidRebuild:
                     mapping = remap.get(target)
                     if value is None or mapping is None:
                         continue
-                    if value not in mapping:
-                        if column in self.references.get(table, {}):
-                            continue  # a soft reference to a row that is gone: keep it as it was
+                    soft = column in self.references.get(table, {})
+                    # A soft reference may hold the integer as text ("7"), as Sillo's permission tables do.
+                    lookup = int(value) if soft and isinstance(value, str) and value.isdigit() else value
+                    if lookup not in mapping:
+                        if soft:
+                            continue  # a reference to a row that is gone: keep it as it was
                         raise RuntimeError(
                             f"{table}.{column} = {value!r} has no matching row in {target}; "
                             "fix or remove the orphan row, then run the migration again"
                         )
-                    row[column] = mapping[value]
+                    row[column] = mapping[lookup]
 
     # ── step 4: write back ───────────────────────────────────────────────
 
