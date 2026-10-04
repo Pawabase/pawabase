@@ -40,6 +40,9 @@ x-api-env: &api-env
   PAWABASE_DEPLOYMENTS_PATH: /data/deployments
   PAWABASE_INLINE_WORKER: "false"
   PAWABASE_INLINE_SCHEDULER: "false"
+  # A deployment's functions/requirements.txt is installed when it is deployed, so a function needing a library never means rebuilding
+  # the image. Set to false to refuse deployments that ask for packages.
+  PAWABASE_FUNCTION_INSTALL: ${PAWABASE_FUNCTION_INSTALL:-true}
 
 services:
   postgres:

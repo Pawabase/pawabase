@@ -194,7 +194,7 @@ class Deployments:
         if not self.install_requirements:
             raise DeploymentError(
                 "This platform does not install a deployment's requirements.",
-                ["functions/requirements.txt is present, but installing is off here (PAWABASE_FUNCTION_INSTALL). Install the libraries on the platform and delete the file, or enable installing."],
+                ["functions/requirements.txt is present, but installing is off here (PAWABASE_FUNCTION_INSTALL). Enable installing (PAWABASE_FUNCTION_INSTALL=true) or remove the file."],
                 status=409,
             )
         digest = hashlib.sha256(("\n".join(sorted(lines)) + "\n" + self.index_url + f"\npy{sys.version_info.major}.{sys.version_info.minor}").encode()).hexdigest()[:16]
