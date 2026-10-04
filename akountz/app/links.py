@@ -42,7 +42,6 @@ async def issue(
     lifetime = LIFETIMES[purpose]
     row = await OneTimeToken.create(
         id=new_ulid(),
-        project=config.project,
         env=config.env,
         purpose=purpose,
         user=user,
@@ -50,7 +49,7 @@ async def issue(
         data=data or {},
         expires_at=datetime.now(UTC) + timedelta(seconds=lifetime),
     )
-    return akountz.serializer(config.project, config.env, purpose).dumps({"id": row.id})
+    return akountz.serializer(config.env, purpose).dumps({"id": row.id})
 
 
 async def consume(
@@ -59,14 +58,14 @@ async def consume(
     """Verify and use up a token. Every failure is the same 400."""
     invalid = HTTPException(status_code=400, detail="the link is invalid or has expired")
     try:
-        payload = akountz.serializer(config.project, config.env, purpose).loads(
+        payload = akountz.serializer(config.env, purpose).loads(
             token, max_age=LIFETIMES[purpose]
         )
     except (BadSignature, ValueError, TypeError) as exc:
         raise invalid from exc
     row = (
         await OneTimeToken.filter(
-            id=str(payload.get("id", "")), project=config.project, env=config.env, purpose=purpose
+            id=str(payload.get("id", "")), env=config.env, purpose=purpose
         )
         .prefetch_related("user")
         .first()
@@ -94,4 +93,4 @@ def link(config: AuthConfig, kind: str, token: str, redirect_to: str | None = No
     if config.site_url:
         return f"{config.site_url.rstrip('/')}/auth/callback?{urlencode(query)}"
     base = (config.public_url or "").rstrip("/")
-    return f"{base}/auth/v1/links/{config.project}/{config.env}/{kind}?{urlencode(query)}"
+    return f"{base}/auth/v1/links/{config.env}/{kind}?{urlencode(query)}"

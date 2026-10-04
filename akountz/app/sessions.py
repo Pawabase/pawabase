@@ -4,7 +4,7 @@ Sillo does the token lifecycle. ``JWTUserMixin.issue_token_pair`` creates a
 token family with tracked access and refresh JTIs, and ``refresh_token_pair``
 rotates it, detecting reuse and revoking the whole family when a consumed
 refresh token comes back. Pawabase adds what Sillo's tokens do not carry: the
-project, environment, roles, permissions and assurance level, in an access
+environment, roles, permissions and assurance level, in an access
 token re-minted under the tracked JTI and signed with the environment's key.
 """
 
@@ -31,7 +31,6 @@ def client_info(ctx: Any) -> tuple[str | None, str | None]:
 
 
 async def log_event(
-    project: str,
     env: str,
     kind: str,
     *,
@@ -44,7 +43,6 @@ async def log_event(
 ) -> None:
     ip, agent = client_info(ctx) if ctx is not None else (None, None)
     await LoginEvent.create(
-        project=project,
         env=env,
         user_id=user.id if user else None,
         email=email or (user.email if user else None),
@@ -65,7 +63,7 @@ async def membership_role(config: AuthConfig, user: AuthUser, slug: str | None) 
     """The user's role in organization *slug* of this environment, or None."""
     if not slug:
         return None
-    org = await Organization.get_or_none(project=config.project, env=config.env, slug=slug)
+    org = await Organization.get_or_none(env=config.env, slug=slug)
     if org is None:
         return None
     member = await Membership.get_or_none(organization=org, user=user)
@@ -94,7 +92,6 @@ async def _access_token(
 ) -> str:
     return issue_user_token(
         akountz.settings.jwt_master_secret,
-        project=config.project,
         env=config.env,
         user_id=str(user.id),
         jti=jti,
@@ -159,7 +156,7 @@ async def start_session(
 ) -> dict[str, Any]:
     org = await require_membership(config, user, org)
     pair = await user.issue_token_pair(
-        secret=akountz.refresh_secret(config.project, config.env),
+        secret=akountz.refresh_secret(config.env),
         access_expires=timedelta(seconds=config.access_ttl),
         refresh_expires=timedelta(seconds=config.refresh_ttl),
     )
@@ -167,7 +164,6 @@ async def start_session(
     await SessionInfo.create(
         family=pair["token_family"],
         user=user,
-        project=config.project,
         env=config.env,
         method=method,
         aal=aal,
@@ -178,9 +174,8 @@ async def start_session(
     from app.accounts import record_success
 
     await record_success(user, ip)
-    await log_event(config.project, config.env, "sign_in", user=user, method=method, ctx=ctx)
+    await log_event(config.env, "sign_in", user=user, method=method, ctx=ctx)
     await akountz.emit(
-        config.project,
         config.env,
         "user.signed_in",
         {"user_id": str(user.id), "method": method},
@@ -203,7 +198,6 @@ async def refresh_session(
     user = (
         await AuthUser.filter(
             id=str(claims["sub"]).upper(),
-            project=config.project,
             env=config.env,
             deleted_at=None,
         ).first()
@@ -214,11 +208,10 @@ async def refresh_session(
         raise HTTPException(status_code=401, detail="invalid refresh token")
     try:
         pair = await user.refresh_token_pair(
-            refresh_token, akountz.refresh_secret(config.project, config.env)
+            refresh_token, akountz.refresh_secret(config.env)
         )
     except ValueError as exc:
         await log_event(
-            config.project,
             config.env,
             "refresh",
             user=user,
@@ -234,7 +227,6 @@ async def refresh_session(
                     revoked_at=datetime.now(UTC)
                 )
             await akountz.emit(
-                config.project,
                 config.env,
                 "session.reuse_detected",
                 {"user_id": str(user.id)},

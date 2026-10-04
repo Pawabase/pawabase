@@ -9,12 +9,12 @@ class ApiSettings(PlatformSettings):
     """API settings.
 
     Attributes:
-        database_url: The platform database: projects, definitions, activity.
+        database_url: The runtime's own database: environments, definitions, activity.
         db_generate_schemas: Create tables at startup. For tests and throwaway
             setups only; migrations own the schema otherwise.
         default_data_url: Where an environment's Resource data lives when the
-            developer has not configured a database. ``{project}`` and
-            ``{env}`` are substituted, so environments never share a database.
+            developer has not configured a database. ``{env}`` is substituted, so
+            environments never share a database.
         storage_root: Local storage root, used when the platform default is the
             ``local`` driver.
         storage_driver: The default object storage for environments that have
@@ -31,7 +31,10 @@ class ApiSettings(PlatformSettings):
             rather than as a subdomain (AWS virtual-hosted style).
         request_retention_days: How long request history (the traces behind route
             statistics) is kept. ``0`` keeps it forever.
-        code_path: Where project code (functions, routes, policies) is mounted.
+        project_name: What this runtime calls itself: Studio's title and the
+            title of each generated API's documentation.
+        code_path: The directory mounted code (``functions/``, ``policies/``,
+            ``routes.py``) is read from.
         deployments_path: Where uploaded function artifacts live (a writable volume shared by the API, workers and scheduler); defaults to
             ``<code_path>/.deployments``, which is wrong when ``code_path`` is a read-only mount.
         public_url: The gateway's public origin, used in signed URLs and docs.
@@ -55,6 +58,7 @@ class ApiSettings(PlatformSettings):
     storage_secret_key: str = ""
     storage_prefix: str = ""
     storage_path_style: bool = True
+    project_name: str = "Pawabase"
     code_path: str = "code"
     #: Where ``pawabase deploy`` artifacts are stored: writable, and shared by every API and worker process. Empty means ``<code_path>/.deployments``.
     deployments_path: str = ""

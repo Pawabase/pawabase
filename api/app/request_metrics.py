@@ -1,7 +1,7 @@
 """Per-environment request counts, persisted for Studio's overview charts.
 
 Telemetry keeps recent requests in memory only. This sink rolls every
-data-plane request (one carrying a project and environment) into per-minute
+data-plane request (one carrying an environment) into per-minute
 counters: ``pawabase.requests`` tagged by status class, with the summed
 duration as the value, so a window's average latency is ``value / count``.
 
@@ -29,7 +29,7 @@ PRUNE_SECONDS = 3600.0
 
 logger = logging.getLogger("pawabase.api.metrics")
 
-Key = tuple[str, str, datetime, str]
+Key = tuple[str, datetime, str]
 
 
 class RequestRollup:
@@ -49,10 +49,10 @@ class RequestRollup:
         return self
 
     async def record(self, record: RequestRecord) -> None:
-        if not record.project or not record.env:
+        if not record.env:
             return  # management-plane calls aren't an environment's traffic
         window = datetime.now(UTC).replace(second=0, microsecond=0)
-        key = (record.project, record.env, window, f"status={record.status // 100}xx")
+        key = (record.env, window, f"status={record.status // 100}xx")
         bucket = self.pending[key]
         bucket[0] += 1
         bucket[1] += record.duration_ms
@@ -72,7 +72,6 @@ class RequestRollup:
                         RequestLog(
                             request_id=record.request_id or "unknown",
                             service=record.service,
-                            project=record.project or "",
                             env=record.env or "",
                             method=record.method,
                             path=record.path,
@@ -92,15 +91,14 @@ class RequestRollup:
                 )
             except Exception:
                 logger.exception("could not store request history")
-        for (project, env, window, tags), (count, total_ms) in pending.items():
+        for (env, window, tags), (count, total_ms) in pending.items():
             match = MetricCounter.filter(
-                project=project, env=env, name=REQUESTS_METRIC, tags=tags, window=window
+                env=env, name=REQUESTS_METRIC, tags=tags, window=window
             )
             try:
                 if not await match.update(value=F("value") + total_ms, count=F("count") + count):
                     try:
                         await MetricCounter.create(
-                            project=project,
                             env=env,
                             name=REQUESTS_METRIC,
                             tags=tags,

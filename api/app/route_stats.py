@@ -258,10 +258,10 @@ def window(minutes: int) -> tuple[datetime, datetime]:
     return until - timedelta(minutes=max(1, minutes)), until
 
 
-async def fetch(ref: str, env: str, since: datetime, **filters: Any) -> tuple[list[dict[str, Any]], bool]:
+async def fetch(env: str, since: datetime, **filters: Any) -> tuple[list[dict[str, Any]], bool]:
     """The newest requests since *since* as dicts, and whether the cap cut the window short."""
     rows = (
-        await RequestLog.filter(project=ref, env=env, started_at__gte=since.isoformat(), **filters)
+        await RequestLog.filter(env=env, started_at__gte=since.isoformat(), **filters)
         .order_by("-id")
         .limit(MAX_ROWS + 1)
         .values(*FIELDS)
@@ -269,9 +269,9 @@ async def fetch(ref: str, env: str, since: datetime, **filters: Any) -> tuple[li
     return rows[:MAX_ROWS], len(rows) > MAX_ROWS
 
 
-async def routes_for(ref: str, env: str, *, minutes: int = 60, sort: str = "errors", limit: int = 50) -> dict[str, Any]:
+async def routes_for(env: str, *, minutes: int = 60, sort: str = "errors", limit: int = 50) -> dict[str, Any]:
     since, until = window(minutes)
-    rows, truncated = await fetch(ref, env, since)
+    rows, truncated = await fetch(env, since)
     return {
         "minutes": minutes,
         "sort": sort if sort in SORTS else "errors",
@@ -281,14 +281,14 @@ async def routes_for(ref: str, env: str, *, minutes: int = 60, sort: str = "erro
     }
 
 
-async def route_detail_for(ref: str, env: str, method: str, route: str, *, minutes: int = 60) -> dict[str, Any]:
+async def route_detail_for(env: str, method: str, route: str, *, minutes: int = 60) -> dict[str, Any]:
     since, until = window(minutes)
     filters: dict[str, Any] = {"method": method.upper()}
     if route == NO_ROUTE:
         filters["route__isnull"] = True
     else:
         filters["route"] = route
-    rows, truncated = await fetch(ref, env, since, **filters)
+    rows, truncated = await fetch(env, since, **filters)
     return {
         "method": method.upper(),
         "route": route,
@@ -298,7 +298,7 @@ async def route_detail_for(ref: str, env: str, method: str, route: str, *, minut
     }
 
 
-async def errors_for(ref: str, env: str, *, minutes: int = 60, limit: int = 50) -> dict[str, Any]:
+async def errors_for(env: str, *, minutes: int = 60, limit: int = 50) -> dict[str, Any]:
     since, _ = window(minutes)
-    rows, truncated = await fetch(ref, env, since, status__gte=400)
+    rows, truncated = await fetch(env, since, status__gte=400)
     return {"minutes": minutes, "truncated": truncated, "failures": len(rows), "groups": error_groups(rows, limit=limit)}

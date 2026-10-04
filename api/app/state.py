@@ -44,12 +44,10 @@ if TYPE_CHECKING:
 
 @dataclass
 class EnvironmentState:
-    """Everything defined for one project environment, at one version."""
+    """Everything defined for one environment, at one version."""
 
     platform: Platform
     environment: Environment
-    project_ref: str
-    project_name: str
     env_name: str
     version: int
     api_version: str | None = None
@@ -76,8 +74,8 @@ class EnvironmentState:
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     @property
-    def key(self) -> tuple[str, str]:
-        return (self.project_ref, self.env_name)
+    def key(self) -> str:
+        return self.env_name
 
     @property
     def infra(self) -> dict[str, Any]:
@@ -93,7 +91,7 @@ class EnvironmentState:
         configured = self.infra.get("database_url")
         if configured:
             return self.platform.resolve_value(self, configured)
-        url = self.platform.settings.default_data_url.format(project=self.project_ref, env=self.env_name)
+        url = self.platform.settings.default_data_url.format(env=self.env_name)
         if url.startswith(("postgres://", "postgresql://")) and "schema=" not in url:
             # One shared Postgres database, one schema per environment (see ``data_schema``).
             url += ("&" if "?" in url else "?") + f"schema={self.data_schema()}"
@@ -101,7 +99,7 @@ class EnvironmentState:
 
     def data_schema(self) -> str:
         """The Postgres schema holding this environment's resource tables in the shared default database."""
-        scope = hashlib.sha256(f"{self.project_ref}:{self.env_name}".encode()).hexdigest()[:12]
+        scope = hashlib.sha256(self.env_name.encode()).hexdigest()[:12]
         return f"pb_{scope}"
 
     def database_table(self, table: str) -> str:
@@ -117,7 +115,7 @@ class EnvironmentState:
 
     async def source(self) -> DataSource:
         return await self.platform.sources.get(
-            self.database_url(), alias=f"{self.project_ref}:{self.env_name}"
+            self.database_url(), alias=self.env_name
         )
 
     def spec(self, name: str) -> ResourceSpec:
@@ -145,12 +143,9 @@ class EnvironmentState:
 
 async def load_state(platform: Platform, environment: Environment) -> EnvironmentState:
     """Read every definition of *environment*."""
-    project = environment.project
     state = EnvironmentState(
         platform=platform,
         environment=environment,
-        project_ref=project.ref,
-        project_name=project.name,
         env_name=environment.name,
         version=environment.version,
     )
@@ -214,19 +209,15 @@ class EnvironmentCache:
 
     def __init__(self, platform: Platform) -> None:
         self.platform = platform
-        self._states: dict[tuple[str, str], EnvironmentState] = {}
-        self._release_states: dict[tuple[str, str, str], EnvironmentState] = {}
-        self._locks: dict[tuple[str, str], asyncio.Lock] = {}
+        self._states: dict[str, EnvironmentState] = {}
+        self._release_states: dict[tuple[str, str], EnvironmentState] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
 
-    async def get(self, project: str, env: str) -> EnvironmentState:
-        environment = (
-            await Environment.filter(project__ref=project, name=env)
-            .select_related("project")
-            .first()
-        )
+    async def get(self, env: str) -> EnvironmentState:
+        environment = await Environment.filter(name=env).first()
         if environment is None:
-            raise HTTPException(status_code=404, detail=f"no environment {project}/{env}")
-        key = (project, env)
+            raise HTTPException(status_code=404, detail=f"no environment {env!r}")
+        key = env
         cached = self._states.get(key)
         if cached is not None and cached.version == environment.version:
             return cached
@@ -239,19 +230,17 @@ class EnvironmentCache:
             self._states[key] = state
             return state
 
-    async def get_release(self, project: str, env: str, release_id: str) -> EnvironmentState:
+    async def get_release(self, env: str, release_id: str) -> EnvironmentState:
         from app.releases import state_from_snapshot
         from database.models import DefinitionRevision, Release
 
-        key = (project, env, release_id)
+        key = (env, release_id)
         cached = self._release_states.get(key)
         if cached is not None:
             return cached
         release = (
-            await Release.filter(
-                id=release_id, environment__project__ref=project, environment__name=env
-            )
-            .select_related("environment__project")
+            await Release.filter(id=release_id, environment__name=env)
+            .select_related("environment")
             .first()
         )
         if release is None:
@@ -272,15 +261,13 @@ class EnvironmentCache:
         self._release_states[key] = state
         return state
 
-    async def get_version(self, project: str, env: str, version: str) -> EnvironmentState:
+    async def get_version(self, env: str, version: str) -> EnvironmentState:
         from database.models import ApiVersion
 
-        api_version = await ApiVersion.filter(
-            environment__project__ref=project, environment__name=env, name=version
-        ).first()
-        # Existing projects remain live on v1 until they explicitly activate a release.
+        api_version = await ApiVersion.filter(environment__name=env, name=version).first()
+        # An environment stays live on v1 until it explicitly activates a release.
         if api_version is None and version == "v1":
-            state = await self.get(project, env)
+            state = await self.get(env)
             state.api_version = "v1"
             return state
         if api_version is None:
@@ -291,22 +278,21 @@ class EnvironmentCache:
             )
         if not api_version.active_release_id:
             if version == "v1":
-                state = await self.get(project, env)
+                state = await self.get(env)
                 state.api_version = "v1"
                 return state
             raise HTTPException(
                 status_code=503, detail=f"API version {version!r} has no active release"
             )
-        return await self.get_release(project, env, api_version.active_release_id)
+        return await self.get_release(env, api_version.active_release_id)
 
-    def forget(self, project: str | None = None) -> None:
-        if project is None:
+    def forget(self, env: str | None = None) -> None:
+        if env is None:
             self._states.clear()
             self._release_states.clear()
             return
-        for key in [k for k in self._states if k[0] == project]:
-            del self._states[key]
-        for key in [k for k in self._release_states if k[0] == project]:
+        self._states.pop(env, None)
+        for key in [k for k in self._release_states if k[0] == env]:
             del self._release_states[key]
 
 

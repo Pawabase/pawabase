@@ -9,6 +9,9 @@ ENV PYTHONUNBUFFERED=1 \
     PATH=/opt/venv/bin:$PATH \
     PYTHONPATH=/app \
     SILLO_ENV_FILE=
+# git: the Pawabase kit is installed from its repository (see [tool.uv.sources] in pyproject.toml).
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir "uv>=0.8,<0.9"
 WORKDIR /app
 

@@ -1,4 +1,4 @@
-"""Inbound webhooks (``/hooks/v1/{project}/{env}/{slug}``) and public docs."""
+"""Inbound webhooks (``/hooks/v1/{env}/{slug}``) and public docs."""
 
 from __future__ import annotations
 
@@ -25,9 +25,9 @@ MAX_HOOK_BYTES = 1024 * 1024
 def register(app: Any, platform: Platform) -> None:
     r = Router(prefix="/hooks/v1", tags=["webhooks"])
 
-    @r.post("/{project}/{env}/{slug}", summary="Receive an inbound webhook")
-    async def receive(ctx: HttpContext, project: str, env: str, slug: str):
-        state = await platform.state(project, env)
+    @r.post("/{env}/{slug}", summary="Receive an inbound webhook")
+    async def receive(ctx: HttpContext, env: str, slug: str):
+        state = await platform.state(env)
         hook = state.inbound_hooks.get(slug)
         if hook is None or not hook.enabled:
             raise HTTPException(status_code=404, detail="Not found")
@@ -66,7 +66,6 @@ def register(app: Any, platform: Platform) -> None:
 
             job_id = await platform.dispatch(
                 RunFlowJob,
-                project=project,
                 env=env,
                 target=hook.target,
                 source="webhook",
@@ -81,41 +80,38 @@ def register(app: Any, platform: Platform) -> None:
 
     app.mount_router(r)
 
-    # Liveness check for one project/environment, named by ?project_id=&environment=
-    # (not path segments, so it lines up with how the gateway itself scopes
-    # apikey resolution). Requires a valid apikey: the gateway must have
-    # resolved it to a context for *this* project/env before the request even
-    # reaches here, so a 200 proves both that the key works and that the
-    # environment loads and compiles.
+    # Liveness check for the environment the apikey belongs to. Requires a valid
+    # apikey: the gateway must have resolved it to a context before the request
+    # even reaches here, so a 200 proves both that the key works and that the
+    # environment loads and compiles. ``?environment=`` is optional; naming a
+    # different environment than the key's is refused.
     @app.get("/health/v1", tags=["health"])
     async def env_health(
         ctx: HttpContext,
-        project_id: str = Query(..., type=str, description="The project's ref, e.g. acme."),
-        environment: str = Query(
-            ..., type=str, description="The environment name, e.g. development or production."
+        environment: str | None = Query(
+            None, type=str, description="The environment name, e.g. development or production."
         ),
     ):
-        project, env = project_id, environment
         context = ctx.scope.get(SCOPE_KEY)
-        if context is None or context.project != project or context.env != env:
+        if context is None or (environment and context.env != environment):
             raise HTTPException(status_code=401, detail="Authentication required")
-        state = await platform.state(project, env)
+        state = await platform.state(context.env)
         await state.compiled()
-        return {"status": "ok", "project": project, "env": env}
+        return {"status": "ok", "env": context.env}
 
     d = Router(prefix="/docs/v1", tags=["docs"], exclude_from_schema=True)
 
-    async def public_state(project: str, env: str):
-        state = await platform.state(project, env)
+    async def public_state(env: str):
+        state = await platform.state(env)
         if not state.settings.get("public_docs"):
             raise HTTPException(status_code=404, detail="Not found")
         return state
 
-    @d.get("/{project}/{env}/openapi.json")
-    async def public_openapi(ctx: HttpContext, project: str, env: str):
+    @d.get("/{env}/openapi.json")
+    async def public_openapi(ctx: HttpContext, env: str):
         from sillo.core.http.response import BaseResponse
 
-        state = await public_state(project, env)
+        state = await public_state(env)
         compiled = await state.compiled()
         spec = json.loads(compiled.build_openapi(REST_PREFIX))
         spec = add_apikey_security(spec)
@@ -123,16 +119,16 @@ def register(app: Any, platform: Platform) -> None:
             body=json.dumps(spec).encode(), content_type="application/json"
         )
 
-    @d.get("/{project}/{env}")
-    async def public_docs(ctx: HttpContext, project: str, env: str):
-        state = await public_state(project, env)
+    @d.get("/{env}")
+    async def public_docs(ctx: HttpContext, env: str):
+        state = await public_state(env)
         compiled = await state.compiled()
         document = json.loads(compiled.build_openapi(REST_PREFIX))
         document = add_apikey_security(document)
         info = document.get("info", {})
-        page = Atlas(title=f"{state.project_name} API").render(
+        page = Atlas(title=f"{platform.settings.project_name} API").render(
             DocsContext(
-                openapi_url=f"/docs/v1/{project}/{env}/openapi.json",
+                openapi_url=f"/docs/v1/{env}/openapi.json",
                 title=info.get("title", "API"),
                 version=info.get("version", ""),
                 description=info.get("description", ""),

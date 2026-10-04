@@ -20,7 +20,7 @@ from app.releases import (
 )
 from database.models import ApiVersion, Branch, DefinitionRevision, Deployment, Release
 from pawabase_core.ids import new_ulid
-from routes.common import NAME_PATTERN, OPERATOR, actor, audit, dump, get_environment
+from routes.common import NAME_PATTERN, MANAGE, actor, audit, dump, get_environment
 
 VERSION_PATTERN = r"^v[1-9][0-9]*$"
 
@@ -91,16 +91,16 @@ async def _branch_snapshot(environment, branch: Branch) -> dict:
 
 
 def register(r: Router, platform: Platform) -> None:
-    prefix = "/projects/{ref}/envs/{env}"
+    prefix = "/envs/{env}"
 
-    @r.get(prefix + "/branches", auth=OPERATOR, tags=["releases"])
-    async def list_branches(ctx: HttpContext, ref: str, env: str):
-        environment = await get_environment(ref, env)
+    @r.get(prefix + "/branches", auth=MANAGE, tags=["releases"])
+    async def list_branches(ctx: HttpContext, env: str):
+        environment = await get_environment(env)
         return {"data": [dump(item) for item in await Branch.filter(environment=environment)]}
 
-    @r.post(prefix + "/branches", auth=OPERATOR, tags=["releases"], request_model=BranchCreate)
-    async def create_branch(ctx: HttpContext, ref: str, env: str, body: BranchCreate):
-        environment = await get_environment(ref, env)
+    @r.post(prefix + "/branches", auth=MANAGE, tags=["releases"], request_model=BranchCreate)
+    async def create_branch(ctx: HttpContext, env: str, body: BranchCreate):
+        environment = await get_environment(env)
         if await Branch.filter(environment=environment, name=body.name).exists():
             raise HTTPException(status_code=409, detail=f"branch {body.name!r} already exists")
         if body.from_revision and body.from_branch:
@@ -127,27 +127,27 @@ def register(r: Router, platform: Platform) -> None:
             changes=[],
             protected=body.protected,
         )
-        await audit(ctx, "branch.created", project=ref, env=env, target=body.name)
+        await audit(ctx, "branch.created", env=env, target=body.name)
         return created(dump(branch))
 
-    @r.get(prefix + "/branches/{branch_name}/draft", auth=OPERATOR, tags=["releases"])
-    async def branch_draft(ctx: HttpContext, ref: str, env: str, branch_name: str):
+    @r.get(prefix + "/branches/{branch_name}/draft", auth=MANAGE, tags=["releases"])
+    async def branch_draft(ctx: HttpContext, env: str, branch_name: str):
         """Read the isolated working tree used when a branch is checked out."""
-        environment = await get_environment(ref, env)
+        environment = await get_environment(env)
         branch = await Branch.get_or_none(environment=environment, name=branch_name)
         if branch is None:
             raise HTTPException(status_code=404, detail=f"branch {branch_name!r} does not exist")
         return {"branch": dump(branch), "snapshot": await _branch_snapshot(environment, branch)}
 
-    @r.post(prefix + "/branches/{branch_name}/merge", auth=OPERATOR, tags=["releases"], request_model=BranchMerge)
-    async def merge_branch(ctx: HttpContext, ref: str, env: str, branch_name: str, body: BranchMerge):
+    @r.post(prefix + "/branches/{branch_name}/merge", auth=MANAGE, tags=["releases"], request_model=BranchMerge)
+    async def merge_branch(ctx: HttpContext, env: str, branch_name: str, body: BranchMerge):
         """Merge a feature branch only when its target has not diverged.
 
         A divergent target is rejected rather than silently overwriting another
         author's definitions; callers can inspect the two drafts and retry
         with ``force`` only when that replacement is intentional.
         """
-        environment = await get_environment(ref, env)
+        environment = await get_environment(env)
         source = await Branch.get_or_none(environment=environment, name=branch_name)
         if source is None or source.name == "main":
             raise HTTPException(status_code=404, detail="choose an existing non-main source branch")
@@ -159,25 +159,25 @@ def register(r: Router, platform: Platform) -> None:
             raise HTTPException(status_code=409, detail="target has changed since this branch was created; resolve or force the merge")
         if body.target == "main":
             await apply_snapshot(environment, source.draft)
-            platform.envs.forget(ref)
+            platform.envs.forget(env)
         else:
             target.draft = dict(source.draft)
             target.base_snapshot = dict(current)
             await target.save(update_fields=["draft", "base_snapshot"])
         source.changes = [*list(source.changes or []), {"action": "merged", "target": body.target, "actor": actor(ctx), "at": datetime.now(UTC).isoformat()}]
         await source.save(update_fields=["changes"])
-        await audit(ctx, "branch.merged", project=ref, env=env, target=branch_name, details={"target": body.target, "force": body.force})
+        await audit(ctx, "branch.merged", env=env, target=branch_name, details={"target": body.target, "force": body.force})
         return {"source": branch_name, "target": body.target, "merged": True}
 
-    @r.get(prefix + "/revisions", auth=OPERATOR, tags=["releases"])
-    async def list_revisions(ctx: HttpContext, ref: str, env: str):
-        environment = await get_environment(ref, env)
+    @r.get(prefix + "/revisions", auth=MANAGE, tags=["releases"])
+    async def list_revisions(ctx: HttpContext, env: str):
+        environment = await get_environment(env)
         items = await DefinitionRevision.filter(environment=environment).all()
         return {"data": [_revision_view(item) for item in items]}
 
-    @r.get(prefix + "/revisions/{revision_id}", auth=OPERATOR, tags=["releases"])
-    async def get_revision(ctx: HttpContext, ref: str, env: str, revision_id: str):
-        environment = await get_environment(ref, env)
+    @r.get(prefix + "/revisions/{revision_id}", auth=MANAGE, tags=["releases"])
+    async def get_revision(ctx: HttpContext, env: str, revision_id: str):
+        environment = await get_environment(env)
         revision = await DefinitionRevision.get_or_none(id=revision_id, environment=environment)
         if revision is None:
             raise HTTPException(status_code=404, detail="revision not found")
@@ -185,14 +185,14 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.post(
         prefix + "/branches/{branch_name}/revisions",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["releases"],
         request_model=RevisionCreate,
     )
     async def create_revision(
-        ctx: HttpContext, ref: str, env: str, branch_name: str, body: RevisionCreate
+        ctx: HttpContext, env: str, branch_name: str, body: RevisionCreate
     ):
-        environment = await get_environment(ref, env)
+        environment = await get_environment(env)
         branch = await Branch.get_or_none(environment=environment, name=branch_name)
         if branch is None:
             if branch_name != "main":
@@ -221,21 +221,20 @@ def register(r: Router, platform: Platform) -> None:
         await audit(
             ctx,
             "revision.created",
-            project=ref,
             env=env,
             target=revision.id,
             details={"number": revision.number, "branch": branch.name, "problems": problems},
         )
         return created(_revision_view(revision, snapshot=True))
 
-    @r.get(prefix + "/api-versions", auth=OPERATOR, tags=["releases"])
-    async def list_versions(ctx: HttpContext, ref: str, env: str):
-        environment = await get_environment(ref, env)
+    @r.get(prefix + "/api-versions", auth=MANAGE, tags=["releases"])
+    async def list_versions(ctx: HttpContext, env: str):
+        environment = await get_environment(env)
         return {"data": [dump(item) for item in await ApiVersion.filter(environment=environment)]}
 
-    @r.post(prefix + "/api-versions", auth=OPERATOR, tags=["releases"], request_model=VersionCreate)
-    async def create_version(ctx: HttpContext, ref: str, env: str, body: VersionCreate):
-        environment = await get_environment(ref, env)
+    @r.post(prefix + "/api-versions", auth=MANAGE, tags=["releases"], request_model=VersionCreate)
+    async def create_version(ctx: HttpContext, env: str, body: VersionCreate):
+        environment = await get_environment(env)
         if await ApiVersion.filter(environment=environment, name=body.name).exists():
             raise HTTPException(status_code=409, detail=f"API version {body.name!r} already exists")
         if body.is_default:
@@ -243,19 +242,19 @@ def register(r: Router, platform: Platform) -> None:
         version = await ApiVersion.create(
             environment=environment, name=body.name, is_default=body.is_default
         )
-        await audit(ctx, "api_version.created", project=ref, env=env, target=body.name)
+        await audit(ctx, "api_version.created", env=env, target=body.name)
         return created(dump(version))
 
     @r.patch(
         prefix + "/api-versions/{version_name}",
-        auth=OPERATOR,
+        auth=MANAGE,
         tags=["releases"],
         request_model=VersionUpdate,
     )
     async def update_version(
-        ctx: HttpContext, ref: str, env: str, version_name: str, body: VersionUpdate
+        ctx: HttpContext, env: str, version_name: str, body: VersionUpdate
     ):
-        environment = await get_environment(ref, env)
+        environment = await get_environment(env)
         version = await ApiVersion.get_or_none(environment=environment, name=version_name)
         if version is None:
             raise HTTPException(status_code=404, detail="API version not found")
@@ -269,20 +268,20 @@ def register(r: Router, platform: Platform) -> None:
         for key, value in values.items():
             setattr(version, key, value)
         await version.save()
-        platform.envs.forget(ref)
+        platform.envs.forget(env)
         await audit(
-            ctx, "api_version.updated", project=ref, env=env, target=version_name, details=values
+            ctx, "api_version.updated", env=env, target=version_name, details=values
         )
         return dump(version)
 
-    @r.get(prefix + "/releases", auth=OPERATOR, tags=["releases"])
-    async def list_releases(ctx: HttpContext, ref: str, env: str):
-        environment = await get_environment(ref, env)
+    @r.get(prefix + "/releases", auth=MANAGE, tags=["releases"])
+    async def list_releases(ctx: HttpContext, env: str):
+        environment = await get_environment(env)
         return {"data": [dump(item) for item in await Release.filter(environment=environment)]}
 
-    @r.post(prefix + "/releases", auth=OPERATOR, tags=["releases"], request_model=ReleaseCreate)
-    async def create_release(ctx: HttpContext, ref: str, env: str, body: ReleaseCreate):
-        environment = await get_environment(ref, env)
+    @r.post(prefix + "/releases", auth=MANAGE, tags=["releases"], request_model=ReleaseCreate)
+    async def create_release(ctx: HttpContext, env: str, body: ReleaseCreate):
+        environment = await get_environment(env)
         revision = await DefinitionRevision.get_or_none(
             id=body.revision_id, environment=environment
         )
@@ -317,20 +316,20 @@ def register(r: Router, platform: Platform) -> None:
             compatibility=report,
             created_by=actor(ctx),
         )
-        await audit(ctx, "release.created", project=ref, env=env, target=release.id, details=report)
+        await audit(ctx, "release.created", env=env, target=release.id, details=report)
         return created(dump(release))
 
     async def activate_release(
-        ctx: HttpContext, ref: str, env: str, release: Release, *, action: str
+        ctx: HttpContext, env: str, release: Release, *, action: str
     ):
-        environment = await get_environment(ref, env)
+        environment = await get_environment(env)
         revision = await DefinitionRevision.get_or_none(
             id=release.revision_id, environment=environment
         )
         if revision is None:
             raise HTTPException(status_code=409, detail="release revision is missing")
         # Compile before moving the public pointer. A bad release never receives traffic.
-        state = await platform.state_for_release(ref, env, release.id)
+        state = await platform.state_for_release(env, release.id)
         problems = list((await state.compiled()).state.get("problems") or [])
         if problems:
             release.status = "failed"
@@ -363,11 +362,10 @@ def register(r: Router, platform: Platform) -> None:
                 actor=actor(ctx),
                 details={"revision_id": revision.id, "checksum": revision.checksum},
             )
-        platform.envs.forget(ref)
+        platform.envs.forget(env)
         await audit(
             ctx,
             f"release.{action}",
-            project=ref,
             env=env,
             target=release.id,
             details={"previous_release_id": old_id},
@@ -378,17 +376,17 @@ def register(r: Router, platform: Platform) -> None:
             "deployment": dump(deployment),
         }
 
-    @r.post(prefix + "/releases/{release_id}/activate", auth=OPERATOR, tags=["releases"])
-    async def activate(ctx: HttpContext, ref: str, env: str, release_id: str):
-        environment = await get_environment(ref, env)
+    @r.post(prefix + "/releases/{release_id}/activate", auth=MANAGE, tags=["releases"])
+    async def activate(ctx: HttpContext, env: str, release_id: str):
+        environment = await get_environment(env)
         release = await Release.get_or_none(id=release_id, environment=environment)
         if release is None:
             raise HTTPException(status_code=404, detail="release not found")
-        return await activate_release(ctx, ref, env, release, action="activated")
+        return await activate_release(ctx, env, release, action="activated")
 
-    @r.post(prefix + "/api-versions/{version_name}/rollback", auth=OPERATOR, tags=["releases"])
-    async def rollback(ctx: HttpContext, ref: str, env: str, version_name: str):
-        environment = await get_environment(ref, env)
+    @r.post(prefix + "/api-versions/{version_name}/rollback", auth=MANAGE, tags=["releases"])
+    async def rollback(ctx: HttpContext, env: str, version_name: str):
+        environment = await get_environment(env)
         version = await ApiVersion.get_or_none(environment=environment, name=version_name)
         if version is None:
             raise HTTPException(status_code=404, detail="API version not found")
@@ -399,9 +397,9 @@ def register(r: Router, platform: Platform) -> None:
         )
         if release is None:
             raise HTTPException(status_code=409, detail="the previous release is missing")
-        return await activate_release(ctx, ref, env, release, action="rolled_back")
+        return await activate_release(ctx, env, release, action="rolled_back")
 
-    @r.get(prefix + "/deployments", auth=OPERATOR, tags=["releases"])
-    async def list_deployments(ctx: HttpContext, ref: str, env: str):
-        environment = await get_environment(ref, env)
+    @r.get(prefix + "/deployments", auth=MANAGE, tags=["releases"])
+    async def list_deployments(ctx: HttpContext, env: str):
+        environment = await get_environment(env)
         return {"data": [dump(item) for item in await Deployment.filter(environment=environment)]}

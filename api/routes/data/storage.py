@@ -208,9 +208,9 @@ def register(app: Any, platform: Platform) -> None:
         return {"url": url, "expires_at": int(time.time()) + body.expires_in, "method": body.method}
 
     # Signed URLs carry their own authority, so they need no API key; the
-    # project and environment are in the path, the grant is in the token.
-    async def signed(ctx: HttpContext, project: str, env: str, bucket: str, key: str):
-        state = await platform.state(project, env)
+    # The environment is in the path, the grant is in the token.
+    async def signed(ctx: HttpContext, env: str, bucket: str, key: str):
+        state = await platform.state(env)
         held = platform.storage.bucket(state, bucket, credential={"is_service": False})
         token = ctx.query_params.get("token", "")
         method = ctx.scope["method"]
@@ -243,13 +243,13 @@ def register(app: Any, platform: Platform) -> None:
         )
 
     r.get(
-        "/signed/{project}/{env}/{bucket}/{key:path}",
+        "/signed/{env}/{bucket}/{key:path}",
         handler=signed,
         summary="Fetch through a signed URL",
         exclude_from_schema=True,
     )
     r.put(
-        "/signed/{project}/{env}/{bucket}/{key:path}",
+        "/signed/{env}/{bucket}/{key:path}",
         handler=signed,
         summary="Upload through a signed URL",
         exclude_from_schema=True,

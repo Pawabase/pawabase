@@ -37,13 +37,14 @@ ROUTES: tuple[Upstream, ...] = (
     Upstream("/flows/v1/", "api"),
     Upstream("/hooks/v1/", "api", "none"),
     Upstream("/docs/v1/", "api", "none"),
-    # Liveness check for one project/environment. Requires an apikey (default
-    # "required") so it also proves the key itself resolves for that project.
+    # Liveness check for the key's environment. Requires an apikey (default
+    # "required") so it also proves the key itself resolves.
     Upstream("/health/v1/", "api"),
     Upstream("/realtime/v1/", "angula"),
-    # Operators may use bearer tokens; the Functions CLI may instead present a
-    # scoped project API key, which the gateway turns into a signed context.
-    Upstream("/platform/v1/", "api", "optional"),
+    # The management plane takes a secret API key (the Functions CLI, automation),
+    # which the gateway turns into a signed context. Studio never comes through
+    # here: it reaches the API directly with a service token.
+    Upstream("/platform/v1/", "api"),
 )
 
 #: Never exposed publicly, whatever the prefix table says.

@@ -68,37 +68,34 @@ class Akountz:
 
     # ── secrets ──────────────────────────────────────────────────────────
 
-    def refresh_secret(self, project: str, env: str) -> str:
+    def refresh_secret(self, env: str) -> str:
         """Signs refresh tokens (Sillo's token pair). Separate from access tokens."""
-        return derive_env_secret(self.settings.jwt_master_secret, project, f"{env}:refresh")
+        return derive_env_secret(self.settings.jwt_master_secret, f"{env}:refresh")
 
-    def state_secret(self, project: str, env: str) -> str:
+    def state_secret(self, env: str) -> str:
         """Signs OAuth state cookies and PKCE verifiers (sillo-oauth)."""
-        return derive_env_secret(self.settings.internal_secret, project, f"{env}:oauth")
+        return derive_env_secret(self.settings.internal_secret, f"{env}:oauth")
 
-    def serializer(self, project: str, env: str, purpose: str) -> URLSafeTimedSerializer:
+    def serializer(self, env: str, purpose: str) -> URLSafeTimedSerializer:
         """Sillo's timed signer for one purpose in one environment."""
         return URLSafeTimedSerializer(
-            derive_env_secret(self.settings.internal_secret, project, env),
+            derive_env_secret(self.settings.internal_secret, env),
             salt=f"akountz:{purpose}",
         )
 
     # ── outbound effects ─────────────────────────────────────────────────
 
     async def emit(
-        self, project: str, env: str, name: str, payload: Any, *, actor: str | None = None
+        self, env: str, name: str, payload: Any, *, actor: str | None = None
     ) -> None:
         """Publish an identity event. Failure to publish never fails the sign-in."""
-        if project.startswith("_"):
-            return
         try:
             if self.bus is not None:
-                await self.bus.emit(name, project=project, env=env, payload=payload, actor=actor)
+                await self.bus.emit(name, env=env, payload=payload, actor=actor)
             else:
                 await self.api.post(
                     "/internal/v1/events",
                     json={
-                        "project": project,
                         "env": env,
                         "name": name,
                         "payload": payload,
@@ -109,10 +106,9 @@ class Akountz:
             logger.warning("could not publish %s: %s", name, exc)
 
     async def send_mail(
-        self, project: str, env: str, *, to: str, subject: str, text: str, html: str | None = None
+        self, env: str, *, to: str, subject: str, text: str, html: str | None = None
     ) -> None:
         message = {
-            "project": project,
             "env": env,
             "to": [to],
             "subject": subject,
@@ -122,13 +118,10 @@ class Akountz:
         }
         self.outbox.append(message)
         del self.outbox[:-100]
-        if project.startswith("_"):
-            logger.info("platform mail to %s: %s", to, subject)
-            return
         try:
             await self.api.post("/internal/v1/mail", json=message)
         except Exception as exc:
             logger.warning("could not queue mail to %s: %s", to, exc)
 
-    def context(self, project: str, env: str) -> PlatformContext:
-        return PlatformContext(project=project, env=env, role="service")
+    def context(self, env: str) -> PlatformContext:
+        return PlatformContext(env=env, role="service")

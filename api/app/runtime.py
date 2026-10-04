@@ -215,7 +215,6 @@ class ApiRuntime(BaseRuntime):
             raise FlowError(f"no flow {flow!r}", code="unknown_flow")
         return await self.platform.dispatch(
             RunFlowJob,
-            project=self.state.project_ref,
             env=self.state.env_name,
             queue=queue,
             delay=delay,
@@ -253,11 +252,10 @@ class ApiRuntime(BaseRuntime):
     async def dispatch_function(self, function, input, *, delay=0, queue=None):
         from app.jobs.functions import RunFunctionJob
 
-        if self.platform.function_spec(self.state.project_ref, self.state.env_name, function, self.branch) is None:
+        if self.platform.function_spec(self.state.env_name, function, self.branch) is None:
             raise FlowError(f"no function {function!r}", code="unknown_function")
         return await self.platform.dispatch(
             RunFunctionJob,
-            project=self.state.project_ref,
             env=self.state.env_name,
             queue=queue,
             delay=delay,
@@ -307,7 +305,6 @@ class ApiRuntime(BaseRuntime):
 
         job_id = await self.platform.dispatch(
             SendMailJob,
-            project=self.state.project_ref,
             env=self.state.env_name,
             target=",".join(to),
             to=list(to),
@@ -375,9 +372,7 @@ class ApiRuntime(BaseRuntime):
         from pawabase_core.clients import ServiceError
         from pawabase_core.context import PlatformContext
 
-        context = PlatformContext(
-            project=self.state.project_ref, env=self.state.env_name, role="service"
-        )
+        context = PlatformContext(env=self.state.env_name, role="service")
         try:
             return await self.platform.akountz.get(f"/admin/v1/users/{user_id}", context=context)
         except ServiceError as exc:
@@ -418,7 +413,7 @@ class ApiRuntime(BaseRuntime):
     async def metric(self, name, value=1.0, tags=None):
         from app.metrics import increment
 
-        await increment(self.state.project_ref, self.state.env_name, name, value, tags or {})
+        await increment(self.state.env_name, name, value, tags or {})
 
 
 def function_context(
@@ -428,7 +423,6 @@ def function_context(
         request=request,
         input=input,
         auth=runtime.auth,
-        project=runtime.state.project_ref,
         env=runtime.state.env_name,
         runtime=runtime,
         trigger=trigger,

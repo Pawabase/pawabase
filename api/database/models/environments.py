@@ -1,4 +1,4 @@
-"""Projects, environments, and the credentials and secrets they own."""
+"""Environments, and the credentials and secrets they own."""
 
 from __future__ import annotations
 
@@ -9,38 +9,11 @@ from database.fields import AnyJSONField
 from pawabase_core.records import ulid_pk
 
 
-class Project(Model):
-    """One application backend.
-
-    Attributes:
-        ref: The stable, URL-safe reference clients and keys carry (``acme``).
-        name: Display name.
-    """
-
-    id = ulid_pk()
-    ref = fields.CharField(max_length=63, unique=True, db_index=True)
-    name = fields.CharField(max_length=200)
-    description = fields.TextField(default="")
-    created_by = fields.CharField(max_length=255, null=True)
-    #: The organization the project lives in. Every project has one, and the column
-    #: is nullable only so databases created before organizations existed can
-    #: migrate, and those projects are adopted by the first organization made.
-    organization = fields.ForeignKeyField(
-        "models.Organization", related_name="projects", null=True, on_delete=fields.RESTRICT
-    )
-
-    environments: fields.ReverseRelation[Environment]
-
-    class Meta:
-        table = "pb_projects"
-        ordering = ["ref"]
-
-
 class Environment(Model):
-    """An isolated stage of a project (``development``, ``production``…).
+    """An isolated stage of this runtime (``development``, ``production``…).
 
     Attributes:
-        name: Unique within the project.
+        name: Unique.
         infra: The developer's infrastructure for this environment: database,
             Redis, storage, mail. Credentials are ``secret://NAME`` references.
         auth: Akountz configuration: token lifetimes, password rules, enabled
@@ -51,10 +24,7 @@ class Environment(Model):
     """
 
     id = ulid_pk()
-    project = fields.ForeignKeyField(
-        "models.Project", related_name="environments", on_delete=fields.CASCADE
-    )
-    name = fields.CharField(max_length=63)
+    name = fields.CharField(max_length=63, unique=True)
     is_default = fields.BooleanField(default=False)
     infra = AnyJSONField(default=dict)
     auth = AnyJSONField(default=dict)
@@ -68,11 +38,10 @@ class Environment(Model):
 
     class Meta:
         table = "pb_environments"
-        unique_together = (("project", "name"),)
         ordering = ["name"]
 
 
-class ProjectKey(Model):
+class ApiKey(Model):
     """An API key for one environment.
 
     The plaintext is shown once at creation. Only a SHA-256 hash is stored,
@@ -105,7 +74,7 @@ class ProjectKey(Model):
     created_by = fields.CharField(max_length=255, null=True)
 
     class Meta:
-        table = "pb_project_keys"
+        table = "pb_api_keys"
 
 
 class Secret(Model):
@@ -127,12 +96,10 @@ class Secret(Model):
 
 
 class AuditEntry(Model):
-    """Who changed what on the management plane."""
+    """What changed on the management plane."""
 
     id = ulid_pk()
-    project = fields.CharField(max_length=63, null=True, db_index=True)
     env = fields.CharField(max_length=63, null=True)
-    org = fields.CharField(max_length=63, null=True, db_index=True)
     actor = fields.CharField(max_length=255, null=True)
     action = fields.CharField(max_length=100)
     target = fields.CharField(max_length=255, default="")

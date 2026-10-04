@@ -203,12 +203,9 @@ async def state_from_snapshot(
     revision_id: str | None = None,
 ) -> EnvironmentState:
     """Build an executable state without copying snapshot rows into live tables."""
-    project = environment.project
     state = EnvironmentState(
         platform=platform,
         environment=environment,
-        project_ref=project.ref,
-        project_name=project.name,
         env_name=environment.name,
         version=environment.version,
         api_version=api_version,
@@ -252,7 +249,7 @@ async def state_from_snapshot(
 async def validate_snapshot(
     platform: Any, environment: Environment, snapshot: dict[str, Any]
 ) -> list[str]:
-    platform.ensure_code(environment.project.ref)
+    platform.ensure_code()
     state = await state_from_snapshot(platform, environment, snapshot)
     app = await state.compiled()
     return list(app.state.get("problems") or [])

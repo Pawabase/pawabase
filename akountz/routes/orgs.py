@@ -66,7 +66,7 @@ def org_view(org: Organization, role: str | None = None) -> dict:
 async def membership(
     user: AuthUser, slug: str, *, manage: bool = False
 ) -> tuple[Organization, Membership]:
-    org = await Organization.get_or_none(project=user.project, env=user.env, slug=slug)
+    org = await Organization.get_or_none(env=user.env, slug=slug)
     member = await Membership.get_or_none(organization=org, user=user) if org else None
     if org is None or member is None:
         raise HTTPException(status_code=404, detail="no such organization")
@@ -92,10 +92,9 @@ def register(r: Router, akountz: Akountz) -> None:
     )
     async def create_org(ctx: HttpContext, body: OrgBody):
         user, _ = await signed_in_user(ctx)
-        if await Organization.filter(project=user.project, env=user.env, slug=body.slug).exists():
+        if await Organization.filter(env=user.env, slug=body.slug).exists():
             raise HTTPException(status_code=409, detail="that slug is taken")
         org = await Organization.create(
-            project=user.project,
             env=user.env,
             slug=body.slug,
             name=body.name,
@@ -104,7 +103,6 @@ def register(r: Router, akountz: Akountz) -> None:
         )
         await Membership.create(organization=org, user=user, role="owner")
         await akountz.emit(
-            user.project,
             user.env,
             "organization.created",
             {"organization": org.slug, "user_id": str(user.id)},
@@ -148,7 +146,6 @@ def register(r: Router, akountz: Akountz) -> None:
             raise HTTPException(status_code=403, detail="only owners can delete an organization")
         await org.delete()
         await akountz.emit(
-            user.project,
             user.env,
             "organization.deleted",
             {"organization": slug},
@@ -234,15 +231,15 @@ def register(r: Router, akountz: Akountz) -> None:
         user, _ = await signed_in_user(ctx)
         org, _ = await membership(user, slug, manage=True)
         _check_role(body.role)
-        config = await load_config(akountz, user.project, user.env)
+        config = await load_config(akountz, user.env)
         email = normalise_email(body.email)
-        existing = await find_by_email(user.project, user.env, email)
+        existing = await find_by_email(user.env, email)
         if existing and await Membership.filter(organization=org, user=existing).exists():
             raise HTTPException(status_code=409, detail="already a member")
         token = await links.issue(
             akountz, config, "invite", email=email, data={"organization": org.id, "role": body.role}
         )
-        row_id = akountz.serializer(config.project, config.env, "invite").loads(token)["id"]
+        row_id = akountz.serializer(config.env, "invite").loads(token)["id"]
         invitation = await Invitation.create(
             organization=org,
             email=email,
@@ -261,7 +258,6 @@ def register(r: Router, akountz: Akountz) -> None:
             role=body.role,
         )
         await akountz.emit(
-            user.project,
             user.env,
             "invitation.created",
             {"organization": slug, "email": email, "role": body.role},
@@ -319,7 +315,7 @@ def register(r: Router, akountz: Akountz) -> None:
     )
     async def accept(ctx: HttpContext, body: AcceptBody):
         user, _ = await signed_in_user(ctx)
-        config = await load_config(akountz, user.project, user.env)
+        config = await load_config(akountz, user.env)
         row = await links.consume(akountz, config, "invite", body.token, peek=True)
         invitation = (
             await Invitation.filter(token_id=row.id, revoked_at=None, accepted_at=None)
@@ -342,7 +338,6 @@ def register(r: Router, akountz: Akountz) -> None:
         invitation.accepted_at = datetime.now(UTC)
         await invitation.save(update_fields=["accepted_at"])
         await akountz.emit(
-            user.project,
             user.env,
             "invitation.accepted",
             {"organization": invitation.organization.slug, "user_id": str(user.id)},

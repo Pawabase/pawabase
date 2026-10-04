@@ -38,7 +38,7 @@ class DeliverWebhookJob(PawabaseJob):
         endpoint = delivery.endpoint
         secret = platform.box.open(endpoint.secret_ciphertext)
         body = delivery_body(
-            delivery.event_id, delivery.event, delivery.payload, self.project, self.env
+            delivery.event_id, delivery.event, delivery.payload, self.env
         )
         headers = {
             **{str(k): str(v) for k, v in (endpoint.headers or {}).items()},

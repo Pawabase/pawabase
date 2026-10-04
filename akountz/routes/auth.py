@@ -72,7 +72,7 @@ class Logout(BaseModel):
 
 async def config_for(akountz: Akountz, ctx: HttpContext) -> AuthConfig:
     context = require_context(ctx)
-    return await load_config(akountz, context.project, context.env)
+    return await load_config(akountz, context.env)
 
 
 async def signed_in_user(ctx: HttpContext) -> tuple[AuthUser, Principal]:
@@ -80,7 +80,7 @@ async def signed_in_user(ctx: HttpContext) -> tuple[AuthUser, Principal]:
     principal = ctx.scope.get("user")
     if not isinstance(principal, Principal) or principal.kind != "user":
         raise HTTPException(status_code=401, detail="sign in first")
-    user = await get_user(context.project, context.env, principal.identity)
+    user = await get_user(context.env, principal.identity)
     if user is None or user.is_disabled:
         raise HTTPException(status_code=401, detail="the account is not available")
     return user, principal
@@ -122,7 +122,6 @@ def register(r: Router, akountz: Akountz) -> None:
             user_metadata=body.data,
         )
         await akountz.emit(
-            config.project,
             config.env,
             "user.created",
             {"user_id": str(user.id), "email": user.email, "method": "password"},
@@ -167,11 +166,10 @@ def register(r: Router, akountz: Akountz) -> None:
         if not body.email or not body.password:
             raise HTTPException(status_code=400, detail="email and password are required")
         email = normalise_email(body.email)
-        user = await find_by_email(config.project, config.env, email)
+        user = await find_by_email(config.env, email)
         refusal = HTTPException(status_code=400, detail="invalid email or password")
         if user is None:
             await log_event(
-                config.project,
                 config.env,
                 "sign_in",
                 email=email,
@@ -182,7 +180,6 @@ def register(r: Router, akountz: Akountz) -> None:
             raise refusal
         if is_locked(user):
             await log_event(
-                config.project,
                 config.env,
                 "sign_in",
                 user=user,
@@ -196,7 +193,6 @@ def register(r: Router, akountz: Akountz) -> None:
                 user, akountz.settings.lockout_threshold, akountz.settings.lockout_minutes
             )
             await log_event(
-                config.project,
                 config.env,
                 "sign_in",
                 user=user,
@@ -207,7 +203,6 @@ def register(r: Router, akountz: Akountz) -> None:
             raise refusal
         if user.is_disabled:
             await log_event(
-                config.project,
                 config.env,
                 "sign_in",
                 user=user,
@@ -223,7 +218,7 @@ def register(r: Router, akountz: Akountz) -> None:
             challenge = await links.issue(
                 akountz, config, "mfa", user=user, data={"method": "password", "org": body.org}
             )
-            await log_event(config.project, config.env, "mfa_challenge", user=user, ctx=ctx)
+            await log_event(config.env, "mfa_challenge", user=user, ctx=ctx)
             return {
                 "mfa_required": True,
                 "mfa_token": challenge,
@@ -244,7 +239,6 @@ def register(r: Router, akountz: Akountz) -> None:
                 user, akountz.settings.lockout_threshold, akountz.settings.lockout_minutes
             )
             await log_event(
-                config.project,
                 config.env,
                 "mfa_verify",
                 user=user,
@@ -280,9 +274,8 @@ def register(r: Router, akountz: Akountz) -> None:
                     await revoke_session(user, session["id"])
         elif current:
             await revoke_session(user, current)
-        await log_event(user.project, user.env, "sign_out", user=user, method=body.scope, ctx=ctx)
+        await log_event(user.env, "sign_out", user=user, method=body.scope, ctx=ctx)
         await akountz.emit(
-            user.project,
             user.env,
             "session.revoked",
             {"user_id": str(user.id), "scope": body.scope},
@@ -302,7 +295,7 @@ def register(r: Router, akountz: Akountz) -> None:
     @r.patch("/user", request_model=UserUpdate, summary="Update the signed-in user")
     async def update_me(ctx: HttpContext, body: UserUpdate):
         user, _ = await signed_in_user(ctx)
-        config = await load_config(akountz, user.project, user.env)
+        config = await load_config(akountz, user.env)
         changed: list[str] = []
         if body.name is not None:
             user.name = body.name
@@ -322,7 +315,7 @@ def register(r: Router, akountz: Akountz) -> None:
         await user.save()
         if body.email is not None:
             email = normalise_email(body.email)
-            if await find_by_email(user.project, user.env, email):
+            if await find_by_email(user.env, email):
                 raise HTTPException(status_code=409, detail="that email is in use")
             token = await links.issue(akountz, config, "email_change", user=user, email=email)
             await emails.send(
@@ -335,14 +328,12 @@ def register(r: Router, akountz: Akountz) -> None:
             changed.append("email (pending confirmation)")
         if "password" in changed:
             await akountz.emit(
-                user.project,
                 user.env,
                 "user.password_changed",
                 {"user_id": str(user.id)},
                 actor=str(user.id),
             )
         await akountz.emit(
-            user.project,
             user.env,
             "user.updated",
             {"user_id": str(user.id), "changed": changed},

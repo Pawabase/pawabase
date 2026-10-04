@@ -12,8 +12,12 @@ ORG_ROLES = ("owner", "admin", "member", "viewer")
 
 
 class Organization(Model):
+    """An organization **your application's users** create and belong to (a company account, a workspace).
+
+    Nothing to do with administering Pawabase itself, which has no organizations.
+    """
+
     id = ulid_pk()
-    project = fields.CharField(max_length=63, db_index=True)
     env = fields.CharField(max_length=63)
     slug = fields.CharField(max_length=63)
     name = fields.CharField(max_length=200)
@@ -22,7 +26,7 @@ class Organization(Model):
 
     class Meta:
         table = "akz_organizations"
-        unique_together = (("project", "env", "slug"),)
+        unique_together = (("env", "slug"),)
 
 
 class Membership(Model):

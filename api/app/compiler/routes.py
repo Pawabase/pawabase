@@ -70,7 +70,7 @@ def register_route(app: SilloApp, state: EnvironmentState, route: Any) -> str:
     )
     limits = rate_limit_middleware(
         route.rate_limit,
-        f"rl:{state.project_ref}:{state.env_name}:route:{route.id}",
+        f"rl:{state.env_name}:route:{route.id}",
         platform.settings.redis_url,
     )
     policy = route.policy or "authenticated"

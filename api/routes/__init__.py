@@ -19,16 +19,15 @@ def register_routes(app: SilloApp, platform: Platform) -> None:
         backups,
         data,
         definitions,
+        environments,
         functions,
         operations,
-        orgs,
-        projects,
         releases,
         runtime,
     )
 
     management = Router(prefix="/platform/v1")
-    for module in (orgs, projects, definitions, releases, data, backups, automation, operations, functions, runtime):
+    for module in (environments, definitions, releases, data, backups, automation, operations, functions, runtime):
         module.register(management, platform)
     app.mount_router(management)
 

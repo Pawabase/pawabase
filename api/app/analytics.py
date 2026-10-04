@@ -54,7 +54,7 @@ def _summary(totals: dict[str, float]) -> dict[str, Any]:
     }
 
 
-async def environment_analytics(ref: str, env: str, range_name: str = DEFAULT_RANGE) -> dict[str, Any]:
+async def environment_analytics(env: str, range_name: str = DEFAULT_RANGE) -> dict[str, Any]:
     span, step = RANGES.get(range_name, RANGES[DEFAULT_RANGE])
     range_name = range_name if range_name in RANGES else DEFAULT_RANGE
     end = _floor(datetime.now(UTC), step) + step
@@ -79,7 +79,7 @@ async def environment_analytics(ref: str, env: str, range_name: str = DEFAULT_RA
 
     latency: list[float] = [0.0] * count
     rows = await MetricCounter.filter(
-        project=ref, env=env, name=REQUESTS_METRIC, window__gte=since
+        env=env, name=REQUESTS_METRIC, window__gte=since
     ).values("window", "tags", "value", "count")
     for row in rows:
         bucket, totals = place(row["window"])
@@ -101,7 +101,7 @@ async def environment_analytics(ref: str, env: str, range_name: str = DEFAULT_RA
         if bucket["requests"]:
             bucket["latency_ms"] = round(latency[index] / bucket["requests"], 1)
 
-    for moment in await EventLog.filter(project=ref, env=env, created_at__gte=since).values_list(
+    for moment in await EventLog.filter(env=env, created_at__gte=since).values_list(
         "created_at", flat=True
     ):
         bucket, totals = place(moment)
@@ -110,7 +110,7 @@ async def environment_analytics(ref: str, env: str, range_name: str = DEFAULT_RA
         if bucket is not None:
             bucket["events"] += 1
 
-    for moment, status in await FlowRun.filter(project=ref, env=env, created_at__gte=since).values_list(
+    for moment, status in await FlowRun.filter(env=env, created_at__gte=since).values_list(
         "created_at", "status"
     ):
         bucket, totals = place(moment)
@@ -123,7 +123,7 @@ async def environment_analytics(ref: str, env: str, range_name: str = DEFAULT_RA
             bucket["flow_failures"] += failed
 
     top_events = (
-        await EventLog.filter(project=ref, env=env, created_at__gte=start)
+        await EventLog.filter(env=env, created_at__gte=start)
         .annotate(total=Count("id"))
         .group_by("name")
         .order_by("-total")
@@ -131,7 +131,7 @@ async def environment_analytics(ref: str, env: str, range_name: str = DEFAULT_RA
         .values("name", "total")
     )
     top_flows = (
-        await FlowRun.filter(project=ref, env=env, created_at__gte=start)
+        await FlowRun.filter(env=env, created_at__gte=start)
         .annotate(total=Count("id"))
         .group_by("flow")
         .order_by("-total")
@@ -139,7 +139,7 @@ async def environment_analytics(ref: str, env: str, range_name: str = DEFAULT_RA
         .values("flow", "total")
     )
     failures = (
-        await FlowRun.filter(project=ref, env=env, created_at__gte=start, status="failed")
+        await FlowRun.filter(env=env, created_at__gte=start, status="failed")
         .order_by("-created_at")
         .limit(5)
         .values("id", "flow", "error", "created_at")

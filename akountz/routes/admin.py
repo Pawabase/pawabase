@@ -64,10 +64,10 @@ class RestoreBody(BaseModel):
 
 
 def register(r: Router, akountz: Akountz) -> None:
-    base = "/projects/{project}/envs/{env}"
+    base = "/envs/{env}"
 
-    async def user_or_404(project: str, env: str, user_id: Any) -> AuthUser:
-        user = await get_user(project, env, user_id)
+    async def user_or_404(env: str, user_id: Any) -> AuthUser:
+        user = await get_user(env, user_id)
         if user is None:
             raise HTTPException(status_code=404, detail="no such user")
         return user
@@ -75,11 +75,11 @@ def register(r: Router, akountz: Akountz) -> None:
     # ── users ────────────────────────────────────────────────────────────
 
     @r.get(f"{base}/users", auth=SERVICE_ONLY, tags=["admin"], summary="Search users")
-    async def users(ctx: HttpContext, project: str, env: str):
+    async def users(ctx: HttpContext, env: str):
         q = ctx.query_params
         limit = max(1, min(int(q.get("limit", 50)), 200))
         offset = max(0, int(q.get("offset", 0)))
-        query = AuthUser.filter(project=project, env=env, deleted_at=None)
+        query = AuthUser.filter(env=env, deleted_at=None)
         if q.get("search"):
             term = q["search"]
             query = query.filter(
@@ -100,8 +100,8 @@ def register(r: Router, akountz: Akountz) -> None:
         request_model=AdminUserCreate,
         summary="Create a user",
     )
-    async def create_user(ctx: HttpContext, project: str, env: str, body: AdminUserCreate):
-        config = await load_config(akountz, project, env)
+    async def create_user(ctx: HttpContext, env: str, body: AdminUserCreate):
+        config = await load_config(akountz, env)
         user = await create_account(
             config,
             email=body.email,
@@ -115,7 +115,6 @@ def register(r: Router, akountz: Akountz) -> None:
         for role in body.roles:
             await rbac.assign_role(user, role)
         await akountz.emit(
-            project,
             env,
             "user.created",
             {"user_id": str(user.id), "email": user.email, "method": "admin"},
@@ -124,8 +123,8 @@ def register(r: Router, akountz: Akountz) -> None:
         return created(await user_view(user, admin=True))
 
     @r.get(f"{base}/users/{{user_id}}", auth=SERVICE_ONLY, tags=["admin"], summary="One user")
-    async def get_one(ctx: HttpContext, project: str, env: str, user_id: str):
-        user = await user_or_404(project, env, user_id)
+    async def get_one(ctx: HttpContext, env: str, user_id: str):
+        user = await user_or_404(env, user_id)
         return {**await user_view(user, admin=True), "sessions": await list_sessions(user)}
 
     @r.patch(
@@ -135,9 +134,9 @@ def register(r: Router, akountz: Akountz) -> None:
         request_model=AdminUserUpdate,
         summary="Update, disable, verify or unlock a user",
     )
-    async def update(ctx: HttpContext, project: str, env: str, user_id: str, body: AdminUserUpdate):
-        user = await user_or_404(project, env, user_id)
-        config = await load_config(akountz, project, env)
+    async def update(ctx: HttpContext, env: str, user_id: str, body: AdminUserUpdate):
+        user = await user_or_404(env, user_id)
+        config = await load_config(akountz, env)
         if body.name is not None:
             user.name = body.name
         if body.email_verified is not None:
@@ -164,7 +163,6 @@ def register(r: Router, akountz: Akountz) -> None:
                 await rbac.revoke_role(user, role)
         if body.disabled is not None:
             await akountz.emit(
-                project,
                 env,
                 "user.disabled" if body.disabled else "user.enabled",
                 {"user_id": str(user.id)},
@@ -175,18 +173,18 @@ def register(r: Router, akountz: Akountz) -> None:
     @r.delete(
         f"{base}/users/{{user_id}}", auth=SERVICE_ONLY, tags=["admin"], summary="Delete a user"
     )
-    async def delete(ctx: HttpContext, project: str, env: str, user_id: str):
-        user = await user_or_404(project, env, user_id)
+    async def delete(ctx: HttpContext, env: str, user_id: str):
+        user = await user_or_404(env, user_id)
         await revoke_all(user)
         await Identity.filter(user=user).delete()
         await mfa.disable(user)
         # Soft delete keeps history attributable; the address is released for re-use.
         user.deleted_at = datetime.now(UTC)
-        user.email = f"deleted+{user.id}@{project}.invalid"
+        user.email = f"deleted+{user.id}@pawabase.invalid"
         user.username = f"deleted-{user.id}"
         user.is_active = False
         await user.save()
-        await akountz.emit(project, env, "user.deleted", {"user_id": str(user.id)}, actor="admin")
+        await akountz.emit(env, "user.deleted", {"user_id": str(user.id)}, actor="admin")
         return no_content()
 
     @r.post(
@@ -195,8 +193,8 @@ def register(r: Router, akountz: Akountz) -> None:
         tags=["admin"],
         summary="Sign a user out everywhere",
     )
-    async def sign_out(ctx: HttpContext, project: str, env: str, user_id: str):
-        user = await user_or_404(project, env, user_id)
+    async def sign_out(ctx: HttpContext, env: str, user_id: str):
+        user = await user_or_404(env, user_id)
         return {"revoked": await revoke_all(user)}
 
     @r.delete(
@@ -205,8 +203,8 @@ def register(r: Router, akountz: Akountz) -> None:
         tags=["admin"],
         summary="End one session",
     )
-    async def end_session(ctx: HttpContext, project: str, env: str, user_id: str, session_id: str):
-        user = await user_or_404(project, env, user_id)
+    async def end_session(ctx: HttpContext, env: str, user_id: str, session_id: str):
+        user = await user_or_404(env, user_id)
         if not await revoke_session(user, session_id):
             raise HTTPException(status_code=404, detail="no such session")
         return no_content()
@@ -217,10 +215,10 @@ def register(r: Router, akountz: Akountz) -> None:
         tags=["admin"],
         summary="Remove a user's second factors",
     )
-    async def reset_mfa(ctx: HttpContext, project: str, env: str, user_id: str):
-        user = await user_or_404(project, env, user_id)
+    async def reset_mfa(ctx: HttpContext, env: str, user_id: str):
+        user = await user_or_404(env, user_id)
         await mfa.disable(user)
-        await akountz.emit(project, env, "user.mfa_reset", {"user_id": str(user.id)}, actor="admin")
+        await akountz.emit(env, "user.mfa_reset", {"user_id": str(user.id)}, actor="admin")
         return {"mfa_enabled": False}
 
     @r.get(
@@ -229,10 +227,10 @@ def register(r: Router, akountz: Akountz) -> None:
         tags=["admin"],
         summary="A user's sign-in history",
     )
-    async def user_history(ctx: HttpContext, project: str, env: str, user_id: str):
-        user = await user_or_404(project, env, user_id)
+    async def user_history(ctx: HttpContext, env: str, user_id: str):
+        user = await user_or_404(env, user_id)
         rows = (
-            await LoginEvent.filter(project=project, env=env, user_id=user.id)
+            await LoginEvent.filter(env=env, user_id=user.id)
             .order_by("-id")
             .limit(100)
         )
@@ -245,8 +243,8 @@ def register(r: Router, akountz: Akountz) -> None:
         request_model=GrantBody,
         summary="Grant permissions directly",
     )
-    async def grant(ctx: HttpContext, project: str, env: str, user_id: str, body: GrantBody):
-        user = await user_or_404(project, env, user_id)
+    async def grant(ctx: HttpContext, env: str, user_id: str, body: GrantBody):
+        user = await user_or_404(env, user_id)
         await rbac.grant(user, *body.permissions)
         return {"permissions": await rbac.permissions_of(user)}
 
@@ -257,8 +255,8 @@ def register(r: Router, akountz: Akountz) -> None:
         request_model=GrantBody,
         summary="Revoke direct permissions",
     )
-    async def revoke_perms(ctx: HttpContext, project: str, env: str, user_id: str, body: GrantBody):
-        user = await user_or_404(project, env, user_id)
+    async def revoke_perms(ctx: HttpContext, env: str, user_id: str, body: GrantBody):
+        user = await user_or_404(env, user_id)
         await rbac.revoke(user, *body.permissions)
         return {"permissions": await rbac.permissions_of(user)}
 
@@ -267,10 +265,10 @@ def register(r: Router, akountz: Akountz) -> None:
     @r.get(
         f"{base}/roles", auth=SERVICE_ONLY, tags=["admin"], summary="Roles with their permissions"
     )
-    async def roles(ctx: HttpContext, project: str, env: str):
+    async def roles(ctx: HttpContext, env: str):
         return {
-            "data": await rbac.list_roles(project, env),
-            "permissions": await rbac.list_permissions(project, env),
+            "data": await rbac.list_roles(env),
+            "permissions": await rbac.list_permissions(env),
         }
 
     @r.put(
@@ -280,17 +278,17 @@ def register(r: Router, akountz: Akountz) -> None:
         request_model=RoleBody,
         summary="Create or replace a role",
     )
-    async def put_role(ctx: HttpContext, project: str, env: str, body: RoleBody):
+    async def put_role(ctx: HttpContext, env: str, body: RoleBody):
         await rbac.define_role(
-            project, env, body.name, description=body.description, permissions=body.permissions
+            env, body.name, description=body.description, permissions=body.permissions
         )
         return next(
-            role for role in await rbac.list_roles(project, env) if role["name"] == body.name
+            role for role in await rbac.list_roles(env) if role["name"] == body.name
         )
 
     @r.delete(f"{base}/roles/{{name}}", auth=SERVICE_ONLY, tags=["admin"], summary="Delete a role")
-    async def delete_role(ctx: HttpContext, project: str, env: str, name: str):
-        if not await rbac.delete_role(project, env, name):
+    async def delete_role(ctx: HttpContext, env: str, name: str):
+        if not await rbac.delete_role(env, name):
             raise HTTPException(status_code=404, detail="no such role")
         return no_content()
 
@@ -302,8 +300,8 @@ def register(r: Router, akountz: Akountz) -> None:
         tags=["admin"],
         summary="Every role, user (with password hashes), and organization",
     )
-    async def export_backup(ctx: HttpContext, project: str, env: str):
-        return await backup.export_identities(project, env)
+    async def export_backup(ctx: HttpContext, env: str):
+        return await backup.export_identities(env)
 
     @r.post(
         f"{base}/restore",
@@ -312,7 +310,7 @@ def register(r: Router, akountz: Akountz) -> None:
         request_model=RestoreBody,
         summary="Apply the identities of a backup",
     )
-    async def restore_backup(ctx: HttpContext, project: str, env: str, body: RestoreBody):
+    async def restore_backup(ctx: HttpContext, env: str, body: RestoreBody):
         document = body.identities
         if document.get("format") != backup.FORMAT:
             raise HTTPException(status_code=422, detail="not an identities backup of this version")
@@ -320,7 +318,7 @@ def register(r: Router, akountz: Akountz) -> None:
             return {"dry_run": True, **backup.counts(document), "replace": body.replace}
         try:
             report = await backup.restore_identities(
-                project, env, document, replace=body.replace
+                env, document, replace=body.replace
             )
         except (KeyError, TypeError) as exc:
             raise HTTPException(
@@ -331,9 +329,9 @@ def register(r: Router, akountz: Akountz) -> None:
     # ── organizations ────────────────────────────────────────────────────
 
     @r.get(f"{base}/orgs", auth=SERVICE_ONLY, tags=["admin"], summary="All organizations")
-    async def orgs(ctx: HttpContext, project: str, env: str):
+    async def orgs(ctx: HttpContext, env: str):
         rows = (
-            await Organization.filter(project=project, env=env)
+            await Organization.filter(env=env)
             .annotate(member_count=Count("memberships"))
             .order_by("slug")
         )
@@ -356,8 +354,8 @@ def register(r: Router, akountz: Akountz) -> None:
         tags=["admin"],
         summary="One organization with members and teams",
     )
-    async def org(ctx: HttpContext, project: str, env: str, slug: str):
-        found = await Organization.get_or_none(project=project, env=env, slug=slug)
+    async def org(ctx: HttpContext, env: str, slug: str):
+        found = await Organization.get_or_none(env=env, slug=slug)
         if found is None:
             raise HTTPException(status_code=404, detail="no such organization")
         members = await Membership.filter(organization=found).prefetch_related("user")
@@ -375,9 +373,9 @@ def register(r: Router, akountz: Akountz) -> None:
     # ── activity ─────────────────────────────────────────────────────────
 
     @r.get(f"{base}/events", auth=SERVICE_ONLY, tags=["admin"], summary="Authentication events")
-    async def events(ctx: HttpContext, project: str, env: str):
+    async def events(ctx: HttpContext, env: str):
         q = ctx.query_params
-        query = LoginEvent.filter(project=project, env=env)
+        query = LoginEvent.filter(env=env)
         if q.get("kind"):
             query = query.filter(kind=q["kind"])
         if q.get("failed") == "true":
@@ -386,9 +384,9 @@ def register(r: Router, akountz: Akountz) -> None:
         return {"data": [_event(e) for e in rows]}
 
     @r.get(f"{base}/stats", auth=SERVICE_ONLY, tags=["admin"], summary="Identity statistics")
-    async def stats(ctx: HttpContext, project: str, env: str):
+    async def stats(ctx: HttpContext, env: str):
         day = datetime.now(UTC) - timedelta(days=1)
-        users = AuthUser.filter(project=project, env=env, deleted_at=None)
+        users = AuthUser.filter(env=env, deleted_at=None)
         return {
             "users": await users.count(),
             "verified": await users.filter(email_verified_at__not_isnull=True).count(),
@@ -396,13 +394,13 @@ def register(r: Router, akountz: Akountz) -> None:
             "disabled": await users.filter(disabled_at__not_isnull=True).count(),
             "signups_24h": await users.filter(created_at__gte=day).count(),
             "sign_ins_24h": await LoginEvent.filter(
-                project=project, env=env, kind="sign_in", success=True, created_at__gte=day
+                env=env, kind="sign_in", success=True, created_at__gte=day
             ).count(),
             "failures_24h": await LoginEvent.filter(
-                project=project, env=env, success=False, created_at__gte=day
+                env=env, success=False, created_at__gte=day
             ).count(),
-            "organizations": await Organization.filter(project=project, env=env).count(),
-            "providers": await Identity.filter(project=project, env=env)
+            "organizations": await Organization.filter(env=env).count(),
+            "providers": await Identity.filter(env=env)
             .group_by("provider")
             .annotate(n=Count("id"))
             .values("provider", "n"),
@@ -420,7 +418,7 @@ def register(r: Router, akountz: Akountz) -> None:
         from pawabase_core.context import require_context
 
         context = require_context(ctx)
-        return await user_view(await user_or_404(context.project, context.env, user_id), admin=True)
+        return await user_view(await user_or_404(context.env, user_id), admin=True)
 
 
 def _event(e: LoginEvent) -> dict[str, Any]:

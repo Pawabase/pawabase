@@ -43,24 +43,24 @@ def check_password_policy(config: AuthConfig, password: str) -> None:
         )
 
 
-async def find_by_email(project: str, env: str, email: str) -> AuthUser | None:
+async def find_by_email(env: str, email: str) -> AuthUser | None:
     return await AuthUser.filter(
-        project=project, env=env, email=email.lower(), deleted_at=None
+        env=env, email=email.lower(), deleted_at=None
     ).first()
 
 
-async def get_user(project: str, env: str, user_id: Any) -> AuthUser | None:
+async def get_user(env: str, user_id: Any) -> AuthUser | None:
     if not is_ulid(user_id):
         return None
     return await AuthUser.filter(
-        id=str(user_id).upper(), project=project, env=env, deleted_at=None
+        id=str(user_id).upper(), env=env, deleted_at=None
     ).first()
 
 
-async def unique_username(project: str, env: str, wanted: str | None, email: str) -> str:
+async def unique_username(env: str, wanted: str | None, email: str) -> str:
     base = re.sub(r"[^a-z0-9_.-]", "", (wanted or email.split("@", 1)[0]).lower())[:40] or "user"
     candidate = base
-    while await AuthUser.filter(project=project, env=env, username=candidate).exists():
+    while await AuthUser.filter(env=env, username=candidate).exists():
         candidate = f"{base}{secrets.randbelow(10_000)}"
     return candidate
 
@@ -77,20 +77,19 @@ async def create_account(
     verified: bool = False,
 ) -> AuthUser:
     email = normalise_email(email)
-    if await find_by_email(config.project, config.env, email):
+    if await find_by_email(config.env, email):
         raise HTTPException(status_code=409, detail="an account with this email already exists")
     if (
         username
         and await AuthUser.filter(
-            project=config.project, env=config.env, username=username.lower()
+            env=config.env, username=username.lower()
         ).exists()
     ):
         raise HTTPException(status_code=409, detail="that username is taken")
     user = AuthUser(
-        project=config.project,
         env=config.env,
         email=email,
-        username=await unique_username(config.project, config.env, username, email),
+        username=await unique_username(config.env, username, email),
         name=name,
         user_metadata=user_metadata or {},
         app_metadata=app_metadata or {},

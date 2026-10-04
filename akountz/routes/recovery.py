@@ -59,7 +59,6 @@ async def complete(
         if user.email_verified_at is None:
             await user.mark_email_verified()
             await akountz.emit(
-                config.project,
                 config.env,
                 "user.verified",
                 {"user_id": str(user.id), "email": user.email},
@@ -92,10 +91,9 @@ async def complete(
         await user.save(update_fields=["password", "failed_logins", "locked_until"])
         await revoke_all(user)
         await log_event(
-            config.project, config.env, "password_reset", user=user, method="recovery", ctx=ctx
+            config.env, "password_reset", user=user, method="recovery", ctx=ctx
         )
         await akountz.emit(
-            config.project,
             config.env,
             "user.password_reset",
             {"user_id": str(user.id)},
@@ -105,14 +103,13 @@ async def complete(
     if kind == "email_change":
         row = await links.consume(akountz, config, "email_change", token)
         user = row.user
-        if await find_by_email(config.project, config.env, row.email):
+        if await find_by_email(config.env, row.email):
             raise HTTPException(status_code=409, detail="that email is in use")
         previous = user.email
         user.email = row.email
         user.email_verified_at = datetime.now(UTC)
         await user.save(update_fields=["email", "email_verified_at"])
         await akountz.emit(
-            config.project,
             config.env,
             "user.email_changed",
             {"user_id": str(user.id), "from": previous, "to": user.email},
@@ -135,7 +132,7 @@ def register(r: Router, akountz: Akountz) -> None:
     )
     async def request_verification(ctx: HttpContext, body: EmailRequest):
         config = await config_for(akountz, ctx)
-        user = await find_by_email(config.project, config.env, normalise_email(body.email))
+        user = await find_by_email(config.env, normalise_email(body.email))
         if user is not None and user.email_verified_at is None:
             token = await links.issue(akountz, config, "verify", user=user)
             await emails.send(
@@ -163,7 +160,7 @@ def register(r: Router, akountz: Akountz) -> None:
         config = await config_for(akountz, ctx)
         if body.redirect_to and not config.redirect_allowed(body.redirect_to):
             raise HTTPException(status_code=400, detail="redirect_to is not an allowed URL")
-        user = await find_by_email(config.project, config.env, normalise_email(body.email))
+        user = await find_by_email(config.env, normalise_email(body.email))
         if user is not None and not user.is_disabled:
             token = await links.issue(akountz, config, "recovery", user=user)
             await emails.send(
@@ -173,7 +170,7 @@ def register(r: Router, akountz: Akountz) -> None:
                 user.email,
                 link=links.link(config, "recovery", token, body.redirect_to),
             )
-            await log_event(config.project, config.env, "recovery_requested", user=user, ctx=ctx)
+            await log_event(config.env, "recovery_requested", user=user, ctx=ctx)
         return SENT
 
     @r.post(
@@ -202,11 +199,10 @@ def register(r: Router, akountz: Akountz) -> None:
         if body.redirect_to and not config.redirect_allowed(body.redirect_to):
             raise HTTPException(status_code=400, detail="redirect_to is not an allowed URL")
         email = normalise_email(body.email)
-        user = await find_by_email(config.project, config.env, email)
+        user = await find_by_email(config.env, email)
         if user is None and body.create_user and config.signup_enabled:
             user = await create_account(config, email=email, password=None)
             await akountz.emit(
-                config.project,
                 config.env,
                 "user.created",
                 {"user_id": str(user.id), "email": email, "method": "magic_link"},
@@ -236,18 +232,17 @@ def register(r: Router, akountz: Akountz) -> None:
         )
 
     # Links opened from an email carry no API key: the environment is in the path.
-    @r.get("/links/{project}/{env}/{kind}", exclude_from_schema=True)
+    @r.get("/links/{env}/{kind}", exclude_from_schema=True)
     async def open_link(
         ctx: HttpContext,
-        project: str,
         env: str,
         kind: Literal["verify", "magic", "email_change", "recovery"],
     ):
-        config = await load_config(akountz, project, env)
+        config = await load_config(akountz, env)
         token = ctx.query_params.get("token", "")
         redirect_to = ctx.query_params.get("redirect_to")
         if kind == "recovery":
-            return html(_recovery_page(project, env, token))
+            return html(_recovery_page(env, token))
         try:
             result = await complete(akountz, config, kind, token, ctx=ctx)
         except HTTPException as exc:
@@ -278,7 +273,7 @@ def _page(title: str, message: str) -> str:
     )
 
 
-def _recovery_page(project: str, env: str, token: str) -> str:
+def _recovery_page(env: str, token: str) -> str:
     import html as escape
     import json
 
@@ -288,16 +283,16 @@ def _recovery_page(project: str, env: str, token: str) -> str:
         "<h1>Choose a new password</h1><form id=f><input id=p type=password required minlength=8 autocomplete=new-password "
         "style='width:100%;padding:.5rem;font-size:1rem'><p><button style='padding:.5rem 1rem'>Save</button></p></form><p id=m></p>"
         "<script>document.getElementById('f').onsubmit=async e=>{e.preventDefault();"
-        f"const r=await fetch('/auth/v1/links/{escape.escape(project)}/{escape.escape(env)}/recovery',{{method:'POST',headers:{{'content-type':'application/json'}},"
+        f"const r=await fetch('/auth/v1/links/{escape.escape(env)}/recovery',{{method:'POST',headers:{{'content-type':'application/json'}},"
         f"body:JSON.stringify({{token:{json.dumps(token)},password:document.getElementById('p').value}})}});"
         "const b=await r.json();document.getElementById('m').textContent=r.ok?'Your password was changed. You can sign in now.':(b.detail?.problems||[b.detail]).join(' ')}</script></body>"
     )
 
 
 def register_keyless_recovery(r: Router, akountz: Akountz) -> None:
-    @r.post("/links/{project}/{env}/recovery", request_model=ResetBody, exclude_from_schema=True)
-    async def recovery_submit(ctx: HttpContext, project: str, env: str, body: ResetBody):
-        config = await load_config(akountz, project, env)
+    @r.post("/links/{env}/recovery", request_model=ResetBody, exclude_from_schema=True)
+    async def recovery_submit(ctx: HttpContext, env: str, body: ResetBody):
+        config = await load_config(akountz, env)
         result = await complete(
             akountz, config, "recovery", body.token, ctx=ctx, password=body.password
         )
