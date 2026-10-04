@@ -39,6 +39,7 @@ from database.models import (
     WebhookEndpoint,
 )
 from pawabase_core.flows import validate_flow
+from pawabase_core.ids import is_ulid, new_ulid
 from pawabase_core.policies import PolicyEngine, PolicyError, validate_condition
 from pawabase_core.schemas import SchemaError, validate_fields
 from pawabase_core.transformers import TransformerError, validate_transformer
@@ -468,9 +469,9 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
     async def lookup(environment, key: str):
         value: Any = key
         if key_field == "id":
-            if not key.isdigit():
+            if not is_ulid(key):
                 raise HTTPException(status_code=404, detail="not found")
-            value = int(key)
+            value = key.upper()
         item = await model.get_or_none(environment=environment, **{key_field: value})
         if item is None:
             raise HTTPException(status_code=404, detail=f"no {path[:-1]} {key!r}")
@@ -506,12 +507,10 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
             if exists:
                 raise HTTPException(status_code=409, detail=f"{path[:-1]} already exists in this branch")
             row = {column: copy.deepcopy(data.get(column)) for column in columns if column in data}
-            # Routes are normally addressed by a database id. New branch-only
-            # routes do not have one until merge, so give them a stable
-            # negative draft id that can still be edited or deleted in Studio.
+            # Routes are addressed by id. A branch-only route gets one now, so it
+            # can be edited or deleted in Studio; merging gives the live row its own.
             if key_field == "id":
-                ids = [int(item["id"]) for item in draft_rows(branch) if item.get("id") is not None]
-                row["id"] = min([0, *ids]) - 1
+                row["id"] = new_ulid()
             else:
                 row.setdefault("id", None)
             draft_rows(branch).append(row)

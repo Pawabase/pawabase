@@ -6,6 +6,7 @@ from sillo.record import Model
 from tortoise import fields
 
 from database.fields import AnyJSONField
+from pawabase_core.records import ulid_pk
 
 
 class Project(Model):
@@ -16,7 +17,7 @@ class Project(Model):
         name: Display name.
     """
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     ref = fields.CharField(max_length=63, unique=True, db_index=True)
     name = fields.CharField(max_length=200)
     description = fields.TextField(default="")
@@ -49,7 +50,7 @@ class Environment(Model):
             and caches know when to rebuild.
     """
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     project = fields.ForeignKeyField(
         "models.Project", related_name="environments", on_delete=fields.CASCADE
     )
@@ -110,7 +111,7 @@ class ProjectKey(Model):
 class Secret(Model):
     """An encrypted configuration value. Its plaintext never leaves the API."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     environment = fields.ForeignKeyField(
         "models.Environment", related_name="secrets", on_delete=fields.CASCADE
     )
@@ -128,7 +129,7 @@ class Secret(Model):
 class AuditEntry(Model):
     """Who changed what on the management plane."""
 
-    id = fields.IntField(primary_key=True)
+    id = ulid_pk()
     project = fields.CharField(max_length=63, null=True, db_index=True)
     env = fields.CharField(max_length=63, null=True)
     org = fields.CharField(max_length=63, null=True, db_index=True)

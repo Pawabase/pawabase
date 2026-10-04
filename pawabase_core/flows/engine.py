@@ -32,11 +32,11 @@ import asyncio
 import copy
 import re
 import time
-import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..ids import new_ulid
 from ..templating import render
 from .registry import BlockRegistry, BlockResult, default_registry
 from .runtime import BaseRuntime, Runtime
@@ -188,7 +188,7 @@ class FlowRun:
         name: str = "flow",
         timeout: float = 60.0,
     ) -> None:
-        self.id = uuid.uuid4().hex
+        self.id = new_ulid()
         self.name = name
         self.flow = flow
         self.runtime: Runtime = runtime or BaseRuntime()  # type: ignore[assignment]

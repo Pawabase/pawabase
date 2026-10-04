@@ -12,7 +12,6 @@ import base64
 import hashlib
 from datetime import UTC, datetime
 from typing import Any
-from uuid import uuid4
 
 from pydantic import BaseModel, Field
 from sillo import HttpContext, Router, created
@@ -23,6 +22,7 @@ from app.platform import Platform
 from database.models import FunctionDeployment, FunctionRun
 from pawabase_core.context import current_context
 from pawabase_core.functions import MAIN
+from pawabase_core.ids import new_ulid
 from routes.common import NAME_PATTERN, OPERATOR, actor, audit, dump, get_environment, page_params
 
 
@@ -93,7 +93,7 @@ def register(r: Router, platform: Platform) -> None:
         if len(raw) > platform.settings.max_upload_bytes:
             raise HTTPException(status_code=413, detail="archive exceeds the upload limit")
         deployment = await FunctionDeployment.create(
-            id=uuid4().hex, environment=environment, branch=body.branch, checksum=hashlib.sha256(raw).hexdigest(),
+            id=new_ulid(), environment=environment, branch=body.branch, checksum=hashlib.sha256(raw).hexdigest(),
             runtime=body.runtime, manifest=body.manifest, limits=body.limits, created_by=actor(ctx),
         )
         await activate(ref, env, deployment, raw)

@@ -1,6 +1,7 @@
 """Immutable revisions, independently routed API versions, and rollback."""
 
 from pawabase_core.clients import ServiceError
+from pawabase_core.ids import is_ulid
 
 ENV = "/platform/v1/projects/releases/envs/development"
 PUBLIC = {"list": {"enabled": True, "policy": "public"}}
@@ -111,7 +112,7 @@ async def test_feature_branch_definition_edits_are_isolated_until_merge(api):
         params={"branch": "feature-notify"},
         json={"method": "POST", "path": "/notify", "handler_type": "flow", "handler": "notify"},
     )
-    assert route["id"] < 0
+    assert is_ulid(route["id"])
     assert (await api.studio.get(f"{env}/routes"))["data"] == []
     assert (await api.studio.get(f"{env}/routes/{route['id']}", params={"branch": "feature-notify"}))["path"] == "/notify"
 

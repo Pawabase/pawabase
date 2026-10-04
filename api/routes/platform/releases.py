@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Literal
-from uuid import uuid4
 
 from pydantic import BaseModel, Field
 from sillo import HttpContext, Router, created
@@ -20,6 +19,7 @@ from app.releases import (
     validate_snapshot,
 )
 from database.models import ApiVersion, Branch, DefinitionRevision, Deployment, Release
+from pawabase_core.ids import new_ulid
 from routes.common import NAME_PATTERN, OPERATOR, actor, audit, dump, get_environment
 
 VERSION_PATTERN = r"^v[1-9][0-9]*$"
@@ -53,7 +53,7 @@ class VersionUpdate(BaseModel):
 
 
 class ReleaseCreate(BaseModel):
-    revision_id: str = Field(min_length=32, max_length=32)
+    revision_id: str = Field(min_length=26, max_length=32)  # a ULID, or a pre-ULID 32-character hex id
     api_version: str = Field(pattern=VERSION_PATTERN)
     name: str = Field(min_length=1, max_length=128)
     notes: str = Field(default="", max_length=10000)
@@ -204,7 +204,7 @@ def register(r: Router, platform: Platform) -> None:
         problems = await validate_snapshot(platform, environment, snapshot)
         last = await DefinitionRevision.filter(environment=environment).order_by("-number").first()
         revision = await DefinitionRevision.create(
-            id=uuid4().hex,
+            id=new_ulid(),
             environment=environment,
             number=(last.number + 1) if last else 1,
             branch=branch.name,
@@ -308,7 +308,7 @@ def register(r: Router, platform: Platform) -> None:
                 },
             )
         release = await Release.create(
-            id=uuid4().hex,
+            id=new_ulid(),
             environment=environment,
             revision_id=revision.id,
             api_version=version.name,
