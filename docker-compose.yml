@@ -3,9 +3,11 @@
 #   cp .env.example .env      # then set the secrets
 #   docker compose up -d
 #
-# Clients use the gateway (:8080). Operators use Studio (:8090). Everything
-# else stays on the internal network. For development (live reload, no
-# rebuilds) use docker-compose.dev.yml instead.
+# Clients use the gateway (:8080). Studio (:8090) opens straight into this
+# backend with no sign-in, so it is published on localhost only: reach it over
+# an SSH tunnel, or put your own authenticating proxy in front of it before
+# exposing it. Everything else stays on the internal network. For development
+# (live reload, no rebuilds) use docker-compose.dev.yml instead.
 
 x-pawabase: &pawabase
   build: .
@@ -20,6 +22,7 @@ x-pawabase: &pawabase
     PAWABASE_ANGULA_URL: http://angula:8003
     PAWABASE_GATEWAY_URL: http://gateway:8080
     PAWABASE_STUDIO_URL: http://studio:8090
+    PAWABASE_PROJECT_NAME: ${PAWABASE_PROJECT_NAME:-Pawabase}
 
 x-api-env: &api-env
   <<: *env
@@ -164,7 +167,7 @@ services:
     environment:
       <<: *env
       PORT: "8090"
-    ports: ["${PAWABASE_STUDIO_PORT:-8090}:8090"]
+    ports: ["127.0.0.1:${PAWABASE_STUDIO_PORT:-8090}:8090"]
     depends_on:
       api: { condition: service_healthy }
       akountz: { condition: service_healthy }
