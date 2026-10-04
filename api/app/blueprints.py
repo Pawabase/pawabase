@@ -219,6 +219,8 @@ async def _create(
         raise BlueprintError(where, f"{field}: {first['msg']}") from exc
     try:
         values = await kind["validate"](platform, environment.project.ref, environment.name, body)
+        if kind.get("on_create"):
+            kind["on_create"](values)
     except HTTPException as exc:
         raise BlueprintError(where, str(exc.detail)) from exc
     reveal = values.pop("_reveal", {})

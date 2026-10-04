@@ -1,7 +1,7 @@
 """Resources keyed by ULID: generated ids, sortable, case-insensitive, 404 for malformed ones."""
 
-import re
-
+import pytest
+from pawabase_core.clients import ServiceError
 from pawabase_core.ids import is_ulid
 
 ENV = "/platform/v1/projects/acme/envs/development"
@@ -63,7 +63,41 @@ async def test_the_column_is_a_26_character_key_and_integer_resources_are_unchan
     assert "AUTOINCREMENT" in primary_key_column("sqlite", "id", "integer")
 
 
-async def test_integer_resources_keep_counting(api):
-    anon = await seed(api, id_type="integer")
-    first = (await api.http.post("/rest/v1/notes", json={"text": "a"}, headers=anon)).json()
-    assert first["id"] == 1 and not re.fullmatch(r"[0-9A-Z]{26}", str(first["id"]))
+async def test_new_resources_default_to_ulid_and_integer_keys_are_refused(api):
+    await api.studio.post("/platform/v1/projects", json={"ref": "acme", "name": "Acme"})
+    made = await api.studio.post(f"{ENV}/resources", json={"name": "plain", "fields": []})
+    assert made["id_type"] == "ulid"  # nothing said, so ULID
+    with pytest.raises(ServiceError) as refused:
+        await api.studio.post(f"{ENV}/resources", json={"name": "legacy", "id_type": "integer", "fields": []})
+    assert refused.value.status == 422 and "ulid" in str(refused.value)
+    assert (await api.studio.post(f"{ENV}/resources", json={"name": "ids", "id_type": "uuid", "fields": []}))["id_type"] == "uuid"
+
+
+async def test_an_existing_integer_resource_keeps_working_and_cannot_be_retyped(api):
+    from database.models import Environment, Resource
+
+    await api.studio.post("/platform/v1/projects", json={"ref": "acme", "name": "Acme"})
+    environment = await Environment.get(name="development")
+    await Resource.create(
+        environment=environment, name="old", table="old", id_type="integer",
+        fields_=[{"name": "text", "type": "string"}],
+        operations={"list": {"enabled": True, "policy": "public"}, "create": {"enabled": True, "policy": "public"}},
+    )  # fmt: skip
+    await api.studio.post(f"{ENV}/resources/old/migrate")
+    anon = api.context_headers("acme", "development")
+    first = (await api.http.post("/rest/v1/old", json={"text": "a"}, headers=anon)).json()
+    assert first["id"] == 1  # still auto-increment: records already carry those keys
+
+    body = {
+        "name": "old",
+        "fields": [{"name": "text", "type": "string"}],
+        "operations": {"create": {"enabled": True, "policy": "public"}},
+        "description": "edited",
+    }
+    resaved = await api.studio.put(f"{ENV}/resources/old", json=body)  # id_type not named: kept
+    assert resaved["id_type"] == "integer" and resaved["description"] == "edited"
+    assert (await api.studio.put(f"{ENV}/resources/old", json={**body, "id_type": "integer"}))["id_type"] == "integer"
+    with pytest.raises(ServiceError) as retyped:
+        await api.studio.put(f"{ENV}/resources/old", json={**body, "id_type": "ulid"})
+    assert retyped.value.status == 409
+    assert (await api.http.post("/rest/v1/old", json={"text": "b"}, headers=anon)).json()["id"] == 2

@@ -36,7 +36,7 @@ POSTS = {
 COMMENTS = {
     "name": "comments",
     "fields": [
-        {"name": "post_id", "type": "integer", "required": True, "indexed": True},
+        {"name": "post_id", "type": "ulid", "required": True, "indexed": True},
         {"name": "text", "type": "string", "required": True},
     ],
     "operations": {"list": {"enabled": True, "policy": "public"}},
@@ -232,7 +232,7 @@ async def test_expand_respects_the_related_resources_read_policy(acme):
     ledger = {
         "name": "receipts",
         "fields": [
-            {"name": "post_id", "type": "integer", "required": True},
+            {"name": "post_id", "type": "ulid", "required": True},
             {"name": "amount", "type": "number", "required": True},
         ],
         "operations": {

@@ -25,8 +25,11 @@ from __future__ import annotations
 import datetime as dt
 import json
 import re
+import uuid
 from collections.abc import Mapping, Sequence
 from typing import Any
+
+from pawabase_core.ids import new_ulid
 
 from .source import timed
 from .sql import JSON_TYPES, TIMESTAMP_FIELDS, check_identifier, decode_value, encode_value, now_value, quote
@@ -127,6 +130,8 @@ class DbSession:
             for field in spec.fields:  # declared defaults apply however the row arrives, as in ResourceStore.create
                 if "default" in field and field["name"] not in values:
                     values[field["name"]] = field["default"]
+        if spec is not None and spec.primary_key not in values and spec.id_type in ("ulid", "uuid"):
+            values[spec.primary_key] = new_ulid() if spec.id_type == "ulid" else str(uuid.uuid4())
         if spec is not None and spec.timestamps:
             stamp = dt.datetime.now(dt.UTC)
             values.setdefault("created_at", stamp)

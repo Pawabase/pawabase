@@ -43,7 +43,7 @@ async def source(api):
         }),
         ("resources", {
             "name": "comments",
-            "fields": [{"name": "post_id", "type": "integer", "required": True}, {"name": "text", "type": "string"}],
+            "fields": [{"name": "post_id", "type": "ulid", "required": True}, {"name": "text", "type": "string"}],
             "operations": {"list": {"enabled": True, "policy": "public"}},
             "relations": [{"name": "post", "resource": "posts", "field": "post_id"}],
         }),
