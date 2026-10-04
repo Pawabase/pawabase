@@ -24,7 +24,7 @@ class Migration(migrations.Migration):
                 ('name', fields.CharField(max_length=200)),
                 ('created_by', fields.CharField(null=True, max_length=255)),
             ],
-            options={'table': 'pb_organizations', 'app': 'models', 'pk_attr': 'id', 'table_description': 'A company or team. Members are platform operators; projects belong to it.'},
+            options={'table': 'pb_organizations', 'app': 'models', 'pk_attr': 'id', 'table_description': 'A company or team. Members are platform operators, and projects belong to it.'},
             bases=['Model'],
         ),
         ops.CreateModel(

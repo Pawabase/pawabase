@@ -17,7 +17,7 @@ ORG_ROLES = ("viewer", "developer", "admin", "owner")
 
 
 class Organization(Model):
-    """A company or team. Members are platform operators; projects belong to it."""
+    """A company or team. Members are platform operators, and projects belong to it."""
 
     id = ulid_pk()
     slug = fields.CharField(max_length=63, unique=True, db_index=True)

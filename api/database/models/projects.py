@@ -22,7 +22,7 @@ class Project(Model):
     name = fields.CharField(max_length=200)
     description = fields.TextField(default="")
     created_by = fields.CharField(max_length=255, null=True)
-    #: The organization the project lives in. Every project has one; the column
+    #: The organization the project lives in. Every project has one, and the column
     #: is nullable only so databases created before organizations existed can
     #: migrate, and those projects are adopted by the first organization made.
     organization = fields.ForeignKeyField(
