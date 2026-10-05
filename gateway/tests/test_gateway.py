@@ -131,3 +131,9 @@ async def test_status_and_health(gateway):
     response = await gateway.http.get("/v1/status")
     assert response.status_code == 200
     assert set(response.json()["services"]) == {"api", "akountz", "angula"}
+
+
+async def test_the_root_is_a_landing_page_not_a_404(gateway):
+    response = await gateway.http.get("/")
+    assert response.status_code == 200 and "text/html" in response.headers["content-type"]
+    assert "API is running" in response.text and "/v1/status" in response.text

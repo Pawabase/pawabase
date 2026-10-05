@@ -12,6 +12,7 @@ from sillo.security.csrf import CSRFMiddleware
 from sillo.security.csrf.config import CSRFConfig
 from sillo_inertia import Inertia, vite_react
 
+from app.access import StudioAccessGate
 from app.config import StudioSettings
 from pawabase_core.clients import ServiceClient
 from pawabase_core.service import create_service
@@ -93,6 +94,8 @@ def create_app(
             )
         )
     )
+    if settings.studio_access_secret:
+        app.use(StudioAccessGate(settings.studio_access_secret, secure_cookie=settings.cookie_secure))
     app.state["clients"] = clients
     app.state["inertia"] = inertia
     app.state["settings"] = settings

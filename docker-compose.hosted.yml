@@ -1,0 +1,72 @@
+# Pawabase for a host that deploys compose files itself (Openship, Coolify, Portainer, ...).
+#
+# Three services: Postgres, Redis, and one Pawabase container that runs every Pawabase process (API, worker,
+# scheduler, Akountz, Angula, gateway, Studio) under a small supervisor. One image build, nothing mounted from
+# the source tree, no .env file (settings come from the host's environment variables), file storage on a volume.
+#
+# Required environment: PAWABASE_INTERNAL_SECRET, PAWABASE_JWT_MASTER_SECRET, PAWABASE_MASTER_KEY, POSTGRES_PASSWORD.
+# Optional: PAWABASE_PROJECT_NAME, PAWABASE_PUBLIC_URL, PAWABASE_PUBLIC_GATEWAY_URL, PAWABASE_COOKIE_SECURE and the host ports
+# PAWABASE_GATEWAY_PORT (8080), PAWABASE_STUDIO_PORT (8090). To use S3-compatible storage, add PAWABASE_STORAGE_* variables.
+#
+# Clients use the gateway. Studio opens with no sign-in unless PAWABASE_STUDIO_ACCESS_SECRET is set (then only a signed link opens it, see
+# studio/app/access.py), so without that secret it is published on the host's loopback only.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pawabase
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: pawabase
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pawabase -d pawabase"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis:/data
+
+  pawabase:
+    build: .
+    restart: unless-stopped
+    command: ["all"]
+    environment:
+      PAWABASE_APP_ENV: production
+      PAWABASE_INTERNAL_SECRET: ${PAWABASE_INTERNAL_SECRET}
+      PAWABASE_JWT_MASTER_SECRET: ${PAWABASE_JWT_MASTER_SECRET}
+      PAWABASE_MASTER_KEY: ${PAWABASE_MASTER_KEY}
+      PAWABASE_PROJECT_NAME: ${PAWABASE_PROJECT_NAME:-Pawabase}
+      PAWABASE_PUBLIC_URL: ${PAWABASE_PUBLIC_URL:-http://localhost:8080}
+      PAWABASE_PUBLIC_GATEWAY_URL: ${PAWABASE_PUBLIC_GATEWAY_URL:-http://localhost:8080}
+      PAWABASE_COOKIE_SECURE: ${PAWABASE_COOKIE_SECURE:-false}
+      # Set by a hosting service that serves Studio publicly: Studio then only opens through a link that service signs with this secret.
+      PAWABASE_STUDIO_ACCESS_SECRET: ${PAWABASE_STUDIO_ACCESS_SECRET:-}
+      PAWABASE_REDIS_URL: redis://redis:6379/0
+      PAWABASE_DATABASE_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase
+      PAWABASE_DEFAULT_DATA_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase
+      PAWABASE_STORAGE_ROOT: /data/objects
+      PAWABASE_CODE_PATH: /code
+      PAWABASE_DEPLOYMENTS_PATH: /data/deployments
+      PAWABASE_INLINE_WORKER: "false"
+      PAWABASE_INLINE_SCHEDULER: "false"
+    ports:
+      - "${PAWABASE_GATEWAY_PORT:-8080}:8080"
+      - "127.0.0.1:${PAWABASE_STUDIO_PORT:-8090}:8090"
+    volumes:
+      - data:/data
+      - code:/code
+    depends_on: [postgres, redis]
+
+volumes:
+  postgres:
+  redis:
+  data:
+  code:
