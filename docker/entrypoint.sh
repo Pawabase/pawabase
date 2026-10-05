@@ -51,7 +51,16 @@ case "$1" in
   gateway)   serve gateway 8080 ;;
   studio)    serve studio 8090 ;;
   migrate)   migrate api; migrate akountz ;;
+  # Every process in this one container (docker-compose.hosted.yml): both databases first, then the supervisor starts the services.
+  all)
+    AKOUNTZ_URL="$(python -m pawabase_core.supervisor --akountz-url)"
+    ensure_database
+    python -m pawabase_core.ensure_database "$AKOUNTZ_URL"
+    migrate api
+    (export PAWABASE_DATABASE_URL="$AKOUNTZ_URL"; migrate akountz)
+    cd /app
+    PAWABASE_MIGRATE=false exec python -m pawabase_core.supervisor ;;
   *)
-    echo "usage: pawabase-service api|worker|scheduler|akountz|angula|gateway|studio|migrate" >&2
+    echo "usage: pawabase-service api|worker|scheduler|akountz|angula|gateway|studio|migrate|all" >&2
     exit 64 ;;
 esac

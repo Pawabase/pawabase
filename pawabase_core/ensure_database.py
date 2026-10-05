@@ -1,4 +1,4 @@
-"""``python -m pawabase_core.ensure_database``: create the database named in PAWABASE_DATABASE_URL when it does not exist yet.
+"""``python -m pawabase_core.ensure_database [url]``: create the database named in *url* (default PAWABASE_DATABASE_URL) when it does not exist yet.
 
 The bundled Postgres starts with one database; Akountz keeps its own. The development and self-hosted compose files create it with an init script
 mounted into Postgres. A host that cannot mount files (a deployment manager that only knows named volumes) sets ``PAWABASE_ENSURE_DATABASE=true`` on
@@ -44,8 +44,9 @@ async def ensure(url: str, *, attempts: int = 30) -> bool:
         await connection.close()
 
 
-def main() -> None:
-    url = os.environ.get("PAWABASE_DATABASE_URL", "")
+def main(argv: list[str] | None = None) -> None:
+    args = sys.argv[1:] if argv is None else argv
+    url = args[0] if args else os.environ.get("PAWABASE_DATABASE_URL", "")
     if not url.startswith(("postgres://", "postgresql://")):
         return  # SQLite and the like create themselves
     created = asyncio.run(ensure(url))

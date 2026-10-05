@@ -1,54 +1,14 @@
 # Pawabase for a host that deploys compose files itself (Openship, Coolify, Portainer, ...).
 #
-# Same services as docker-compose.yml, shaped for such a host: one image build shared by every service, nothing
-# mounted from the source tree (named volumes only), no .env file (settings come from the host's environment
-# variables), a MinIO image that can still be pulled, and Akountz makes its own database.
+# Three services: Postgres, Redis, and one Pawabase container that runs every Pawabase process (API, worker,
+# scheduler, Akountz, Angula, gateway, Studio) under a small supervisor. One image build, nothing mounted from
+# the source tree, no .env file (settings come from the host's environment variables), file storage on a volume.
 #
-# Required environment: PAWABASE_INTERNAL_SECRET, PAWABASE_JWT_MASTER_SECRET, PAWABASE_MASTER_KEY, POSTGRES_PASSWORD,
-# MINIO_ROOT_PASSWORD. Optional: PAWABASE_PROJECT_NAME, PAWABASE_PUBLIC_URL, PAWABASE_PUBLIC_GATEWAY_URL, and the
-# host ports PAWABASE_GATEWAY_PORT (8080), PAWABASE_STUDIO_PORT (8090), PAWABASE_MINIO_PORT (9000).
+# Required environment: PAWABASE_INTERNAL_SECRET, PAWABASE_JWT_MASTER_SECRET, PAWABASE_MASTER_KEY, POSTGRES_PASSWORD.
+# Optional: PAWABASE_PROJECT_NAME, PAWABASE_PUBLIC_URL, PAWABASE_PUBLIC_GATEWAY_URL, PAWABASE_COOKIE_SECURE and the host ports
+# PAWABASE_GATEWAY_PORT (8080), PAWABASE_STUDIO_PORT (8090). To use S3-compatible storage, add PAWABASE_STORAGE_* variables.
 #
 # Clients use the gateway. Studio opens with no sign-in, so it is published on the host's loopback only.
-
-x-env: &env
-  PAWABASE_APP_ENV: production
-  PAWABASE_INTERNAL_SECRET: ${PAWABASE_INTERNAL_SECRET}
-  PAWABASE_JWT_MASTER_SECRET: ${PAWABASE_JWT_MASTER_SECRET}
-  PAWABASE_MASTER_KEY: ${PAWABASE_MASTER_KEY}
-  PAWABASE_PROJECT_NAME: ${PAWABASE_PROJECT_NAME:-Pawabase}
-  PAWABASE_PUBLIC_URL: ${PAWABASE_PUBLIC_URL:-http://localhost:8080}
-  PAWABASE_PUBLIC_GATEWAY_URL: ${PAWABASE_PUBLIC_GATEWAY_URL:-http://localhost:8080}
-  PAWABASE_COOKIE_SECURE: ${PAWABASE_COOKIE_SECURE:-false}
-  PAWABASE_REDIS_URL: redis://redis:6379/0
-  PAWABASE_API_URL: http://api:8001
-  PAWABASE_AKOUNTZ_URL: http://akountz:8002
-  PAWABASE_ANGULA_URL: http://angula:8003
-  PAWABASE_GATEWAY_URL: http://gateway:8080
-  PAWABASE_STUDIO_URL: http://studio:8090
-
-x-api-env: &api-env
-  <<: *env
-  PAWABASE_DATABASE_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase
-  PAWABASE_DEFAULT_DATA_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase
-  PAWABASE_STORAGE_ROOT: /data/objects
-  PAWABASE_STORAGE_ENDPOINT: http://minio:9000
-  PAWABASE_STORAGE_PUBLIC_ENDPOINT: ${PAWABASE_STORAGE_PUBLIC_ENDPOINT:-http://localhost:9000}
-  PAWABASE_STORAGE_BUCKET: pawabase
-  PAWABASE_STORAGE_REGION: us-east-1
-  PAWABASE_STORAGE_ACCESS_KEY: pawabase
-  PAWABASE_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-  PAWABASE_STORAGE_PATH_STYLE: "true"
-  PAWABASE_CODE_PATH: /code
-  PAWABASE_DEPLOYMENTS_PATH: /data/deployments
-  PAWABASE_INLINE_WORKER: "false"
-  PAWABASE_INLINE_SCHEDULER: "false"
-
-x-health: &health
-  test: ["CMD", "python", "-c", "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % os.environ.get('PORT', '8001'), timeout=3)"]
-  interval: 10s
-  timeout: 5s
-  retries: 12
-  start_period: 20s
 
 services:
   postgres:
@@ -73,100 +33,37 @@ services:
     volumes:
       - redis:/data
 
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-    restart: unless-stopped
-    command: ["server", "/data", "--console-address", ":9001"]
-    environment:
-      MINIO_ROOT_USER: pawabase
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    ports:
-      - "${PAWABASE_MINIO_PORT:-9000}:9000"
-    volumes:
-      - minio:/data
-
-  # The one build: every other Pawabase service runs this image.
-  api:
+  pawabase:
     build: .
-    image: ${PAWABASE_IMAGE:-pawabase:hosted}
     restart: unless-stopped
-    command: ["api"]
-    environment: *api-env
-    volumes:
-      - api-data:/data
-      - code:/code
-    depends_on: [postgres, redis, minio]
-    healthcheck: *health
-
-  worker:
-    image: ${PAWABASE_IMAGE:-pawabase:hosted}
-    restart: unless-stopped
-    command: ["worker"]
-    environment: *api-env
-    volumes:
-      - api-data:/data
-      - code:/code
-    depends_on: [api]
-
-  scheduler:
-    image: ${PAWABASE_IMAGE:-pawabase:hosted}
-    restart: unless-stopped
-    command: ["scheduler"]
-    environment: *api-env
-    volumes:
-      - api-data:/data
-      - code:/code
-    depends_on: [api]
-
-  akountz:
-    image: ${PAWABASE_IMAGE:-pawabase:hosted}
-    restart: unless-stopped
-    command: ["akountz"]
+    command: ["all"]
     environment:
-      <<: *env
-      PORT: "8002"
-      PAWABASE_ENSURE_DATABASE: "true"
-      PAWABASE_DATABASE_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/akountz
-    depends_on: [postgres, redis, api]
-    healthcheck: *health
-
-  angula:
-    image: ${PAWABASE_IMAGE:-pawabase:hosted}
-    restart: unless-stopped
-    command: ["angula"]
-    environment:
-      <<: *env
-      PORT: "8003"
-    depends_on: [redis]
-    healthcheck: *health
-
-  gateway:
-    image: ${PAWABASE_IMAGE:-pawabase:hosted}
-    restart: unless-stopped
-    command: ["gateway"]
-    environment:
-      <<: *env
-      PORT: "8080"
+      PAWABASE_APP_ENV: production
+      PAWABASE_INTERNAL_SECRET: ${PAWABASE_INTERNAL_SECRET}
+      PAWABASE_JWT_MASTER_SECRET: ${PAWABASE_JWT_MASTER_SECRET}
+      PAWABASE_MASTER_KEY: ${PAWABASE_MASTER_KEY}
+      PAWABASE_PROJECT_NAME: ${PAWABASE_PROJECT_NAME:-Pawabase}
+      PAWABASE_PUBLIC_URL: ${PAWABASE_PUBLIC_URL:-http://localhost:8080}
+      PAWABASE_PUBLIC_GATEWAY_URL: ${PAWABASE_PUBLIC_GATEWAY_URL:-http://localhost:8080}
+      PAWABASE_COOKIE_SECURE: ${PAWABASE_COOKIE_SECURE:-false}
+      PAWABASE_REDIS_URL: redis://redis:6379/0
+      PAWABASE_DATABASE_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase
+      PAWABASE_DEFAULT_DATA_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase
+      PAWABASE_STORAGE_ROOT: /data/objects
+      PAWABASE_CODE_PATH: /code
+      PAWABASE_DEPLOYMENTS_PATH: /data/deployments
+      PAWABASE_INLINE_WORKER: "false"
+      PAWABASE_INLINE_SCHEDULER: "false"
     ports:
       - "${PAWABASE_GATEWAY_PORT:-8080}:8080"
-    depends_on: [api, akountz, angula]
-    healthcheck: *health
-
-  studio:
-    image: ${PAWABASE_IMAGE:-pawabase:hosted}
-    restart: unless-stopped
-    command: ["studio"]
-    environment:
-      <<: *env
-      PORT: "8090"
-    ports:
       - "127.0.0.1:${PAWABASE_STUDIO_PORT:-8090}:8090"
-    depends_on: [api, akountz]
-    healthcheck: *health
+    volumes:
+      - data:/data
+      - code:/code
+    depends_on: [postgres, redis]
 
 volumes:
   postgres:
   redis:
-  minio:
-  api-data:
+  data:
   code:
