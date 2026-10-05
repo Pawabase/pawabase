@@ -18,7 +18,7 @@ class StudioSettings(PlatformSettings):
         frontend_dir: The front end's directory, holding ``dist/`` once built.
         public_gateway_url: The gateway as browsers reach it, shown in Studio
             (API URLs, snippets, the realtime socket).
-        access_secret: When set, Studio requires a session that only a link
+        studio_access_secret: When set (``PAWABASE_STUDIO_ACCESS_SECRET``), Studio requires a session that only a link
             signed with this secret can start (see ``app.access``). Empty keeps
             Studio open, which is only right behind localhost or your own proxy.
     """
@@ -30,4 +30,4 @@ class StudioSettings(PlatformSettings):
     vite_dev_server: str = "http://localhost:5173"
     frontend_dir: str = "frontend"
     public_gateway_url: str = "http://localhost:8080"
-    access_secret: str = ""
+    studio_access_secret: str = ""

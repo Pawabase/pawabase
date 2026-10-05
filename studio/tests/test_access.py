@@ -22,7 +22,7 @@ async def gated(tmp_path):
     dist = tmp_path / "frontend" / "dist"
     (dist / ".vite").mkdir(parents=True)
     (dist / ".vite" / "manifest.json").write_text('{"src/main.jsx": {"file": "assets/main-abc.js"}}')
-    settings = StudioSettings(_env_file=None, app_env="testing", frontend_dir=str(tmp_path / "frontend"), access_secret=SECRET)
+    settings = StudioSettings(_env_file=None, app_env="testing", frontend_dir=str(tmp_path / "frontend"), studio_access_secret=SECRET)
     api, akountz, angula = FakeApi(), FakeAkountz(master=settings.jwt_master_secret), FakeApi()
     app = create_app(settings, clients={"api": api, "akountz": akountz, "angula": angula})
     await app._startup()
@@ -75,3 +75,13 @@ async def test_a_forged_or_expired_session_cookie_is_not_a_session(gated):
 
 async def test_an_ungated_studio_stays_open(studio):
     assert (await studio.http.get("/")).status_code == 302  # no secret configured: unchanged behaviour
+
+
+def test_the_environment_variable_that_turns_the_gate_on_is_the_documented_one(monkeypatch):
+    """The name in docker-compose.hosted.yml must be the one Studio reads: a wrong name leaves Studio silently open."""
+    from app.config import StudioSettings
+
+    monkeypatch.setenv("PAWABASE_STUDIO_ACCESS_SECRET", "from-the-environment-0123456789abcdef")
+    assert StudioSettings(_env_file=None).studio_access_secret == "from-the-environment-0123456789abcdef"
+    monkeypatch.delenv("PAWABASE_STUDIO_ACCESS_SECRET")
+    assert StudioSettings(_env_file=None).studio_access_secret == ""

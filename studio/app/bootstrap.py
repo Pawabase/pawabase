@@ -94,8 +94,8 @@ def create_app(
             )
         )
     )
-    if settings.access_secret:
-        app.use(StudioAccessGate(settings.access_secret, secure_cookie=settings.cookie_secure))
+    if settings.studio_access_secret:
+        app.use(StudioAccessGate(settings.studio_access_secret, secure_cookie=settings.cookie_secure))
     app.state["clients"] = clients
     app.state["inertia"] = inertia
     app.state["settings"] = settings
