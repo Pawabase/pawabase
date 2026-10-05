@@ -8,7 +8,8 @@
 # Optional: PAWABASE_PROJECT_NAME, PAWABASE_PUBLIC_URL, PAWABASE_PUBLIC_GATEWAY_URL, PAWABASE_COOKIE_SECURE and the host ports
 # PAWABASE_GATEWAY_PORT (8080), PAWABASE_STUDIO_PORT (8090). To use S3-compatible storage, add PAWABASE_STORAGE_* variables.
 #
-# Clients use the gateway. Studio opens with no sign-in, so it is published on the host's loopback only.
+# Clients use the gateway. Studio opens with no sign-in unless PAWABASE_STUDIO_ACCESS_SECRET is set (then only a signed link opens it, see
+# studio/app/access.py), so without that secret it is published on the host's loopback only.
 
 services:
   postgres:
@@ -46,6 +47,8 @@ services:
       PAWABASE_PUBLIC_URL: ${PAWABASE_PUBLIC_URL:-http://localhost:8080}
       PAWABASE_PUBLIC_GATEWAY_URL: ${PAWABASE_PUBLIC_GATEWAY_URL:-http://localhost:8080}
       PAWABASE_COOKIE_SECURE: ${PAWABASE_COOKIE_SECURE:-false}
+      # Set by a hosting service that serves Studio publicly: Studio then only opens through a link that service signs with this secret.
+      PAWABASE_STUDIO_ACCESS_SECRET: ${PAWABASE_STUDIO_ACCESS_SECRET:-}
       PAWABASE_REDIS_URL: redis://redis:6379/0
       PAWABASE_DATABASE_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase
       PAWABASE_DEFAULT_DATA_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase
