@@ -334,6 +334,7 @@ class ApiRuntime(BaseRuntime):
             params=params,
             timeout=timeout,
             retries=retries,
+            allow_hosts=[h.strip() for h in self.platform.settings.outbound_allow_hosts.split(",") if h.strip()],
         )
 
     async def webhook_send(self, event, payload):

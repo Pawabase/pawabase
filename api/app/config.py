@@ -29,6 +29,8 @@ class ApiSettings(PlatformSettings):
             URLs, when ``storage_endpoint`` is an internal address.
         storage_path_style: Address the bucket in the URL path (MinIO, Ceph)
             rather than as a subdomain (AWS virtual-hosted style).
+        outbound_allow_hosts: Comma-separated host names a function's ``http_request`` may reach even though they resolve to a private address
+            (an internal service such as a deployment manager). Everything else private stays refused.
         request_retention_days: How long request history (the traces behind route
             statistics) is kept. ``0`` keeps it forever.
         code_path: The directory mounted code (``functions/``, ``policies/``,
@@ -56,6 +58,7 @@ class ApiSettings(PlatformSettings):
     storage_secret_key: str = ""
     storage_prefix: str = ""
     storage_path_style: bool = True
+    outbound_allow_hosts: str = ""
     code_path: str = "code"
     #: Where ``pawabase deploy`` artifacts are stored: writable, and shared by every API and worker process. Empty means ``<code_path>/.deployments``.
     deployments_path: str = ""

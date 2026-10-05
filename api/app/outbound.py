@@ -11,8 +11,9 @@ helper for backoff and jitter.
 from __future__ import annotations
 
 import ipaddress
+import json
 import socket
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import Any
 from urllib.parse import urlparse
 
@@ -35,17 +36,18 @@ class _Retryable(Exception):
         self.response = response
 
 
-def check_target(url: str, *, allow_private: bool = False) -> None:
+def check_target(url: str, *, allow_private: bool = False, allow_hosts: Collection[str] = ()) -> None:
     """Refuse non-HTTP URLs, and private or loopback targets unless allowed.
 
     Flows and webhooks are configured by developers but can be pointed
     anywhere. Refusing internal addresses keeps them from reaching the
-    platform's own services or the cloud metadata endpoint.
+    platform's own services or the cloud metadata endpoint. ``allow_hosts``
+    names hosts the operator trusts (matched exactly, case-insensitively).
     """
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise OutboundRefused("only http and https URLs are allowed")
-    if allow_private:
+    if allow_private or (parsed.hostname or "").lower() in {h.lower() for h in allow_hosts}:
         return
     try:
         infos = socket.getaddrinfo(parsed.hostname, None)
@@ -91,8 +93,9 @@ async def request_once(
                 break
     text = body.decode("utf-8", "replace")
     try:
+        # The body was read in chunks above, so decode the text we hold: response.json() would raise ResponseNotRead.
         parsed: Any = (
-            response.json() if text and "json" in response.headers.get("content-type", "") else text
+            json.loads(text) if text and "json" in response.headers.get("content-type", "") else text
         )
     except ValueError:
         parsed = text
@@ -111,9 +114,10 @@ async def request_with_retries(
     timeout: float = 30.0,
     retries: int = 0,
     allow_private: bool = False,
+    allow_hosts: Collection[str] = (),
 ) -> dict[str, Any]:
     """One request, retried with Sillo's backoff on transient failures."""
-    check_target(url, allow_private=allow_private)
+    check_target(url, allow_private=allow_private, allow_hosts=allow_hosts)
     parsed = urlparse(url)
     target = f"{method.upper()} {parsed.hostname}{parsed.path}"
 

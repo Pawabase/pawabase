@@ -44,6 +44,8 @@ x-api-env: &api-env
   PAWABASE_DATABASE_URL: postgres://pawabase:pawabase@postgres:5432/pawabase
   PAWABASE_DEFAULT_DATA_URL: sqlite:///data/envs/{env}.db
   PAWABASE_STORAGE_ROOT: /data/objects
+  # Private hosts functions may call (comma-separated), e.g. a deployment manager running on this machine. Empty keeps every private address refused.
+  PAWABASE_OUTBOUND_ALLOW_HOSTS: ${PAWABASE_OUTBOUND_ALLOW_HOSTS:-}
   # File storage: the bundled MinIO unless .env points these at your own S3-compatible service.
   PAWABASE_STORAGE_ENDPOINT: ${PAWABASE_STORAGE_ENDPOINT:-http://minio:9000}
   PAWABASE_STORAGE_PUBLIC_ENDPOINT: ${PAWABASE_STORAGE_PUBLIC_ENDPOINT:-${PAWABASE_STORAGE_ENDPOINT:-http://localhost:9000}}

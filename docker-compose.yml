@@ -29,6 +29,8 @@ x-api-env: &api-env
   PAWABASE_DATABASE_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase
   PAWABASE_DEFAULT_DATA_URL: ${PAWABASE_DEFAULT_DATA_URL:-postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase}
   PAWABASE_STORAGE_ROOT: /data/objects
+  # Private hosts functions may call (comma-separated), e.g. an internal deployment manager. Empty keeps every private address refused.
+  PAWABASE_OUTBOUND_ALLOW_HOSTS: ${PAWABASE_OUTBOUND_ALLOW_HOSTS:-}
   # File storage: the bundled MinIO unless .env points these at your own S3-compatible
   # service (AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces, Wasabi, ...).
   PAWABASE_STORAGE_ENDPOINT: ${PAWABASE_STORAGE_ENDPOINT:-http://minio:9000}
