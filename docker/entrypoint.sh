@@ -29,6 +29,13 @@ run() {
   exec python "$@"
 }
 
+# PAWABASE_ENSURE_DATABASE=true: make this service's database first. For hosts that cannot mount the init script docker/postgres/init.sql.
+ensure_database() {
+  if [ "${PAWABASE_ENSURE_DATABASE:-false}" = "true" ]; then
+    python -m pawabase_core.ensure_database
+  fi
+}
+
 migrate() {
   if [ "${PAWABASE_MIGRATE:-true}" = "true" ]; then
     (cd "/app/$1" && python -m database.migrate)
@@ -39,7 +46,7 @@ case "$1" in
   api)       migrate api; serve api 8001 ;;
   worker)    run api -m app.worker ;;
   scheduler) run api -m app.scheduler ;;
-  akountz)   migrate akountz; serve akountz 8002 ;;
+  akountz)   ensure_database; migrate akountz; serve akountz 8002 ;;
   angula)    serve angula 8003 ;;
   gateway)   serve gateway 8080 ;;
   studio)    serve studio 8090 ;;
