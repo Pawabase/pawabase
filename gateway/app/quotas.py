@@ -123,3 +123,24 @@ class RequestQuota:
     async def close(self) -> None:
         if self._redis is not None:
             await self._redis.aclose()
+
+    async def usage(self) -> dict[str, object]:
+        """Return the current UTC-window counters without reserving capacity."""
+        now = datetime.now(UTC)
+        day, day_ttl, month, month_ttl = _windows(now)
+        if self._redis is None:
+            daily = self._local.get(f"day:{day}", 0)
+            monthly = self._local.get(f"month:{month}", 0)
+        else:
+            daily, monthly = await self._redis.mget(
+                f"pawabase:quota:requests:day:{day}",
+                f"pawabase:quota:requests:month:{month}",
+            )
+            daily, monthly = int(daily or 0), int(monthly or 0)
+        return {
+            "requests": {
+                "daily": {"used": daily, "limit": self.daily_limit, "resets_in": day_ttl},
+                "monthly": {"used": monthly, "limit": self.monthly_limit, "resets_in": month_ttl},
+            },
+            "reservation": self.reservation,
+        }

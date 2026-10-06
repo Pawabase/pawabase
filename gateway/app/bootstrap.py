@@ -120,6 +120,18 @@ main{{max-width:30rem;padding:2rem;text-align:center}}h1{{margin:.5rem 0}}p{{col
     async def stats(ctx: HttpContext):
         return {**proxy.stats, "key_lookups": resolver.lookups}
 
+    @app.get("/internal/v1/gateway/usage", auth=SERVICE_ONLY, exclude_from_schema=True)
+    async def usage(ctx: HttpContext):
+        return {
+            **await quota.usage(),
+            "connections": {
+                "active": settings.max_active_connections - proxy.connections._value
+                if proxy.connections is not None
+                else 0,
+                "limit": settings.max_active_connections,
+            },
+        }
+
     @app.on_shutdown
     async def close() -> None:
         for client in clients.values():
