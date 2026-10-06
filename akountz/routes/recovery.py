@@ -90,9 +90,7 @@ async def complete(
         user.locked_until = None
         await user.save(update_fields=["password", "failed_logins", "locked_until"])
         await revoke_all(user)
-        await log_event(
-            config.env, "password_reset", user=user, method="recovery", ctx=ctx
-        )
+        await log_event(config.env, "password_reset", user=user, method="recovery", ctx=ctx)
         await akountz.emit(
             config.env,
             "user.password_reset",
@@ -201,7 +199,9 @@ def register(r: Router, akountz: Akountz) -> None:
         email = normalise_email(body.email)
         user = await find_by_email(config.env, email)
         if user is None and body.create_user and config.signup_enabled:
-            user = await create_account(config, email=email, password=None)
+            user = await create_account(
+                config, email=email, password=None, max_users=akountz.settings.max_users
+            )
             await akountz.emit(
                 config.env,
                 "user.created",

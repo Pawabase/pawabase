@@ -37,9 +37,7 @@ def register(r: Router, akountz: Akountz) -> None:
 
     # ── OAuth (browser navigations: the environment is in the path) ──────
 
-    @r.get(
-        "/authorize/{env}/{provider}", summary="Start a social sign-in", tags=["oauth"]
-    )
+    @r.get("/authorize/{env}/{provider}", summary="Start a social sign-in", tags=["oauth"])
     async def start(ctx: HttpContext, env: str, provider: str):
         config = await load_config(akountz, env)
         redirect_to = ctx.query_params.get("redirect_to") or config.site_url or None
@@ -90,9 +88,7 @@ def register(r: Router, akountz: Akountz) -> None:
             target = None
 
         identity = (
-            await Identity.filter(
-                env=env, provider=provider, subject=profile.subject
-            )
+            await Identity.filter(env=env, provider=provider, subject=profile.subject)
             .prefetch_related("user")
             .first()
         )
@@ -122,6 +118,7 @@ def register(r: Router, akountz: Akountz) -> None:
                 username=profile.username,
                 name=profile.name or "",
                 verified=bool(profile.email_verified),
+                max_users=akountz.settings.max_users,
             )
             user.avatar_url = profile.avatar_url
             await user.save(update_fields=["avatar_url"])
@@ -203,9 +200,7 @@ def register(r: Router, akountz: Akountz) -> None:
                 else {}
             ),
         }
-        return {
-            "url": f"{base}/auth/v1/authorize/{user.env}/{provider}?{urlencode(query)}"
-        }
+        return {"url": f"{base}/auth/v1/authorize/{user.env}/{provider}?{urlencode(query)}"}
 
     @r.delete("/identities/{identity_id}", summary="Unlink an identity", tags=["oauth"])
     async def unlink_identity(ctx: HttpContext, identity_id: str):
@@ -327,11 +322,7 @@ def register(r: Router, akountz: Akountz) -> None:
     @r.get("/history", summary="Recent sign-in activity", tags=["sessions"])
     async def history(ctx: HttpContext):
         user, _ = await signed_in_user(ctx)
-        events = (
-            await LoginEvent.filter(env=user.env, user_id=user.id)
-            .order_by("-id")
-            .limit(50)
-        )
+        events = await LoginEvent.filter(env=user.env, user_id=user.id).order_by("-id").limit(50)
         return {
             "data": [
                 {

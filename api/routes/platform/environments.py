@@ -88,7 +88,16 @@ class KeyCreate(BaseModel):
         for value in values:
             parts = value.split(None, 1)
             method, path = (parts[0], parts[1]) if len(parts) == 2 else ("*", parts[0])
-            if method.upper() not in {"*", "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"} or not path.startswith("/"):
+            if method.upper() not in {
+                "*",
+                "GET",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE",
+                "HEAD",
+                "OPTIONS",
+            } or not path.startswith("/"):
                 raise ValueError("route rules must be '/path/*' or 'METHOD /path/*'")
         return values
 
@@ -118,8 +127,16 @@ async def create_key(
     allowed_ips: list[str] | None = None,
     allowed_routes: list[str] | None = None,
     created_by: str | None = None,
+    max_keys: int = 0,
 ) -> tuple[str, ApiKey]:
     """Mint a key with Sillo's API-key generator; only the hash is stored."""
+    if (
+        max_keys
+        and await ApiKey.filter(environment=environment, revoked_at=None).count() >= max_keys
+    ):
+        raise HTTPException(
+            status_code=403, detail="the environment API key limit has been reached"
+        )
     full, _raw, digest = generate_api_key(prefix="pb_pk" if role == "publishable" else "pb_sk")
     key = await ApiKey.create(
         environment=environment,
@@ -150,6 +167,16 @@ def environment_view(environment: Environment) -> dict[str, Any]:
 
 def register(r: Router, platform: Platform) -> None:
 
+    async def require_environment_capacity(extra: int = 1) -> None:
+        maximum = platform.settings.max_environments
+        if maximum and await Environment.all().count() + extra > maximum:
+            raise HTTPException(
+                status_code=403, detail="the installation environment limit has been reached"
+            )
+
+    def key_limit() -> int:
+        return platform.settings.max_api_keys_per_environment
+
     # ── this runtime ─────────────────────────────────────────────────────
 
     @r.get("/runtime", auth=MANAGE, tags=["runtime"], summary="This runtime and its environments")
@@ -174,9 +201,14 @@ def register(r: Router, platform: Platform) -> None:
         except blueprints.BlueprintError as exc:
             raise HTTPException(
                 status_code=422,
-                detail={"message": "this is not a valid blueprint", "where": exc.where, "problem": exc.message},
+                detail={
+                    "message": "this is not a valid blueprint",
+                    "where": exc.where,
+                    "problem": exc.message,
+                },
             ) from exc
         names = list(dict.fromkeys(body.environments or DEFAULT_ENVIRONMENTS))
+        await require_environment_capacity(len(names))
         for name in names:
             if not re.match(NAME_PATTERN, name):
                 raise HTTPException(status_code=422, detail=f"invalid environment name {name!r}")
@@ -193,10 +225,18 @@ def register(r: Router, platform: Platform) -> None:
                 environment = await Environment.create(name=name, settings={"public_docs": False})
                 environments.append(environment)
                 publishable, _ = await create_key(
-                    environment, "Default publishable key", "publishable", created_by=_actor(ctx)
+                    environment,
+                    "Default publishable key",
+                    "publishable",
+                    created_by=_actor(ctx),
+                    max_keys=key_limit(),
                 )
                 secret, _ = await create_key(
-                    environment, "Default secret key", "secret", created_by=_actor(ctx)
+                    environment,
+                    "Default secret key",
+                    "secret",
+                    created_by=_actor(ctx),
+                    max_keys=key_limit(),
                 )
                 keys[name] = {"publishable": publishable, "secret": secret}
         try:
@@ -208,7 +248,11 @@ def register(r: Router, platform: Platform) -> None:
                 platform.envs.forget(environment.name)
             raise HTTPException(
                 status_code=422,
-                detail={"message": "the blueprint could not be applied", "where": exc.where, "problem": exc.message},
+                detail={
+                    "message": "the blueprint could not be applied",
+                    "where": exc.where,
+                    "problem": exc.message,
+                },
             ) from exc
         await audit(
             ctx,
@@ -273,14 +317,23 @@ def register(r: Router, platform: Platform) -> None:
         summary="Create an environment",
     )
     async def create_environment(ctx: HttpContext, body: EnvironmentCreate):
+        await require_environment_capacity()
         if await Environment.filter(name=body.name).exists():
             raise HTTPException(status_code=409, detail=f"environment {body.name!r} already exists")
         environment = await Environment.create(name=body.name, settings={"public_docs": False})
         publishable, _ = await create_key(
-            environment, "Default publishable key", "publishable", created_by=_actor(ctx)
+            environment,
+            "Default publishable key",
+            "publishable",
+            created_by=_actor(ctx),
+            max_keys=key_limit(),
         )
         secret, _ = await create_key(
-            environment, "Default secret key", "secret", created_by=_actor(ctx)
+            environment,
+            "Default secret key",
+            "secret",
+            created_by=_actor(ctx),
+            max_keys=key_limit(),
         )
         copied = {}
         if body.copy_from:
@@ -307,6 +360,7 @@ def register(r: Router, platform: Platform) -> None:
     async def create_preview(ctx: HttpContext, env: str, body: PreviewCreate):
         """Clone definitions into an isolated, automatically-expiring environment."""
         source = await get_environment(env)
+        await require_environment_capacity()
         name = body.name or f"pr-{body.ref}"
         if await Environment.filter(name=name).exists():
             raise HTTPException(status_code=409, detail=f"environment {name!r} already exists")
@@ -320,21 +374,42 @@ def register(r: Router, platform: Platform) -> None:
             preview_expires_at=datetime.now(UTC) + timedelta(hours=body.expires_in_hours),
         )
         publishable, _ = await create_key(
-            preview, "Preview publishable key", "publishable", expires_at=preview.preview_expires_at,
+            preview,
+            "Preview publishable key",
+            "publishable",
+            expires_at=preview.preview_expires_at,
             created_by=_actor(ctx),
+            max_keys=key_limit(),
         )
         secret, _ = await create_key(
-            preview, "Preview secret key", "secret", expires_at=preview.preview_expires_at,
+            preview,
+            "Preview secret key",
+            "secret",
+            expires_at=preview.preview_expires_at,
             created_by=_actor(ctx),
+            max_keys=key_limit(),
         )
         from routes.platform.promote import copy_definitions
 
         copied = await copy_definitions(source, preview)
         await audit(
-            ctx, "preview.created", env=name, target=name,
-            details={"source": env, "expires_at": preview.preview_expires_at.isoformat(), "copied": copied},
+            ctx,
+            "preview.created",
+            env=name,
+            target=name,
+            details={
+                "source": env,
+                "expires_at": preview.preview_expires_at.isoformat(),
+                "copied": copied,
+            },
         )
-        return created({**environment_view(preview), "keys": {"publishable": publishable, "secret": secret}, "copied": copied})
+        return created(
+            {
+                **environment_view(preview),
+                "keys": {"publishable": publishable, "secret": secret},
+                "copied": copied,
+            }
+        )
 
     @r.get(
         "/envs/{env}",
@@ -440,6 +515,7 @@ def register(r: Router, platform: Platform) -> None:
             allowed_ips=body.allowed_ips,
             allowed_routes=body.allowed_routes,
             created_by=_actor(ctx),
+            max_keys=key_limit(),
         )
         await audit(
             ctx,

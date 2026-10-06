@@ -44,17 +44,13 @@ def check_password_policy(config: AuthConfig, password: str) -> None:
 
 
 async def find_by_email(env: str, email: str) -> AuthUser | None:
-    return await AuthUser.filter(
-        env=env, email=email.lower(), deleted_at=None
-    ).first()
+    return await AuthUser.filter(env=env, email=email.lower(), deleted_at=None).first()
 
 
 async def get_user(env: str, user_id: Any) -> AuthUser | None:
     if not is_ulid(user_id):
         return None
-    return await AuthUser.filter(
-        id=str(user_id).upper(), env=env, deleted_at=None
-    ).first()
+    return await AuthUser.filter(id=str(user_id).upper(), env=env, deleted_at=None).first()
 
 
 async def unique_username(env: str, wanted: str | None, email: str) -> str:
@@ -75,17 +71,15 @@ async def create_account(
     user_metadata: dict[str, Any] | None = None,
     app_metadata: dict[str, Any] | None = None,
     verified: bool = False,
+    max_users: int = 0,
 ) -> AuthUser:
     email = normalise_email(email)
     if await find_by_email(config.env, email):
         raise HTTPException(status_code=409, detail="an account with this email already exists")
-    if (
-        username
-        and await AuthUser.filter(
-            env=config.env, username=username.lower()
-        ).exists()
-    ):
+    if username and await AuthUser.filter(env=config.env, username=username.lower()).exists():
         raise HTTPException(status_code=409, detail="that username is taken")
+    if max_users and await AuthUser.filter(env=config.env, deleted_at=None).count() >= max_users:
+        raise HTTPException(status_code=403, detail="the environment user limit has been reached")
     user = AuthUser(
         env=config.env,
         email=email,

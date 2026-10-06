@@ -21,6 +21,10 @@ class StudioSettings(PlatformSettings):
         studio_access_secret: When set (``PAWABASE_STUDIO_ACCESS_SECRET``), Studio requires a session that only a link
             signed with this secret can start (see ``app.access``). Empty keeps
             Studio open, which is only right behind localhost or your own proxy.
+        studio_username, studio_password: Optional self-hosted Studio login.
+            Set both variables to show a login form and require its signed
+            session cookie. This is deliberately separate from the hosted
+            signed-link access gate.
     """
 
     service_name: str = "studio"
@@ -31,3 +35,10 @@ class StudioSettings(PlatformSettings):
     frontend_dir: str = "frontend"
     public_gateway_url: str = "http://localhost:8080"
     studio_access_secret: str = ""
+    studio_username: str = ""
+    studio_password: str = ""
+
+    @property
+    def password_access_enabled(self) -> bool:
+        """Whether this self-hosted Studio has a local login configured."""
+        return bool(self.studio_username and self.studio_password)

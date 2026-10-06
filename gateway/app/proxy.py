@@ -36,6 +36,7 @@ from sillo.security import RateLimitConfig, RateLimitMiddleware
 
 from app.config import GatewaySettings
 from app.keys import KeyRejected, KeyResolver
+from app.quotas import RequestQuota
 from app.routing import route_for
 from pawabase_core.clients import ServiceError
 from pawabase_core.context import CONTEXT_HEADER, SCOPE_KEY
@@ -100,6 +101,7 @@ class GatewayProxy:
         ws_bases: dict[str, str],
         *,
         rate_backend: Any = "memory",
+        request_quota: RequestQuota | None = None,
     ) -> None:
         self.settings = settings
         self.resolver = resolver
@@ -114,6 +116,12 @@ class GatewayProxy:
                 key_func=_limit_key,
             )
         )
+        self.request_quota = request_quota or RequestQuota()
+        self.connections = (
+            asyncio.BoundedSemaphore(settings.max_active_connections)
+            if settings.max_active_connections > 0
+            else None
+        )
         self.app: Any = None
         self.stats = {
             "proxied": 0,
@@ -121,6 +129,8 @@ class GatewayProxy:
             "rate_limited": 0,
             "upstream_errors": 0,
             "websockets": 0,
+            "quota_rejected": 0,
+            "connections_rejected": 0,
         }
 
     # ── common ───────────────────────────────────────────────────────────
@@ -236,7 +246,9 @@ class GatewayProxy:
             method, path = scope.get("method", "GET").upper(), scope.get("path", "")
             for rule in rules:
                 parts = rule.split(None, 1)
-                rule_method, pattern = (parts[0].upper(), parts[1]) if len(parts) == 2 else ("*", parts[0])
+                rule_method, pattern = (
+                    (parts[0].upper(), parts[1]) if len(parts) == 2 else ("*", parts[0])
+                )
                 if (rule_method in ("*", method)) and fnmatch.fnmatchcase(path, pattern):
                     break
             else:
@@ -291,7 +303,11 @@ class GatewayProxy:
                 )
                 return
             if denied := self._key_allowed(scope, info or {}):
-                await _json(send, 403, {"error": denied, "message": "This API key is not allowed for this request."})
+                await _json(
+                    send,
+                    403,
+                    {"error": denied, "message": "This API key is not allowed for this request."},
+                )
                 return
         result = await self.limiter.check(HttpContext(scope, receive))
         if result is not None and not result.allowed:
@@ -302,6 +318,17 @@ class GatewayProxy:
                 429,
                 {"error": "rate_limit_exceeded", "retry_after": max(int(result.retry_after), 1)},
                 [(b"retry-after", str(max(int(result.retry_after), 1)).encode())],
+            )
+            return
+        if not await self.request_quota.acquire():
+            self.stats["quota_rejected"] += 1
+            await _json(
+                send,
+                429,
+                {
+                    "error": "request_quota_exceeded",
+                    "message": "The installation request quota has been reached.",
+                },
             )
             return
         await self._forward(
@@ -390,6 +417,14 @@ class GatewayProxy:
         if context is not None and (denied := self._key_allowed(scope, info or {})):
             await send({"type": "websocket.close", "code": 4003, "reason": denied})
             return
+        if self.connections is not None and self.connections.locked():
+            self.stats["connections_rejected"] += 1
+            await send(
+                {"type": "websocket.close", "code": 4429, "reason": "connection limit reached"}
+            )
+            return
+        if self.connections is not None:
+            await self.connections.acquire()
         forwarded = self._forward_headers(scope, headers, context)
         forwarded = {k: v for k, v in forwarded.items() if not k.startswith("sec-websocket")}
         query = self._query_without_key(scope)
@@ -407,6 +442,8 @@ class GatewayProxy:
                     "reason": "upstream refused the connection",
                 }
             )
+            if self.connections is not None:
+                self.connections.release()
             return
         self.stats["websockets"] += 1
         await send({"type": "websocket.accept"})
@@ -442,3 +479,5 @@ class GatewayProxy:
                 await task
         with contextlib.suppress(Exception):
             await remote.close()
+        if self.connections is not None:
+            self.connections.release()

@@ -14,6 +14,7 @@ from sillo_inertia import Inertia, vite_react
 
 from app.access import StudioAccessGate
 from app.config import StudioSettings
+from app.password_access import StudioPasswordGate
 from pawabase_core.clients import ServiceClient
 from pawabase_core.service import create_service
 
@@ -32,6 +33,15 @@ def create_app(
     settings: StudioSettings | None = None, *, clients: dict[str, ServiceClient] | None = None
 ) -> SilloApp:
     settings = settings or StudioSettings()
+    if bool(settings.studio_username) != bool(settings.studio_password):
+        raise ValueError(
+            "PAWABASE_STUDIO_USERNAME and PAWABASE_STUDIO_PASSWORD must be set together"
+        )
+    if settings.studio_access_secret and settings.password_access_enabled:
+        raise ValueError(
+            "configure either PAWABASE_STUDIO_ACCESS_SECRET or the self-hosted "
+            "PAWABASE_STUDIO_USERNAME/PAWABASE_STUDIO_PASSWORD pair, not both"
+        )
     secret = (
         settings.csrf_secret
         or hashlib.sha256(f"studio-csrf:{settings.internal_secret}".encode()).hexdigest()
@@ -95,7 +105,18 @@ def create_app(
         )
     )
     if settings.studio_access_secret:
-        app.use(StudioAccessGate(settings.studio_access_secret, secure_cookie=settings.cookie_secure))
+        app.use(
+            StudioAccessGate(settings.studio_access_secret, secure_cookie=settings.cookie_secure)
+        )
+    elif settings.password_access_enabled:
+        app.use(
+            StudioPasswordGate(
+                settings.studio_username,
+                settings.studio_password,
+                session_secret=settings.internal_secret,
+                secure_cookie=settings.cookie_secure,
+            )
+        )
     app.state["clients"] = clients
     app.state["inertia"] = inertia
     app.state["settings"] = settings

@@ -31,6 +31,18 @@ class PlatformSettings(Config):
         redis_url: Shared Redis for platform events, cache and queues. Empty
             means in-process fallbacks, which is only correct for a single process.
         cors_origins: Comma-separated origins allowed by the gateway and Studio.
+        daily_request_limit, monthly_request_limit: Optional installation-wide
+            request quotas. ``0`` disables a quota. Gateway workers reserve
+            requests in small blocks, so Redis is not contacted per request.
+        request_quota_reservation: Number of request tokens a gateway worker
+            reserves at once when either request quota is enabled.
+        max_active_connections: Optional maximum active WebSocket connections
+            per gateway process. ``0`` disables it.
+        max_upload_bytes: Optional largest single object upload. Enforced while
+            streaming the upload, not by buffering it in memory.
+        max_users: Optional maximum active application users per environment.
+        max_environments: Optional maximum environments in this installation.
+        max_api_keys_per_environment: Optional key limit for one environment.
     """
 
     service_name: str = "pawabase"
@@ -50,6 +62,15 @@ class PlatformSettings(Config):
 
     redis_url: str = ""
     cors_origins: str = "http://localhost:8090,http://127.0.0.1:8090"
+
+    daily_request_limit: int = 0
+    monthly_request_limit: int = 0
+    request_quota_reservation: int = 64
+    max_active_connections: int = 0
+    max_upload_bytes: int = 50 * 1024 * 1024
+    max_users: int = 0
+    max_environments: int = 0
+    max_api_keys_per_environment: int = 0
 
     class Env:
         env_prefix = "PAWABASE_"

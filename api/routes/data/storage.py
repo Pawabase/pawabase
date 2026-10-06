@@ -114,7 +114,12 @@ def register(app: Any, platform: Platform) -> None:
         state, held = await bucket_for(ctx, bucket)
         body, declared = await _body_stream(ctx)
         try:
-            stored = await held.put(key, body, content_type=declared, user=_user(ctx))
+            stored = await held.put(
+                key,
+                _limited(body, platform.settings.max_upload_bytes),
+                content_type=declared,
+                user=_user(ctx),
+            )
         except PolicyRefused as exc:
             raise HTTPException(
                 status_code=403, detail="the bucket's policy refused this upload"
@@ -229,7 +234,19 @@ def register(app: Any, platform: Platform) -> None:
             )
         try:
             stored = await held.put(
-                key, _limited(body, grant.max_bytes), content_type=declared, signed=True
+                key,
+                _limited(
+                    body,
+                    min(
+                        value
+                        for value in (grant.max_bytes, platform.settings.max_upload_bytes)
+                        if value
+                    )
+                    if grant.max_bytes or platform.settings.max_upload_bytes
+                    else 0,
+                ),
+                content_type=declared,
+                signed=True,
             )
         except (UnsafeKey, StorageError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
