@@ -62,6 +62,7 @@ SECTIONS: dict[str, str] = {
     "events": "Env/Events",
     "realtime": "Env/Realtime",
     "observability": "Env/Observability",
+    "usage": "Env/Usage",
     "explorer": "Env/Explorer",
     "settings": "Env/Settings",
 }
@@ -72,6 +73,7 @@ BRIDGE: dict[str, tuple[str, str]] = {
     "auth": ("akountz", "/admin/v1/"),
     "realtime": ("angula", "/internal/v1/realtime/"),
     "telemetry": ("api", "/internal/v1/telemetry/"),
+    "gateway": ("gateway", "/internal/v1/gateway/"),
 }
 
 

@@ -19,7 +19,7 @@ export const ENV_NAV = [
   ] },
   { title: "Services", items: [["users", "Users & auth"], ["mail", "Mail"], ["storage", "Storage"], ["realtime", "Realtime"]] },
   { title: "Operate", items: [
-    ["jobs", "Jobs & queues"], ["events", "Events & runs"], ["observability", "Observability"],
+    ["jobs", "Jobs & queues"], ["events", "Events & runs"], ["observability", "Observability"], ["usage", "Usage & limits"],
     ["keys", "API keys"], ["secrets", "Secrets"], ["backups", "Backups"], ["settings", "Settings"],
   ] },
 ];

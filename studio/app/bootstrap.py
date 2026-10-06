@@ -64,6 +64,9 @@ def create_app(
         "angula": ServiceClient(
             settings.angula_url, secret=settings.internal_secret, issuer="studio", audience="angula"
         ),
+        "gateway": ServiceClient(
+            settings.gateway_url, secret=settings.internal_secret, issuer="studio", audience="gateway"
+        ),
     }
     frontend = Path(settings.frontend_dir)
     if not frontend.is_absolute():
