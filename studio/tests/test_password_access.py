@@ -52,6 +52,8 @@ async def test_password_gate_shows_a_login_form(protected_studio):
     login = await protected_studio.get("/login")
     assert login.status_code == 200
     assert "Sign in to Studio" in login.text
+    assert 'alt="Pawabase"' in login.text
+    assert "box-shadow" not in login.text
 
 
 async def test_password_gate_accepts_the_configured_credentials(protected_studio):

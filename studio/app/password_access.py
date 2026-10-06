@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 import time
 from http.cookies import SimpleCookie
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
@@ -20,6 +22,18 @@ LOGOUT = "/logout"
 SESSION_SECONDS = 8 * 3600
 OPEN_PATHS = ("/health",)
 OPEN_PREFIXES = ("/internal/",)
+
+
+def _pawabase_logo() -> str:
+    """Reuse Studio's canonical Pawabase mark in the pre-frontend login page."""
+    template = Path(__file__).parent.parent / "resources" / "views" / "app.html"
+    match = re.search(
+        r'href="(data:image/svg\+xml;base64,[^"]+)"', template.read_text(encoding="utf-8")
+    )
+    return match.group(1) if match else ""
+
+
+PAWABASE_LOGO = _pawabase_logo()
 
 
 class StudioPasswordGate:
@@ -127,7 +141,7 @@ class StudioPasswordGate:
     @staticmethod
     def _form(*, error: str = "") -> bytes:
         notice = f'<div class="alert" role="alert">{error}</div>' if error else ""
-        return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in · Pawabase Studio</title><style>:root{{color-scheme:light dark}}*{{box-sizing:border-box}}body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#f8faf9;color:#1c2522;font:15px/1.5 system-ui,sans-serif}}main{{width:min(100% - 32px,430px);padding:32px;border:1px solid #d9e2de;border-radius:16px;background:#fff}}.brand{{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800}}.mark{{width:32px;height:32px;color:#3ecf8e}}h1{{font-size:27px;letter-spacing:-.04em;margin:28px 0 4px}}.sub{{margin:0 0 22px;color:#64716b}}label{{display:block;margin:13px 0 6px;font-weight:650}}input,button{{width:100%;border-radius:9px;font:inherit}}input{{padding:11px 12px;border:1px solid #bfcac5;outline:none}}input:focus{{border-color:#3ecf8e;box-shadow:0 0 0 3px #d9f8e9}}button{{margin-top:20px;padding:12px;border:0;background:#3ecf8e;color:#103a2a;font-weight:750;cursor:pointer}}button:hover{{background:#2fbd7c}}.alert{{margin:14px 0;padding:10px 12px;border-radius:9px;background:#fee4e2;color:#b42318;font-size:13px}}@media(prefers-color-scheme:dark){{body{{background:#101513;color:#eaf2ee}}main{{background:#17201d;border-color:#304039}}input{{background:#101513;color:#eaf2ee;border-color:#46574f}}.sub{{color:#a8b8b0}}}}</style></head><body><main><div class="brand"><svg class="mark" viewBox="0 0 109 113" fill="none" aria-hidden="true"><path d="M63.7 110.7c-3.2 4-9.7 1.8-9.7-3.3V66.8h48.4c8.8 0 13.7 10.2 8.2 17.1L63.7 110.7Z" fill="currentColor"/><path d="M45.3 2.3c3.2-4 9.7-1.8 9.7 3.3v40.6H6.6c-8.8 0-13.7-10.2-8.2-17.1L45.3 2.3Z" fill="currentColor" opacity=".72"/></svg><span>Supabase</span><span style="font-weight:500;color:#718078">Studio</span></div><h1>Welcome back</h1><p class="sub">Sign in to manage this self-hosted runtime.</p>{notice}<form method="post" action="/login"><label for="username">Username</label><input id="username" name="username" autocomplete="username" required autofocus><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required><button type="submit">Sign in to Studio</button></form></main></body></html>""".encode()
+        return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in · Pawabase Studio</title><style>:root{{color-scheme:light dark}}*{{box-sizing:border-box}}body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#f8f7fb;color:#28242f;font:15px/1.5 system-ui,sans-serif}}main{{width:min(100% - 32px,430px);padding:32px;border:1px solid #e2ddea;border-radius:16px;background:#fff}}.brand{{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800}}.brand img{{width:34px;height:34px}}.studio{{font-weight:500;color:#847d91}}h1{{font-size:27px;letter-spacing:-.04em;margin:28px 0 4px}}.sub{{margin:0 0 22px;color:#716a7c}}label{{display:block;margin:13px 0 6px;font-weight:650}}input,button{{width:100%;border-radius:9px;font:inherit}}input{{padding:11px 12px;border:1px solid #cdc6d8;outline:none}}input:focus{{border-color:#8b5cf6;outline:3px solid #ede9fe;outline-offset:1px}}button{{margin-top:20px;padding:12px;border:0;background:#7654d9;color:white;font-weight:750;cursor:pointer}}button:hover{{background:#6543c6}}.alert{{margin:14px 0;padding:10px 12px;border-radius:9px;background:#fee4e2;color:#b42318;font-size:13px}}@media(prefers-color-scheme:dark){{body{{background:#17151e;color:#f1eef7}}main{{background:#211e2a;border-color:#393343}}input{{background:#17151e;color:#f1eef7;border-color:#4b4457}}.sub{{color:#aaa3b6}}.studio{{color:#aaa3b6}}}}</style></head><body><main><div class="brand"><img src="{PAWABASE_LOGO}" alt="Pawabase"><span>pawabase</span><span class="studio">Studio</span></div><h1>Welcome back</h1><p class="sub">Sign in to manage this self-hosted runtime.</p>{notice}<form method="post" action="/login"><label for="username">Username</label><input id="username" name="username" autocomplete="username" required autofocus><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required><button type="submit">Sign in to Studio</button></form></main></body></html>""".encode()
 
     async def _redirect(
         self, send, location: str, *, cookie: str = "", clear: bool = False
