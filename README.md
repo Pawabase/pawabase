@@ -76,9 +76,16 @@ Open Studio at <http://localhost:8090>. A fresh runtime starts with a `developme
 add `staging` and `production` from Studio's Environments page. Every environment has its own
 publishable and secret key (Keys).
 
-Studio has **no sign-in**, so the compose file publishes it on localhost only. Reach it over an
-SSH tunnel, or put a proxy that authenticates people in front of it before exposing it. Name
-the backend with `PAWABASE_PROJECT_NAME`.
+Studio is local-only by default. Set both `PAWABASE_STUDIO_USERNAME` and
+`PAWABASE_STUDIO_PASSWORD` to show a self-hosted Studio login form; successful
+sign-ins receive an HttpOnly session cookie. This is separate from Pawabase
+Cloud. Name the backend with `PAWABASE_PROJECT_NAME`.
+
+Optional `.env` limits default to `0` (disabled): daily/monthly requests,
+active WebSockets, upload bytes, users per environment, environments, and API
+keys per environment. Request quotas use Redis-backed token leases, so normal
+gateway requests do not query Redis or the database; tune the bounded lease
+size with `PAWABASE_REQUEST_QUOTA_RESERVATION`.
 
 Clients call the gateway:
 

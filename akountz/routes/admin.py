@@ -111,6 +111,7 @@ def register(r: Router, akountz: Akountz) -> None:
             user_metadata=body.user_metadata,
             app_metadata=body.app_metadata,
             verified=body.email_verified,
+            max_users=akountz.settings.max_users,
         )
         for role in body.roles:
             await rbac.assign_role(user, role)
@@ -229,11 +230,7 @@ def register(r: Router, akountz: Akountz) -> None:
     )
     async def user_history(ctx: HttpContext, env: str, user_id: str):
         user = await user_or_404(env, user_id)
-        rows = (
-            await LoginEvent.filter(env=env, user_id=user.id)
-            .order_by("-id")
-            .limit(100)
-        )
+        rows = await LoginEvent.filter(env=env, user_id=user.id).order_by("-id").limit(100)
         return {"data": [_event(e) for e in rows]}
 
     @r.post(
@@ -282,9 +279,7 @@ def register(r: Router, akountz: Akountz) -> None:
         await rbac.define_role(
             env, body.name, description=body.description, permissions=body.permissions
         )
-        return next(
-            role for role in await rbac.list_roles(env) if role["name"] == body.name
-        )
+        return next(role for role in await rbac.list_roles(env) if role["name"] == body.name)
 
     @r.delete(f"{base}/roles/{{name}}", auth=SERVICE_ONLY, tags=["admin"], summary="Delete a role")
     async def delete_role(ctx: HttpContext, env: str, name: str):
@@ -317,9 +312,7 @@ def register(r: Router, akountz: Akountz) -> None:
         if body.dry_run:
             return {"dry_run": True, **backup.counts(document), "replace": body.replace}
         try:
-            report = await backup.restore_identities(
-                env, document, replace=body.replace
-            )
+            report = await backup.restore_identities(env, document, replace=body.replace)
         except (KeyError, TypeError) as exc:
             raise HTTPException(
                 status_code=422, detail=f"the backup is malformed: {type(exc).__name__}: {exc}"

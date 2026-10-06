@@ -72,7 +72,6 @@ class ApiSettings(PlatformSettings):
     inline_worker: bool = True
     inline_scheduler: bool = False
     queue_prefix: str = "pawabase:queue:"
-    max_upload_bytes: int = 50 * 1024 * 1024
     request_retention_days: int = 14
     query_timeout: float = 15.0
     #: Proxies between the gateway and the open internet (a load balancer is 1). The caller's address, as handed to functions, is the entry
@@ -103,7 +102,11 @@ def default_storage(settings: ApiSettings) -> dict[str, object]:
 
 
 def function_install_enabled(settings: ApiSettings) -> bool:
-    return settings.app_env != "production" if settings.function_install is None else settings.function_install
+    return (
+        settings.app_env != "production"
+        if settings.function_install is None
+        else settings.function_install
+    )
 
 
 def load_settings(**overrides) -> ApiSettings:

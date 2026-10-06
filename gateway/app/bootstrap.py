@@ -13,6 +13,7 @@ from sillo.security import CorsConfig, CORSMiddleware
 from app.config import GatewaySettings
 from app.keys import KeyResolver
 from app.proxy import GatewayProxy
+from app.quotas import RequestQuota
 from pawabase_core.clients import ServiceClient
 from pawabase_core.service import SERVICE_ONLY, create_service
 
@@ -49,7 +50,15 @@ def create_app(
         name: url.replace("http://", "ws://").replace("https://", "wss://")
         for name, url in urls.items()
     }
-    proxy = GatewayProxy(settings, resolver, clients, ws_bases, rate_backend=rate_backend)
+    quota = RequestQuota(
+        daily_limit=settings.daily_request_limit,
+        monthly_limit=settings.monthly_request_limit,
+        reservation=settings.request_quota_reservation,
+        redis_url=settings.redis_url,
+    )
+    proxy = GatewayProxy(
+        settings, resolver, clients, ws_bases, rate_backend=rate_backend, request_quota=quota
+    )
 
     app = create_service(
         "gateway",
@@ -78,6 +87,7 @@ def create_app(
         )
     )
     app.state["proxy"] = proxy
+    app.state["request_quota"] = quota
 
     @app.get("/", exclude_from_schema=True)
     async def landing(ctx: HttpContext):
@@ -115,5 +125,6 @@ main{{max-width:30rem;padding:2rem;text-align:center}}h1{{margin:.5rem 0}}p{{col
         for client in clients.values():
             await client.aclose()
         await api.close()
+        await quota.close()
 
     return app
