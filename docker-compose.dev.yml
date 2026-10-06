@@ -85,7 +85,10 @@ services:
       retries: 20
 
   minio:
-    image: minio/minio:latest
+    build:
+      context: .
+      dockerfile: docker/minio.Dockerfile
+    image: pawabase-minio:local
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: pawabase
@@ -93,7 +96,7 @@ services:
     ports: ["9000:9000", "9001:9001"]
     volumes: [minio:/data]
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:9000/minio/health/live"]
       interval: 5s
       timeout: 5s
       retries: 20

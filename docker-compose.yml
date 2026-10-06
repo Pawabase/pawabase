@@ -78,10 +78,15 @@ services:
       retries: 20
 
   # Object storage. Pawabase creates its bucket on first start, so there is nothing to set
-  # up. Using your own S3-compatible service instead? Set PAWABASE_STORAGE_* in .env and run
+  # up. The image is built from MinIO's final community source release because its public
+  # registry image was withdrawn. Using your own S3-compatible service instead? Set
+  # PAWABASE_STORAGE_* in .env and run
   # `docker compose up -d --scale minio=0`.
   minio:
-    image: ${MINIO_IMAGE:-minio/minio:latest}
+    build:
+      context: .
+      dockerfile: docker/minio.Dockerfile
+    image: pawabase-minio:local
     restart: unless-stopped
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
@@ -93,7 +98,7 @@ services:
       - "127.0.0.1:${PAWABASE_MINIO_CONSOLE_PORT:-9001}:9001"
     volumes: [minio:/data]
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:9000/minio/health/live"]
       interval: 5s
       timeout: 5s
       retries: 20
