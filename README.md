@@ -99,7 +99,8 @@ The bundled Postgres holds the platform's own data, Akountz, and default resourc
 Default resource tables are namespaced by environment; configure
 `database_url` in Studio → Settings → Infrastructure when an environment should use its own
 database. Redis carries the queue, events, cache and rate limits. The
-same goes for storage and mail (SMTP). File storage runs on a bundled MinIO by default; set
+same goes for storage and mail (SMTP). File storage runs on a bundled MinIO by default (built
+from MinIO's final community source release, rather than its withdrawn public registry image); set
 `PAWABASE_STORAGE_ENDPOINT` and credentials in `.env` to use AWS S3, R2, B2, Spaces or any other
 S3-compatible service instead, or configure storage per environment in Studio. Reference
 credentials as `secret://NAME` so they are stored encrypted.
