@@ -79,6 +79,8 @@ def register(app: Any, platform: Platform) -> None:
             "allowed_routes": key.allowed_routes or [],
             "key_id": str(key.id),
             "cors_origins": (environment.settings or {}).get("cors_origins", []),
+            "ip_allowlist": (environment.settings or {}).get("ip_allowlist", []),
+            "maintenance": (environment.settings or {}).get("maintenance") or {},
             "expires_at": key.expires_at.isoformat() if key.expires_at else None,
         }
 
