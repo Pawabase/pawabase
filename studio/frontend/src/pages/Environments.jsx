@@ -2,7 +2,7 @@ import { Link, router } from "@inertiajs/react";
 import { useState } from "react";
 import Layout from "../components/Layout";
 import { Icon } from "../components/icons";
-import { Badge, Button, Card, Field, Modal, PageHead, Switch, Table, useAction, when } from "../components/ui";
+import { Badge, Button, Card, CopyText, Field, Modal, PageHead, Switch, Table, copyToClipboard, useAction, useToast, when } from "../components/ui";
 import { get, post } from "../lib/api";
 
 export default function Environments({ runtime, envs }) {
@@ -137,6 +137,7 @@ function ExportBlueprint({ runtime, envs, onClose }) {
 }
 
 function ImportBlueprint({ onClose, onDone }) {
+  const toast = useToast();
   const [text, setText] = useState("");
   const [names, setNames] = useState("development, production");
   const [result, setResult] = useState(null);
@@ -154,7 +155,17 @@ function ImportBlueprint({ onClose, onDone }) {
       <Field label="Blueprint file"><input type="file" accept="application/json,.json" onChange={(e) => read(e.target.files?.[0])} /></Field>
       <Field label="…or paste it"><textarea rows={6} value={text} onChange={(e) => setText(e.target.value)} placeholder='{"format": "pawabase.blueprint", ...}' /></Field>
       <Field label="New environments" hint="Comma separated."><input value={names} onChange={(e) => setNames(e.target.value)} /></Field>
-      {result && <><div className="alert warn">Keys are shown once. Copy them now.</div><pre className="code-block">{JSON.stringify(result.keys, null, 2)}</pre></>}
+      {result && <>
+        <div className="alert warn">Keys are shown once. Copy them now.</div>
+        {Object.entries(result.keys || {}).map(([name, k]) => (
+          <div key={name} className="card sunken stack" style={{ padding: 14, gap: 10 }}>
+            <b>{name}</b>
+            <Field label="Publishable key" hint="Safe in browsers and mobile apps."><CopyText text={k.publishable} label={`${name} publishable key`} /></Field>
+            <Field label="Secret key" hint="Server-side only. Never ship it to a client."><CopyText text={k.secret} label={`${name} secret key`} /></Field>
+          </div>
+        ))}
+        <Button onClick={async () => { const env = Object.entries(result.keys || {}).map(([name, k]) => `# ${name}\nPAWABASE_${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_PUBLISHABLE_KEY=${k.publishable}\nPAWABASE_${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_SECRET_KEY=${k.secret}`).join("\n\n"); { const ok = await copyToClipboard(env); toast(ok ? "Copied all keys as .env lines" : "Could not copy", ok ? "ok" : "error"); }; }}><Icon name="copy" />Copy all as .env lines</Button>
+      </>}
     </Modal>
   );
 }
