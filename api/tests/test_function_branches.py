@@ -7,9 +7,9 @@ import tarfile
 import textwrap
 
 import pytest
+from pawabase import codec
 
 from app.deployments import Deployments, unpack
-from pawabase import codec
 from pawabase_core.tokens import issue_user_token
 
 

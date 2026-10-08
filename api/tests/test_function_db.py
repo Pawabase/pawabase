@@ -111,9 +111,9 @@ async def test_a_transaction_rolls_back_every_write_when_one_fails(shop):
 async def test_identifiers_are_checked_before_they_reach_sql(shop):
     response = await shop.http.post("/rest/v1/stock-add", json={"sku": "X"}, headers=shop.context_headers("development"))
     assert response.status_code == 200
-    from app.data.sql import check_identifier
+    from app.data.sql import SqlError, check_identifier
 
-    with pytest.raises(Exception):
+    with pytest.raises(SqlError):
         check_identifier("stock; DROP TABLE stock")
 
 

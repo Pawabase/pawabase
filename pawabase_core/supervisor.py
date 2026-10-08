@@ -75,7 +75,7 @@ async def main() -> int:
         processes[name] = process
         return process
 
-    for name, cwd, command, port in SERVICES:
+    for name, cwd, command, _port in SERVICES:
         process = await start(name, cwd, command)
         if name == "api" and not await wait_healthy(8001, process):
             print("api did not become healthy", file=sys.stderr)

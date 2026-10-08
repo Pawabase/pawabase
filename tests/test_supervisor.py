@@ -1,6 +1,4 @@
-import asyncio
 
-import pytest
 
 from pawabase_core.ensure_database import NAME
 from pawabase_core.supervisor import SERVICES, database_url_for, environment_for

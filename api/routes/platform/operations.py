@@ -13,8 +13,8 @@ from tortoise.functions import Count
 
 from app import route_stats
 from app.analytics import DEFAULT_RANGE, environment_analytics
-from app.system_health import system_report
 from app.platform import PLATFORM_QUEUES, Platform
+from app.system_health import system_report
 from database.models import (
     ApiKey,
     AuditEntry,
