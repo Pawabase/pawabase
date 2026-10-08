@@ -133,7 +133,9 @@ class EnvironmentState:
         return table
 
     async def source(self) -> DataSource:
-        return await self.platform.sources.get(self.database_url(), alias=self.env_name)
+        return await self.platform.sources.get(
+            self.platform.settings.tuned(self.database_url()), alias=self.env_name
+        )
 
     def spec(self, name: str) -> ResourceSpec:
         spec = self.specs.get(name)

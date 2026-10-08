@@ -9,7 +9,9 @@ MIGRATIONS_MODULE = "database.migrations"
 
 
 def database_config(settings) -> DatabaseConfig:
-    return DatabaseConfig(url=settings.database_url, generate_schemas=settings.db_generate_schemas)
+    return DatabaseConfig(
+        url=settings.tuned(settings.database_url), generate_schemas=settings.db_generate_schemas
+    )
 
 
 def database(settings) -> DatabaseManager:

@@ -11,6 +11,8 @@ from typing import Literal
 
 from sillo.config import Config
 
+from pawabase_core.dburl import pooled
+
 
 class PlatformSettings(Config):
     """Configuration shared by every service.
@@ -30,6 +32,11 @@ class PlatformSettings(Config):
         api_url, akountz_url, angula_url: Internal URLs of the other services.
         redis_url: Shared Redis for platform events, cache and queues. Empty
             means in-process fallbacks, which is only correct for a single process.
+        db_pool_min, db_pool_max: Fewest and most connections each process keeps open to
+            Postgres. Unset keeps Tortoise's defaults (1 and 5). ``0`` and a small maximum
+            let an idle deployment hold no connections at all.
+        db_statement_cache_size: asyncpg's prepared-statement cache. Set ``0`` behind
+            PgBouncer in transaction mode, which cannot carry prepared statements.
         cors_origins: Comma-separated origins allowed by the gateway and Studio.
         daily_request_limit, monthly_request_limit: Optional installation-wide
             request quotas. ``0`` disables a quota. Gateway workers reserve
@@ -61,6 +68,9 @@ class PlatformSettings(Config):
     studio_url: str = "http://127.0.0.1:8090"
 
     redis_url: str = ""
+    db_pool_min: int | None = None
+    db_pool_max: int | None = None
+    db_statement_cache_size: int | None = None
     cors_origins: str = "http://localhost:8090,http://127.0.0.1:8090"
 
     daily_request_limit: int = 0
@@ -74,6 +84,15 @@ class PlatformSettings(Config):
 
     class Env:
         env_prefix = "PAWABASE_"
+
+    def tuned(self, url: str) -> str:
+        """*url* with this deployment's pool settings applied (Postgres only)."""
+        return pooled(
+            url,
+            minimum=self.db_pool_min,
+            maximum=self.db_pool_max,
+            statement_cache=self.db_statement_cache_size,
+        )
 
     def origins(self) -> list[str]:
         """The CORS origins as a list."""
