@@ -66,6 +66,10 @@ def register(r: Router, platform: Platform) -> None:
             if stored is None:
                 source = platform.deployments.archive(env, deployment.branch, deployment.id)
                 stored = source.read_bytes() if source.is_file() else None
+            if stored is None:
+                # The local copy is gone (another server, a lost volume): use the one kept in storage.
+                stored = await platform.deployment_mirror.get(env, deployment.branch, deployment.id)
+                raw = stored
             if stored is not None:
                 await asyncio.to_thread(platform.deployments.prepare, stored)
             if raw is None:
@@ -85,6 +89,8 @@ def register(r: Router, platform: Platform) -> None:
             )
             await deployment.save(update_fields=["status", "error"])
             raise _problem(exc) from exc
+        if raw is not None:
+            await platform.deployment_mirror.put(env, deployment.branch, deployment.id, raw)
         await (
             FunctionDeployment.filter(
                 environment_id=deployment.environment_id, branch=deployment.branch, status="active"

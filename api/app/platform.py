@@ -24,6 +24,7 @@ from tortoise.exceptions import IntegrityError
 
 from app.config import ApiSettings, function_install_enabled
 from app.data.source import DataSourcePool
+from app.deployment_mirror import DeploymentMirror
 from app.deployments import Deployments
 from app.mail import MailManager
 from app.secrets import SecretBox, is_reference, reference_name
@@ -94,6 +95,7 @@ class Platform:
             timeout=30.0, follow_redirects=False, headers={"user-agent": "Pawabase/0.1"}
         )
         self.code: ProjectCode | None = None
+        self.deployment_mirror = DeploymentMirror(self)
         self.deployments = Deployments(
             settings.deployments_path or Path(settings.code_path) / ".deployments",
             install_requirements=function_install_enabled(settings),
@@ -127,6 +129,10 @@ class Platform:
         self.bind()
         await self.bus.start()
         logger.info(await self.storage.prepare_default())
+        try:
+            await self.deployment_mirror.restore()
+        except Exception as exc:  # a failed restore must not stop the API starting
+            logger.error("could not restore function deployments from storage: %s", exc)
 
     async def audit_configuration(self) -> None:
         """Say, once at start-up, which configuration is kept where it should not be.
@@ -171,6 +177,7 @@ class Platform:
         await self.bus.stop()
         await self.sources.close()
         await self.storage.close()
+        await self.deployment_mirror.close()
         await self.mail.close()
         await self.angula.close()
         await self.akountz.close()

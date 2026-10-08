@@ -35,6 +35,9 @@ class ApiSettings(PlatformSettings):
         mail_use_ssl, mail_use_tls: Connect with SSL, or upgrade with STARTTLS. Unset means
             SSL on port 465 and STARTTLS on port 587.
         mail_suppress: Log mail but never send it, even with a host configured.
+        deployment_mirror: Keep a copy of every function bundle in the default S3-compatible
+            storage and restore a missing one at start-up (``PAWABASE_DEPLOYMENT_MIRROR``). Does
+            nothing with local storage, where the deployments volume is the only store.
         outbound_allow_hosts: Comma-separated host names a function's ``http_request`` may reach even though they resolve to a private address
             (an internal service such as a deployment manager). Everything else private stays refused.
         request_retention_days: How long request history (the traces behind route
@@ -73,6 +76,7 @@ class ApiSettings(PlatformSettings):
     mail_use_ssl: bool | None = None
     mail_use_tls: bool | None = None
     mail_suppress: bool = False
+    deployment_mirror: bool = True
     outbound_allow_hosts: str = ""
     code_path: str = "code"
     #: Where ``pawabase deploy`` artifacts are stored: writable, and shared by every API and worker process. Empty means ``<code_path>/.deployments``.
