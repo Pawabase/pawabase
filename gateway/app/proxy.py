@@ -35,6 +35,8 @@ from sillo.http import get_request_id_from_request
 from sillo.security import RateLimitConfig, RateLimitMiddleware
 
 from app.config import GatewaySettings
+from app.hosts import normalise
+from app.hosts import parse as parse_hosts
 from app.keys import KeyRejected, KeyResolver
 from app.limits import EnvironmentLimits
 from app.quotas import RequestQuota
@@ -118,6 +120,8 @@ class GatewayProxy:
             )
         )
         self.request_quota = request_quota or RequestQuota()
+        #: Which environment each hostname serves (``PAWABASE_HOSTS``); empty maps nothing.
+        self.hosts: dict[str, str] = parse_hosts(getattr(settings, "hosts", ""))
         #: Limits an environment adds with its own ``<ENV>_*`` variables, built on first use.
         self.env_limits = EnvironmentLimits(
             settings, key_func=_limit_key, rate_backend=rate_backend
@@ -189,7 +193,8 @@ class GatewayProxy:
             return None, None, ("missing_api_key" if mode == "required" else None)
         if mode == "none":
             return None, None, None
-        env = self._scope(scope, headers)
+        # The caller can name the environment; failing that, the hostname can.
+        env = self._scope(scope, headers) or self.hosts.get(normalise(headers.get("host", "")))
         try:
             context, info = await self.resolver.resolve(raw, env=env)
         except KeyRejected as exc:
@@ -259,6 +264,11 @@ class GatewayProxy:
             else:
                 return "route_not_allowed"
         return None
+
+    def _host_mismatch(self, headers: dict[str, str], context: Any) -> bool:
+        """Whether the key belongs to a different environment than the hostname serves."""
+        served = self.hosts.get(normalise(headers.get("host", "")))
+        return bool(served and context is not None and context.env != served)
 
     @staticmethod
     def _environment_gate(
@@ -343,6 +353,16 @@ class GatewayProxy:
                     send,
                     403,
                     {"error": denied, "message": "This API key is not allowed for this request."},
+                )
+                return
+            if self._host_mismatch(headers, context):
+                await _json(
+                    send,
+                    403,
+                    {
+                        "error": "host_environment_mismatch",
+                        "message": "This API key belongs to a different environment than this address serves.",
+                    },
                 )
                 return
             if gate := self._environment_gate(scope, context, info or {}):
@@ -477,6 +497,11 @@ class GatewayProxy:
             return
         if context is not None and (denied := self._key_allowed(scope, info or {})):
             await send({"type": "websocket.close", "code": 4003, "reason": denied})
+            return
+        if self._host_mismatch(headers, context):
+            await send(
+                {"type": "websocket.close", "code": 4003, "reason": "host_environment_mismatch"}
+            )
             return
         if context is not None and (gate := self._environment_gate(scope, context, info or {})):
             await send(
