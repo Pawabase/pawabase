@@ -36,6 +36,7 @@ from sillo.security import RateLimitConfig, RateLimitMiddleware
 
 from app.config import GatewaySettings
 from app.keys import KeyRejected, KeyResolver
+from app.limits import EnvironmentLimits
 from app.quotas import RequestQuota
 from app.routing import route_for
 from pawabase_core.clients import ServiceError
@@ -117,6 +118,10 @@ class GatewayProxy:
             )
         )
         self.request_quota = request_quota or RequestQuota()
+        #: Limits an environment adds with its own ``<ENV>_*`` variables, built on first use.
+        self.env_limits = EnvironmentLimits(
+            settings, key_func=_limit_key, rate_backend=rate_backend
+        )
         self.connections = (
             asyncio.BoundedSemaphore(settings.max_active_connections)
             if settings.max_active_connections > 0
@@ -352,7 +357,9 @@ class GatewayProxy:
                 else:
                     await _json(send, 403, {"error": code, "message": message})
                 return
-        result = await self.limiter.check(HttpContext(scope, receive))
+        own = self.env_limits.for_environment(context.env) if context is not None else None
+        limiter = own.limiter if own is not None and own.limiter is not None else self.limiter
+        result = await limiter.check(HttpContext(scope, receive))
         if result is not None and not result.allowed:
             self.stats["rate_limited"] += 1
             note("rate_limited", True)
@@ -361,6 +368,17 @@ class GatewayProxy:
                 429,
                 {"error": "rate_limit_exceeded", "retry_after": max(int(result.retry_after), 1)},
                 [(b"retry-after", str(max(int(result.retry_after), 1)).encode())],
+            )
+            return
+        if own is not None and own.quota is not None and not await own.quota.acquire():
+            self.stats["quota_rejected"] += 1
+            await _json(
+                send,
+                429,
+                {
+                    "error": "request_quota_exceeded",
+                    "message": "This environment's request quota has been reached.",
+                },
             )
             return
         if not await self.request_quota.acquire():
@@ -469,12 +487,26 @@ class GatewayProxy:
                 }
             )
             return
+        own = self.env_limits.for_environment(context.env) if context is not None else None
+        own_connections = own.connections if own is not None else None
+        if own_connections is not None and own_connections.locked():
+            self.stats["connections_rejected"] += 1
+            await send(
+                {
+                    "type": "websocket.close",
+                    "code": 4429,
+                    "reason": "environment connection limit reached",
+                }
+            )
+            return
         if self.connections is not None and self.connections.locked():
             self.stats["connections_rejected"] += 1
             await send(
                 {"type": "websocket.close", "code": 4429, "reason": "connection limit reached"}
             )
             return
+        if own_connections is not None:
+            await own_connections.acquire()
         if self.connections is not None:
             await self.connections.acquire()
         forwarded = self._forward_headers(scope, headers, context)
@@ -496,6 +528,8 @@ class GatewayProxy:
             )
             if self.connections is not None:
                 self.connections.release()
+            if own_connections is not None:
+                own_connections.release()
             return
         self.stats["websockets"] += 1
         await send({"type": "websocket.accept"})
@@ -533,3 +567,5 @@ class GatewayProxy:
             await remote.close()
         if self.connections is not None:
             self.connections.release()
+        if own_connections is not None:
+            own_connections.release()
