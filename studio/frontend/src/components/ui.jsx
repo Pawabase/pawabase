@@ -187,12 +187,46 @@ export function Tabs({ tabs, value, onChange }) {
   );
 }
 
-export function CopyText({ text }) {
+/** Copy text to the clipboard. The async API needs a secure context and a focused page, and
+ *  rejects otherwise; fall back to a hidden textarea so a copy button never silently does nothing. */
+export async function copyToClipboard(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* fall through to the legacy path */ }
+  const holder = document.activeElement?.closest?.("[role=dialog], dialog") || document.body;
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.style.cssText = "position:fixed;top:0;left:0;opacity:0;";
+  holder.appendChild(area);
+  const previous = document.activeElement;
+  area.select();
+  area.setSelectionRange(0, text.length);
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch { ok = false; }
+  holder.removeChild(area);
+  previous?.focus?.();
+  return ok;
+}
+
+export function CopyText({ text, label }) {
   const [copied, setCopied] = useState(false);
+  const toast = useToast();
+  const copy = async () => {
+    if (await copyToClipboard(text)) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } else {
+      toast("Could not copy. Select the text and copy it manually.", "error");
+    }
+  };
   return (
     <span className="row" style={{ gap: 6 }}>
       <code style={{ overflowWrap: "anywhere" }}>{text}</code>
-      <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard?.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1200); }}>
+      <Button size="sm" variant="ghost" onClick={copy} aria-label={label ? `Copy ${label}` : "Copy"} title={copied ? "Copied" : "Copy"}>
         <Icon name={copied ? "check" : "copy"} />
       </Button>
     </span>
