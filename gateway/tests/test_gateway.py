@@ -137,3 +137,29 @@ async def test_the_root_is_a_landing_page_not_a_404(gateway):
     response = await gateway.http.get("/")
     assert response.status_code == 200 and "text/html" in response.headers["content-type"]
     assert "API is running" in response.text and "/v1/status" in response.text
+
+
+def test_environment_gate():
+    from app.proxy import GatewayProxy
+    from pawabase_core.context import PlatformContext
+
+    gate = GatewayProxy._environment_gate
+    anon = PlatformContext(env="main", role="anon")
+    service = PlatformContext(env="main", role="service")
+    scope = {"client": ("10.2.3.4", 1234)}
+
+    assert gate(scope, anon, {}) is None
+
+    down = {"maintenance": {"enabled": True, "message": "Back soon", "retry_after": 90}}
+    assert gate(scope, anon, down) == ("maintenance", "Back soon", 90)
+    assert gate(scope, service, down) is None
+    closed = {"maintenance": {"enabled": True, "allow_secret_keys": False}}
+    assert gate(scope, service, closed)[0] == "maintenance"
+    assert gate(scope, anon, {"maintenance": {"enabled": False}}) is None
+
+    allow = {"ip_allowlist": ["10.0.0.0/8"]}
+    assert gate(scope, service, allow) is None
+    assert gate({"client": ("192.168.1.1", 1)}, service, allow)[0] == "ip_not_allowed"
+    assert gate({"client": None}, service, allow)[0] == "ip_not_allowed"
+    # Browsers on publishable keys are not held to the secret-key allowlist.
+    assert gate({"client": ("192.168.1.1", 1)}, anon, allow) is None

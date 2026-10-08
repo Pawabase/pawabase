@@ -13,6 +13,7 @@ from tortoise.functions import Count
 
 from app import route_stats
 from app.analytics import DEFAULT_RANGE, environment_analytics
+from app.system_health import system_report
 from app.platform import PLATFORM_QUEUES, Platform
 from database.models import (
     ApiKey,
@@ -558,6 +559,20 @@ def register(r: Router, platform: Platform) -> None:
                 "events": platform.bus.backend,
             },
         }
+
+    @r.get(
+        f"{base}/observability/system",
+        auth=MANAGE,
+        tags=["observability"],
+        summary="Queues, workers, schedules, flows, events, webhooks and mail over a window",
+    )
+    async def system(ctx: HttpContext, env: str):
+        await get_environment(env)
+        try:
+            minutes = max(5, min(int(ctx.query_params.get("minutes", 60)), 43200))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="minutes must be an integer") from exc
+        return await system_report(platform, env, minutes)
 
     @r.get(
         f"{base}/analytics",
