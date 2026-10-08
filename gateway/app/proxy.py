@@ -255,6 +255,35 @@ class GatewayProxy:
                 return "route_not_allowed"
         return None
 
+    @staticmethod
+    def _environment_gate(scope: dict[str, Any], context: Any, info: dict[str, Any]) -> tuple[str, str, int] | None:
+        """Environment-wide settings: ``(code, message, retry_after)`` when the request is refused.
+
+        Maintenance mode refuses everything except secret keys (unless the
+        environment says otherwise); the IP allowlist restricts secret keys,
+        because browsers on publishable keys have no stable address.
+        """
+        maintenance = info.get("maintenance") or {}
+        if maintenance.get("enabled") and not (
+            context.role == "service" and maintenance.get("allow_secret_keys", True)
+        ):
+            return (
+                "maintenance",
+                maintenance.get("message") or "This service is down for maintenance.",
+                int(maintenance.get("retry_after") or 300),
+            )
+        allowlist = info.get("ip_allowlist") or []
+        if allowlist and context.role == "service":
+            client = scope.get("client")
+            try:
+                ip = ipaddress.ip_address(client[0] if client else "")
+                if any(ip in ipaddress.ip_network(item, strict=False) for item in allowlist):
+                    return None
+            except ValueError:
+                pass
+            return "ip_not_allowed", "Secret keys may not be used from this address.", 0
+        return None
+
     # ── dispatch ─────────────────────────────────────────────────────────
 
     async def __call__(self, scope, receive, send):
@@ -308,6 +337,18 @@ class GatewayProxy:
                     403,
                     {"error": denied, "message": "This API key is not allowed for this request."},
                 )
+                return
+            if gate := self._environment_gate(scope, context, info or {}):
+                code, message, retry_after = gate
+                if code == "maintenance":
+                    await _json(
+                        send,
+                        503,
+                        {"error": code, "message": message, "retry_after": retry_after},
+                        [(b"retry-after", str(retry_after).encode())],
+                    )
+                else:
+                    await _json(send, 403, {"error": code, "message": message})
                 return
         result = await self.limiter.check(HttpContext(scope, receive))
         if result is not None and not result.allowed:
@@ -416,6 +457,11 @@ class GatewayProxy:
             return
         if context is not None and (denied := self._key_allowed(scope, info or {})):
             await send({"type": "websocket.close", "code": 4003, "reason": denied})
+            return
+        if context is not None and (gate := self._environment_gate(scope, context, info or {})):
+            await send(
+                {"type": "websocket.close", "code": 4503 if gate[0] == "maintenance" else 4003, "reason": gate[0]}
+            )
             return
         if self.connections is not None and self.connections.locked():
             self.stats["connections_rejected"] += 1
