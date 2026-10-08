@@ -69,18 +69,19 @@ export default function Settings({ env }) {
   const state = useApi(path);
   const policiesState = useApi(envPath(env, "/policies"));
   const usage = useApi("/usage", { params: { env } });
+  const configuration = useApi(`${path}/configuration`);
   const policyNames = (policiesState.data?.data || []).map((p) => p.name);
   return (
     <Layout title="Settings">
-      <PageHead title="Settings" description={`Behaviour, access and defaults for the ${env} environment. Infrastructure credentials live in .env and Secrets, not here.`} />
+      <PageHead title="Settings" description={`Behaviour, access and defaults for the ${env} environment. Infrastructure and limits come from environment variables, not from here.`} />
       <Loading state={state}>
-        {(data) => <SettingsBody key={data.version + ":" + JSON.stringify(data.settings)} env={env} path={path} data={data} usage={usage.data} policyNames={policyNames} reload={state.reload} />}
+        {(data) => <SettingsBody key={data.version + ":" + JSON.stringify(data.settings)} env={env} path={path} data={data} usage={usage.data} configuration={configuration.data} policyNames={policyNames} reload={state.reload} />}
       </Loading>
     </Layout>
   );
 }
 
-function SettingsBody({ env, path, data, usage, policyNames, reload }) {
+function SettingsBody({ env, path, data, usage, configuration, policyNames, reload }) {
   const original = data.settings || {};
   const [draft, setDraft] = useState(original);
   const [active, setActive] = useState("general");
@@ -184,8 +185,8 @@ function SettingsBody({ env, path, data, usage, policyNames, reload }) {
           </Section>
         </div>}
 
-        {active === "infrastructure" && <Infrastructure env={env} infra={data.infra || {}} />}
-        {active === "limits" && <Limits usage={usage} />}
+        {active === "infrastructure" && <Infrastructure env={env} configuration={configuration} deprecations={data.deprecations || []} />}
+        {active === "limits" && <Limits usage={usage} configuration={configuration} />}
 
         {active === "custom" && <Field label="Custom values" hint="Extra keys flows and policies can read as $settings.<key>. They are not platform configuration. Names use letters, digits and underscores.">
           <KeyValue value={custom} onChange={setCustom} keyLabel="Key" valueLabel="Value" addLabel="Add setting" />
@@ -207,21 +208,31 @@ function TimezoneInput({ value, onChange }) {
   </>;
 }
 
-function Infrastructure({ env, infra }) {
-  const storage = infra.storage || {};
-  const mail = infra.mail || {};
+const SOURCE = { environment: ["this environment", "green"], deployment: ["every environment", "blue"], stored: ["stored (deprecated)", "yellow"], default: ["default", ""] };
+
+function Source({ value }) {
+  const [label, tone] = SOURCE[value] || SOURCE.default;
+  return <Badge tone={tone}>{label}</Badge>;
+}
+
+function Infrastructure({ env, configuration, deprecations }) {
+  if (!configuration) return <p className="muted" style={{ margin: 0 }}>Loading…</p>;
+  const { database, storage, mail, variables } = configuration;
   const rows = [
-    ["Database", infra.database_url ? "Own database" : "Platform default", Boolean(infra.database_url), "database", "Resources are stored in the shared Postgres, in a schema for this environment, unless you point the environment at your own database."],
-    ["Storage", storage.driver || "local", true, "storage", "Where uploaded objects live. Buckets and access policies are managed on the Storage page."],
-    ["Mail", mail.host ? (mail.suppress ? "Suppressed" : mail.host) : "Not configured", Boolean(mail.host) && !mail.suppress, "mail", "SMTP used for flows, auth emails and notifications. Unconfigured mail is logged and suppressed, never sent."],
-    ["Secrets", "Encrypted at rest", true, "secrets", "Credentials are referenced as secret://NAME and never shown after saving."],
+    ["Data database", <Source key="s" value={database.source} />, "database", `Where resource data lives. Set ${database.variable}; without it each environment gets its own schema in the platform's default database.`],
+    ["Storage", <><Badge>{storage.driver}</Badge> <Source value={storage.source} /></>, "storage", `Where uploaded objects go. Set ${storage.variable} (driver, endpoint, bucket, keys); anything unset keeps the platform default.`],
+    ["Mail", <Badge key="m" tone={mail.configured && !mail.suppressed ? "green" : "yellow"}>{mail.configured ? (mail.suppressed ? "paused" : "configured") : "not configured"}</Badge>, "mail", `SMTP for flows, sign-in emails and notifications. Set ${mail.variable}; without a host, mail is recorded and not sent.`],
+    ["Secrets", <Badge key="e" tone="green">encrypted, per environment</Badge>, "secrets", "Values are sealed for this environment and shown only as secret://NAME references."],
   ];
   return <div className="stack" style={{ gap: 12 }}>
-    <p className="muted" style={{ margin: 0 }}>A read-only summary. The installation-wide pieces (Redis, JWT secrets, master key, quotas) are set once through .env.</p>
-    {rows.map(([label, value, ok, section, hint]) => <div key={label} className="card sunken" style={{ padding: 14 }}>
+    {deprecations.length > 0 && <div className="alert warn"><b>This environment still stores settings the platform no longer prefers.</b>
+      <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{deprecations.map((note) => <li key={note}>{note}</li>)}</ul>
+      <div style={{ marginTop: 6 }}>Print them as variables with <code>python -m app.export_config --env {env}</code>.</div></div>}
+    <p className="muted" style={{ margin: 0 }}>Read-only. Set these as environment variables on the deployment: <code>{variables.environment_prefix}*</code> for this environment, <code>{variables.global_prefix}*</code> for every environment (this environment's wins), then restart.</p>
+    {rows.map(([label, value, section, hint]) => <div key={label} className="card sunken" style={{ padding: 14 }}>
       <div className="spread">
-        <div><b>{label}</b> <Badge tone={ok ? "green" : "yellow"}>{value}</Badge></div>
-        <Link className="link-more" href={envHref(env, section)}>Manage <Icon name="chevronRight" size={14} /></Link>
+        <div className="row" style={{ gap: 8 }}><b>{label}</b>{value}</div>
+        <Link className="link-more" href={envHref(env, section)}>Open <Icon name="chevronRight" size={14} /></Link>
       </div>
       <p className="muted" style={{ margin: "6px 0 0" }}>{hint}</p>
     </div>)}
@@ -236,18 +247,31 @@ function bytes(n) {
   return `${Math.round(n * 10) / 10} ${units[i]}`;
 }
 
-function Limits({ usage }) {
-  if (!usage) return <p className="muted" style={{ margin: 0 }}>Loading limits…</p>;
-  const count = (u) => (u.limit ? `${u.used ?? 0} of ${u.limit}` : `${u.used ?? 0} · no limit`);
-  const rows = [
-    ["Environments", count(usage.environments || {})],
-    ["API keys in this environment", count(usage.api_keys || {})],
-    ["Largest upload", bytes(usage.uploads?.limit)],
-    ["Active users", usage.users?.limit ? `up to ${usage.users.limit}` : "No limit"],
-  ];
+const LIMIT_LABELS = {
+  MAX_USERS: ["Active users", (v) => (Number(v) ? `up to ${Number(v).toLocaleString()}` : "no limit")],
+  MAX_API_KEYS_PER_ENVIRONMENT: ["API keys", (v) => (Number(v) ? `up to ${v}` : "no limit")],
+  MAX_UPLOAD_BYTES: ["Largest upload", (v) => bytes(Number(v))],
+  DAILY_REQUEST_LIMIT: ["Requests per day", (v) => (Number(v) ? Number(v).toLocaleString() : "no limit")],
+  MONTHLY_REQUEST_LIMIT: ["Requests per month", (v) => (Number(v) ? Number(v).toLocaleString() : "no limit")],
+  MAX_ACTIVE_CONNECTIONS: ["Realtime connections", (v) => (Number(v) ? `up to ${v}` : "no limit")],
+  RATE_LIMIT: ["Rate limit", (v) => (v == null ? "gateway default" : `${v} per window`)],
+  RATE_WINDOW: ["Rate window", (v) => (v == null ? "gateway default" : `${v} seconds`)],
+};
+
+function Limits({ usage, configuration }) {
+  if (!usage || !configuration) return <p className="muted" style={{ margin: 0 }}>Loading limits…</p>;
+  const used = { MAX_USERS: usage.users, MAX_API_KEYS_PER_ENVIRONMENT: usage.api_keys };
   return <div className="stack" style={{ gap: 10 }}>
-    <p className="muted" style={{ margin: 0 }}>Limits are set for the whole installation through PAWABASE_* variables in .env, so they apply to every environment.</p>
-    {rows.map(([label, value]) => <div key={label} className="spread card sunken" style={{ padding: "12px 14px" }}><b>{label}</b><span>{value}</span></div>)}
+    <p className="muted" style={{ margin: 0 }}>Limits come from variables. <code>{configuration.variables.environment_prefix}&lt;NAME&gt;</code> sets one for this environment; <code>{configuration.variables.global_prefix}&lt;NAME&gt;</code> for every environment. The deployment-wide request and connection limits always apply on top.</p>
+    {configuration.limits.map((row) => {
+      const [label, format] = LIMIT_LABELS[row.key] || [row.key, String];
+      return <div key={row.key} className="spread card sunken" style={{ padding: "12px 14px" }}>
+        <div><b>{label}</b><div className="hint"><code>{row.variable}</code></div></div>
+        <div className="row" style={{ gap: 8 }}><span>{format(row.value)}</span><Source value={row.source} /></div>
+      </div>;
+    })}
+    <div className="spread card sunken" style={{ padding: "12px 14px" }}><b>Environments in this deployment</b><span>{usage.environments?.limit ? `${usage.environments.used} of ${usage.environments.limit}` : `${usage.environments?.used ?? 0} · no limit`}</span></div>
+    {used.MAX_API_KEYS_PER_ENVIRONMENT && <p className="muted" style={{ margin: 0 }}>{used.MAX_API_KEYS_PER_ENVIRONMENT.used ?? 0} API keys in use.</p>}
   </div>;
 }
 
