@@ -358,7 +358,7 @@ async def validate_subscription(platform, env, body: SubscriptionBody) -> dict[s
 async def validate_webhook(platform, env, body: WebhookBody) -> dict[str, Any]:
     data = body.model_dump(exclude={"secret"})
     secret = body.secret or f"whsec_{token_source.token_urlsafe(24)}"
-    data["secret_ciphertext"] = platform.box.seal(secret)
+    data["secret_ciphertext"] = platform.box.seal(secret, env)
     data["_reveal"] = {"secret": secret} if body.secret is None else {}
     return data
 
@@ -369,7 +369,7 @@ async def validate_inbound(platform, env, body: InboundHookBody) -> dict[str, An
     data["_reveal"] = {}
     if body.verification != "none":
         secret = body.secret or token_source.token_urlsafe(24)
-        data["secret_ciphertext"] = platform.box.seal(secret)
+        data["secret_ciphertext"] = platform.box.seal(secret, env)
         if body.secret is None:
             data["_reveal"] = {"secret": secret}
     return data

@@ -215,7 +215,7 @@ async def load_state(platform: Platform, environment: Environment) -> Environmen
     state.schedules = list(schedules)
     for secret in secrets:
         try:
-            state.secret_values[secret.name] = platform.box.open(secret.ciphertext)
+            state.secret_values[secret.name] = platform.box.open(secret.ciphertext, state.env_name)
         except Exception:  # sealed under another master key
             continue
     state.engine = PolicyEngine(state.policies, python=python_policies())

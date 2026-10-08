@@ -36,7 +36,7 @@ class DeliverWebhookJob(PawabaseJob):
         if delivery is None:
             return {"skipped": "delivery no longer exists"}
         endpoint = delivery.endpoint
-        secret = platform.box.open(endpoint.secret_ciphertext)
+        secret = platform.box.open(endpoint.secret_ciphertext, self.env)
         body = delivery_body(delivery.event_id, delivery.event, delivery.payload, self.env)
         headers = {
             **{str(k): str(v) for k, v in (endpoint.headers or {}).items()},

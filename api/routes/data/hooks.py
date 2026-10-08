@@ -35,7 +35,7 @@ def register(app: Any, platform: Platform) -> None:
         if len(body) > MAX_HOOK_BYTES:
             raise HTTPException(status_code=413, detail="payload too large")
         if hook.verification != "none":
-            secret = platform.box.open(hook.secret_ciphertext or "")
+            secret = platform.box.open(hook.secret_ciphertext or "", env)
             provided = ctx.headers.get(hook.signature_header.lower(), "")
             if hook.verification == "hmac-sha256":
                 valid = bool(provided) and verify_plain_hmac(secret, body, provided)

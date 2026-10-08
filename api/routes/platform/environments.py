@@ -422,7 +422,7 @@ def register(r: Router, platform: Platform) -> None:
             from routes.platform.promote import copy_definitions
 
             source = await get_environment(body.copy_from)
-            copied = await copy_definitions(source, environment)
+            copied = await copy_definitions(source, environment, box=platform.box)
         await audit(ctx, "environment.created", env=body.name, target=body.name)
         return created(
             {
@@ -475,7 +475,7 @@ def register(r: Router, platform: Platform) -> None:
         )
         from routes.platform.promote import copy_definitions
 
-        copied = await copy_definitions(source, preview)
+        copied = await copy_definitions(source, preview, box=platform.box)
         await audit(
             ctx,
             "preview.created",
@@ -572,7 +572,7 @@ def register(r: Router, platform: Platform) -> None:
 
         source = await get_environment(env)
         target = await get_environment(body.to)
-        copied = await copy_definitions(source, target, include=body.include)
+        copied = await copy_definitions(source, target, include=body.include, box=platform.box)
         await changed(ctx, target, "environment.promoted", body.to, {"from": env, "copied": copied})
         return {"from": env, "to": body.to, "copied": copied}
 
@@ -670,7 +670,7 @@ def register(r: Router, platform: Platform) -> None:
             environment=environment,
             name=name,
             defaults={
-                "ciphertext": platform.box.seal(body.value),
+                "ciphertext": platform.box.seal(body.value, env),
                 "description": body.description,
                 "updated_by": _actor(ctx),
             },

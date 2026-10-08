@@ -242,7 +242,7 @@ async def state_from_snapshot(
     state.schedules = list(materialized["schedules"])
     for secret in await Secret.filter(environment_id=environment.id):
         try:
-            state.secret_values[secret.name] = platform.box.open(secret.ciphertext)
+            state.secret_values[secret.name] = platform.box.open(secret.ciphertext, state.env_name)
         except Exception:
             continue
     state.engine = PolicyEngine(state.policies, python=python_policies())
