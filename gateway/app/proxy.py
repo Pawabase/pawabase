@@ -256,7 +256,9 @@ class GatewayProxy:
         return None
 
     @staticmethod
-    def _environment_gate(scope: dict[str, Any], context: Any, info: dict[str, Any]) -> tuple[str, str, int] | None:
+    def _environment_gate(
+        scope: dict[str, Any], context: Any, info: dict[str, Any]
+    ) -> tuple[str, str, int] | None:
         """Environment-wide settings: ``(code, message, retry_after)`` when the request is refused.
 
         Maintenance mode refuses everything except secret keys (unless the
@@ -460,7 +462,11 @@ class GatewayProxy:
             return
         if context is not None and (gate := self._environment_gate(scope, context, info or {})):
             await send(
-                {"type": "websocket.close", "code": 4503 if gate[0] == "maintenance" else 4003, "reason": gate[0]}
+                {
+                    "type": "websocket.close",
+                    "code": 4503 if gate[0] == "maintenance" else 4003,
+                    "reason": gate[0],
+                }
             )
             return
         if self.connections is not None and self.connections.locked():

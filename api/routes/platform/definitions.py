@@ -493,7 +493,9 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
             return str(row.get("slug")) == key
         return str(row.get("name")) == key
 
-    async def record_branch_change(ctx: HttpContext, branch: Branch, action: str, target: str) -> None:
+    async def record_branch_change(
+        ctx: HttpContext, branch: Branch, action: str, target: str
+    ) -> None:
         branch.changes = [
             *list(branch.changes or []),
             {"action": action, "target": target, "at": datetime.now(UTC).isoformat()},
@@ -536,12 +538,22 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
         )
         if branch is not None:
             exists = any(
-                (row.get("slug") == natural.get("slug")) if key_field == "slug"
-                else ((row.get("method") == natural.get("method") and row.get("path") == natural.get("path")) if model is RouteDef else row.get("name") == natural.get("name"))
+                (row.get("slug") == natural.get("slug"))
+                if key_field == "slug"
+                else (
+                    (
+                        row.get("method") == natural.get("method")
+                        and row.get("path") == natural.get("path")
+                    )
+                    if model is RouteDef
+                    else row.get("name") == natural.get("name")
+                )
                 for row in draft_rows(branch)
             )
             if exists:
-                raise HTTPException(status_code=409, detail=f"{path[:-1]} already exists in this branch")
+                raise HTTPException(
+                    status_code=409, detail=f"{path[:-1]} already exists in this branch"
+                )
             row = {column: copy.deepcopy(data.get(column)) for column in columns if column in data}
             # Routes are addressed by id. A branch-only route gets one now, so it
             # can be edited or deleted in Studio; merging gives the live row its own.
@@ -550,8 +562,16 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
             else:
                 row.setdefault("id", None)
             draft_rows(branch).append(row)
-            await record_branch_change(ctx, branch, f"{path}.created", str(getattr(body, key_field, data.get("name", ""))))
-            await audit(ctx, f"branch.{path}.created", env=env, target=str(getattr(body, key_field, data.get("name", ""))), details={"branch": branch.name})
+            await record_branch_change(
+                ctx, branch, f"{path}.created", str(getattr(body, key_field, data.get("name", "")))
+            )
+            await audit(
+                ctx,
+                f"branch.{path}.created",
+                env=env,
+                target=str(getattr(body, key_field, data.get("name", ""))),
+                details={"branch": branch.name},
+            )
             return created({**draft_view(environment, row), **reveal})
         if await model.filter(environment=environment, **natural).exists():
             raise HTTPException(status_code=409, detail=f"{path[:-1]} already exists")
@@ -565,7 +585,9 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
         if branch is not None:
             row = next((item for item in draft_rows(branch) if row_matches(item, key)), None)
             if row is None:
-                raise HTTPException(status_code=404, detail=f"no {path[:-1]} {key!r} in branch {branch.name!r}")
+                raise HTTPException(
+                    status_code=404, detail=f"no {path[:-1]} {key!r} in branch {branch.name!r}"
+                )
             return draft_view(environment, row)
         return view(await lookup(environment, key))
 
@@ -575,7 +597,9 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
         if branch is not None:
             row = next((item for item in draft_rows(branch) if row_matches(item, key)), None)
             if row is None:
-                raise HTTPException(status_code=404, detail=f"no {path[:-1]} {key!r} in branch {branch.name!r}")
+                raise HTTPException(
+                    status_code=404, detail=f"no {path[:-1]} {key!r} in branch {branch.name!r}"
+                )
             data = await validate(platform, env, body)
             if model is Resource:
                 keep_key_type(row.get("id_type"), data, body)
@@ -585,7 +609,9 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
                 reveal = {}
             row.update(copy.deepcopy(data))
             await record_branch_change(ctx, branch, f"{path}.updated", key)
-            await audit(ctx, f"branch.{path}.updated", env=env, target=key, details={"branch": branch.name})
+            await audit(
+                ctx, f"branch.{path}.updated", env=env, target=key, details={"branch": branch.name}
+            )
             return {**draft_view(environment, row), **reveal}
         item = await lookup(environment, key)
         data = await validate(platform, env, body)
@@ -609,10 +635,14 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
             rows = draft_rows(branch)
             index = next((i for i, item in enumerate(rows) if row_matches(item, key)), None)
             if index is None:
-                raise HTTPException(status_code=404, detail=f"no {path[:-1]} {key!r} in branch {branch.name!r}")
+                raise HTTPException(
+                    status_code=404, detail=f"no {path[:-1]} {key!r} in branch {branch.name!r}"
+                )
             rows.pop(index)
             await record_branch_change(ctx, branch, f"{path}.deleted", key)
-            await audit(ctx, f"branch.{path}.deleted", env=env, target=key, details={"branch": branch.name})
+            await audit(
+                ctx, f"branch.{path}.deleted", env=env, target=key, details={"branch": branch.name}
+            )
             return no_content()
         item = await lookup(environment, key)
         await item.delete()

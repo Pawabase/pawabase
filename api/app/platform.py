@@ -183,7 +183,11 @@ class Platform:
 
     def reload_code(self) -> ProjectCode:
         clear_functions(RUNTIME)
-        for name in [name for name in list(__import__("sys").modules) if name.startswith(f"pawabase_code.{RUNTIME}.")]:
+        for name in [
+            name
+            for name in list(__import__("sys").modules)
+            if name.startswith(f"pawabase_code.{RUNTIME}.")
+        ]:
             del __import__("sys").modules[name]
         self.code = None
         self.envs.forget()

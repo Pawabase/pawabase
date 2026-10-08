@@ -11,7 +11,9 @@ from database.config import database
 from pawabase_core.ids import is_ulid, legacy_ulid, ulid_timestamp_ms
 
 LEGACY = "0008_function_branches"
-ULID = "0010_user_ids_are_ulids"  # the step under test; 0011 (single runtime) has its own tests below
+ULID = (
+    "0010_user_ids_are_ulids"  # the step under test; 0011 (single runtime) has its own tests below
+)
 
 
 def manager_for(tmp_path, name):
@@ -135,6 +137,7 @@ async def test_integer_keys_become_ulids_and_every_link_survives(tmp_path):
     )
     db.close()
 
+
 async def test_a_fresh_postgres_goes_straight_through_to_the_single_runtime_schema():
     """Opt-in: PAWABASE_TEST_POSTGRES_URL=postgres://user:pass@host:5432/postgres (a server; a scratch database is made and dropped).
 
@@ -147,7 +150,9 @@ async def test_a_fresh_postgres_goes_straight_through_to_the_single_runtime_sche
 
     server = os.environ.get("PAWABASE_TEST_POSTGRES_URL")
     if not server:
-        pytest.skip("set PAWABASE_TEST_POSTGRES_URL to run the migrations against a real PostgreSQL")
+        pytest.skip(
+            "set PAWABASE_TEST_POSTGRES_URL to run the migrations against a real PostgreSQL"
+        )
     name = f"pw_test_{uuid.uuid4().hex[:10]}"
     admin = await asyncpg.connect(server)
     await admin.execute(f'CREATE DATABASE "{name}"')
@@ -157,17 +162,30 @@ async def test_a_fresh_postgres_goes_straight_through_to_the_single_runtime_sche
         async with manager:
             await migrate(manager)
         db = await asyncpg.connect(url)
-        tables = {r["tablename"] for r in await db.fetch("select tablename from pg_tables where schemaname='public'")}
+        tables = {
+            r["tablename"]
+            for r in await db.fetch("select tablename from pg_tables where schemaname='public'")
+        }
         await db.close()
         assert {"pb_environments", "pb_api_keys", "pb_secrets", "pb_audit"} <= tables
-        assert not tables & {"pb_projects", "pb_organizations", "pb_org_members", "pb_org_invitations", "pb_project_keys"}
+        assert not tables & {
+            "pb_projects",
+            "pb_organizations",
+            "pb_org_members",
+            "pb_org_invitations",
+            "pb_project_keys",
+        }
         manager = database(ApiSettings(_env_file=None, app_env="testing", database_url=url))
         async with manager:
             from database.models import Environment, Secret
 
             environment = await Environment.create(name="development")
             secret = await Secret.create(environment=environment, name="TOKEN", ciphertext="x")
-            assert is_ulid(environment.id) and is_ulid(secret.id) and secret.environment_id == environment.id
+            assert (
+                is_ulid(environment.id)
+                and is_ulid(secret.id)
+                and secret.environment_id == environment.id
+            )
     finally:
         await admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
         await admin.close()
@@ -179,7 +197,14 @@ async def test_the_single_runtime_migration_refuses_a_database_that_still_holds_
         await migrate(manager, target=ULID)
     db = sqlite3.connect(path)
     insert(db, "pb_organizations", id="01ARZ3NDEKTSV4RRFFQ69G5FAV", slug="acme", name="Acme")
-    insert(db, "pb_projects", id="01ARZ3NDEKTSV4RRFFQ69G5FAW", ref="shop", name="Shop", organization_id="01ARZ3NDEKTSV4RRFFQ69G5FAV")
+    insert(
+        db,
+        "pb_projects",
+        id="01ARZ3NDEKTSV4RRFFQ69G5FAW",
+        ref="shop",
+        name="Shop",
+        organization_id="01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    )
     db.commit()
     db.close()
 

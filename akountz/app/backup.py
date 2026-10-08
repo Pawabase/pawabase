@@ -172,7 +172,9 @@ async def restore_identities(
             )
             report["roles"] += 1
 
-        id_map: dict[Any, str] = {}  # the id a backup used (a ULID, or an integer in old backups) -> the restored user's
+        id_map: dict[
+            Any, str
+        ] = {}  # the id a backup used (a ULID, or an integer in old backups) -> the restored user's
         taken = {u.email: u for u in await AuthUser.filter(env=env, deleted_at=None)}
         for source in document.get("users", []):
             existing = taken.get(source["email"])
@@ -203,9 +205,7 @@ async def restore_identities(
                 # A backup's ULID is kept when free. An old backup's integer id is not a key any more.
                 wanted_id = wanted_id.upper() if is_ulid(wanted_id) else None
                 id_free = wanted_id is not None and not await AuthUser.filter(id=wanted_id).exists()
-                clash = await AuthUser.filter(
-                    env=env, username=fields["username"]
-                ).exists()
+                clash = await AuthUser.filter(env=env, username=fields["username"]).exists()
                 if clash:
                     fields["username"] = f"{fields['username']}-restored"
                     report["warnings"].append(
@@ -248,7 +248,9 @@ async def restore_identities(
                 if user_id is None:
                     continue
                 await Membership.update_or_create(
-                    organization=org, user_id=user_id, defaults={"role": member.get("role", "member")}
+                    organization=org,
+                    user_id=user_id,
+                    defaults={"role": member.get("role", "member")},
                 )
             for team_source in source.get("teams", []):
                 team, _ = await Team.get_or_create(

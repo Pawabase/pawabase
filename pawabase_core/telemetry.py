@@ -174,8 +174,12 @@ class RequestLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         trace = _trace.get()
-        if trace is None or hasattr(record, "pawabase") or record.name.startswith(
-            ("pawabase.telemetry", "pawabase.api.metrics", "httpx", "httpcore")
+        if (
+            trace is None
+            or hasattr(record, "pawabase")
+            or record.name.startswith(
+                ("pawabase.telemetry", "pawabase.api.metrics", "httpx", "httpcore")
+            )
         ):
             return
         try:
@@ -188,7 +192,9 @@ class RequestLogHandler(logging.Handler):
                         "level": record.levelname.lower(),
                         "message": record.getMessage()[:MAX_TEXT],
                         "logger": record.name,
-                        "at_ms": round((time.perf_counter() - origin) * 1000, 3) if origin else None,
+                        "at_ms": round((time.perf_counter() - origin) * 1000, 3)
+                        if origin
+                        else None,
                     }
                 )
             else:

@@ -37,7 +37,9 @@ class StudioAccessGate:
     # ── the session cookie ───────────────────────────────────────────────
 
     def _sign(self, expires: int) -> str:
-        return hmac.new(self.secret.encode(), f"studio-session:{expires}".encode(), hashlib.sha256).hexdigest()
+        return hmac.new(
+            self.secret.encode(), f"studio-session:{expires}".encode(), hashlib.sha256
+        ).hexdigest()
 
     def session_cookie(self) -> str:
         expires = int(time.time()) + SESSION_SECONDS
@@ -62,7 +64,14 @@ class StudioAccessGate:
 
     def accept_link(self, token: str) -> bool:
         try:
-            claims = jwt.decode(token, self.secret, algorithms=["HS256"], audience=AUDIENCE, issuer=ISSUER, options={"require": ["exp", "jti"]})
+            claims = jwt.decode(
+                token,
+                self.secret,
+                algorithms=["HS256"],
+                audience=AUDIENCE,
+                issuer=ISSUER,
+                options={"require": ["exp", "jti"]},
+            )
         except jwt.PyJWTError:
             return False
         now = time.time()
@@ -85,12 +94,32 @@ class StudioAccessGate:
             await self.app(scope, receive, send)
             return
         if path == ENTRY and scope["type"] == "http":
-            query = dict(item.split("=", 1) for item in scope.get("query_string", b"").decode().split("&") if "=" in item)
+            query = dict(
+                item.split("=", 1)
+                for item in scope.get("query_string", b"").decode().split("&")
+                if "=" in item
+            )
             if self.accept_link(query.get("token", "")):
-                cookie = f"{COOKIE}={self.session_cookie()}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_SECONDS}" + ("; Secure" if self.secure else "")
-                await self._respond(send, 303, b"", [(b"location", b"/"), (b"set-cookie", cookie.encode()), (b"cache-control", b"no-store")])
+                cookie = (
+                    f"{COOKIE}={self.session_cookie()}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_SECONDS}"
+                    + ("; Secure" if self.secure else "")
+                )
+                await self._respond(
+                    send,
+                    303,
+                    b"",
+                    [
+                        (b"location", b"/"),
+                        (b"set-cookie", cookie.encode()),
+                        (b"cache-control", b"no-store"),
+                    ],
+                )
             else:
-                await self._respond(send, 403, b'{"error":"invalid_link","message":"This link is invalid or has expired. Open Studio again from your dashboard."}')
+                await self._respond(
+                    send,
+                    403,
+                    b'{"error":"invalid_link","message":"This link is invalid or has expired. Open Studio again from your dashboard."}',
+                )
             return
         if self.has_session(scope):
             await self.app(scope, receive, send)
@@ -98,10 +127,22 @@ class StudioAccessGate:
         if scope["type"] == "websocket":
             await send({"type": "websocket.close", "code": 4401})
             return
-        await self._respond(send, 401, b'{"error":"studio_access_required","message":"Open Studio from your dashboard."}')
+        await self._respond(
+            send,
+            401,
+            b'{"error":"studio_access_required","message":"Open Studio from your dashboard."}',
+        )
 
     @staticmethod
-    async def _respond(send, status: int, body: bytes, headers: list[tuple[bytes, bytes]] | None = None) -> None:
-        base = [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode()), (b"cache-control", b"no-store")]
-        await send({"type": "http.response.start", "status": status, "headers": [*base, *(headers or [])]})
+    async def _respond(
+        send, status: int, body: bytes, headers: list[tuple[bytes, bytes]] | None = None
+    ) -> None:
+        base = [
+            (b"content-type", b"application/json"),
+            (b"content-length", str(len(body)).encode()),
+            (b"cache-control", b"no-store"),
+        ]
+        await send(
+            {"type": "http.response.start", "status": status, "headers": [*base, *(headers or [])]}
+        )
         await send({"type": "http.response.body", "body": body})

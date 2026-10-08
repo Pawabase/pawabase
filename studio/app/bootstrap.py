@@ -65,7 +65,10 @@ def create_app(
             settings.angula_url, secret=settings.internal_secret, issuer="studio", audience="angula"
         ),
         "gateway": ServiceClient(
-            settings.gateway_url, secret=settings.internal_secret, issuer="studio", audience="gateway"
+            settings.gateway_url,
+            secret=settings.internal_secret,
+            issuer="studio",
+            audience="gateway",
         ),
     }
     frontend = Path(settings.frontend_dir)

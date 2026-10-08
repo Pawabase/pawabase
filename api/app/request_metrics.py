@@ -92,9 +92,7 @@ class RequestRollup:
             except Exception:
                 logger.exception("could not store request history")
         for (env, window, tags), (count, total_ms) in pending.items():
-            match = MetricCounter.filter(
-                env=env, name=REQUESTS_METRIC, tags=tags, window=window
-            )
+            match = MetricCounter.filter(env=env, name=REQUESTS_METRIC, tags=tags, window=window)
             try:
                 if not await match.update(value=F("value") + total_ms, count=F("count") + count):
                     try:

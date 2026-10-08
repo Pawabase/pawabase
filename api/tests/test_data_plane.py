@@ -210,9 +210,13 @@ async def test_each_write_checks_its_own_policy(acme):
     created = await api.http.post("/rest/v1/ledger", json={"note": "paid"}, headers=ada)
     assert created.status_code == 201, created.text
     record = created.json()
-    updated = await api.http.patch(f"/rest/v1/ledger/{record['id']}", json={"note": "paid in full"}, headers=ada)
+    updated = await api.http.patch(
+        f"/rest/v1/ledger/{record['id']}", json={"note": "paid in full"}, headers=ada
+    )
     assert updated.status_code == 200, updated.text
-    assert (await api.http.delete(f"/rest/v1/ledger/{record['id']}", headers=ada)).status_code == 403
+    assert (
+        await api.http.delete(f"/rest/v1/ledger/{record['id']}", headers=ada)
+    ).status_code == 403
 
 
 async def test_operators_read_the_openapi_document_without_public_docs(acme):
@@ -242,17 +246,32 @@ async def test_expand_respects_the_related_resources_read_policy(acme):
     await api.studio.post(f"{ENV}/resources", json=ledger)
     await api.studio.post(f"{ENV}/resources/receipts/migrate")
     posts = await api.studio.get(f"{ENV}/resources/posts")
-    posts = {k: v for k, v in posts.items() if k not in ("id", "environment", "environment_id", "created_at", "updated_at", "version")}
-    posts["relations"] = [*posts["relations"], {"name": "receipts", "type": "has_many", "resource": "receipts", "field": "post_id"}]
+    posts = {
+        k: v
+        for k, v in posts.items()
+        if k not in ("id", "environment", "environment_id", "created_at", "updated_at", "version")
+    }
+    posts["relations"] = [
+        *posts["relations"],
+        {"name": "receipts", "type": "has_many", "resource": "receipts", "field": "post_id"},
+    ]
     await api.studio.put(f"{ENV}/resources/posts", json=posts)
 
     ada = api.user_headers("development", user_id="1")
-    post = (await api.http.post("/rest/v1/posts", json={"title": "t", "status": "live"}, headers=ada)).json()
-    await api.studio.post(f"{ENV}/resources/receipts/records", json={"post_id": post["id"], "amount": 9})
+    post = (
+        await api.http.post("/rest/v1/posts", json={"title": "t", "status": "live"}, headers=ada)
+    ).json()
+    await api.studio.post(
+        f"{ENV}/resources/receipts/records", json={"post_id": post["id"], "amount": 9}
+    )
 
     assert (await api.http.get("/rest/v1/receipts", headers=ada)).status_code == 403
-    expanded = (await api.http.get(f"/rest/v1/posts/{post['id']}?expand=receipts", headers=ada)).json()
+    expanded = (
+        await api.http.get(f"/rest/v1/posts/{post['id']}?expand=receipts", headers=ada)
+    ).json()
     assert expanded["receipts"] == []
     service = api.context_headers("development", role="service")
-    as_service = (await api.http.get(f"/rest/v1/posts/{post['id']}?expand=receipts", headers=service)).json()
+    as_service = (
+        await api.http.get(f"/rest/v1/posts/{post['id']}?expand=receipts", headers=service)
+    ).json()
     assert [r["amount"] for r in as_service["receipts"]] == [9]

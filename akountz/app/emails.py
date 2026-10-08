@@ -58,6 +58,4 @@ async def send(akountz: Akountz, config: AuthConfig, kind: str, to: str, **value
             html_lib.escape(link),
             f'<a href="{html_lib.escape(link, quote=True)}">{html_lib.escape(link)}</a>',
         )
-    await akountz.send_mail(
-        config.env, to=to, subject=subject, text=text, html=f"<p>{escaped}</p>"
-    )
+    await akountz.send_mail(config.env, to=to, subject=subject, text=text, html=f"<p>{escaped}</p>")

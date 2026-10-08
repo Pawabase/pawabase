@@ -92,7 +92,9 @@ class EnvironmentState:
         if configured:
             return self.platform.resolve_value(self, configured)
         # ``{project}`` from an older configuration names nothing now: drop it, with its separator.
-        template = self.platform.settings.default_data_url.replace("{project}__", "").replace("{project}", "")
+        template = self.platform.settings.default_data_url.replace("{project}__", "").replace(
+            "{project}", ""
+        )
         url = template.replace("{env}", self.env_name)
         if url.startswith(("postgres://", "postgresql://")) and "schema=" not in url:
             # One shared Postgres database, one schema per environment (see ``data_schema``).
@@ -116,9 +118,7 @@ class EnvironmentState:
         return table
 
     async def source(self) -> DataSource:
-        return await self.platform.sources.get(
-            self.database_url(), alias=self.env_name
-        )
+        return await self.platform.sources.get(self.database_url(), alias=self.env_name)
 
     def spec(self, name: str) -> ResourceSpec:
         spec = self.specs.get(name)
@@ -128,7 +128,9 @@ class EnvironmentState:
 
     async def store(self, name: str) -> ResourceStore:
         spec = self.spec(name)
-        return ResourceStore(await self.source(), replace(spec, table=self.database_table(spec.table)))
+        return ResourceStore(
+            await self.source(), replace(spec, table=self.database_table(spec.table))
+        )
 
     # ── compiled API ─────────────────────────────────────────────────────
 

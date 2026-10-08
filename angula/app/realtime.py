@@ -183,9 +183,7 @@ class Realtime:
             payload = await self.api.get(f"/internal/v1/environments/{env}/realtime")
         except ServiceError as exc:
             if exc.status == 404:
-                raise HTTPException(
-                    status_code=404, detail=f"no environment {env!r}"
-                ) from exc
+                raise HTTPException(status_code=404, detail=f"no environment {env!r}") from exc
             raise
         await self.cache.set(key, payload, ttl=self.settings.config_ttl)
         return self._build_config(payload)
@@ -378,9 +376,7 @@ class Realtime:
         connection.channels.setdefault(channel, {})
 
     async def leave(self, connection: Connection, channel: str) -> None:
-        await self.hub.leave(
-            connection.peer, room_name(connection.env, channel)
-        )
+        await self.hub.leave(connection.peer, room_name(connection.env, channel))
         if connection.channels.pop(channel, None) is not None:
             await self.untrack(connection, channel)
 
@@ -390,9 +386,7 @@ class Realtime:
         self.connections.pop(str(connection.peer.id), None)
         await self.hub.disconnect(connection.peer)
 
-    async def history(
-        self, env: str, channel: str, limit: int = 50
-    ) -> list[dict[str, Any]]:
+    async def history(self, env: str, channel: str, limit: int = 50) -> list[dict[str, Any]]:
         envelopes = await self.hub.history(room_name(env, channel), limit=limit)
         return [
             {**envelope.payload, "seq": envelope.seq}

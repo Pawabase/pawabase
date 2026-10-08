@@ -132,9 +132,7 @@ async def export_environment(
             definitions[path] = [_body(kind, row) for row in rows]
 
     try:
-        roles_page = await platform.akountz.get(
-            f"/admin/v1/envs/{environment.name}/roles"
-        )
+        roles_page = await platform.akountz.get(f"/admin/v1/envs/{environment.name}/roles")
         roles = [
             {
                 "name": role["name"],
@@ -168,8 +166,14 @@ async def export_environment(
         "source": {"env": environment.name, "definitions_version": environment.version},
         "definitions": definitions,
         "roles": roles,
-        "auth": {key: (environment.auth or {})[key] for key in AUTH_KEYS if key in (environment.auth or {})},
-        "settings": {k: v for k, v in (environment.settings or {}).items() if k not in SETTINGS_SKIP},
+        "auth": {
+            key: (environment.auth or {})[key]
+            for key in AUTH_KEYS
+            if key in (environment.auth or {})
+        },
+        "settings": {
+            k: v for k, v in (environment.settings or {}).items() if k not in SETTINGS_SKIP
+        },
         "data": data,
     }
 
@@ -317,9 +321,7 @@ async def apply(
     return report
 
 
-async def _load_data(
-    platform: Platform, environment: Environment, blueprint: Blueprint
-) -> None:
+async def _load_data(platform: Platform, environment: Environment, blueprint: Blueprint) -> None:
     """Insert sample rows as they were exported, ids included, without events."""
     state = await platform.state(environment.name)
     for name, rows in blueprint.data.items():

@@ -185,7 +185,9 @@ def register_routes(
 
     async def environment_openapi(ctx: HttpContext, env: str) -> dict[str, Any]:
         document = await call(ctx, "GET", f"/envs/{env}/openapi")
-        document["servers"] = [{"url": settings.public_gateway_url, "description": f"Gateway · {env}"}]
+        document["servers"] = [
+            {"url": settings.public_gateway_url, "description": f"Gateway · {env}"}
+        ]
         return document
 
     @app.get("/envs/{env}/api-docs/openapi.json", exclude_from_schema=True)
@@ -278,7 +280,9 @@ def register_routes(
             workers = None
         for kind, label in (("worker", "Worker"), ("scheduler", "Scheduler")):
             if workers is None:
-                services.append({"name": label, "status": "unknown", "detail": "the API is unreachable"})
+                services.append(
+                    {"name": label, "status": "unknown", "detail": "the API is unreachable"}
+                )
                 continue
             # Heartbeats of processes that exited long ago stay in the table;
             # only processes seen recently say anything about health now.
@@ -288,7 +292,9 @@ def register_routes(
                 {
                     "name": label,
                     "status": "up" if alive else ("down" if mine else "unknown"),
-                    "detail": f"{len(alive)} running" if alive else ("stopped" if mine else "not running"),
+                    "detail": f"{len(alive)} running"
+                    if alive
+                    else ("stopped" if mine else "not running"),
                 }
             )
         return JSONResponse({"services": services, "checked_at": time.time()})
@@ -310,7 +316,9 @@ def register_routes(
     # for this environment a few seconds ago.
 
     angula_ws_base = (
-        settings.angula_url.replace("https://", "wss://", 1).replace("http://", "ws://", 1).rstrip("/")
+        settings.angula_url.replace("https://", "wss://", 1)
+        .replace("http://", "ws://", 1)
+        .rstrip("/")
         + "/realtime/v1/socket"
     )
 
@@ -319,12 +327,16 @@ def register_routes(
     @app.get("/envs/{env}/realtime/ticket", exclude_from_schema=True)
     async def realtime_ticket(ctx: HttpContext, env: str):
         context = PlatformContext(env=env, role="anon", key_id=TICKET)
-        return JSONResponse({"ticket": issue_context_token(settings.internal_secret, context, ttl=20)})
+        return JSONResponse(
+            {"ticket": issue_context_token(settings.internal_secret, context, ttl=20)}
+        )
 
     @app.ws_route("/studio/ws/realtime")
     async def realtime_console(ws: WebSocketContext):
         try:
-            context = verify_context_token(ws.query_params.get("ticket") or "", settings.internal_secret)
+            context = verify_context_token(
+                ws.query_params.get("ticket") or "", settings.internal_secret
+            )
         except TokenInvalid:
             await ws.close(code=4001, reason="invalid ticket")
             return
@@ -336,7 +348,10 @@ def register_routes(
         header = issue_context_token(settings.internal_secret, service_context, ttl=60)
         try:
             remote = await websockets.connect(
-                angula_ws_base, additional_headers={CONTEXT_HEADER: header}, open_timeout=10, max_size=2**20
+                angula_ws_base,
+                additional_headers={CONTEXT_HEADER: header},
+                open_timeout=10,
+                max_size=2**20,
             )
         except Exception:
             await ws.close(code=1011, reason="could not reach the realtime service")

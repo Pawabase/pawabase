@@ -63,9 +63,7 @@ class Harness:
     api: FakeApi
     akountz: Any
 
-    def headers(
-        self, env: str = "development", token: str | None = None
-    ) -> dict[str, str]:
+    def headers(self, env: str = "development", token: str | None = None) -> dict[str, str]:
         from pawabase_core.context import CONTEXT_HEADER, PlatformContext
         from pawabase_core.tokens import issue_context_token
 

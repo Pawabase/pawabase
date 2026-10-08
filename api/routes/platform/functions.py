@@ -29,25 +29,36 @@ from routes.common import MANAGE, NAME_PATTERN, actor, audit, dump, get_environm
 def _manage_scope(ctx: HttpContext) -> None:
     context = current_context(ctx)
     if context is not None and context.is_service and not context.allows_scope("functions:manage"):
-        raise HTTPException(status_code=403, detail="This API key lacks the 'functions:manage' scope")
+        raise HTTPException(
+            status_code=403, detail="This API key lacks the 'functions:manage' scope"
+        )
 
 
 class DeployBody(BaseModel):
     archive: str = Field(description="base64 encoded .tar.gz source bundle")
-    branch: str = Field(default=MAIN, pattern=NAME_PATTERN, description="The branch these functions belong to")
-    manifest: dict[str, Any] = Field(default_factory=dict, description="Facts about the build: git commit, kit version, the functions found locally")
+    branch: str = Field(
+        default=MAIN, pattern=NAME_PATTERN, description="The branch these functions belong to"
+    )
+    manifest: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Facts about the build: git commit, kit version, the functions found locally",
+    )
     runtime: str = Field(default="python3.11", max_length=64)
     limits: dict[str, Any] = Field(default_factory=dict)
 
 
 def _problem(error: DeploymentError) -> HTTPException:
-    return HTTPException(status_code=error.status, detail={"message": error.message, "problems": error.problems})
+    return HTTPException(
+        status_code=error.status, detail={"message": error.message, "problems": error.problems}
+    )
 
 
 def register(r: Router, platform: Platform) -> None:
     base = "/envs/{env}"
 
-    async def activate(env: str, deployment: FunctionDeployment, raw: bytes | None) -> FunctionDeployment:
+    async def activate(
+        env: str, deployment: FunctionDeployment, raw: bytes | None
+    ) -> FunctionDeployment:
         """Install (or re-install) *deployment*'s artifact and make it the only active one on its branch."""
         try:
             # Libraries are installed off the event loop (it can take a while); activating then finds them already there.
@@ -60,13 +71,32 @@ def register(r: Router, platform: Platform) -> None:
             if raw is None:
                 code = platform.deployments.reactivate(env, deployment.branch, deployment.id)
             else:
-                code = platform.deployments.install(env, deployment.branch, raw, deployment_id=deployment.id, checksum=deployment.checksum)
+                code = platform.deployments.install(
+                    env,
+                    deployment.branch,
+                    raw,
+                    deployment_id=deployment.id,
+                    checksum=deployment.checksum,
+                )
         except DeploymentError as exc:
-            deployment.status, deployment.error = "failed", "; ".join([exc.message, *exc.problems])[:2000]
+            deployment.status, deployment.error = (
+                "failed",
+                "; ".join([exc.message, *exc.problems])[:2000],
+            )
             await deployment.save(update_fields=["status", "error"])
             raise _problem(exc) from exc
-        await FunctionDeployment.filter(environment_id=deployment.environment_id, branch=deployment.branch, status="active").exclude(id=deployment.id).update(status="superseded")
-        deployment.status, deployment.error, deployment.activated_at = "active", "", datetime.now(UTC)
+        await (
+            FunctionDeployment.filter(
+                environment_id=deployment.environment_id, branch=deployment.branch, status="active"
+            )
+            .exclude(id=deployment.id)
+            .update(status="superseded")
+        )
+        deployment.status, deployment.error, deployment.activated_at = (
+            "active",
+            "",
+            datetime.now(UTC),
+        )
         deployment.manifest = {**(deployment.manifest or {}), "functions": code.functions}
         await deployment.save(update_fields=["status", "error", "activated_at", "manifest"])
         platform.envs.forget(env)
@@ -82,7 +112,9 @@ def register(r: Router, platform: Platform) -> None:
             query = query.filter(branch=branch)
         return {"data": [dump(row) for row in await query.offset(offset).limit(limit)]}
 
-    @r.post(f"{base}/function-deployments", auth=MANAGE, tags=["functions"], request_model=DeployBody)
+    @r.post(
+        f"{base}/function-deployments", auth=MANAGE, tags=["functions"], request_model=DeployBody
+    )
     async def deploy(ctx: HttpContext, env: str, body: DeployBody):
         _manage_scope(ctx)
         environment = await get_environment(env)
@@ -93,13 +125,27 @@ def register(r: Router, platform: Platform) -> None:
         if len(raw) > platform.settings.max_upload_bytes:
             raise HTTPException(status_code=413, detail="archive exceeds the upload limit")
         deployment = await FunctionDeployment.create(
-            id=new_ulid(), environment=environment, branch=body.branch, checksum=hashlib.sha256(raw).hexdigest(),
-            runtime=body.runtime, manifest=body.manifest, limits=body.limits, created_by=actor(ctx),
+            id=new_ulid(),
+            environment=environment,
+            branch=body.branch,
+            checksum=hashlib.sha256(raw).hexdigest(),
+            runtime=body.runtime,
+            manifest=body.manifest,
+            limits=body.limits,
+            created_by=actor(ctx),
         )
         await activate(env, deployment, raw)
-        await audit(ctx, "function.deployed", env=env, target=deployment.id, details={"checksum": deployment.checksum, "branch": body.branch})
+        await audit(
+            ctx,
+            "function.deployed",
+            env=env,
+            target=deployment.id,
+            details={"checksum": deployment.checksum, "branch": body.branch},
+        )
         specs = platform.function_specs(env, body.branch)
-        return created({"deployment": dump(deployment), "functions": [spec.describe() for spec in specs]})
+        return created(
+            {"deployment": dump(deployment), "functions": [spec.describe() for spec in specs]}
+        )
 
     @r.get(f"{base}/function-deployments/{{deployment_id}}", auth=MANAGE, tags=["functions"])
     async def deployment(ctx: HttpContext, env: str, deployment_id: str):
@@ -110,7 +156,9 @@ def register(r: Router, platform: Platform) -> None:
             raise HTTPException(status_code=404, detail="no such function deployment")
         return dump(row)
 
-    @r.post(f"{base}/function-deployments/{{deployment_id}}/activate", auth=MANAGE, tags=["functions"])
+    @r.post(
+        f"{base}/function-deployments/{{deployment_id}}/activate", auth=MANAGE, tags=["functions"]
+    )
     async def reactivate(ctx: HttpContext, env: str, deployment_id: str):
         """Roll back (or forward) to a deployment whose artifact is still stored."""
         _manage_scope(ctx)
@@ -119,8 +167,13 @@ def register(r: Router, platform: Platform) -> None:
         if row is None or row.status == "removed":
             raise HTTPException(status_code=404, detail="no such function deployment")
         await activate(env, row, None)
-        await audit(ctx, "function.activated", env=env, target=row.id, details={"branch": row.branch})
-        return {"deployment": dump(row), "functions": [spec.describe() for spec in platform.function_specs(env, row.branch)]}
+        await audit(
+            ctx, "function.activated", env=env, target=row.id, details={"branch": row.branch}
+        )
+        return {
+            "deployment": dump(row),
+            "functions": [spec.describe() for spec in platform.function_specs(env, row.branch)],
+        }
 
     @r.delete(f"{base}/function-deployments/{{deployment_id}}", auth=MANAGE, tags=["functions"])
     async def remove(ctx: HttpContext, env: str, deployment_id: str):
@@ -149,7 +202,14 @@ def register(r: Router, platform: Platform) -> None:
             if stamp is None and name == MAIN:
                 continue
             functions = platform.function_specs(env, name)
-            out.append({"branch": name, "deployment_id": (stamp or {}).get("id"), "checksum": (stamp or {}).get("checksum"), "functions": [spec.name for spec in functions]})
+            out.append(
+                {
+                    "branch": name,
+                    "deployment_id": (stamp or {}).get("id"),
+                    "checksum": (stamp or {}).get("checksum"),
+                    "functions": [spec.name for spec in functions],
+                }
+            )
         return {"data": out}
 
     @r.delete(f"{base}/function-branches/{{branch}}", auth=MANAGE, tags=["functions"])
@@ -163,7 +223,11 @@ def register(r: Router, platform: Platform) -> None:
             raise _problem(exc) from exc
         if not removed:
             raise HTTPException(status_code=404, detail="that branch has no deployed functions")
-        await FunctionDeployment.filter(environment=environment, branch=branch).exclude(status="removed").update(status="removed", removed_at=datetime.now(UTC))
+        await (
+            FunctionDeployment.filter(environment=environment, branch=branch)
+            .exclude(status="removed")
+            .update(status="removed", removed_at=datetime.now(UTC))
+        )
         await audit(ctx, "function.branch_removed", env=env, target=branch)
         return {"removed": True}
 
@@ -178,9 +242,15 @@ def register(r: Router, platform: Platform) -> None:
             query = query.filter(branch=branch)
         if status := ctx.query_params.get("status"):
             query = query.filter(status=status)
-        if after := ctx.query_params.get("after"):  # a follow loop asks only for what is newer than the last row it saw
+        if after := ctx.query_params.get(
+            "after"
+        ):  # a follow loop asks only for what is newer than the last row it saw
             query = query.filter(created_at__gt=datetime.fromisoformat(after))
-        return {"data": [dump(row, exclude=("logs",)) for row in await query.offset(offset).limit(limit)]}
+        return {
+            "data": [
+                dump(row, exclude=("logs",)) for row in await query.offset(offset).limit(limit)
+            ]
+        }
 
     @r.get(f"{base}/function-runs/{{run_id}}", auth=MANAGE, tags=["functions"])
     async def run(ctx: HttpContext, env: str, run_id: str):

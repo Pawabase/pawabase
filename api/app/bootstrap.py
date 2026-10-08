@@ -67,7 +67,9 @@ def create_app(
     )
     app.state["platform"] = platform
     platform.app = app
-    rollup = RequestRollup(retention_days=settings.request_retention_days).attach(app.state["pawabase.telemetry"])
+    rollup = RequestRollup(retention_days=settings.request_retention_days).attach(
+        app.state["pawabase.telemetry"]
+    )
     app.state["request_rollup"] = rollup
 
     @app.on_startup

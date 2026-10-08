@@ -16,7 +16,17 @@ import urllib.request
 from urllib.parse import urlsplit, urlunsplit
 
 PYTHON = sys.executable
-UVICORN = [PYTHON, "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--proxy-headers", "--forwarded-allow-ips", "*"]
+UVICORN = [
+    PYTHON,
+    "-m",
+    "uvicorn",
+    "app.main:app",
+    "--host",
+    "0.0.0.0",
+    "--proxy-headers",
+    "--forwarded-allow-ips",
+    "*",
+]
 #: (name, working directory, command, port): started in this order, the API first and alone.
 SERVICES = [
     ("api", "/app/api", [*UVICORN, "--port", "8001"], 8001),
@@ -44,15 +54,21 @@ def environment_for(name: str, base: dict[str, str]) -> dict[str, str]:
     env.setdefault("PAWABASE_STUDIO_URL", "http://127.0.0.1:8090")
     url = base.get("PAWABASE_DATABASE_URL", "")
     if name == "akountz" and url.startswith(("postgres://", "postgresql://")):
-        env["PAWABASE_DATABASE_URL"] = base.get("PAWABASE_AKOUNTZ_DATABASE_URL") or database_url_for(url, "akountz")
+        env["PAWABASE_DATABASE_URL"] = base.get(
+            "PAWABASE_AKOUNTZ_DATABASE_URL"
+        ) or database_url_for(url, "akountz")
     return env
 
 
-async def wait_healthy(port: int, process: asyncio.subprocess.Process, timeout: float = 120) -> bool:
+async def wait_healthy(
+    port: int, process: asyncio.subprocess.Process, timeout: float = 120
+) -> bool:
     deadline = asyncio.get_running_loop().time() + timeout
     while asyncio.get_running_loop().time() < deadline and process.returncode is None:
         try:
-            await asyncio.to_thread(urllib.request.urlopen, f"http://127.0.0.1:{port}/health", None, 3)
+            await asyncio.to_thread(
+                urllib.request.urlopen, f"http://127.0.0.1:{port}/health", None, 3
+            )
             return True
         except (urllib.error.URLError, OSError):
             await asyncio.sleep(1)
@@ -71,7 +87,9 @@ async def main() -> int:
         asyncio.get_running_loop().add_signal_handler(sig, stop)
 
     async def start(name: str, cwd: str, command: list[str]) -> asyncio.subprocess.Process:
-        process = await asyncio.create_subprocess_exec(*command, cwd=cwd, env=environment_for(name, base))
+        process = await asyncio.create_subprocess_exec(
+            *command, cwd=cwd, env=environment_for(name, base)
+        )
         processes[name] = process
         return process
 

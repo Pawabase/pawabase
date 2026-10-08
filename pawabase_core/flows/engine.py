@@ -118,8 +118,8 @@ def observable(value: Any, *, depth: int = 0) -> Any:
         items = list(value.items())
         for key, item in items[:TRACE_COLLECTION_LIMIT]:
             name = str(key)
-            result[name] = "[redacted]" if SENSITIVE_KEY.search(name) else observable(
-                item, depth=depth + 1
+            result[name] = (
+                "[redacted]" if SENSITIVE_KEY.search(name) else observable(item, depth=depth + 1)
             )
         if len(items) > TRACE_COLLECTION_LIMIT:
             result["…"] = f"{len(items) - TRACE_COLLECTION_LIMIT} more fields"

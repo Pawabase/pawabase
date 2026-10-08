@@ -135,7 +135,9 @@ async def test_call_flow_returns_the_child_result():
     flow = {
         "nodes": [
             node("start", "trigger.manual"),
-            node("child", "flow.call", flow="calculate_tax", input={"amount": "{{ input.amount }}"}),
+            node(
+                "child", "flow.call", flow="calculate_tax", input={"amount": "{{ input.amount }}"}
+            ),
         ],
         "edges": [edge("start", "child")],
     }
@@ -247,7 +249,10 @@ async def test_summarize_list_supports_aggregates_and_groups():
             ),
         ],
         "edges": [
-            edge("start", "count"), edge("count", "totals"), edge("totals", "median"), edge("median", "distinct")
+            edge("start", "count"),
+            edge("count", "totals"),
+            edge("totals", "median"),
+            edge("median", "distinct"),
         ],
     }
     run = await run_flow(
@@ -274,11 +279,19 @@ async def test_list_and_object_transforms():
             node("start", "trigger.manual"),
             node("unique", "transform.unique", value="{{ input.items }}", field="email"),
             node("slice", "transform.slice", value="{{ steps.unique.output }}", offset=1, limit=1),
-            node("rename", "transform.rename", value="{{ steps.slice.output }}", fields={"name": "full_name"}),
+            node(
+                "rename",
+                "transform.rename",
+                value="{{ steps.slice.output }}",
+                fields={"name": "full_name"},
+            ),
             node("flatten", "transform.flatten", value="{{ input.nested }}", depth=2),
         ],
         "edges": [
-            edge("start", "unique"), edge("unique", "slice"), edge("slice", "rename"), edge("rename", "flatten")
+            edge("start", "unique"),
+            edge("unique", "slice"),
+            edge("slice", "rename"),
+            edge("rename", "flatten"),
         ],
     }
     run = await run_flow(
@@ -297,7 +310,9 @@ async def test_list_and_object_transforms():
         {"email": "a@example.com", "name": "Ada"},
         {"email": "b@example.com", "name": "Bea"},
     ]
-    assert run.state["steps"]["rename"]["output"] == [{"email": "b@example.com", "full_name": "Bea"}]
+    assert run.state["steps"]["rename"]["output"] == [
+        {"email": "b@example.com", "full_name": "Bea"}
+    ]
     assert run.state["steps"]["flatten"]["output"] == [1, 2, 3, 4, 5]
 
 

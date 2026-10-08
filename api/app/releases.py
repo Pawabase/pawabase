@@ -184,7 +184,11 @@ async def apply_snapshot(environment: Environment, snapshot: dict[str, Any]) -> 
     for kind, (model, columns) in DEFINITIONS.items():
         await model.filter(environment_id=environment.id).delete()
         for source in definitions.get(kind, []):
-            values = {key: _json_value(source.get(key)) for key in columns if key != "id" and key in source}
+            values = {
+                key: _json_value(source.get(key))
+                for key in columns
+                if key != "id" and key in source
+            }
             await model.create(environment=environment, **values)
 
 

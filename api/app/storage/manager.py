@@ -86,9 +86,7 @@ class StorageManager:
         signer = self._signers.get(key)
         if signer is None:
             secret = f"{self.platform.settings.internal_secret}:storage:{state.env_name}"
-            signer = self._signers[key] = Signer(
-                secret, f"{state.env_name}/{bucket}"
-            )
+            signer = self._signers[key] = Signer(secret, f"{state.env_name}/{bucket}")
         return signer
 
     def driver(self, state: EnvironmentState, bucket: str) -> Any:
@@ -103,9 +101,7 @@ class StorageManager:
             driver = MemoryDriver()
         elif kind == "s3":
             base_prefix = str(config.get("prefix") or "").strip("/")
-            prefix = "/".join(
-                part for part in (base_prefix, state.env_name, bucket) if part
-            )
+            prefix = "/".join(part for part in (base_prefix, state.env_name, bucket) if part)
             driver = S3Driver(
                 bucket=config.get("bucket", ""),
                 endpoint=config.get("endpoint", ""),
@@ -200,7 +196,11 @@ class StorageManager:
         driver = self.driver(state, name)
         # Sillo buckets name themselves in storage events; keep the Pawabase name.
         return Bucket(
-            name, driver, policy=policy, max_bytes=max_bytes, accepts=MimePatterns(model.accepts or ())
+            name,
+            driver,
+            policy=policy,
+            max_bytes=max_bytes,
+            accepts=MimePatterns(model.accepts or ()),
         )
 
     async def close(self) -> None:

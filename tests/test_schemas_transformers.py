@@ -97,8 +97,16 @@ async def test_transformers():
 def test_array_items_can_be_unnamed_objects():
     model = compile_model(
         "Sale",
-        [{"name": "lines", "type": "array", "items": {"type": "object", "fields": [
-            {"name": "variant_id", "type": "integer", "required": True}]}}],
+        [
+            {
+                "name": "lines",
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "fields": [{"name": "variant_id", "type": "integer", "required": True}],
+                },
+            }
+        ],
     )
     sale = model(lines=[{"variant_id": 3}])
     assert sale.lines[0].variant_id == 3

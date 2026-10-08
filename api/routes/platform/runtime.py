@@ -40,15 +40,52 @@ TRANSACTION_SECONDS = 60
 MAX_OPEN_TRANSACTIONS = 16
 
 #: What a remote caller may do. ``http_request`` is absent on purpose: the emulator makes outbound requests from the developer's own machine.
-METHODS = frozenset({
-    "resource_list", "resource_get", "resource_create", "resource_update", "resource_delete",
-    "db_query", "db_transaction",
-    "cache_get", "cache_set", "cache_delete", "cache_invalidate",
-    "emit", "dispatch_flow", "call_flow", "dispatch_function", "publish",
-    "storage_put", "storage_read", "storage_signed_url", "storage_delete",
-    "send_mail", "webhook_send", "secret", "call_function", "identity_user", "check_policy", "log", "metric",
-})
-DB_OPS = frozenset({"fetch", "one", "scalar", "execute", "insert", "update", "delete", "begin", "commit", "rollback"})
+METHODS = frozenset(
+    {
+        "resource_list",
+        "resource_get",
+        "resource_create",
+        "resource_update",
+        "resource_delete",
+        "db_query",
+        "db_transaction",
+        "cache_get",
+        "cache_set",
+        "cache_delete",
+        "cache_invalidate",
+        "emit",
+        "dispatch_flow",
+        "call_flow",
+        "dispatch_function",
+        "publish",
+        "storage_put",
+        "storage_read",
+        "storage_signed_url",
+        "storage_delete",
+        "send_mail",
+        "webhook_send",
+        "secret",
+        "call_function",
+        "identity_user",
+        "check_policy",
+        "log",
+        "metric",
+    }
+)
+DB_OPS = frozenset(
+    {
+        "fetch",
+        "one",
+        "scalar",
+        "execute",
+        "insert",
+        "update",
+        "delete",
+        "begin",
+        "commit",
+        "rollback",
+    }
+)
 
 
 class CallBody(BaseModel):
@@ -60,7 +97,9 @@ class CallBody(BaseModel):
 
 
 class IdentifyBody(BaseModel):
-    token: str | None = Field(default=None, description="A user's access token, or nothing for an anonymous caller")
+    token: str | None = Field(
+        default=None, description="A user's access token, or nothing for an anonymous caller"
+    )
 
 
 class DbBody(BaseModel):
@@ -82,10 +121,39 @@ def _scope(ctx: HttpContext) -> None:
 
 def _failure(exc: Exception) -> Any:
     if isinstance(exc, FlowError):
-        return json_response({"error": {"code": exc.code, "message": exc.message, "status": exc.status, "details": encode(exc.details)}}, status_code=exc.status)
+        return json_response(
+            {
+                "error": {
+                    "code": exc.code,
+                    "message": exc.message,
+                    "status": exc.status,
+                    "details": encode(exc.details),
+                }
+            },
+            status_code=exc.status,
+        )
     if isinstance(exc, FunctionError):
-        return json_response({"error": {"code": exc.code, "message": exc.message, "status": exc.status, "details": encode(exc.details)}}, status_code=exc.status)
-    return json_response({"error": {"code": "runtime_error", "message": f"{type(exc).__name__}: {exc}", "status": 500}}, status_code=500)
+        return json_response(
+            {
+                "error": {
+                    "code": exc.code,
+                    "message": exc.message,
+                    "status": exc.status,
+                    "details": encode(exc.details),
+                }
+            },
+            status_code=exc.status,
+        )
+    return json_response(
+        {
+            "error": {
+                "code": "runtime_error",
+                "message": f"{type(exc).__name__}: {exc}",
+                "status": 500,
+            }
+        },
+        status_code=500,
+    )
 
 
 class _Rollback(Exception):
@@ -169,7 +237,11 @@ class _Transactions:
     def get(self, tx: str) -> _Held:
         held = self.open.get(tx)
         if held is None:
-            raise FlowError("That transaction is not open (it ended, timed out, or belongs to another process).", status=409, code="no_transaction")
+            raise FlowError(
+                "That transaction is not open (it ended, timed out, or belongs to another process).",
+                status=409,
+                code="no_transaction",
+            )
         return held
 
     async def finish(self, tx: str, *, commit: bool) -> None:
@@ -196,32 +268,64 @@ def register(r: Router, platform: Platform) -> None:
     base = "/envs/{env}/runtime"
     transactions = _Transactions()
 
-    async def runtime_for(ctx: HttpContext, env: str, as_user: dict[str, Any] | None, branch: str | None) -> ApiRuntime:
+    async def runtime_for(
+        ctx: HttpContext, env: str, as_user: dict[str, Any] | None, branch: str | None
+    ) -> ApiRuntime:
         _scope(ctx)
         await get_environment(env)
         state = await platform.state(env)
-        auth = as_user or {"authenticated": True, "kind": "service", "user_id": "pawabase-cli", "roles": ["service"]}
-        return ApiRuntime(platform, state, auth=auth, request_id=ctx.headers.get("x-request-id"), branch=branch)
+        auth = as_user or {
+            "authenticated": True,
+            "kind": "service",
+            "user_id": "pawabase-cli",
+            "roles": ["service"],
+        }
+        return ApiRuntime(
+            platform, state, auth=auth, request_id=ctx.headers.get("x-request-id"), branch=branch
+        )
 
-    @r.post(f"{base}/call", auth=MANAGE, tags=["runtime"], request_model=CallBody, summary="Call one runtime capability")
+    @r.post(
+        f"{base}/call",
+        auth=MANAGE,
+        tags=["runtime"],
+        request_model=CallBody,
+        summary="Call one runtime capability",
+    )
     async def call(ctx: HttpContext, env: str, body: CallBody):
         if body.method not in METHODS:
             raise HTTPException(status_code=404, detail=f"{body.method!r} is not a runtime method")
         if body.method == "secret":
             # Reading a secret's value is a step beyond using the runtime: a key meant for emulating need not be able to read every secret.
             context = current_context(ctx)
-            if context is not None and context.is_service and not context.allows_scope("secrets:read"):
-                raise HTTPException(status_code=403, detail="This API key lacks the 'secrets:read' scope")
+            if (
+                context is not None
+                and context.is_service
+                and not context.allows_scope("secrets:read")
+            ):
+                raise HTTPException(
+                    status_code=403, detail="This API key lacks the 'secrets:read' scope"
+                )
         runtime = await runtime_for(ctx, env, body.as_user, body.branch)
         try:
             result = await getattr(runtime, body.method)(*decode(body.args), **decode(body.kwargs))
         except Exception as exc:  # noqa: BLE001 - the caller gets the failure, typed
             return _failure(exc)
         if body.method == "secret":
-            await audit(ctx, "runtime.secret_read", env=env, target=str(body.args[0] if body.args else ""))
-        return {"result": encode(result), "logs": runtime.logs[-20:] if body.method == "log" else []}
+            await audit(
+                ctx, "runtime.secret_read", env=env, target=str(body.args[0] if body.args else "")
+            )
+        return {
+            "result": encode(result),
+            "logs": runtime.logs[-20:] if body.method == "log" else [],
+        }
 
-    @r.post(f"{base}/identify", auth=MANAGE, tags=["runtime"], request_model=IdentifyBody, summary="Who a user access token belongs to")
+    @r.post(
+        f"{base}/identify",
+        auth=MANAGE,
+        tags=["runtime"],
+        request_model=IdentifyBody,
+        summary="Who a user access token belongs to",
+    )
     async def identify(ctx: HttpContext, env: str, body: IdentifyBody):
         """Verify a user's access token *here* (the platform holds the signing secret) and return the ``auth`` context policies and functions see.
 
@@ -238,7 +342,13 @@ def register(r: Router, platform: Platform) -> None:
             return {"auth": dict(ANONYMOUS_POLICY_CONTEXT), "reason": "invalid_token"}
         return {"auth": Principal("user", claims).as_policy_context()}
 
-    @r.post(f"{base}/db", auth=MANAGE, tags=["runtime"], request_model=DbBody, summary="Run SQL, optionally inside a transaction")
+    @r.post(
+        f"{base}/db",
+        auth=MANAGE,
+        tags=["runtime"],
+        request_model=DbBody,
+        summary="Run SQL, optionally inside a transaction",
+    )
     async def db(ctx: HttpContext, env: str, body: DbBody):
         if body.op not in DB_OPS:
             raise HTTPException(status_code=422, detail=f"{body.op!r} is not a database operation")
@@ -263,10 +373,14 @@ def register(r: Router, platform: Platform) -> None:
                 if body.op == "insert":
                     return await session.insert(body.table or "", decode(body.data or {}))
                 if body.op == "update":
-                    return await session.update(body.table or "", decode(body.id), decode(body.data or {}))
+                    return await session.update(
+                        body.table or "", decode(body.id), decode(body.data or {})
+                    )
                 return await session.delete(body.table or "", decode(body.id))
 
-            result = await (transactions.get(body.tx).run(work) if body.tx else work(await runtime.db()))
+            result = await (
+                transactions.get(body.tx).run(work) if body.tx else work(await runtime.db())
+            )
         except Exception as exc:  # noqa: BLE001
             return _failure(exc)
         return {"result": encode(result)}

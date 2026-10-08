@@ -128,7 +128,17 @@ async def test_the_single_runtime_migration_refuses_users_of_the_old_layout(tmp_
     async with manager:
         await migrate(manager, target=ULID)
     db = sqlite3.connect(path)
-    insert(db, "akz_users", id=legacy_ulid(7), project="acme", env="development", email="ada@example.com", username="ada", password="x", is_active=1)
+    insert(
+        db,
+        "akz_users",
+        id=legacy_ulid(7),
+        project="acme",
+        env="development",
+        email="ada@example.com",
+        username="ada",
+        password="x",
+        is_active=1,
+    )
     db.commit()
     db.close()
     manager, _ = manager_for(tmp_path, "old.db")
@@ -152,7 +162,9 @@ async def test_postgres_drops_the_studio_operators_and_keeps_an_empty_runtime_us
 
     server = os.environ.get("PAWABASE_TEST_POSTGRES_URL")
     if not server:
-        pytest.skip("set PAWABASE_TEST_POSTGRES_URL to run the migrations against a real PostgreSQL")
+        pytest.skip(
+            "set PAWABASE_TEST_POSTGRES_URL to run the migrations against a real PostgreSQL"
+        )
     name = f"akz_test_{uuid.uuid4().hex[:10]}"
     admin = await asyncpg.connect(server)
     await admin.execute(f'CREATE DATABASE "{name}"')
@@ -177,10 +189,17 @@ async def test_postgres_drops_the_studio_operators_and_keeps_an_empty_runtime_us
             from database.models import AuthUser
 
             assert await AuthUser.all().count() == 0
-            user = await AuthUser.create(env="development", email="a@b.co", username="a", password="x")
+            user = await AuthUser.create(
+                env="development", email="a@b.co", username="a", password="x"
+            )
             assert is_ulid(user.id)
         db = await asyncpg.connect(url)
-        columns = {r["column_name"] for r in await db.fetch("select column_name from information_schema.columns where table_name='akz_users'")}
+        columns = {
+            r["column_name"]
+            for r in await db.fetch(
+                "select column_name from information_schema.columns where table_name='akz_users'"
+            )
+        }
         await db.close()
         assert "env" in columns and "project" not in columns
     finally:

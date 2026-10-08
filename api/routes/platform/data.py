@@ -147,9 +147,7 @@ def register(r: Router, platform: Platform) -> None:
         # Studio reads the docs whether or not ``public_docs`` publishes them
         # at /docs/v1; that setting only decides what anonymous callers see.
         version = ctx.query_params.get("version", "v1")
-        state = await platform.state_for_version(
-            PlatformContext(env=env, role="service"), version
-        )
+        state = await platform.state_for_version(PlatformContext(env=env, role="service"), version)
         spec = json.loads((await state.compiled()).build_openapi(f"/rest/{version}"))
         return add_apikey_security(spec)
 
@@ -161,9 +159,7 @@ def register(r: Router, platform: Platform) -> None:
     )
     async def compiled_routes(ctx: HttpContext, env: str, name: str):
         version = ctx.query_params.get("version", "v1")
-        state = await platform.state_for_version(
-            PlatformContext(env=env, role="service"), version
-        )
+        state = await platform.state_for_version(PlatformContext(env=env, role="service"), version)
         document = json.loads((await state.compiled()).build_openapi(f"/rest/{version}"))
         prefix = f"/rest/{version}/{name}"
         return {
@@ -269,9 +265,7 @@ def register(r: Router, platform: Platform) -> None:
         except Exception as exc:
             raise HTTPException(status_code=400, detail=f"{type(exc).__name__}: {exc}") from exc
         if not read_only:
-            await audit(
-                ctx, "database.write", env=env, details={"sql": body.sql[:2000]}
-            )
+            await audit(ctx, "database.write", env=env, details={"sql": body.sql[:2000]})
             await platform.cache_invalidate(state, [f"resource:{name}" for name in state.specs])
         return result
 

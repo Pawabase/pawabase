@@ -188,7 +188,12 @@ def register(r: Router, platform: Platform) -> None:
             "environments": [environment_view(e) for e in environments],
         }
 
-    @r.get("/usage", auth=MANAGE, tags=["runtime"], summary="Configured runtime limits and management-plane usage")
+    @r.get(
+        "/usage",
+        auth=MANAGE,
+        tags=["runtime"],
+        summary="Configured runtime limits and management-plane usage",
+    )
     async def usage(ctx: HttpContext, env: str | None = None):
         environments = await Environment.all()
         keys = 0
@@ -196,7 +201,10 @@ def register(r: Router, platform: Platform) -> None:
             environment = await get_environment(env)
             keys = await ApiKey.filter(environment=environment, revoked_at=None).count()
         return {
-            "environments": {"used": len(environments), "limit": platform.settings.max_environments},
+            "environments": {
+                "used": len(environments),
+                "limit": platform.settings.max_environments,
+            },
             "api_keys": {"used": keys, "limit": platform.settings.max_api_keys_per_environment},
             "uploads": {"limit": platform.settings.max_upload_bytes},
             "users": {"limit": platform.settings.max_users},

@@ -53,7 +53,9 @@ class VersionUpdate(BaseModel):
 
 
 class ReleaseCreate(BaseModel):
-    revision_id: str = Field(min_length=26, max_length=32)  # a ULID, or a pre-ULID 32-character hex id
+    revision_id: str = Field(
+        min_length=26, max_length=32
+    )  # a ULID, or a pre-ULID 32-character hex id
     api_version: str = Field(pattern=VERSION_PATTERN)
     name: str = Field(min_length=1, max_length=128)
     notes: str = Field(default="", max_length=10000)
@@ -104,24 +106,39 @@ def register(r: Router, platform: Platform) -> None:
         if await Branch.filter(environment=environment, name=body.name).exists():
             raise HTTPException(status_code=409, detail=f"branch {body.name!r} already exists")
         if body.from_revision and body.from_branch:
-            raise HTTPException(status_code=422, detail="choose a revision or branch as the source, not both")
+            raise HTTPException(
+                status_code=422, detail="choose a revision or branch as the source, not both"
+            )
         source = None
         if body.from_revision:
-            source = await DefinitionRevision.get_or_none(id=body.from_revision, environment=environment)
+            source = await DefinitionRevision.get_or_none(
+                id=body.from_revision, environment=environment
+            )
             if source is None:
                 raise HTTPException(status_code=404, detail="the source revision does not exist")
         source_branch = None
         if body.from_branch:
             source_branch = await Branch.get_or_none(environment=environment, name=body.from_branch)
             if source_branch is None:
-                raise HTTPException(status_code=404, detail=f"source branch {body.from_branch!r} does not exist")
+                raise HTTPException(
+                    status_code=404, detail=f"source branch {body.from_branch!r} does not exist"
+                )
         # A new branch starts as an isolated copy. Its subsequent definition
         # edits belong to this snapshot, never to the environment's live tree.
-        draft = dict(source.snapshot) if source else (await _branch_snapshot(environment, source_branch) if source_branch else await snapshot_environment(environment))
+        draft = (
+            dict(source.snapshot)
+            if source
+            else (
+                await _branch_snapshot(environment, source_branch)
+                if source_branch
+                else await snapshot_environment(environment)
+            )
+        )
         branch = await Branch.create(
             environment=environment,
             name=body.name,
-            head_revision_id=body.from_revision or (source_branch.head_revision_id if source_branch else None),
+            head_revision_id=body.from_revision
+            or (source_branch.head_revision_id if source_branch else None),
             draft=draft,
             base_snapshot=dict(draft),
             changes=[],
@@ -139,7 +156,12 @@ def register(r: Router, platform: Platform) -> None:
             raise HTTPException(status_code=404, detail=f"branch {branch_name!r} does not exist")
         return {"branch": dump(branch), "snapshot": await _branch_snapshot(environment, branch)}
 
-    @r.post(prefix + "/branches/{branch_name}/merge", auth=MANAGE, tags=["releases"], request_model=BranchMerge)
+    @r.post(
+        prefix + "/branches/{branch_name}/merge",
+        auth=MANAGE,
+        tags=["releases"],
+        request_model=BranchMerge,
+    )
     async def merge_branch(ctx: HttpContext, env: str, branch_name: str, body: BranchMerge):
         """Merge a feature branch only when its target has not diverged.
 
@@ -153,10 +175,21 @@ def register(r: Router, platform: Platform) -> None:
             raise HTTPException(status_code=404, detail="choose an existing non-main source branch")
         target = await Branch.get_or_none(environment=environment, name=body.target)
         if body.target != "main" and target is None:
-            raise HTTPException(status_code=404, detail=f"target branch {body.target!r} does not exist")
-        current = await snapshot_environment(environment) if body.target == "main" else await _branch_snapshot(environment, target)
-        if not body.force and snapshot_checksum(current) != snapshot_checksum(source.base_snapshot or {}):
-            raise HTTPException(status_code=409, detail="target has changed since this branch was created; resolve or force the merge")
+            raise HTTPException(
+                status_code=404, detail=f"target branch {body.target!r} does not exist"
+            )
+        current = (
+            await snapshot_environment(environment)
+            if body.target == "main"
+            else await _branch_snapshot(environment, target)
+        )
+        if not body.force and snapshot_checksum(current) != snapshot_checksum(
+            source.base_snapshot or {}
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="target has changed since this branch was created; resolve or force the merge",
+            )
         if body.target == "main":
             await apply_snapshot(environment, source.draft)
             platform.envs.forget(env)
@@ -164,9 +197,23 @@ def register(r: Router, platform: Platform) -> None:
             target.draft = dict(source.draft)
             target.base_snapshot = dict(current)
             await target.save(update_fields=["draft", "base_snapshot"])
-        source.changes = [*list(source.changes or []), {"action": "merged", "target": body.target, "actor": actor(ctx), "at": datetime.now(UTC).isoformat()}]
+        source.changes = [
+            *list(source.changes or []),
+            {
+                "action": "merged",
+                "target": body.target,
+                "actor": actor(ctx),
+                "at": datetime.now(UTC).isoformat(),
+            },
+        ]
         await source.save(update_fields=["changes"])
-        await audit(ctx, "branch.merged", env=env, target=branch_name, details={"target": body.target, "force": body.force})
+        await audit(
+            ctx,
+            "branch.merged",
+            env=env,
+            target=branch_name,
+            details={"target": body.target, "force": body.force},
+        )
         return {"source": branch_name, "target": body.target, "merged": True}
 
     @r.get(prefix + "/revisions", auth=MANAGE, tags=["releases"])
@@ -189,9 +236,7 @@ def register(r: Router, platform: Platform) -> None:
         tags=["releases"],
         request_model=RevisionCreate,
     )
-    async def create_revision(
-        ctx: HttpContext, env: str, branch_name: str, body: RevisionCreate
-    ):
+    async def create_revision(ctx: HttpContext, env: str, branch_name: str, body: RevisionCreate):
         environment = await get_environment(env)
         branch = await Branch.get_or_none(environment=environment, name=branch_name)
         if branch is None:
@@ -251,9 +296,7 @@ def register(r: Router, platform: Platform) -> None:
         tags=["releases"],
         request_model=VersionUpdate,
     )
-    async def update_version(
-        ctx: HttpContext, env: str, version_name: str, body: VersionUpdate
-    ):
+    async def update_version(ctx: HttpContext, env: str, version_name: str, body: VersionUpdate):
         environment = await get_environment(env)
         version = await ApiVersion.get_or_none(environment=environment, name=version_name)
         if version is None:
@@ -269,9 +312,7 @@ def register(r: Router, platform: Platform) -> None:
             setattr(version, key, value)
         await version.save()
         platform.envs.forget(env)
-        await audit(
-            ctx, "api_version.updated", env=env, target=version_name, details=values
-        )
+        await audit(ctx, "api_version.updated", env=env, target=version_name, details=values)
         return dump(version)
 
     @r.get(prefix + "/releases", auth=MANAGE, tags=["releases"])
@@ -319,9 +360,7 @@ def register(r: Router, platform: Platform) -> None:
         await audit(ctx, "release.created", env=env, target=release.id, details=report)
         return created(dump(release))
 
-    async def activate_release(
-        ctx: HttpContext, env: str, release: Release, *, action: str
-    ):
+    async def activate_release(ctx: HttpContext, env: str, release: Release, *, action: str):
         environment = await get_environment(env)
         revision = await DefinitionRevision.get_or_none(
             id=release.revision_id, environment=environment

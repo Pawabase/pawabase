@@ -218,9 +218,9 @@ async def test_custom_route_flow_and_event_consumer(acme):
     assert metrics and metrics[0]["value"] == 1
 
     request_id = paid.headers["x-request-id"]
-    request_rows = (
-        await api.studio.get(f"{ENV}/requests", params={"request_id": request_id})
-    )["data"]
+    request_rows = (await api.studio.get(f"{ENV}/requests", params={"request_id": request_id}))[
+        "data"
+    ]
     assert request_rows and request_rows[0]["user"] == "7"
     detail = await api.studio.get(f"{ENV}/requests/{request_id}")
     assert {run["flow"] for run in detail["flow_runs"]} == {"pay-order", "on-order-paid"}
@@ -484,9 +484,15 @@ async def test_internal_key_resolution_and_config(acme, settings):
         "scopes": ["resource:read"],
     }
     with pytest.raises(ServiceError) as elsewhere:
-        await gateway.post("/internal/v1/keys/resolve", json={"key": created["key"], "env": "production"})
+        await gateway.post(
+            "/internal/v1/keys/resolve", json={"key": created["key"], "env": "production"}
+        )
     assert elsewhere.value.status == 401 and "environment" in str(elsewhere.value)
-    assert (await gateway.post("/internal/v1/keys/resolve", json={"key": created["key"], "env": "development"}))["env"] == "development"
+    assert (
+        await gateway.post(
+            "/internal/v1/keys/resolve", json={"key": created["key"], "env": "development"}
+        )
+    )["env"] == "development"
     await api.studio.post(f"{ENV}/keys/{created['id']}/revoke")
     with pytest.raises(ServiceError) as refused:
         await gateway.post("/internal/v1/keys/resolve", json={"key": created["key"]})
@@ -543,7 +549,11 @@ async def test_bucket_accepts_wildcard_mime_patterns(acme):
     api = acme
     await api.studio.post(
         f"{ENV}/buckets",
-        json={"name": "photos", "write_policy": "authenticated", "accepts": ["image/*", "application/pdf"]},
+        json={
+            "name": "photos",
+            "write_policy": "authenticated",
+            "accepts": ["image/*", "application/pdf"],
+        },
     )
     ada = api.user_headers("development", user_id="7")
     png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
@@ -577,15 +587,24 @@ async def test_input_policies_see_the_body_on_resources_and_routes(acme):
     api = acme
     await api.studio.post(
         f"{ENV}/policies",
-        json={"name": "small", "condition": {"all": [{"authenticated": True}, {"lte": ["$input.total", 100]}]}},
+        json={
+            "name": "small",
+            "condition": {"all": [{"authenticated": True}, {"lte": ["$input.total", 100]}]},
+        },
     )
     await api.studio.post(
         f"{ENV}/policies",
-        json={"name": "few_items", "condition": {"all": [{"authenticated": True}, {"lte": ["$input.items", 5]}]}},
+        json={
+            "name": "few_items",
+            "condition": {"all": [{"authenticated": True}, {"lte": ["$input.items", 5]}]},
+        },
     )
     await api.studio.put(
         f"{ENV}/resources/orders",
-        json={**ORDERS, "operations": {**ORDERS["operations"], "create": {"enabled": True, "policy": "small"}}},
+        json={
+            **ORDERS,
+            "operations": {**ORDERS["operations"], "create": {"enabled": True, "policy": "small"}},
+        },
     )
     await api.studio.post(
         f"{ENV}/routes",
@@ -599,9 +618,19 @@ async def test_input_policies_see_the_body_on_resources_and_routes(acme):
         },
     )
     ada = api.user_headers("development", user_id="7")
-    assert (await api.http.post("/rest/v1/orders", json={"total": 40}, headers=ada)).status_code == 201
-    assert (await api.http.post("/rest/v1/orders", json={"total": 400}, headers=ada)).status_code == 403
-    assert (await api.http.post("/rest/v1/small-quotes", json={"items": 3}, headers=ada)).status_code == 200
-    assert (await api.http.post("/rest/v1/small-quotes", json={"items": 9}, headers=ada)).status_code == 403
+    assert (
+        await api.http.post("/rest/v1/orders", json={"total": 40}, headers=ada)
+    ).status_code == 201
+    assert (
+        await api.http.post("/rest/v1/orders", json={"total": 400}, headers=ada)
+    ).status_code == 403
+    assert (
+        await api.http.post("/rest/v1/small-quotes", json={"items": 3}, headers=ada)
+    ).status_code == 200
+    assert (
+        await api.http.post("/rest/v1/small-quotes", json={"items": 9}, headers=ada)
+    ).status_code == 403
     anonymous = api.context_headers("development")
-    assert (await api.http.post("/rest/v1/small-quotes", json={"items": 3}, headers=anonymous)).status_code == 401
+    assert (
+        await api.http.post("/rest/v1/small-quotes", json={"items": 3}, headers=anonymous)
+    ).status_code == 401

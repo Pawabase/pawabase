@@ -24,9 +24,9 @@ async def increment(
 ) -> None:
     window = _window()
     tag_text = _tags(tags or {})
-    updated = await MetricCounter.filter(
-        env=env, name=name, tags=tag_text, window=window
-    ).update(value=F("value") + value, count=F("count") + 1)
+    updated = await MetricCounter.filter(env=env, name=name, tags=tag_text, window=window).update(
+        value=F("value") + value, count=F("count") + 1
+    )
     if not updated:
         try:
             await MetricCounter.create(
@@ -38,6 +38,6 @@ async def increment(
                 count=1,
             )
         except Exception:  # a concurrent writer created it first
-            await MetricCounter.filter(
-                env=env, name=name, tags=tag_text, window=window
-            ).update(value=F("value") + value, count=F("count") + 1)
+            await MetricCounter.filter(env=env, name=name, tags=tag_text, window=window).update(
+                value=F("value") + value, count=F("count") + 1
+            )

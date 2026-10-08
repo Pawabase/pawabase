@@ -200,18 +200,34 @@ def route_breakdown(
     def brief(row: dict[str, Any]) -> dict[str, Any]:
         return {
             key: row.get(key)
-            for key in ("request_id", "status", "duration_ms", "started_at", "path", "user", "role", "error")
+            for key in (
+                "request_id",
+                "status",
+                "duration_ms",
+                "started_at",
+                "path",
+                "user",
+                "role",
+                "error",
+            )
         }
 
     return {
-        "summary": {**_latency([float(r["duration_ms"] or 0) for r in rows]), "requests": len(rows)},
+        "summary": {
+            **_latency([float(r["duration_ms"] or 0) for r in rows]),
+            "requests": len(rows),
+        },
         "timeline": timeline,
         "step_seconds": step,
         "statuses": [{"status": s, "count": n} for s, n in sorted(statuses.items())],
         "callers": [{"caller": c, "count": n} for c, n in callers.most_common(8)],
         "errors": error_groups(failed),
-        "slowest": [brief(r) for r in sorted(rows, key=lambda r: -float(r["duration_ms"] or 0))[:10]],
-        "recent_failures": [brief(r) for r in sorted(failed, key=lambda r: r["started_at"], reverse=True)[:10]],
+        "slowest": [
+            brief(r) for r in sorted(rows, key=lambda r: -float(r["duration_ms"] or 0))[:10]
+        ],
+        "recent_failures": [
+            brief(r) for r in sorted(failed, key=lambda r: r["started_at"], reverse=True)[:10]
+        ],
         "time_by_kind": _by_kind(rows),
     }
 
@@ -269,7 +285,9 @@ async def fetch(env: str, since: datetime, **filters: Any) -> tuple[list[dict[st
     return rows[:MAX_ROWS], len(rows) > MAX_ROWS
 
 
-async def routes_for(env: str, *, minutes: int = 60, sort: str = "errors", limit: int = 50) -> dict[str, Any]:
+async def routes_for(
+    env: str, *, minutes: int = 60, sort: str = "errors", limit: int = 50
+) -> dict[str, Any]:
     since, until = window(minutes)
     rows, truncated = await fetch(env, since)
     return {
@@ -277,11 +295,15 @@ async def routes_for(env: str, *, minutes: int = 60, sort: str = "errors", limit
         "sort": sort if sort in SORTS else "errors",
         "requests": len(rows),
         "truncated": truncated,
-        "routes": aggregate_routes(rows, window_seconds=(until - since).total_seconds(), sort=sort, limit=limit),
+        "routes": aggregate_routes(
+            rows, window_seconds=(until - since).total_seconds(), sort=sort, limit=limit
+        ),
     }
 
 
-async def route_detail_for(env: str, method: str, route: str, *, minutes: int = 60) -> dict[str, Any]:
+async def route_detail_for(
+    env: str, method: str, route: str, *, minutes: int = 60
+) -> dict[str, Any]:
     since, until = window(minutes)
     filters: dict[str, Any] = {"method": method.upper()}
     if route == NO_ROUTE:
@@ -301,4 +323,9 @@ async def route_detail_for(env: str, method: str, route: str, *, minutes: int = 
 async def errors_for(env: str, *, minutes: int = 60, limit: int = 50) -> dict[str, Any]:
     since, _ = window(minutes)
     rows, truncated = await fetch(env, since, status__gte=400)
-    return {"minutes": minutes, "truncated": truncated, "failures": len(rows), "groups": error_groups(rows, limit=limit)}
+    return {
+        "minutes": minutes,
+        "truncated": truncated,
+        "failures": len(rows),
+        "groups": error_groups(rows, limit=limit),
+    }

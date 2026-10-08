@@ -16,7 +16,16 @@ async def test_studio_opens_straight_into_the_default_environment(studio):
     assert page["props"]["runtime"]["name"] == "Shop"
     assert [e["name"] for e in page["props"]["envs"]] == ["main", "staging"]
     # What the old platform asked a developer to do first no longer exists.
-    for gone in ("/login", "/signup", "/logout", "/setup", "/orgs/new", "/orgs/acme", "/projects/shop", "/invite/x"):
+    for gone in (
+        "/login",
+        "/signup",
+        "/logout",
+        "/setup",
+        "/orgs/new",
+        "/orgs/acme",
+        "/projects/shop",
+        "/invite/x",
+    ):
         assert (await studio.http.get(gone, headers=INERTIA)).status_code == 404, gone
     assert "operator" not in page["props"] and "orgs" not in page["props"]
 
@@ -41,7 +50,9 @@ async def test_pages_are_a_full_document_with_built_assets(studio):
 async def test_the_sections_render_and_unknown_things_are_404(studio):
     kind = (await studio.http.get("/envs/main/policies", headers=INERTIA)).json()
     assert (kind["component"], kind["props"]["kind"]) == ("Env/Definitions", "policies")
-    assert (await studio.http.get("/envs/main/explorer", headers=INERTIA)).json()["component"] == "Env/Explorer"
+    assert (await studio.http.get("/envs/main/explorer", headers=INERTIA)).json()[
+        "component"
+    ] == "Env/Explorer"
 
     editor = (await studio.http.get("/envs/main/flows/new", headers=INERTIA)).json()
     assert editor["component"] == "Flows/Editor"
@@ -68,7 +79,12 @@ async def test_api_docs_come_from_the_api_and_point_at_the_gateway(studio):
 async def test_the_bridge_forwards_with_a_service_token_and_no_operator(studio):
     listed = await studio.http.get("/studio/api/platform/envs/main/jobs?status=failed")
     assert listed.status_code == 200
-    assert studio.api.calls[-1] == ("GET", "/platform/v1/envs/main/jobs", None, {"status": "failed"})
+    assert studio.api.calls[-1] == (
+        "GET",
+        "/platform/v1/envs/main/jobs",
+        None,
+        {"status": "failed"},
+    )
     assert "operator" not in studio.api.last_kwargs
 
     created = await studio.http.post(
@@ -119,7 +135,11 @@ async def test_the_explorer_uses_an_anonymous_context_and_an_optional_user_token
     assert result["status"] == 201 and result["body"] == {"id": 7, "total": 42}
     assert "set-cookie" not in result["headers"]
     call = studio.api.raw_call
-    assert (call["method"], call["path"], call["params"]) == ("POST", "/rest/v2/orders", {"expand": "items"})
+    assert (call["method"], call["path"], call["params"]) == (
+        "POST",
+        "/rest/v2/orders",
+        {"expand": "items"},
+    )
     assert (call["context"].env, call["context"].role) == ("main", "anon")
     assert call["headers"]["Authorization"] == "Bearer user-token"
     assert "apikey" not in call["headers"]

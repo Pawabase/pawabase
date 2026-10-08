@@ -32,7 +32,13 @@ def _origin(value: Any) -> str:
     if not isinstance(value, str):
         raise _fail("cors_origins", "origins must be strings")
     parts = urlsplit(value)
-    if parts.scheme not in ("http", "https") or not parts.netloc or parts.path not in ("", "/") or parts.query or parts.fragment:
+    if (
+        parts.scheme not in ("http", "https")
+        or not parts.netloc
+        or parts.path not in ("", "/")
+        or parts.query
+        or parts.fragment
+    ):
         raise _fail("cors_origins", f"{value!r} is not an origin like https://app.example.com")
     return f"{parts.scheme}://{parts.netloc}"
 

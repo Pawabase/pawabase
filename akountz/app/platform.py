@@ -85,9 +85,7 @@ class Akountz:
 
     # ── outbound effects ─────────────────────────────────────────────────
 
-    async def emit(
-        self, env: str, name: str, payload: Any, *, actor: str | None = None
-    ) -> None:
+    async def emit(self, env: str, name: str, payload: Any, *, actor: str | None = None) -> None:
         """Publish an identity event. Failure to publish never fails the sign-in."""
         try:
             if self.bus is not None:

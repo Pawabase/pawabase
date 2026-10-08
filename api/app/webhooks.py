@@ -47,7 +47,9 @@ def verify_signature(
     return hmac.compare_digest(expected, parts.get("v1", ""))
 
 
-def verify_plain_hmac(secret: str, body: bytes, signature: str, *, algorithm: str = "sha256") -> bool:
+def verify_plain_hmac(
+    secret: str, body: bytes, signature: str, *, algorithm: str = "sha256"
+) -> bool:
     """Check a bare hex (optionally algorithm-prefixed) HMAC of the body.
 
     Providers commonly use either HMAC-SHA256 (GitHub and Shopify-style
@@ -58,7 +60,7 @@ def verify_plain_hmac(secret: str, body: bytes, signature: str, *, algorithm: st
     if algorithm not in {"sha256", "sha512"}:
         raise ValueError(f"unsupported HMAC algorithm {algorithm!r}")
     prefix = f"{algorithm}="
-    signature = signature[len(prefix):] if signature.startswith(prefix) else signature
+    signature = signature[len(prefix) :] if signature.startswith(prefix) else signature
     expected = hmac.new(secret.encode(), body, getattr(hashlib, algorithm)).hexdigest()
     return hmac.compare_digest(expected, signature.strip())
 

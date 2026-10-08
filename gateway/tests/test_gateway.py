@@ -86,22 +86,26 @@ async def test_key_ip_and_route_restrictions(gateway):
     assert (
         await gateway.http.get("/rest/v1/orders", headers={"apikey": "sk_restricted"})
     ).status_code == 200
-    denied = await gateway.http.post(
-        "/rest/v1/orders", headers={"apikey": "sk_restricted"}
-    )
+    denied = await gateway.http.post("/rest/v1/orders", headers={"apikey": "sk_restricted"})
     assert denied.status_code == 403
     assert denied.json()["error"] == "route_not_allowed"
 
     from app.proxy import GatewayProxy
 
-    assert GatewayProxy._key_allowed(
-        {"client": ("10.2.3.4", 1234), "method": "GET", "path": "/rest/v1/orders"},
-        {"allowed_ips": ["10.0.0.0/8"]},
-    ) is None
-    assert GatewayProxy._key_allowed(
-        {"client": ("192.168.1.1", 1234), "method": "GET", "path": "/rest/v1/orders"},
-        {"allowed_ips": ["10.0.0.0/8"]},
-    ) == "ip_not_allowed"
+    assert (
+        GatewayProxy._key_allowed(
+            {"client": ("10.2.3.4", 1234), "method": "GET", "path": "/rest/v1/orders"},
+            {"allowed_ips": ["10.0.0.0/8"]},
+        )
+        is None
+    )
+    assert (
+        GatewayProxy._key_allowed(
+            {"client": ("192.168.1.1", 1234), "method": "GET", "path": "/rest/v1/orders"},
+            {"allowed_ips": ["10.0.0.0/8"]},
+        )
+        == "ip_not_allowed"
+    )
 
 
 async def test_rate_limit_per_key(gateway):

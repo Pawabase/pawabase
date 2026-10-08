@@ -9,13 +9,18 @@ async def test_overview_charts_come_from_recorded_activity(api):
         json={
             "name": "notes",
             "fields": [{"name": "text", "type": "string", "required": True}],
-            "operations": {"list": {"enabled": True, "policy": "public"}, "create": {"enabled": True, "policy": "public"}},
+            "operations": {
+                "list": {"enabled": True, "policy": "public"},
+                "create": {"enabled": True, "policy": "public"},
+            },
         },
     )
     await api.studio.post(f"{ENV}/resources/notes/migrate")
     anon = api.context_headers("development")
     for text in ("a", "b", "c"):
-        assert (await api.http.post("/rest/v1/notes", json={"text": text}, headers=anon)).status_code == 201
+        assert (
+            await api.http.post("/rest/v1/notes", json={"text": text}, headers=anon)
+        ).status_code == 201
     assert (await api.http.get("/rest/v1/notes", headers=anon)).status_code == 200
     assert (await api.http.get("/rest/v1/nothing-here", headers=anon)).status_code == 404
     await api.drain()
@@ -32,4 +37,7 @@ async def test_overview_charts_come_from_recorded_activity(api):
 
     # Studio's own management calls are not the environment's traffic.
     overview = await api.studio.get(f"{ENV}/overview")
-    assert overview["analytics"]["range"] == "24h" and overview["analytics"]["summary"]["requests"] == 5
+    assert (
+        overview["analytics"]["range"] == "24h"
+        and overview["analytics"]["summary"]["requests"] == 5
+    )

@@ -174,9 +174,7 @@ class ServiceClient:
         This is intended for operator tooling such as an API explorer. Normal
         service-to-service calls should use :meth:`request` and its exceptions.
         """
-        kwargs: dict[str, Any] = {
-            "headers": self.headers(context=context, extra=headers)
-        }
+        kwargs: dict[str, Any] = {"headers": self.headers(context=context, extra=headers)}
         if json is not None:
             kwargs["json"] = json
         if params:
