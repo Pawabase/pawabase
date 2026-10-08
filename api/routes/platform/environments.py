@@ -13,7 +13,7 @@ from sillo.auth.apikey import generate_api_key
 from sillo.exceptions import HTTPException
 from tortoise.transactions import in_transaction
 
-from app import blueprints
+from app import blueprints, env_settings
 from app.platform import Platform
 from app.secrets import mask
 from database.models import ApiKey, Environment, Secret
@@ -445,6 +445,8 @@ def register(r: Router, platform: Platform) -> None:
     async def update_environment(ctx: HttpContext, env: str, body: EnvironmentUpdate):
         environment = await get_environment(env)
         updates = body.model_dump(exclude_unset=True)
+        if updates.get("settings") is not None:
+            updates["settings"] = env_settings.validate(updates["settings"])
         for section in ("infra", "auth", "settings"):
             if section in updates and updates[section] is not None:
                 merged = {**(getattr(environment, section) or {}), **updates[section]}
