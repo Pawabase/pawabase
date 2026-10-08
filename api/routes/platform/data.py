@@ -180,7 +180,7 @@ def register(r: Router, platform: Platform) -> None:
         managed = {spec.table: name for name, spec in state.specs.items()}
         return {
             "dialect": source.dialect,
-            "configured": bool(state.infra.get("database_url")),
+            "configured": state.database_source() != "default",
             "tables": [{"name": table, "resource": managed.get(table)} for table in tables],
         }
 

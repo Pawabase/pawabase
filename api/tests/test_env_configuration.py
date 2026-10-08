@@ -314,3 +314,75 @@ async def test_startup_audit_reports_leftovers_and_typos(api, monkeypatch, caplo
     assert "infra.database_url is deprecated" in caplog.text
     assert "infra.mail is no longer read" in caplog.text
     assert "DEVELOPMENT_STORAGE_BUKET" in caplog.text
+
+
+# ── what Studio is told ──────────────────────────────────────────────────
+
+
+async def test_the_mail_setup_says_where_each_part_comes_from(api, monkeypatch):
+    api.platform.settings.mail_host = "smtp.global.example"
+    monkeypatch.setenv("DEVELOPMENT_MAIL_FROM", "dev@example.com")
+    monkeypatch.setenv("DEVELOPMENT_MAIL_PASSWORD", "never-shown")
+    described = await api.studio.get(f"{ENV}/mail/config")
+    rows = {row["setting"]: row for row in described["settings"]}
+    assert described["configured"] is True and described["suppressed"] is False
+    assert (rows["host"]["value"], rows["host"]["source"]) == ("smtp.global.example", "deployment")
+    assert (rows["from"]["value"], rows["from"]["source"]) == ("dev@example.com", "environment")
+    assert rows["port"]["source"] == "default" and rows["port"]["value"] == 587
+    assert rows["from"]["variable"] == "DEVELOPMENT_MAIL_FROM"
+    assert rows["from"]["global_variable"] == "PAWABASE_MAIL_FROM"
+    assert rows["password"]["value"] is True  # whether one is set, never what it is
+    assert "never-shown" not in str(described)
+    assert described["environment_prefix"] == "DEVELOPMENT_MAIL_"
+
+
+async def test_with_no_host_the_mail_setup_is_unconfigured(api):
+    described = await api.studio.get(f"{ENV}/mail/config")
+    assert described["configured"] is False and described["suppressed"] is True
+    assert described["legacy"] is False
+
+
+async def test_the_overview_reflects_variables_not_only_stored_settings(api, monkeypatch, tmp_path):
+    before = (await api.studio.get(f"{ENV}/overview"))["infrastructure"]
+    assert before["database"] == "platform default" and before["mail"].startswith("suppressed")
+    monkeypatch.setenv("DEVELOPMENT_DATA_URL", f"sqlite://{tmp_path}/own.db")
+    monkeypatch.setenv("DEVELOPMENT_MAIL_HOST", "smtp.dev.example")
+    monkeypatch.setenv("DEVELOPMENT_STORAGE_DRIVER", "memory")
+    api.platform.envs.forget("development")
+    after = (await api.studio.get(f"{ENV}/overview"))["infrastructure"]
+    assert after["database"] == "configured"
+    assert after["mail"] == "configured" and after["storage"] == "memory"
+    database = await api.studio.get(f"{ENV}/database")
+    assert database["configured"] is True
+
+
+async def test_configuration_reports_each_value_with_its_source(api, monkeypatch, tmp_path):
+    api.platform.settings.max_users = 100
+    monkeypatch.setenv("DEVELOPMENT_MAX_UPLOAD_BYTES", "4096")
+    monkeypatch.setenv("DEVELOPMENT_STORAGE_PREFIX", "acme")
+    monkeypatch.setenv("DEVELOPMENT_DATA_URL", f"sqlite://{tmp_path}/own.db")
+    api.platform.envs.forget("development")
+    report = await api.studio.get(f"{ENV}/configuration")
+    assert report["database"] == {"source": "environment", "variable": "DEVELOPMENT_DATA_URL"}
+    assert report["storage"]["source"] == "environment" and report["storage"]["driver"] == "local"
+    limits = {row["key"]: row for row in report["limits"]}
+    assert (limits["MAX_UPLOAD_BYTES"]["value"], limits["MAX_UPLOAD_BYTES"]["source"]) == (
+        "4096",
+        "environment",
+    )
+    assert (limits["MAX_USERS"]["value"], limits["MAX_USERS"]["source"]) == (100, "deployment")
+    assert limits["DAILY_REQUEST_LIMIT"]["source"] == "default"
+    assert limits["RATE_LIMIT"]["value"] is None  # only the gateway knows it
+    assert limits["MAX_USERS"]["variable"] == "DEVELOPMENT_MAX_USERS"
+    assert report["variables"] == {
+        "environment_prefix": "DEVELOPMENT_",
+        "global_prefix": "PAWABASE_",
+    }
+
+
+async def test_configuration_flags_values_still_stored_on_the_environment(api, tmp_path):
+    await api.studio.patch(ENV, json={"infra": {"database_url": f"sqlite://{tmp_path}/legacy.db"}})
+    api.platform.envs.forget("development")
+    report = await api.studio.get(f"{ENV}/configuration")
+    assert report["database"]["source"] == "stored"
+    assert report["storage"]["source"] == "default"

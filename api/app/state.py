@@ -116,6 +116,12 @@ class EnvironmentState:
             url += ("&" if "?" in url else "?") + f"schema={self.data_schema()}"
         return url
 
+    def database_source(self) -> str:
+        """Where the data database comes from: ``environment`` (a variable), ``stored`` (deprecated ``infra``) or ``default``."""
+        if envvars.get(self.env_name, "DATA_URL"):
+            return "environment"
+        return "stored" if self.infra.get("database_url") else "default"
+
     def data_schema(self) -> str:
         """The Postgres schema holding this environment's resource tables in the shared default database."""
         scope = hashlib.sha256(self.env_name.encode()).hexdigest()[:12]

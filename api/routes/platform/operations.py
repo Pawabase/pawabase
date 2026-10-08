@@ -14,6 +14,7 @@ from tortoise.functions import Count
 from app import route_stats
 from app.analytics import DEFAULT_RANGE, environment_analytics
 from app.capacity import report as capacity_report
+from app.configuration import report as configuration_report
 from app.platform import PLATFORM_QUEUES, Platform
 from app.system_health import system_report
 from database.models import (
@@ -271,6 +272,26 @@ def register(r: Router, platform: Platform) -> None:
         }
 
     # ── mail ─────────────────────────────────────────────────────────────
+
+    @r.get(
+        f"{base}/configuration",
+        auth=MANAGE,
+        tags=["environments"],
+        summary="The infrastructure and limits an environment runs under, and which variable each comes from",
+    )
+    async def configuration(ctx: HttpContext, env: str):
+        await get_environment(env)
+        return configuration_report(platform, await platform.state(env))
+
+    @r.get(
+        f"{base}/mail/config",
+        auth=MANAGE,
+        tags=["mail"],
+        summary="The mail setup this environment has, and which variable each part comes from",
+    )
+    async def mail_config(ctx: HttpContext, env: str):
+        await get_environment(env)
+        return platform.mail.describe(await platform.state(env))
 
     @r.get(f"{base}/mail/log", auth=MANAGE, tags=["mail"], summary="Messages sent or suppressed")
     async def mail_log(ctx: HttpContext, env: str):
@@ -543,10 +564,12 @@ def register(r: Router, platform: Platform) -> None:
             ),
             "problems": compiled.state.get("problems", []),
             "infrastructure": {
-                "database": "configured" if state.infra.get("database_url") else "platform default",
-                "storage": (state.infra.get("storage") or {}).get("driver", "local"),
+                "database": "platform default"
+                if state.database_source() == "default"
+                else "configured",
+                "storage": platform.storage._config(state).get("driver", "local"),
                 "mail": "configured"
-                if (state.infra.get("mail") or {}).get("host")
+                if platform.mail.describe(state)["configured"]
                 else "suppressed (not configured)",
                 "cache": type(platform.cache).__name__,
                 "queue": type(platform.queue).__name__,

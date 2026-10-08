@@ -75,6 +75,65 @@ class MailManager:
             template_directory=None,
         )
 
+    #: Setting, its variable key, and the settings attribute that holds the deployment-wide value.
+    FIELDS = (
+        ("host", "MAIL_HOST", "mail_host"),
+        ("port", "MAIL_PORT", "mail_port"),
+        ("username", "MAIL_USERNAME", "mail_username"),
+        ("password", "MAIL_PASSWORD", "mail_password"),
+        ("use_ssl", "MAIL_USE_SSL", "mail_use_ssl"),
+        ("use_tls", "MAIL_USE_TLS", "mail_use_tls"),
+        ("from", "MAIL_FROM", "mail_from"),
+        ("reply_to", "MAIL_REPLY_TO", "mail_reply_to"),
+        ("suppress", "MAIL_SUPPRESS", "mail_suppress"),
+    )
+
+    def describe(self, state: EnvironmentState) -> dict[str, Any]:
+        """The mail setup an environment actually has, and which variable each part comes from.
+
+        Never contains the password: only whether one is set.
+        """
+        config = self._config(state)
+        settings = self.platform.settings
+        prefix = envvars.prefix_for(state.env_name)
+        host = self._text(state, "MAIL_HOST", settings.mail_host)
+        effective = {
+            "host": host,
+            "port": config.smtp_port,
+            "username": config.smtp_username or "",
+            "password": bool(config.smtp_password),
+            "use_ssl": config.use_ssl,
+            "use_tls": config.use_tls,
+            "from": config.default_from,
+            "reply_to": config.default_reply_to or "",
+            "suppress": envvars.boolean(state.env_name, "MAIL_SUPPRESS", settings.mail_suppress),
+        }
+        rows = []
+        for name, key, attribute in self.FIELDS:
+            default = type(settings).model_fields[attribute].default
+            if envvars.get(state.env_name, key) is not None:
+                source = "environment"
+            elif getattr(settings, attribute) != default:
+                source = "deployment"
+            else:
+                source = "default"
+            rows.append(
+                {
+                    "setting": name,
+                    "value": effective[name],
+                    "source": source,
+                    "variable": f"{prefix}_{key}",
+                    "global_variable": f"PAWABASE_{key}",
+                }
+            )
+        return {
+            "configured": bool(effective["host"]),
+            "suppressed": config.suppress_send,
+            "settings": rows,
+            "legacy": bool(state.infra.get("mail")),
+            "environment_prefix": f"{prefix}_MAIL_",
+        }
+
     def client(self, state: EnvironmentState) -> MailClient:
         config = self._config(state)
         key = (state.env_name, repr(sorted(vars(config).items())))
