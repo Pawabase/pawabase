@@ -122,7 +122,7 @@ def register(r: Router, platform: Platform) -> None:
             raw = base64.b64decode(body.archive, validate=True)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail="archive is not valid base64") from exc
-        if len(raw) > platform.settings.max_upload_bytes:
+        if len(raw) > platform.limit(env, "MAX_UPLOAD_BYTES", platform.settings.max_upload_bytes):
             raise HTTPException(status_code=413, detail="archive exceeds the upload limit")
         deployment = await FunctionDeployment.create(
             id=new_ulid(),

@@ -16,6 +16,7 @@ from sillo.cache import base as cache_base
 from sillo.helpers.signing import URLSafeTimedSerializer
 
 from app.config import AkountzSettings
+from pawabase_core import envvars
 from pawabase_core.clients import ServiceClient
 from pawabase_core.context import PlatformContext
 from pawabase_core.crypto import SecretBox
@@ -45,6 +46,10 @@ class Akountz:
             else None
         )
         self.outbox: list[dict[str, Any]] = []  # recent mail, for tests and diagnostics
+
+    def max_users(self, env: str) -> int:
+        """The most active users an environment may have: its own ``<ENV>_MAX_USERS``, else the deployment's."""
+        return envvars.integer(env, "MAX_USERS", self.settings.max_users)
 
     def _build_cache(self) -> BaseCache:
         if self.settings.redis_url:

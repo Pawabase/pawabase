@@ -35,6 +35,7 @@ from database.models import (
     TransformerDef,
     WebhookEndpoint,
 )
+from pawabase_core import envvars
 from pawabase_core.policies import Policy, PolicyEngine, python_policies
 from pawabase_core.schemas import compile_schemas
 
@@ -88,8 +89,22 @@ class EnvironmentState:
     # ── data ─────────────────────────────────────────────────────────────
 
     def database_url(self) -> str:
+        """Where this environment's resource data lives.
+
+        In order: ``<ENV>_DATA_URL`` from the process environment; the deprecated
+        ``infra.database_url`` an older install stored on the environment; the
+        platform default (``PAWABASE_DEFAULT_DATA_URL``), one schema per environment.
+        """
+        own = self.platform.env_setting(self, "DATA_URL")
+        if own:
+            return own
         configured = self.infra.get("database_url")
         if configured:
+            self.platform.deprecated(
+                self.env_name,
+                "infra.database_url",
+                f"set {envvars.prefix_for(self.env_name)}_DATA_URL instead",
+            )
             return self.platform.resolve_value(self, configured)
         # ``{project}`` from an older configuration names nothing now: drop it, with its separator.
         template = self.platform.settings.default_data_url.replace("{project}__", "").replace(

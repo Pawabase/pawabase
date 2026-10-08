@@ -17,6 +17,7 @@ from sillo.storage.base import Action, StorageEvent
 from sillo.storage.signing import Signer
 
 from app.config import default_storage
+from pawabase_core import envvars
 from pawabase_core.policies import PolicyStorage
 from pawabase_core.telemetry import note
 
@@ -63,6 +64,21 @@ EVENT_NAMES = {
 }
 
 
+#: The per-environment variables that shape storage, and the config field each sets.
+ENVIRONMENT_STORAGE = {
+    "STORAGE_DRIVER": "driver",
+    "STORAGE_ROOT": "root",
+    "STORAGE_ENDPOINT": "endpoint",
+    "STORAGE_PUBLIC_ENDPOINT": "public_endpoint",
+    "STORAGE_BUCKET": "bucket",
+    "STORAGE_REGION": "region",
+    "STORAGE_ACCESS_KEY": "access_key",
+    "STORAGE_SECRET_KEY": "secret_key",
+    "STORAGE_PREFIX": "prefix",
+    "STORAGE_PATH_STYLE": "path_style",
+}
+
+
 class StorageManager:
     """Builds and caches storage drivers per environment bucket."""
 
@@ -73,12 +89,38 @@ class StorageManager:
         self.operations = 0
 
     def _config(self, state: EnvironmentState) -> dict[str, Any]:
-        """The environment's storage: its own ``infra.storage``, else the platform default."""
-        config = dict(state.infra.get("storage") or {})
-        if not config:
+        """The environment's storage.
+
+        The platform default (``PAWABASE_STORAGE_*``) is the base. An older install's
+        ``infra.storage`` replaces it, deprecated. Whatever ``<ENV>_STORAGE_*``
+        variables the deployment sets for this environment are laid over the result, so
+        ``PRODUCTION_STORAGE_BUCKET`` alone moves one bucket and keeps the rest.
+        """
+        legacy = dict(state.infra.get("storage") or {})
+        if legacy:
+            self.platform.deprecated(
+                state.env_name,
+                "infra.storage",
+                f"set {envvars.prefix_for(state.env_name)}_STORAGE_* variables instead",
+            )
+            config = legacy
+            if not config.get("driver"):
+                config["driver"] = "s3" if config.get("endpoint") else "local"
+        else:
             config = default_storage(self.platform.settings)
-        elif not config.get("driver"):
-            config["driver"] = "s3" if config.get("endpoint") else "local"
+
+        overlay: dict[str, Any] = {}
+        for variable, field in ENVIRONMENT_STORAGE.items():
+            value = envvars.get(state.env_name, variable)
+            if value is not None:
+                overlay[field] = value
+        if "path_style" in overlay:
+            overlay["path_style"] = envvars.boolean(state.env_name, "STORAGE_PATH_STYLE", True)
+        if overlay:
+            config.update(overlay)
+            if "driver" not in overlay and config["driver"] != "s3" and overlay.get("endpoint"):
+                # An endpoint on a deployment whose default is local storage means S3.
+                config["driver"] = "s3"
         return {key: self.platform.resolve_value(state, value) for key, value in config.items()}
 
     def signer(self, state: EnvironmentState, bucket: str) -> Signer:
@@ -192,7 +234,12 @@ class StorageManager:
             env=state.env_name,
             signed_writes=model.signed_uploads,
         )
-        max_bytes = int(model.max_bytes or self.platform.settings.max_upload_bytes)
+        max_bytes = int(
+            model.max_bytes
+            or self.platform.limit(
+                state.env_name, "MAX_UPLOAD_BYTES", self.platform.settings.max_upload_bytes
+            )
+        )
         driver = self.driver(state, name)
         # Sillo buckets name themselves in storage events; keep the Pawabase name.
         return Bucket(

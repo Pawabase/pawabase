@@ -76,6 +76,7 @@ def create_app(
     async def start_platform() -> None:
         await platform.start()
         await ensure_default_environment()
+        await platform.audit_configuration()
         rollup.start()
         from app.events import EventProcessor
 

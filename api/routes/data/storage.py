@@ -90,6 +90,12 @@ async def _limited(source: AsyncIterator[bytes], limit: int) -> AsyncIterator[by
 def register(app: Any, platform: Platform) -> None:
     r = Router(prefix="/storage/v1", tags=["storage"])
 
+    def upload_limit(state) -> int:
+        """The largest upload this environment accepts: its own MAX_UPLOAD_BYTES, else the platform's."""
+        return platform.limit(
+            state.env_name, "MAX_UPLOAD_BYTES", platform.settings.max_upload_bytes
+        )
+
     async def bucket_for(ctx: HttpContext, name: str):
         context = require_context(ctx)
         state = await platform.state_for(context)
@@ -116,7 +122,7 @@ def register(app: Any, platform: Platform) -> None:
         try:
             stored = await held.put(
                 key,
-                _limited(body, platform.settings.max_upload_bytes),
+                _limited(body, upload_limit(state)),
                 content_type=declared,
                 user=_user(ctx),
             )
@@ -237,12 +243,8 @@ def register(app: Any, platform: Platform) -> None:
                 key,
                 _limited(
                     body,
-                    min(
-                        value
-                        for value in (grant.max_bytes, platform.settings.max_upload_bytes)
-                        if value
-                    )
-                    if grant.max_bytes or platform.settings.max_upload_bytes
+                    min(value for value in (grant.max_bytes, upload_limit(state)) if value)
+                    if grant.max_bytes or upload_limit(state)
                     else 0,
                 ),
                 content_type=declared,

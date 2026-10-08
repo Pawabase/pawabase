@@ -111,7 +111,7 @@ def register(r: Router, akountz: Akountz) -> None:
             user_metadata=body.user_metadata,
             app_metadata=body.app_metadata,
             verified=body.email_verified,
-            max_users=akountz.settings.max_users,
+            max_users=akountz.max_users(config.env),
         )
         for role in body.roles:
             await rbac.assign_role(user, role)
