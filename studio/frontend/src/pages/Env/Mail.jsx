@@ -4,13 +4,6 @@ import { Icon } from "../../components/icons";
 import { Badge, Button, Card, EmptyState, Field, JsonInput, Loading, Modal, PageHead, Segmented, Sheet, Spinner, Status, Table, Tile, copyToClipboard, useAction, useToast, when } from "../../components/ui";
 import { del, envPath, patch, post, put, useApi } from "../../lib/api";
 
-const PROVIDERS = [
-  ["custom", "Custom", {}],
-  ["resend", "Resend", { host: "smtp.resend.com", port: 465, username: "resend" }],
-  ["sendgrid", "SendGrid", { host: "smtp.sendgrid.net", port: 587, username: "apikey" }],
-  ["mailgun", "Mailgun", { host: "smtp.mailgun.org", port: 587, username: "" }],
-  ["gmail", "Gmail", { host: "smtp.gmail.com", port: 587, username: "" }],
-];
 const STATUSES = [["all", "All"], ["sent", "Sent"], ["suppressed", "Suppressed"], ["failed", "Failed"]];
 
 export default function Mail({ env }) {
@@ -167,20 +160,11 @@ const SOURCES = { environment: ["this environment", "green"], deployment: ["ever
 function Delivery({ base, environment, setup }) {
   const toast = useToast();
   const [run, busy] = useAction();
-  const [provider, setProvider] = useState("custom");
-  const [scope, setScope] = useState("environment");
   const data = setup.data;
   if (!data) return <Loading state={setup}>{() => <div className="empty"><Spinner /></div>}</Loading>;
 
-  const preset = PROVIDERS.find(([key]) => key === provider)[2];
-  const prefix = scope === "environment" ? data.environment_prefix : "PAWABASE_MAIL_";
-  const lines = [
-    `${prefix}HOST=${preset.host || "smtp.example.com"}`,
-    `${prefix}PORT=${preset.port || 587}`,
-    `${prefix}USERNAME=${preset.username || "your-username"}`,
-    `${prefix}PASSWORD=your-password-or-api-key`,
-    `${prefix}FROM=Your App <no-reply@yourdomain.com>`,
-  ].join("\n");
+  const prefix = data.environment_prefix;
+  const lines = ["HOST", "PORT", "USERNAME", "PASSWORD", "FROM"].map((key) => `${prefix}${key}=`).join("\n");
   const clearStored = async () => {
     if (await run(() => patch(base, { infra: { mail: null } }), "Stored mail settings removed")) environment.reload();
   };
@@ -215,12 +199,10 @@ function Delivery({ base, environment, setup }) {
       </section>
       <section className="form-section">
         <div className="form-section-head"><div><h3>Set it up</h3><p>Add these to the deployment's environment (its <code>.env</code> or its host's variables) and restart it.</p></div></div>
-        <Field label="Provider"><Segmented value={provider} onChange={setProvider} options={PROVIDERS.map(([k, label]) => [k, label])} /></Field>
-        <Field label="For"><Segmented value={scope} onChange={setScope} options={[["environment", "This environment only"], ["deployment", "Every environment"]]} /></Field>
         <pre className="code-block">{lines}</pre>
         <div><Button size="sm" onClick={async () => toast((await copyToClipboard(lines)) ? "Copied" : "Could not copy", "ok")}><Icon name="copy" />Copy</Button></div>
         <p className="muted" style={{ margin: "8px 0 0" }}>
-          Also available: <code>{prefix}REPLY_TO</code>, <code>{prefix}USE_SSL</code>, <code>{prefix}USE_TLS</code> and <code>{prefix}SUPPRESS=true</code> to keep the settings but pause delivery.
+          Use <code>PAWABASE_MAIL_*</code> instead to set them for every environment. Also available: <code>{prefix}REPLY_TO</code>, <code>{prefix}USE_SSL</code>, <code>{prefix}USE_TLS</code> and <code>{prefix}SUPPRESS=true</code> to keep the settings but pause delivery.
           A password can name one of this environment's secrets (<code>secret://NAME</code>) instead of holding the value.
         </p>
       </section>
