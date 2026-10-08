@@ -91,7 +91,6 @@ def create_app(
             app.state["inline_scheduler"] = scheduler
             await scheduler.start()
 
-    @app.on_shutdown
     async def stop_platform() -> None:
         await rollup.stop()
         worker = app.state.get("inline_worker")
@@ -104,6 +103,13 @@ def create_app(
         if scheduler is not None:
             await scheduler.stop()
         await platform.stop()
+
+    # Shutdown handlers run in the order they were added, and the database installable added
+    # its own when the service was created. Stopping the platform *after* that closes the
+    # database: the last request-metrics flush and any job still finishing then write to a
+    # closed database, which silently opens a new connection nothing closes. Stop the things
+    # that use the database first, then let it close.
+    app.shutdown_handlers.insert(0, stop_platform)
 
     from routes import register_routes
 
