@@ -46,3 +46,62 @@ def test_database_names_are_validated_before_they_reach_sql():
         and not NAME.match("1db")
     )
     assert database_url_for("postgres://u:p@h:5432/a", "b") == "postgres://u:p@h:5432/b"
+
+
+# ── choosing the processes ───────────────────────────────────────────────
+
+from pawabase_core.supervisor import selected  # noqa: E402
+
+
+def names(environ):
+    return [name for name, *_ in selected(environ)]
+
+
+def test_by_default_every_process_runs():
+    assert names({}) == ["api", "worker", "scheduler", "akountz", "angula", "gateway", "studio"]
+
+
+def test_an_inline_worker_and_scheduler_do_not_get_processes_of_their_own():
+    assert names({"PAWABASE_INLINE_WORKER": "true"}) == [
+        "api",
+        "scheduler",
+        "akountz",
+        "angula",
+        "gateway",
+        "studio",
+    ]
+    assert names({"PAWABASE_INLINE_WORKER": "1", "PAWABASE_INLINE_SCHEDULER": "yes"}) == [
+        "api",
+        "akountz",
+        "angula",
+        "gateway",
+        "studio",
+    ]
+
+
+def test_false_or_unset_flags_leave_the_defaults_alone():
+    assert len(names({"PAWABASE_INLINE_WORKER": "false", "PAWABASE_INLINE_SCHEDULER": ""})) == 7
+
+
+def test_studio_can_be_left_out():
+    assert "studio" not in names({"PAWABASE_STUDIO": "off"})
+    assert "studio" in names({"PAWABASE_STUDIO": "on"})
+    assert "studio" in names({"PAWABASE_STUDIO": "something-else"})
+
+
+def test_an_explicit_list_runs_exactly_those_in_start_order():
+    assert names({"PAWABASE_PROCESSES": "gateway, api ,akountz"}) == ["api", "akountz", "gateway"]
+    # an explicit list is taken at its word: the inline flags do not trim it further
+    assert names({"PAWABASE_PROCESSES": "api,worker", "PAWABASE_INLINE_WORKER": "true"}) == [
+        "api",
+        "worker",
+    ]
+
+
+def test_a_bad_list_is_refused_with_a_reason():
+    import pytest
+
+    with pytest.raises(ValueError, match="names gatewy"):
+        selected({"PAWABASE_PROCESSES": "api,gatewy"})
+    with pytest.raises(ValueError, match="cannot leave out the api"):
+        selected({"PAWABASE_PROCESSES": "gateway,worker"})

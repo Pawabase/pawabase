@@ -39,6 +39,54 @@ SERVICES = [
 ]
 
 
+_TRUE = {"1", "true", "yes", "on"}
+_FALSE = {"0", "false", "no", "off"}
+
+
+def selected(environ: dict[str, str]) -> list[tuple[str, str, list[str], int | None]]:
+    """The processes this deployment runs, in start order.
+
+    By default all seven. A small deployment can run fewer, because every process costs
+    memory and database connections whether or not anything is happening:
+
+    - ``PAWABASE_PROCESSES=api,gateway,akountz,angula`` names exactly the processes to run.
+    - ``PAWABASE_INLINE_WORKER=true`` and ``PAWABASE_INLINE_SCHEDULER=true`` run the worker and
+      scheduler inside the API process, so their own processes are not started.
+    - ``PAWABASE_STUDIO=off`` leaves Studio out (nothing serves it then).
+
+    Raises:
+        ValueError: A name is not a process, or the list leaves out the API.
+    """
+    known = [name for name, *_ in SERVICES]
+    listed = [
+        part.strip() for part in environ.get("PAWABASE_PROCESSES", "").split(",") if part.strip()
+    ]
+    if listed:
+        unknown = [name for name in listed if name not in known]
+        if unknown:
+            raise ValueError(
+                f"PAWABASE_PROCESSES names {', '.join(unknown)}; the processes are {', '.join(known)}"
+            )
+        if "api" not in listed:
+            raise ValueError(
+                "PAWABASE_PROCESSES cannot leave out the api: everything else needs it"
+            )
+        return [service for service in SERVICES if service[0] in listed]
+
+    def flag(name: str) -> bool | None:
+        value = environ.get(name, "").strip().lower()
+        return True if value in _TRUE else False if value in _FALSE else None
+
+    skipped = set()
+    if flag("PAWABASE_INLINE_WORKER"):
+        skipped.add("worker")
+    if flag("PAWABASE_INLINE_SCHEDULER"):
+        skipped.add("scheduler")
+    if flag("PAWABASE_STUDIO") is False:
+        skipped.add("studio")
+    return [service for service in SERVICES if service[0] not in skipped]
+
+
 def database_url_for(base: str, database: str) -> str:
     parts = urlsplit(base)
     return urlunsplit(parts._replace(path=f"/{database}"))
@@ -93,7 +141,13 @@ async def main() -> int:
         processes[name] = process
         return process
 
-    for name, cwd, command, _port in SERVICES:
+    try:
+        services = selected(base)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    print("starting: " + ", ".join(name for name, *_ in services), file=sys.stderr)
+    for name, cwd, command, _port in services:
         process = await start(name, cwd, command)
         if name == "api" and not await wait_healthy(8001, process):
             print("api did not become healthy", file=sys.stderr)
