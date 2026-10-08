@@ -13,6 +13,7 @@ from tortoise.functions import Count
 
 from app import route_stats
 from app.analytics import DEFAULT_RANGE, environment_analytics
+from app.capacity import report as capacity_report
 from app.platform import PLATFORM_QUEUES, Platform
 from app.system_health import system_report
 from database.models import (
@@ -566,6 +567,15 @@ def register(r: Router, platform: Platform) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="minutes must be an integer") from exc
         return await system_report(platform, env, minutes)
+
+    @r.get(
+        "/capacity",
+        auth=MANAGE,
+        tags=["runtime"],
+        summary="What this deployment is using: process memory, and per environment its database, storage and keys",
+    )
+    async def capacity(ctx: HttpContext):
+        return await capacity_report(platform)
 
     @r.get(
         f"{base}/analytics",

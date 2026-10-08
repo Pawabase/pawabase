@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import os
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +54,9 @@ class DataSource:
         self.url = url
         self.alias = alias
         self.client: Any = None
+        #: What the URL said about where the data sits: a Postgres schema, or a SQLite file.
+        self.schema: str | None = None
+        self.file_path: str | None = None
         self.dialect = "sqlite"
         self.query_class: Any = None
         self._lock = asyncio.Lock()
@@ -89,6 +93,8 @@ class DataSource:
                     f'CREATE SCHEMA IF NOT EXISTS "{str(schema).replace(chr(34), "")}"'
                 )
             self.client = client
+            self.schema = str(schema) if schema else None
+            self.file_path = str(file_path) if file_path and file_path != ":memory:" else None
             self.dialect = dialect_of(client)
             self.query_class = client.query_class
             return self
@@ -106,6 +112,36 @@ class DataSource:
         """Run an INSERT; returns the new row id on SQLite and MySQL."""
         await self.connect()
         return await timed(self.client, "execute_insert", sql, params)
+
+    async def size_bytes(self) -> int | None:
+        """How much space the data takes: the schema (Postgres), the file (SQLite) or the database (MySQL).
+
+        ``None`` when it cannot be told, which is not the same as empty.
+        """
+        await self.connect()
+        try:
+            if self.dialect == "sqlite":
+                return os.path.getsize(self.file_path) if self.file_path else None
+            if self.dialect == "postgres":
+                if self.schema:
+                    rows = await self.fetch(
+                        "SELECT COALESCE(SUM(pg_total_relation_size(c.oid)), 0)::bigint AS size "
+                        "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+                        "WHERE n.nspname = $1 AND c.relkind IN ('r', 'm')",
+                        [self.schema],
+                    )
+                else:
+                    rows = await self.fetch("SELECT pg_database_size(current_database()) AS size")
+                return int(rows[0]["size"])
+            if self.dialect == "mysql":
+                rows = await self.fetch(
+                    "SELECT COALESCE(SUM(data_length + index_length), 0) AS size "
+                    "FROM information_schema.tables WHERE table_schema = DATABASE()"
+                )
+                return int(rows[0]["size"])
+        except Exception:  # a size is a courtesy, never a failure
+            return None
+        return None
 
     async def script(self, sql: str) -> None:
         await self.connect()
