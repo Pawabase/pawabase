@@ -92,6 +92,9 @@ class ApiSettings(PlatformSettings):
     inline_scheduler: bool = False
     queue_prefix: str = "pawabase:queue:"
     request_retention_days: int = 14
+    #: How often function and flow run records are written, in seconds. They gather in memory and go to the database in one batch, so a request does
+    #: not wait on the write. ``0`` writes each record before the request returns.
+    record_buffer_seconds: float = 0.5
     query_timeout: float = 15.0
     #: Proxies between the gateway and the open internet (a load balancer is 1). The caller's address, as handed to functions, is the entry
     #: ``trusted_proxy_hops`` places from the right of ``X-Forwarded-For``: the gateway appends the address it saw, so the left side is whatever the caller sent.

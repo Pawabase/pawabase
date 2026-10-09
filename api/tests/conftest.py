@@ -21,6 +21,7 @@ def settings(tmp_path):
         code_path=str(tmp_path / "code"),
         public_url="http://gateway.test",
         inline_worker=True,
+        record_buffer_seconds=0,  # records are written at once, so a test can read them right after the call
     )
 
 
