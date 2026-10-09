@@ -36,7 +36,14 @@ def _aware(moment: datetime) -> datetime:
 
 
 def _totals() -> dict[str, float]:
-    return {"requests": 0, "errors": 0, "latency_total": 0.0, "events": 0, "flow_runs": 0, "flow_failures": 0}
+    return {
+        "requests": 0,
+        "errors": 0,
+        "latency_total": 0.0,
+        "events": 0,
+        "flow_runs": 0,
+        "flow_failures": 0,
+    }
 
 
 def _summary(totals: dict[str, float]) -> dict[str, Any]:
@@ -50,7 +57,9 @@ def _summary(totals: dict[str, float]) -> dict[str, Any]:
         "events": int(totals["events"]),
         "flow_runs": runs,
         "flow_failures": int(totals["flow_failures"]),
-        "flow_success_rate": round((runs - totals["flow_failures"]) / runs * 100, 1) if runs else None,
+        "flow_success_rate": round((runs - totals["flow_failures"]) / runs * 100, 1)
+        if runs
+        else None,
     }
 
 
@@ -62,8 +71,16 @@ async def environment_analytics(env: str, range_name: str = DEFAULT_RANGE) -> di
     since = start - span
     count = int(span / step)
     series = [
-        {"t": (start + step * i).isoformat(), "requests": 0, "errors": 0, "client_errors": 0,
-         "latency_ms": None, "events": 0, "flow_runs": 0, "flow_failures": 0}
+        {
+            "t": (start + step * i).isoformat(),
+            "requests": 0,
+            "errors": 0,
+            "client_errors": 0,
+            "latency_ms": None,
+            "events": 0,
+            "flow_runs": 0,
+            "flow_failures": 0,
+        }
         for i in range(count)
     ]
     current, previous = _totals(), _totals()
@@ -78,9 +95,9 @@ async def environment_analytics(env: str, range_name: str = DEFAULT_RANGE) -> di
         return None, None
 
     latency: list[float] = [0.0] * count
-    rows = await MetricCounter.filter(
-        env=env, name=REQUESTS_METRIC, window__gte=since
-    ).values("window", "tags", "value", "count")
+    rows = await MetricCounter.filter(env=env, name=REQUESTS_METRIC, window__gte=since).values(
+        "window", "tags", "value", "count"
+    )
     for row in rows:
         bucket, totals = place(row["window"])
         if totals is None:
@@ -155,8 +172,12 @@ async def environment_analytics(env: str, range_name: str = DEFAULT_RANGE) -> di
         "top_events": [{"name": r["name"], "count": r["total"]} for r in top_events],
         "top_flows": [{"name": r["flow"], "count": r["total"]} for r in top_flows],
         "recent_failures": [
-            {"id": r["id"], "flow": r["flow"], "error": (r["error"] or "")[:200],
-             "at": _aware(r["created_at"]).isoformat()}
+            {
+                "id": r["id"],
+                "flow": r["flow"],
+                "error": (r["error"] or "")[:200],
+                "at": _aware(r["created_at"]).isoformat(),
+            }
             for r in failures
         ],
     }

@@ -24,7 +24,9 @@ class RestoreRequest(BaseModel):
         default="merge",
         description="merge adds and updates; replace first removes what the chosen parts hold.",
     )
-    dry_run: bool = Field(default=False, description="Report what would be restored; change nothing.")
+    dry_run: bool = Field(
+        default=False, description="Report what would be restored; change nothing."
+    )
     confirm: str | None = Field(
         default=None, description="For replace: the environment's name, typed out."
     )
@@ -56,7 +58,9 @@ def register(r: Router, platform: Platform) -> None:
         stamp = document["created_at"][:19].replace(":", "-")
         return JSONResponse(
             document,
-            headers={"Content-Disposition": f'attachment; filename="{env}-{stamp}.pawabase-backup.json"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="{env}-{stamp}.pawabase-backup.json"'
+            },
         )
 
     @r.post(
@@ -97,12 +101,18 @@ def register(r: Router, platform: Platform) -> None:
                 platform, environment, body.backup, parts, replace=replace
             )
         except KeyError as exc:
-            raise HTTPException(status_code=422, detail=f"the backup is malformed: missing {exc}") from exc
+            raise HTTPException(
+                status_code=422, detail=f"the backup is malformed: missing {exc}"
+            ) from exc
         await audit(
             ctx,
             "backup.restored",
             env=env,
             target=env,
-            details={"parts": parts, "strategy": body.strategy, "from": body.backup.get("source", {})},
+            details={
+                "parts": parts,
+                "strategy": body.strategy,
+                "from": body.backup.get("source", {}),
+            },
         )
         return report

@@ -78,10 +78,14 @@ class Grouped:
 class Buckets:
     """Equal time buckets, each holding counters named up front."""
 
-    def __init__(self, start: datetime, end: datetime, step: timedelta, keys: tuple[str, ...]) -> None:
+    def __init__(
+        self, start: datetime, end: datetime, step: timedelta, keys: tuple[str, ...]
+    ) -> None:
         self.start, self.step, self.keys = start, step, keys
         count = max(1, int((end - start) / step))
-        self.rows = [{"t": (start + step * i).isoformat(), **dict.fromkeys(keys, 0)} for i in range(count)]
+        self.rows = [
+            {"t": (start + step * i).isoformat(), **dict.fromkeys(keys, 0)} for i in range(count)
+        ]
 
     def add(self, moment: datetime | None, key: str, amount: int = 1) -> None:
         moment = aware(moment)
@@ -95,9 +99,16 @@ class Buckets:
 async def system_report(platform: Any, env: str, minutes: int) -> dict[str, Any]:
     now = datetime.now(UTC)
     step = timedelta(minutes=step_for(minutes))
-    end = datetime.fromtimestamp((now.timestamp() // step.total_seconds() + 1) * step.total_seconds(), UTC)
+    end = datetime.fromtimestamp(
+        (now.timestamp() // step.total_seconds() + 1) * step.total_seconds(), UTC
+    )
     start = end - step * max(1, int(timedelta(minutes=minutes) / step))
-    window = {"minutes": minutes, "step_seconds": int(step.total_seconds()), "start": start.isoformat(), "end": end.isoformat()}
+    window = {
+        "minutes": minutes,
+        "step_seconds": int(step.total_seconds()),
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+    }
 
     traffic = await _traffic(env, start, end, step)
     jobs = await _jobs(platform, env, start, end, step, now)
@@ -124,7 +135,9 @@ async def system_report(platform: Any, env: str, minutes: int) -> dict[str, Any]
 
 async def _traffic(env: str, start: datetime, end: datetime, step: timedelta) -> dict[str, Any]:
     """Gateway traffic on the same buckets as everything else, so charts line up."""
-    rows = await MetricCounter.filter(env=env, name=REQUESTS_METRIC, window__gte=start).values("window", "tags", "value", "count")
+    rows = await MetricCounter.filter(env=env, name=REQUESTS_METRIC, window__gte=start).values(
+        "window", "tags", "value", "count"
+    )
     series = Buckets(start, end, step, ("requests", "errors", "client_errors"))
     latency = [0.0] * len(series.rows)
     totals = {"requests": 0, "errors": 0, "latency": 0.0}
@@ -143,29 +156,57 @@ async def _traffic(env: str, start: datetime, end: datetime, step: timedelta) ->
         totals["requests"] += row["count"]
         totals["latency"] += row["value"]
     for index, bucket in enumerate(series.rows):
-        bucket["latency_ms"] = round(latency[index] / bucket["requests"], 1) if bucket["requests"] else None
+        bucket["latency_ms"] = (
+            round(latency[index] / bucket["requests"], 1) if bucket["requests"] else None
+        )
     return {
         "series": series.rows,
         "totals": {
-            "requests": totals["requests"], "errors": totals["errors"],
+            "requests": totals["requests"],
+            "errors": totals["errors"],
             "error_rate": rate(totals["errors"], totals["requests"]) or 0.0,
-            "avg_latency_ms": round(totals["latency"] / totals["requests"], 1) if totals["requests"] else 0.0,
+            "avg_latency_ms": round(totals["latency"] / totals["requests"], 1)
+            if totals["requests"]
+            else 0.0,
         },
     }
 
 
-async def _jobs(platform: Any, env: str, start: datetime, end: datetime, step: timedelta, now: datetime) -> dict[str, Any]:
-    rows = await JobRun.filter(env=env, created_at__gte=start).order_by("-created_at").limit(ROW_CAP).values(
-        "id", "queue", "job", "status", "attempts", "error", "created_at", "available_at", "started_at", "finished_at", "duration_ms"
+async def _jobs(
+    platform: Any, env: str, start: datetime, end: datetime, step: timedelta, now: datetime
+) -> dict[str, Any]:
+    rows = (
+        await JobRun.filter(env=env, created_at__gte=start)
+        .order_by("-created_at")
+        .limit(ROW_CAP)
+        .values(
+            "id",
+            "queue",
+            "job",
+            "status",
+            "attempts",
+            "error",
+            "created_at",
+            "available_at",
+            "started_at",
+            "finished_at",
+            "duration_ms",
+        )
     )
     series = Buckets(start, end, step, ("succeeded", "failed", "retrying", "queued"))
-    by_queue: dict[str, dict[str, Any]] = defaultdict(lambda: {"total": 0, "failed": 0, "durations": []})
-    by_job: dict[str, dict[str, Any]] = defaultdict(lambda: {"total": 0, "failed": 0, "durations": []})
+    by_queue: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {"total": 0, "failed": 0, "durations": []}
+    )
+    by_job: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {"total": 0, "failed": 0, "durations": []}
+    )
     failures = Grouped()
     for row in rows:
         status = row["status"]
         key = status if status in ("succeeded", "failed", "retrying") else "queued"
-        series.add(row["finished_at"] if status in ("succeeded", "failed") else row["created_at"], key)
+        series.add(
+            row["finished_at"] if status in ("succeeded", "failed") else row["created_at"], key
+        )
         for group, name in ((by_queue, row["queue"]), (by_job, row["job"])):
             entry = group[name]
             entry["total"] += 1
@@ -176,11 +217,19 @@ async def _jobs(platform: Any, env: str, start: datetime, end: datetime, step: t
             error = (row["error"] or "")[:240]
             failures.add(
                 (row["job"], row["queue"], error),
-                {"id": row["id"], "job": row["job"], "queue": row["queue"], "attempts": row["attempts"], "error": error,
-                 "at": (aware(row["finished_at"] or row["created_at"]) or now).isoformat()},
+                {
+                    "id": row["id"],
+                    "job": row["job"],
+                    "queue": row["queue"],
+                    "attempts": row["attempts"],
+                    "error": error,
+                    "at": (aware(row["finished_at"] or row["created_at"]) or now).isoformat(),
+                },
             )
 
-    waiting = await JobRun.filter(env=env, status="queued").values_list("available_at", "created_at")
+    waiting = await JobRun.filter(env=env, status="queued").values_list(
+        "available_at", "created_at"
+    )
     oldest = max((now - (aware(a or c) or now) for a, c in waiting), default=timedelta())
     active = await JobRun.filter(env=env, status="active").values_list("id", "job", "started_at")
     stuck = [
@@ -196,9 +245,14 @@ async def _jobs(platform: Any, env: str, start: datetime, end: datetime, step: t
         depth = await platform.queue.size(name)
         queues.append(
             {
-                "queue": name, "depth": depth, "total": entry["total"], "failed": entry["failed"],
+                "queue": name,
+                "depth": depth,
+                "total": entry["total"],
+                "failed": entry["failed"],
                 "success_rate": rate(entry["total"] - entry["failed"], entry["total"]),
-                "avg_ms": round(sum(entry["durations"]) / len(entry["durations"]), 1) if entry["durations"] else None,
+                "avg_ms": round(sum(entry["durations"]) / len(entry["durations"]), 1)
+                if entry["durations"]
+                else None,
                 "p95_ms": percentile(entry["durations"], 0.95),
             }
         )
@@ -206,18 +260,29 @@ async def _jobs(platform: Any, env: str, start: datetime, end: datetime, step: t
     totals = {"total": len(rows), "failed": sum(e["failed"] for e in by_queue.values())}
     return {
         "series": series.rows,
-        "totals": {**totals, "success_rate": rate(totals["total"] - totals["failed"], totals["total"])},
+        "totals": {
+            **totals,
+            "success_rate": rate(totals["total"] - totals["failed"], totals["total"]),
+        },
         "queues": queues,
         "by_job": [
             {
-                "job": name, "total": e["total"], "failed": e["failed"],
-                "avg_ms": round(sum(e["durations"]) / len(e["durations"]), 1) if e["durations"] else None,
+                "job": name,
+                "total": e["total"],
+                "failed": e["failed"],
+                "avg_ms": round(sum(e["durations"]) / len(e["durations"]), 1)
+                if e["durations"]
+                else None,
                 "p95_ms": percentile(e["durations"], 0.95),
                 "max_ms": round(max(e["durations"]), 1) if e["durations"] else None,
             }
             for name, e in top_jobs
         ],
-        "backlog": {"waiting": len(waiting), "oldest_seconds": int(oldest.total_seconds()), "stuck": stuck},
+        "backlog": {
+            "waiting": len(waiting),
+            "oldest_seconds": int(oldest.total_seconds()),
+            "stuck": stuck,
+        },
         "recent_failures": failures.top(),
         "truncated": len(rows) >= ROW_CAP,
     }
@@ -231,40 +296,72 @@ async def _workers(platform: Any) -> dict[str, Any]:
         seen = aware(row.last_seen)
         items.append(
             {
-                "name": row.name, "kind": row.kind, "status": row.status, "processed": row.processed,
-                "concurrency": row.concurrency, "last_seen": seen.isoformat() if seen else None,
+                "name": row.name,
+                "kind": row.kind,
+                "status": row.status,
+                "processed": row.processed,
+                "concurrency": row.concurrency,
+                "last_seen": seen.isoformat() if seen else None,
                 "alive": row.status == "running" and seen is not None and seen >= cutoff,
             }
         )
     inline = platform.app.state.get("inline_worker")
     if inline is not None:
         items.append(
-            {"name": "inline (api process)", "kind": "worker", "status": "running", "alive": True,
-             "processed": inline.worker._jobs_processed, "concurrency": inline.worker.options.concurrency, "last_seen": None}
+            {
+                "name": "inline (api process)",
+                "kind": "worker",
+                "status": "running",
+                "alive": True,
+                "processed": inline.worker._jobs_processed,
+                "concurrency": inline.worker.options.concurrency,
+                "last_seen": None,
+            }
         )
-    return {"items": items, "alive": sum(i["alive"] for i in items if i["kind"] == "worker"),
-            "schedulers_alive": sum(i["alive"] for i in items if i["kind"] != "worker")}
+    return {
+        "items": items,
+        "alive": sum(i["alive"] for i in items if i["kind"] == "worker"),
+        "schedulers_alive": sum(i["alive"] for i in items if i["kind"] != "worker"),
+    }
 
 
 async def _schedules(env: str, now: datetime) -> list[dict[str, Any]]:
     rows = await Schedule.filter(environment__name=env).values(
-        "name", "cron", "interval_seconds", "target_type", "target", "enabled", "last_run_at", "last_status", "run_count"
+        "name",
+        "cron",
+        "interval_seconds",
+        "target_type",
+        "target",
+        "enabled",
+        "last_run_at",
+        "last_status",
+        "run_count",
     )
     out = []
     for row in rows:
         last = aware(row["last_run_at"])
         interval = row["interval_seconds"]
-        overdue = bool(row["enabled"] and interval and last and (now - last).total_seconds() > interval * 2 + 60)
+        overdue = bool(
+            row["enabled"]
+            and interval
+            and last
+            and (now - last).total_seconds() > interval * 2 + 60
+        )
         out.append({**row, "last_run_at": last.isoformat() if last else None, "overdue": overdue})
     return sorted(out, key=lambda r: r["name"])
 
 
 async def _flows(env: str, start: datetime, end: datetime, step: timedelta) -> dict[str, Any]:
-    rows = await FlowRun.filter(env=env, created_at__gte=start).order_by("-created_at").limit(ROW_CAP).values(
-        "id", "flow", "status", "error", "duration_ms", "trigger", "created_at"
+    rows = (
+        await FlowRun.filter(env=env, created_at__gte=start)
+        .order_by("-created_at")
+        .limit(ROW_CAP)
+        .values("id", "flow", "status", "error", "duration_ms", "trigger", "created_at")
     )
     series = Buckets(start, end, step, ("succeeded", "failed"))
-    by_flow: dict[str, dict[str, Any]] = defaultdict(lambda: {"runs": 0, "failed": 0, "durations": []})
+    by_flow: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {"runs": 0, "failed": 0, "durations": []}
+    )
     failures = Grouped()
     for row in rows:
         failed = row["status"] == "failed"
@@ -275,15 +372,29 @@ async def _flows(env: str, start: datetime, end: datetime, step: timedelta) -> d
         entry["durations"].append(row["duration_ms"] or 0)
         if failed:
             error = (row["error"] or "")[:240]
-            failures.add((row["flow"], error), {"id": row["id"], "flow": row["flow"], "trigger": row["trigger"], "error": error,
-                                                 "at": aware(row["created_at"]).isoformat()})
+            failures.add(
+                (row["flow"], error),
+                {
+                    "id": row["id"],
+                    "flow": row["flow"],
+                    "trigger": row["trigger"],
+                    "error": error,
+                    "at": aware(row["created_at"]).isoformat(),
+                },
+            )
     return {
         "series": series.rows,
         "totals": {"runs": len(rows), "failed": sum(e["failed"] for e in by_flow.values())},
         "by_flow": sorted(
             (
-                {"flow": name, "runs": e["runs"], "failed": e["failed"], "success_rate": rate(e["runs"] - e["failed"], e["runs"]),
-                 "avg_ms": round(sum(e["durations"]) / len(e["durations"]), 1), "p95_ms": percentile(e["durations"], 0.95)}
+                {
+                    "flow": name,
+                    "runs": e["runs"],
+                    "failed": e["failed"],
+                    "success_rate": rate(e["runs"] - e["failed"], e["runs"]),
+                    "avg_ms": round(sum(e["durations"]) / len(e["durations"]), 1),
+                    "p95_ms": percentile(e["durations"], 0.95),
+                }
                 for name, e in by_flow.items()
             ),
             key=lambda r: -r["runs"],
@@ -293,7 +404,12 @@ async def _flows(env: str, start: datetime, end: datetime, step: timedelta) -> d
 
 
 async def _events(env: str, start: datetime, end: datetime, step: timedelta) -> dict[str, Any]:
-    rows = await EventLog.filter(env=env, created_at__gte=start).order_by("-created_at").limit(ROW_CAP).values("name", "source", "created_at")
+    rows = (
+        await EventLog.filter(env=env, created_at__gte=start)
+        .order_by("-created_at")
+        .limit(ROW_CAP)
+        .values("name", "source", "created_at")
+    )
     series = Buckets(start, end, step, ("events",))
     by_name: dict[str, int] = defaultdict(int)
     by_source: dict[str, int] = defaultdict(int)
@@ -304,21 +420,46 @@ async def _events(env: str, start: datetime, end: datetime, step: timedelta) -> 
     return {
         "series": series.rows,
         "total": len(rows),
-        "top": [{"name": n, "count": c} for n, c in sorted(by_name.items(), key=lambda kv: -kv[1])[:10]],
-        "sources": [{"name": n, "count": c} for n, c in sorted(by_source.items(), key=lambda kv: -kv[1])],
+        "top": [
+            {"name": n, "count": c} for n, c in sorted(by_name.items(), key=lambda kv: -kv[1])[:10]
+        ],
+        "sources": [
+            {"name": n, "count": c} for n, c in sorted(by_source.items(), key=lambda kv: -kv[1])
+        ],
     }
 
 
 async def _webhooks(env: str, start: datetime, end: datetime, step: timedelta) -> dict[str, Any]:
-    rows = await WebhookDelivery.filter(endpoint__environment__name=env, created_at__gte=start).order_by("-created_at").limit(ROW_CAP).values(
-        "id", "status", "attempts", "response_status", "error", "duration_ms", "event", "created_at", "endpoint__name"
+    rows = (
+        await WebhookDelivery.filter(endpoint__environment__name=env, created_at__gte=start)
+        .order_by("-created_at")
+        .limit(ROW_CAP)
+        .values(
+            "id",
+            "status",
+            "attempts",
+            "response_status",
+            "error",
+            "duration_ms",
+            "event",
+            "created_at",
+            "endpoint__name",
+        )
     )
     series = Buckets(start, end, step, ("delivered", "failed", "pending"))
-    by_endpoint: dict[str, dict[str, Any]] = defaultdict(lambda: {"total": 0, "failed": 0, "durations": []})
+    by_endpoint: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {"total": 0, "failed": 0, "durations": []}
+    )
     failures = Grouped()
     for row in rows:
         status = row["status"]
-        key = "delivered" if status in ("delivered", "succeeded", "ok") else "failed" if status in ("failed", "dead") else "pending"
+        key = (
+            "delivered"
+            if status in ("delivered", "succeeded", "ok")
+            else "failed"
+            if status in ("failed", "dead")
+            else "pending"
+        )
         series.add(row["created_at"], key)
         entry = by_endpoint[row["endpoint__name"]]
         entry["total"] += 1
@@ -327,17 +468,33 @@ async def _webhooks(env: str, start: datetime, end: datetime, step: timedelta) -
             entry["durations"].append(row["duration_ms"])
         if key == "failed":
             error = (row["error"] or "")[:240]
-            failures.add((row["endpoint__name"], row["event"], error),
-                         {"id": row["id"], "endpoint": row["endpoint__name"], "event": row["event"], "attempts": row["attempts"],
-                          "status_code": row["response_status"], "error": error, "at": aware(row["created_at"]).isoformat()})
+            failures.add(
+                (row["endpoint__name"], row["event"], error),
+                {
+                    "id": row["id"],
+                    "endpoint": row["endpoint__name"],
+                    "event": row["event"],
+                    "attempts": row["attempts"],
+                    "status_code": row["response_status"],
+                    "error": error,
+                    "at": aware(row["created_at"]).isoformat(),
+                },
+            )
     return {
         "series": series.rows,
         "totals": {"total": len(rows), "failed": sum(e["failed"] for e in by_endpoint.values())},
         "by_endpoint": sorted(
             (
-                {"endpoint": n, "total": e["total"], "failed": e["failed"], "success_rate": rate(e["total"] - e["failed"], e["total"]),
-                 "avg_ms": round(sum(e["durations"]) / len(e["durations"]), 1) if e["durations"] else None,
-                 "p95_ms": percentile(e["durations"], 0.95)}
+                {
+                    "endpoint": n,
+                    "total": e["total"],
+                    "failed": e["failed"],
+                    "success_rate": rate(e["total"] - e["failed"], e["total"]),
+                    "avg_ms": round(sum(e["durations"]) / len(e["durations"]), 1)
+                    if e["durations"]
+                    else None,
+                    "p95_ms": percentile(e["durations"], 0.95),
+                }
                 for n, e in by_endpoint.items()
             ),
             key=lambda r: -r["total"],
@@ -347,8 +504,11 @@ async def _webhooks(env: str, start: datetime, end: datetime, step: timedelta) -
 
 
 async def _mail(env: str, start: datetime, end: datetime, step: timedelta) -> dict[str, Any]:
-    rows = await MailLog.filter(env=env, created_at__gte=start).order_by("-created_at").limit(ROW_CAP).values(
-        "id", "subject", "template", "status", "error", "source", "created_at"
+    rows = (
+        await MailLog.filter(env=env, created_at__gte=start)
+        .order_by("-created_at")
+        .limit(ROW_CAP)
+        .values("id", "subject", "template", "status", "error", "source", "created_at")
     )
     series = Buckets(start, end, step, ("sent", "suppressed", "failed"))
     by_template: dict[str, dict[str, int]] = defaultdict(lambda: {"total": 0, "failed": 0})
@@ -363,12 +523,21 @@ async def _mail(env: str, start: datetime, end: datetime, step: timedelta) -> di
         entry["failed"] += status == "failed"
         if status == "failed":
             error = (row["error"] or "")[:240]
-            failures.add((row["subject"], error), {"id": row["id"], "subject": row["subject"], "error": error,
-                                                    "at": aware(row["created_at"]).isoformat()})
+            failures.add(
+                (row["subject"], error),
+                {
+                    "id": row["id"],
+                    "subject": row["subject"],
+                    "error": error,
+                    "at": aware(row["created_at"]).isoformat(),
+                },
+            )
     return {
         "series": series.rows,
         "totals": {"total": len(rows), **counts},
-        "by_template": sorted(({"template": n, **e} for n, e in by_template.items()), key=lambda r: -r["total"])[:10],
+        "by_template": sorted(
+            ({"template": n, **e} for n, e in by_template.items()), key=lambda r: -r["total"]
+        )[:10],
         "recent_failures": failures.top(),
     }
 
@@ -383,17 +552,37 @@ def diagnose(report: dict[str, Any]) -> list[dict[str, str]]:
     jobs, workers = report["jobs"], report["workers"]
     backlog = jobs["backlog"]
     if backlog["waiting"] and workers["alive"] == 0:
-        add("critical", "queues", f"{backlog['waiting']} jobs are waiting and no worker is running. Start one with `python -m app.worker`.")
+        add(
+            "critical",
+            "queues",
+            f"{backlog['waiting']} jobs are waiting and no worker is running. Start one with `python -m app.worker`.",
+        )
     elif backlog["oldest_seconds"] > 1800:
-        add("critical", "queues", f"The oldest waiting job has been queued for {backlog['oldest_seconds'] // 60} minutes.")
+        add(
+            "critical",
+            "queues",
+            f"The oldest waiting job has been queued for {backlog['oldest_seconds'] // 60} minutes.",
+        )
     elif backlog["oldest_seconds"] > 300:
-        add("warning", "queues", f"The oldest waiting job has been queued for {backlog['oldest_seconds'] // 60} minutes.")
+        add(
+            "warning",
+            "queues",
+            f"The oldest waiting job has been queued for {backlog['oldest_seconds'] // 60} minutes.",
+        )
     for item in backlog["stuck"][:3]:
-        add("warning", "queues", f"Job {item['job']} has been running for {item['running_seconds'] // 60} minutes.")
+        add(
+            "warning",
+            "queues",
+            f"Job {item['job']} has been running for {item['running_seconds'] // 60} minutes.",
+        )
     stale = [i["name"] for i in workers["items"] if not i["alive"] and i["status"] == "running"]
     if stale:
         shown = ", ".join(stale[:2]) + (f" and {len(stale) - 2} more" if len(stale) > 2 else "")
-        add("warning", "workers", f"{len(stale)} worker or scheduler process{'es' if len(stale) > 1 else ''} stopped reporting in ({shown}).")
+        add(
+            "warning",
+            "workers",
+            f"{len(stale)} worker or scheduler process{'es' if len(stale) > 1 else ''} stopped reporting in ({shown}).",
+        )
     totals = jobs["totals"]
     if totals["total"] >= 5 and totals["success_rate"] is not None:
         failed_rate = 100 - totals["success_rate"]
@@ -403,7 +592,11 @@ def diagnose(report: dict[str, Any]) -> list[dict[str, str]]:
             add("warning", "queues", f"{failed_rate:.0f}% of jobs in this window failed.")
     for schedule in report["schedules"]:
         if schedule["overdue"]:
-            add("warning", "schedules", f"Schedule {schedule['name']} has not run on time (last run {schedule['last_run_at'][:16].replace('T', ' ')} UTC).")
+            add(
+                "warning",
+                "schedules",
+                f"Schedule {schedule['name']} has not run on time (last run {schedule['last_run_at'][:16].replace('T', ' ')} UTC).",
+            )
         elif schedule["enabled"] and schedule["last_status"] == "failed":
             add("warning", "schedules", f"Schedule {schedule['name']} failed on its last run.")
     flows = report["flows"]["totals"]
@@ -411,7 +604,11 @@ def diagnose(report: dict[str, Any]) -> list[dict[str, str]]:
         add("warning", "flows", f"{flows['failed']} of {flows['runs']} flow runs failed.")
     for endpoint in report["webhooks"]["by_endpoint"]:
         if endpoint["total"] >= 3 and endpoint["failed"] / endpoint["total"] >= 0.5:
-            add("warning", "webhooks", f"Webhook {endpoint['endpoint']} failed {endpoint['failed']} of {endpoint['total']} deliveries.")
+            add(
+                "warning",
+                "webhooks",
+                f"Webhook {endpoint['endpoint']} failed {endpoint['failed']} of {endpoint['total']} deliveries.",
+            )
     mail = report["mail"]["totals"]
     if mail["failed"]:
         add("warning", "mail", f"{mail['failed']} emails failed to send.")

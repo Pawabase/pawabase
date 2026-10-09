@@ -14,7 +14,9 @@ class FakeAkountz:
         self.identities = {
             "format": 1,
             "roles": [{"name": "editor", "description": "", "permissions": ["posts:write"]}],
-            "users": [{"id": 7, "email": "ada@example.com", "password": "hash", "roles": ["editor"]}],
+            "users": [
+                {"id": 7, "email": "ada@example.com", "password": "hash", "roles": ["editor"]}
+            ],
             "orgs": [],
         }
         self.restores = []
@@ -25,7 +27,12 @@ class FakeAkountz:
 
     async def post(self, path, json=None, **kwargs):
         self.restores.append((path, json))
-        return {"roles": 1, "users": {"created": 1, "updated": 0}, "organizations": 0, "warnings": ["w"]}
+        return {
+            "roles": 1,
+            "users": {"created": 1, "updated": 0},
+            "organizations": 0,
+            "warnings": ["w"],
+        }
 
     async def close(self):
         pass
@@ -34,23 +41,32 @@ class FakeAkountz:
 @pytest.fixture
 async def shop(api):
     api.platform.akountz = FakeAkountz()
-    await api.studio.post(f"{ENV}/policies", json={"name": "staff", "condition": {"role": "editor"}})
+    await api.studio.post(
+        f"{ENV}/policies", json={"name": "staff", "condition": {"role": "editor"}}
+    )
     await api.studio.post(
         f"{ENV}/resources",
         json={
             "name": "posts",
-            "fields": [{"name": "title", "type": "string", "required": True}, {"name": "meta", "type": "json"}],
+            "fields": [
+                {"name": "title", "type": "string", "required": True},
+                {"name": "meta", "type": "json"},
+            ],
             "operations": {"list": {"enabled": True, "policy": "staff"}},
         },
     )
     await api.studio.post(f"{ENV}/resources/posts/migrate")
     for title in ("One", "Two", "Three"):
-        await api.studio.post(f"{ENV}/resources/posts/records", json={"title": title, "meta": {"t": title}})
+        await api.studio.post(
+            f"{ENV}/resources/posts/records", json={"title": title, "meta": {"t": title}}
+        )
     return api
 
 
 async def rows(api):
-    return (await api.studio.get(f"{ENV}/resources/posts/records", params={"per_page": 100}))["data"]
+    return (await api.studio.get(f"{ENV}/resources/posts/records", params={"per_page": 100}))[
+        "data"
+    ]
 
 
 async def test_backup_holds_definitions_data_users_and_a_checksum(shop):
@@ -107,7 +123,9 @@ async def test_replace_restore_brings_back_policies_data_and_ids(shop):
 async def test_merge_restore_updates_and_keeps_newer_rows(shop):
     backup = await shop.studio.get(f"{ENV}/backup", params={"include": "data"})
     first = (await rows(shop))[0]
-    await shop.studio.patch(f"{ENV}/resources/posts/records/{first['id']}", json={"title": "Changed"})
+    await shop.studio.patch(
+        f"{ENV}/resources/posts/records/{first['id']}", json={"title": "Changed"}
+    )
     extra = await shop.studio.post(f"{ENV}/resources/posts/records", json={"title": "Newer"})
 
     report = await shop.studio.post(f"{ENV}/restore", json={"backup": backup})
@@ -119,7 +137,9 @@ async def test_merge_restore_updates_and_keeps_newer_rows(shop):
 
 async def test_dry_run_changes_nothing(shop):
     backup = await shop.studio.get(f"{ENV}/backup")
-    preview = await shop.studio.post(f"{ENV}/restore", json={"backup": backup, "strategy": "replace", "dry_run": True})
+    preview = await shop.studio.post(
+        f"{ENV}/restore", json={"backup": backup, "strategy": "replace", "dry_run": True}
+    )
     assert preview["dry_run"] and preview["contents"]["data"] == {"posts": 3}
     assert shop.platform.akountz.restores == []
 
@@ -133,7 +153,10 @@ async def test_a_changed_or_foreign_file_is_refused(shop):
             await shop.studio.post(f"{ENV}/restore", json={"backup": document})
         assert err.value.status == 422 and text in str(err.value.body)
     with pytest.raises(ServiceError) as err:
-        await shop.studio.post(f"{ENV}/restore", json={"backup": {**backup, "checksum": None}, "include": ["settings", "users", "x"]})
+        await shop.studio.post(
+            f"{ENV}/restore",
+            json={"backup": {**backup, "checksum": None}, "include": ["settings", "users", "x"]},
+        )
     assert err.value.status == 422
 
 

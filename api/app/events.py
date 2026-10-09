@@ -82,9 +82,7 @@ class EventProcessor:
                 else await self.platform.state(event.env)
             )
         except HTTPException:
-            logger.warning(
-                "event %s for unknown environment %s", event.name, event.env
-            )
+            logger.warning("event %s for unknown environment %s", event.name, event.env)
             return []
         if await EventLog.filter(event_id=event.id).exists():
             return []  # at-least-once delivery: this one was already handled

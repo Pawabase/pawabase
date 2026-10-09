@@ -118,7 +118,7 @@ def register(r: Router, akountz: Akountz) -> None:
                 username=profile.username,
                 name=profile.name or "",
                 verified=bool(profile.email_verified),
-                max_users=akountz.settings.max_users,
+                max_users=akountz.max_users(config.env),
             )
             user.avatar_url = profile.avatar_url
             await user.save(update_fields=["avatar_url"])

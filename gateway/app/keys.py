@@ -51,9 +51,7 @@ class KeyResolver:
             return self._context(cached), cached
         self.lookups += 1
         try:
-            info = await self.api.post(
-                "/internal/v1/keys/resolve", json={"key": raw, "env": env}
-            )
+            info = await self.api.post("/internal/v1/keys/resolve", json={"key": raw, "env": env})
         except ServiceError as exc:
             if exc.status in (401, 404, 422):
                 detail = exc.body.get("detail") if isinstance(exc.body, dict) else None

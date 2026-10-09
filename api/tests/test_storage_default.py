@@ -26,6 +26,9 @@ class FakePlatform:
     def resolve_value(self, state, value):
         return value
 
+    def deprecated(self, env, what, advice, *, removed=False):
+        pass
+
 
 def manager(**values) -> StorageManager:
     return StorageManager(FakePlatform(**values))

@@ -125,9 +125,7 @@ class PawabaseJob(Job):
             queue=self.queue,
             job_id=self._job_id or "unknown",
             job_class=self.job_reference(),
-            payload=json.dumps(
-                {"env": self.env, **self.params}, default=str
-            ),
+            payload=json.dumps({"env": self.env, **self.params}, default=str),
             exception=error,
         )
 

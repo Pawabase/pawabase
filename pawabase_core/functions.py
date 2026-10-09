@@ -64,7 +64,9 @@ def list_resolved_functions(env: str, branch: str | None) -> list[FunctionSpec]:
     merged: dict[str, FunctionSpec] = {}
     for key in reversed(lookup_order(env, branch)):
         for spec in list_functions(key):
-            if spec.project == key:  # list_functions also returns shared ones; only this owner's count here
+            if (
+                spec.project == key
+            ):  # list_functions also returns shared ones; only this owner's count here
                 merged[spec.name] = spec
     return sorted(merged.values(), key=lambda spec: spec.name)
 

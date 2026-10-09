@@ -36,7 +36,9 @@ class _Retryable(Exception):
         self.response = response
 
 
-def check_target(url: str, *, allow_private: bool = False, allow_hosts: Collection[str] = ()) -> None:
+def check_target(
+    url: str, *, allow_private: bool = False, allow_hosts: Collection[str] = ()
+) -> None:
     """Refuse non-HTTP URLs, and private or loopback targets unless allowed.
 
     Flows and webhooks are configured by developers but can be pointed
@@ -95,7 +97,9 @@ async def request_once(
     try:
         # The body was read in chunks above, so decode the text we hold: response.json() would raise ResponseNotRead.
         parsed: Any = (
-            json.loads(text) if text and "json" in response.headers.get("content-type", "") else text
+            json.loads(text)
+            if text and "json" in response.headers.get("content-type", "")
+            else text
         )
     except ValueError:
         parsed = text

@@ -138,6 +138,21 @@ for s in api akountz angula gateway studio; do (cd $s && uv run pytest -q tests)
 uv run ruff check . && uv run ruff format --check .
 ```
 
+## Configuration
+
+Infrastructure and limits (database, storage, mail, quotas) are set with environment
+variables, never through the API. `PAWABASE_<KEY>` applies to every environment and
+`<ENV>_<KEY>` overrides it for one (`PRODUCTION_STORAGE_BUCKET`, `STAGING_MAX_USERS`).
+See `.env.example` for the keys. Studio's Settings page shows what is in effect and where
+each value came from; `GET /platform/v1/capacity` reports what a deployment is using, and
+`docker-compose.external.yml` runs one container against your own Postgres, Redis and S3.
+
+**Upgrading.** Stored `infra.database_url` and `infra.storage` still work and are reported
+as deprecated; `python -m app.export_config` prints them as variables. **Mail is the one
+break:** `infra.mail` is now ignored, so set `PAWABASE_MAIL_*` (or `<ENV>_MAIL_*`) before
+upgrading or mail is only logged. Secrets are now bound to their environment; existing
+ciphertext still opens, and `python -m app.reseal` rebinds it.
+
 ## Related repositories
 
 | Repository | What it is |

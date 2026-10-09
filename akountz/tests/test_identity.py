@@ -160,9 +160,7 @@ async def test_admin_roles_and_claims(akz):
 
     listing = await akz.admin.get("/admin/v1/envs/development/users?search=ada")
     assert listing["total"] == 1 and listing["data"][0]["app_metadata"] == {"plan": "pro"}
-    await akz.admin.patch(
-        f"/admin/v1/envs/development/users/{user_id}", json={"disabled": True}
-    )
+    await akz.admin.patch(f"/admin/v1/envs/development/users/{user_id}", json={"disabled": True})
     refused = await akz.http.post(
         "/auth/v1/token",
         json={"email": "ada@example.com", "password": "correct-horse-1"},
@@ -197,7 +195,9 @@ async def test_admin_requires_a_service_token(akz):
 
 async def test_there_are_no_platform_operators_and_tokens_name_no_project(akz):
     body = await akz.signup("ada@example.com")
-    claims = verify_user_token(body["access_token"], akz.settings.jwt_master_secret, env="development")
+    claims = verify_user_token(
+        body["access_token"], akz.settings.jwt_master_secret, env="development"
+    )
     assert "prj" not in claims and claims["env"] == "development"
     assert claims["iss"] == "pawabase:akountz"
     # A token is only good in the environment it was issued for.
@@ -209,7 +209,6 @@ async def test_there_are_no_platform_operators_and_tokens_name_no_project(akz):
     from database.models import AuthUser
 
     assert await AuthUser.all().count() == 1
-
 
 
 async def test_organization_scoped_tokens_and_app_claims(akz):
@@ -236,29 +235,79 @@ async def test_organization_scoped_tokens_and_app_claims(akz):
     assert claims["org"] == "acme-inc" and claims["org_role"] == "owner"
 
     # Refreshing keeps it; naming another org switches; null leaves every org.
-    kept = (await akz.http.post("/auth/v1/token", json={"grant_type": "refresh_token", "refresh_token": scoped["refresh_token"]}, headers=akz.headers())).json()
+    kept = (
+        await akz.http.post(
+            "/auth/v1/token",
+            json={"grant_type": "refresh_token", "refresh_token": scoped["refresh_token"]},
+            headers=akz.headers(),
+        )
+    ).json()
     assert kept["org"] == "acme-inc"
-    switched = (await akz.http.post("/auth/v1/token", json={"grant_type": "refresh_token", "refresh_token": kept["refresh_token"], "org": "globex"}, headers=akz.headers())).json()
+    switched = (
+        await akz.http.post(
+            "/auth/v1/token",
+            json={
+                "grant_type": "refresh_token",
+                "refresh_token": kept["refresh_token"],
+                "org": "globex",
+            },
+            headers=akz.headers(),
+        )
+    ).json()
     assert switched["org"] == "globex" and peek_claims(switched["access_token"])["org"] == "globex"
-    left = (await akz.http.post("/auth/v1/token", json={"grant_type": "refresh_token", "refresh_token": switched["refresh_token"], "org": None}, headers=akz.headers())).json()
+    left = (
+        await akz.http.post(
+            "/auth/v1/token",
+            json={
+                "grant_type": "refresh_token",
+                "refresh_token": switched["refresh_token"],
+                "org": None,
+            },
+            headers=akz.headers(),
+        )
+    ).json()
     assert left["org"] is None and peek_claims(left["access_token"])["org"] is None
 
     # Not a member: refused, on sign-in and on switch.
     assert (await sign_in("bob@example.com", org="acme-inc")).status_code == 403
     bob = (await sign_in("bob@example.com")).json()
-    refused = await akz.http.post("/auth/v1/token", json={"grant_type": "refresh_token", "refresh_token": bob["refresh_token"], "org": "acme-inc"}, headers=akz.headers())
+    refused = await akz.http.post(
+        "/auth/v1/token",
+        json={
+            "grant_type": "refresh_token",
+            "refresh_token": bob["refresh_token"],
+            "org": "acme-inc",
+        },
+        headers=akz.headers(),
+    )
     assert refused.status_code == 403
 
     # A role change in the org applies on the next refresh.
-    invite = await akz.http.post("/auth/v1/orgs/acme-inc/invitations", json={"email": "bob@example.com", "role": "viewer"}, headers=owner_h)
+    invite = await akz.http.post(
+        "/auth/v1/orgs/acme-inc/invitations",
+        json={"email": "bob@example.com", "role": "viewer"},
+        headers=owner_h,
+    )
     assert invite.status_code == 201, invite.text
-    accepted = await akz.http.post("/auth/v1/invitations/accept", json={"token": akz.api.last_token()}, headers=akz.headers(token=bob["access_token"]))
+    accepted = await akz.http.post(
+        "/auth/v1/invitations/accept",
+        json={"token": akz.api.last_token()},
+        headers=akz.headers(token=bob["access_token"]),
+    )
     assert accepted.status_code in (200, 201), accepted.text
     bob_scoped = (await sign_in("bob@example.com", org="acme-inc")).json()
     assert bob_scoped["org_role"] == "viewer"
     bob_id = bob_scoped["user"]["id"]
-    await akz.http.put(f"/auth/v1/orgs/acme-inc/members/{bob_id}", json={"role": "admin"}, headers=owner_h)
-    promoted = (await akz.http.post("/auth/v1/token", json={"grant_type": "refresh_token", "refresh_token": bob_scoped["refresh_token"]}, headers=akz.headers())).json()
+    await akz.http.put(
+        f"/auth/v1/orgs/acme-inc/members/{bob_id}", json={"role": "admin"}, headers=owner_h
+    )
+    promoted = (
+        await akz.http.post(
+            "/auth/v1/token",
+            json={"grant_type": "refresh_token", "refresh_token": bob_scoped["refresh_token"]},
+            headers=akz.headers(),
+        )
+    ).json()
     assert promoted["org_role"] == "admin"
 
     # app_metadata is admin-controlled and becomes the "app" claim; user_metadata stays "meta".

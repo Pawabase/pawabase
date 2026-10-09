@@ -67,7 +67,9 @@ PROJECT_LEVEL = ("routes.py", "policies.py", "transformers.py")
 class DeploymentError(Exception):
     """An artifact that cannot be activated. ``problems`` says why, one line each."""
 
-    def __init__(self, message: str, problems: list[str] | None = None, *, status: int = 422) -> None:
+    def __init__(
+        self, message: str, problems: list[str] | None = None, *, status: int = 422
+    ) -> None:
         super().__init__(message)
         self.message, self.problems, self.status = message, problems or [], status
 
@@ -89,11 +91,15 @@ def parse_requirements(text: str) -> tuple[list[str], list[str]]:
         if not line:
             continue
         if not REQUIREMENT_LINE.match(line):
-            problems.append(f"{REQUIREMENTS}:{number}: {line!r} is not a plain requirement (a package name with optional version, such as 'Pillow>=10.3'; options, URLs and paths are not allowed).")
+            problems.append(
+                f"{REQUIREMENTS}:{number}: {line!r} is not a plain requirement (a package name with optional version, such as 'Pillow>=10.3'; options, URLs and paths are not allowed)."
+            )
         else:
             lines.append(line)
     if len(lines) > MAX_REQUIREMENTS:
-        problems.append(f"{REQUIREMENTS} lists {len(lines)} packages; the limit is {MAX_REQUIREMENTS}.")
+        problems.append(
+            f"{REQUIREMENTS} lists {len(lines)} packages; the limit is {MAX_REQUIREMENTS}."
+        )
     return lines, problems
 
 
@@ -102,7 +108,11 @@ def requirements_in(archive: bytes) -> str | None:
     try:
         with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as bundle:
             for member in bundle.getmembers():
-                if member.name == REQUIREMENTS and member.isfile() and member.size <= MAX_FILE_BYTES:
+                if (
+                    member.name == REQUIREMENTS
+                    and member.isfile()
+                    and member.size <= MAX_FILE_BYTES
+                ):
                     handle = bundle.extractfile(member)
                     return handle.read().decode("utf-8", "replace") if handle else None
     except tarfile.TarError:
@@ -120,12 +130,20 @@ def unpack(archive: bytes, destination: Path) -> int:
                 raise DeploymentError("The bundle contains too many files.")
             for member in members:
                 path = PurePosixPath(member.name)
-                if member.issym() or member.islnk() or member.isdev() or path.is_absolute() or ".." in path.parts:
+                if (
+                    member.issym()
+                    or member.islnk()
+                    or member.isdev()
+                    or path.is_absolute()
+                    or ".." in path.parts
+                ):
                     raise DeploymentError(f"The bundle contains an unsafe entry: {member.name}")
                 if not member.isfile():
                     continue
                 if member.size > MAX_FILE_BYTES:
-                    raise DeploymentError(f"{member.name} is larger than {MAX_FILE_BYTES // 1024 // 1024}MB.")
+                    raise DeploymentError(
+                        f"{member.name} is larger than {MAX_FILE_BYTES // 1024 // 1024}MB."
+                    )
                 total += member.size
                 if total > MAX_UNPACKED_BYTES:
                     raise DeploymentError("The bundle is too large when unpacked.")
@@ -144,7 +162,14 @@ def unpack(archive: bytes, destination: Path) -> int:
 class Deployments:
     """Install, find, load and remove function artifacts."""
 
-    def __init__(self, root: str | Path, *, install_requirements: bool = True, index_url: str = "", install_timeout: int = 300) -> None:
+    def __init__(
+        self,
+        root: str | Path,
+        *,
+        install_requirements: bool = True,
+        index_url: str = "",
+        install_timeout: int = 300,
+    ) -> None:
         self.root = Path(root).resolve()
         self.install_requirements = install_requirements
         self.index_url = index_url
@@ -194,10 +219,19 @@ class Deployments:
         if not self.install_requirements:
             raise DeploymentError(
                 "This platform does not install a deployment's requirements.",
-                ["functions/requirements.txt is present, but installing is off here (PAWABASE_FUNCTION_INSTALL). Enable installing (PAWABASE_FUNCTION_INSTALL=true) or remove the file."],
+                [
+                    "functions/requirements.txt is present, but installing is off here (PAWABASE_FUNCTION_INSTALL). Enable installing (PAWABASE_FUNCTION_INSTALL=true) or remove the file."
+                ],
                 status=409,
             )
-        digest = hashlib.sha256(("\n".join(sorted(lines)) + "\n" + self.index_url + f"\npy{sys.version_info.major}.{sys.version_info.minor}").encode()).hexdigest()[:16]
+        digest = hashlib.sha256(
+            (
+                "\n".join(sorted(lines))
+                + "\n"
+                + self.index_url
+                + f"\npy{sys.version_info.major}.{sys.version_info.minor}"
+            ).encode()
+        ).hexdigest()[:16]
         target = self.packages_dir(digest)
         if (target / ".ok").is_file():
             return digest
@@ -209,7 +243,9 @@ class Deployments:
             requirements.write_text("\n".join(lines) + "\n")
             installed = building / "site"
             self._pip(requirements, installed)
-            (installed / ".ok").write_text(json.dumps({"requirements": lines, "installed_at": time.time()}))
+            (installed / ".ok").write_text(
+                json.dumps({"requirements": lines, "installed_at": time.time()})
+            )
             try:
                 installed.rename(target)
             except OSError:  # another process finished the same set first
@@ -223,29 +259,73 @@ class Deployments:
         index = ["--index-url", self.index_url] if self.index_url else []
         uv = shutil.which("uv")
         if uv:
-            command = [uv, "pip", "install", "--quiet", "--no-cache-dir", "--python", sys.executable, "--target", str(target), "-r", str(requirements), *index]
+            command = [
+                uv,
+                "pip",
+                "install",
+                "--quiet",
+                "--no-cache-dir",
+                "--python",
+                sys.executable,
+                "--target",
+                str(target),
+                "-r",
+                str(requirements),
+                *index,
+            ]
         else:
-            command = [sys.executable, "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--target", str(target), "-r", str(requirements), *index]
+            command = [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--quiet",
+                "--disable-pip-version-check",
+                "--target",
+                str(target),
+                "-r",
+                str(requirements),
+                *index,
+            ]
         try:
-            done = subprocess.run(command, capture_output=True, text=True, timeout=self.install_timeout, check=False)  # noqa: S603 - argv list, lines are validated
+            done = subprocess.run(
+                command, capture_output=True, text=True, timeout=self.install_timeout, check=False
+            )  # noqa: S603 - argv list, lines are validated
         except subprocess.TimeoutExpired as exc:
-            raise DeploymentError("Installing the requirements took too long.", [f"Stopped after {self.install_timeout}s."]) from exc
+            raise DeploymentError(
+                "Installing the requirements took too long.",
+                [f"Stopped after {self.install_timeout}s."],
+            ) from exc
         except OSError as exc:
-            raise DeploymentError("The installer could not be started.", [str(exc)], status=500) from exc
+            raise DeploymentError(
+                "The installer could not be started.", [str(exc)], status=500
+            ) from exc
         if done.returncode != 0:
-            tail = [line for line in (done.stderr or done.stdout).strip().splitlines() if line.strip()][-8:]
-            raise DeploymentError("The requirements could not be installed.", ["functions/requirements.txt: " + (tail[0] if tail else "the installer failed"), *tail[1:]])
+            tail = [
+                line for line in (done.stderr or done.stdout).strip().splitlines() if line.strip()
+            ][-8:]
+            raise DeploymentError(
+                "The requirements could not be installed.",
+                [
+                    "functions/requirements.txt: " + (tail[0] if tail else "the installer failed"),
+                    *tail[1:],
+                ],
+            )
 
     def _library_paths(self, stamp: dict[str, Any] | None, current: Path) -> list[Path]:
         digest = (stamp or {}).get("packages")
         if not digest:
             return []
         target = self.packages_dir(digest)
-        if not (target / ".ok").is_file():  # the shared volume lost it: build it again from the artifact's own file
+        if not (
+            target / ".ok"
+        ).is_file():  # the shared volume lost it: build it again from the artifact's own file
             try:
                 self._ensure_packages((current / REQUIREMENTS).read_text())
             except (OSError, DeploymentError) as exc:
-                logger.error("libraries for %s are missing and could not be restored: %s", current, exc)
+                logger.error(
+                    "libraries for %s are missing and could not be restored: %s", current, exc
+                )
                 return []
         return [target]
 
@@ -278,8 +358,18 @@ class Deployments:
         stamp = self.stamp(env, branch)
         current = self.current(env, branch)
         # Forget modules an earlier artifact imported from its own files, but never the installed libraries: a C extension cannot be imported twice.
-        owners = [entry for entry in self.root.iterdir() if entry.is_dir() and entry.name != PACKAGES] if self.root.is_dir() else []
-        code = load_code_dir(current, key, only_functions=True, purge_under=owners, extra_paths=self._library_paths(stamp, current))
+        owners = (
+            [entry for entry in self.root.iterdir() if entry.is_dir() and entry.name != PACKAGES]
+            if self.root.is_dir()
+            else []
+        )
+        code = load_code_dir(
+            current,
+            key,
+            only_functions=True,
+            purge_under=owners,
+            extra_paths=self._library_paths(stamp, current),
+        )
         seen.checked_at, seen.loaded_id, seen.code = time.monotonic(), (stamp or {}).get("id"), code
         if code.errors:
             logger.warning("deployment %s has errors: %s", key, code.errors)
@@ -287,7 +377,16 @@ class Deployments:
 
     # ── installing ──────────────────────────────────────────────────────
 
-    def install(self, env: str, branch: str, archive: bytes, *, deployment_id: str, checksum: str, keep_archive: bool = True) -> ProjectCode:
+    def install(
+        self,
+        env: str,
+        branch: str,
+        archive: bytes,
+        *,
+        deployment_id: str,
+        checksum: str,
+        keep_archive: bool = True,
+    ) -> ProjectCode:
         """Activate *archive*, or raise :class:`DeploymentError` having changed nothing that is served."""
         folder = self.folder(env, branch)
         folder.mkdir(parents=True, exist_ok=True)
@@ -300,13 +399,25 @@ class Deployments:
             if problems:
                 raise DeploymentError("The bundle was refused.", problems)
             packages = self.prepare(archive)
-            (staging / STAMP).write_text(json.dumps({"id": deployment_id, "checksum": checksum, "files": files, "packages": packages, "activated_at": time.time()}))
+            (staging / STAMP).write_text(
+                json.dumps(
+                    {
+                        "id": deployment_id,
+                        "checksum": checksum,
+                        "files": files,
+                        "packages": packages,
+                        "activated_at": time.time(),
+                    }
+                )
+            )
             if current.exists():
                 current.rename(previous)
             staging.rename(current)
             code = self.load(env, branch)
             if code.errors:
-                raise DeploymentError("The new code does not load, so it was not activated.", code.errors)
+                raise DeploymentError(
+                    "The new code does not load, so it was not activated.", code.errors
+                )
         except Exception:
             if staging.exists():
                 shutil.rmtree(staging, ignore_errors=True)
@@ -333,11 +444,20 @@ class Deployments:
         if not source.is_file():
             raise DeploymentError("That deployment's artifact is no longer stored.", status=409)
         data = source.read_bytes()
-        return self.install(env, branch, data, deployment_id=deployment_id, checksum=hashlib.sha256(data).hexdigest(), keep_archive=False)
+        return self.install(
+            env,
+            branch,
+            data,
+            deployment_id=deployment_id,
+            checksum=hashlib.sha256(data).hexdigest(),
+            keep_archive=False,
+        )
 
     def remove_branch(self, env: str, branch: str) -> bool:
         if branch == MAIN:
-            raise DeploymentError("The main deployment is replaced by deploying again, not removed.", status=409)
+            raise DeploymentError(
+                "The main deployment is replaced by deploying again, not removed.", status=409
+            )
         folder = self.folder(env, branch)
         if not folder.exists():
             return False
@@ -353,7 +473,9 @@ class Deployments:
             problems.append("The bundle must contain functions/*.py.")
         for name in PROJECT_LEVEL:
             if (directory / name).exists():
-                problems.append(f"{name} cannot be deployed: it changes what the whole runtime enforces, so it is loaded from the mounted code, not from an upload.")
+                problems.append(
+                    f"{name} cannot be deployed: it changes what the whole runtime enforces, so it is loaded from the mounted code, not from an upload."
+                )
         for source in sorted(directory.rglob("*.py")):
             try:
                 compile(source.read_text(), str(source), "exec")

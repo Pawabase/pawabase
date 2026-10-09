@@ -200,7 +200,7 @@ def register(r: Router, akountz: Akountz) -> None:
         user = await find_by_email(config.env, email)
         if user is None and body.create_user and config.signup_enabled:
             user = await create_account(
-                config, email=email, password=None, max_users=akountz.settings.max_users
+                config, email=email, password=None, max_users=akountz.max_users(config.env)
             )
             await akountz.emit(
                 config.env,

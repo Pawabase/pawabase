@@ -71,14 +71,33 @@ async def shop(api, tmp_path):
     (code / "stock.py").write_text(CODE)
     await api.studio.post(f"{ENV}/resources", json=STOCK)
     await api.studio.post(f"{ENV}/resources/stock/migrate")
-    for name, path, method in (("stock.add", "/stock-add", "POST"), ("stock.take", "/stock-take", "POST"), ("stock.move", "/stock-move", "POST"),
-                               ("stock.read", "/stock-read", "GET"), ("echo.request", "/echo/{thing}", "POST")):
-        await api.studio.post(f"{ENV}/routes", json={"method": method, "path": path, "handler_type": "function", "handler": name, "policy": "public"})
+    for name, path, method in (
+        ("stock.add", "/stock-add", "POST"),
+        ("stock.take", "/stock-take", "POST"),
+        ("stock.move", "/stock-move", "POST"),
+        ("stock.read", "/stock-read", "GET"),
+        ("echo.request", "/echo/{thing}", "POST"),
+    ):
+        await api.studio.post(
+            f"{ENV}/routes",
+            json={
+                "method": method,
+                "path": path,
+                "handler_type": "function",
+                "handler": name,
+                "policy": "public",
+            },
+        )
     return api
 
 
 async def call(api, path, body=None, method="POST", headers=None):
-    response = await api.http.request(method, f"/rest/v1{path}", json=body, headers={**api.context_headers("development"), **(headers or {})})
+    response = await api.http.request(
+        method,
+        f"/rest/v1{path}",
+        json=body,
+        headers={**api.context_headers("development"), **(headers or {})},
+    )
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -86,17 +105,31 @@ async def call(api, path, body=None, method="POST", headers=None):
 async def test_insert_applies_defaults_and_decodes_by_the_resource_fields(shop):
     added = await call(shop, "/stock-add", {"sku": "A"})
     row = added["row"]
-    assert row["on_hand"] == 5 and row["meta"] == {"tags": ["a", "b"]} and row["active"] is True and row["created_at"]
+    assert (
+        row["on_hand"] == 5
+        and row["meta"] == {"tags": ["a", "b"]}
+        and row["active"] is True
+        and row["created_at"]
+    )
     bare = await call(shop, "/stock-add", {"sku": "B", "on_hand": 0})
-    assert bare["row"]["on_hand"] == 0 and bare["row"]["active"] is True  # a declared default applies when the value is not given
+    assert (
+        bare["row"]["on_hand"] == 0 and bare["row"]["active"] is True
+    )  # a declared default applies when the value is not given
     rows = (await call(shop, "/stock-read", method="GET"))["rows"]
-    assert [r["sku"] for r in rows] == ["A", "B"] and rows[0]["meta"] == {"tags": ["a", "b"]} and rows[0]["active"] is True
+    assert (
+        [r["sku"] for r in rows] == ["A", "B"]
+        and rows[0]["meta"] == {"tags": ["a", "b"]}
+        and rows[0]["active"] is True
+    )
 
 
 async def test_a_conditional_update_is_the_concurrency_guard(shop):
     await call(shop, "/stock-add", {"sku": "C", "on_hand": 3})
     assert (await call(shop, "/stock-take", {"sku": "C", "n": 2})) == {"moved": 1, "left": 1}
-    assert (await call(shop, "/stock-take", {"sku": "C", "n": 2})) == {"moved": 0, "left": 1}  # not enough left: nothing changes
+    assert (await call(shop, "/stock-take", {"sku": "C", "n": 2})) == {
+        "moved": 0,
+        "left": 1,
+    }  # not enough left: nothing changes
 
 
 async def test_a_transaction_rolls_back_every_write_when_one_fails(shop):
@@ -109,16 +142,29 @@ async def test_a_transaction_rolls_back_every_write_when_one_fails(shop):
 
 
 async def test_identifiers_are_checked_before_they_reach_sql(shop):
-    response = await shop.http.post("/rest/v1/stock-add", json={"sku": "X"}, headers=shop.context_headers("development"))
+    response = await shop.http.post(
+        "/rest/v1/stock-add", json={"sku": "X"}, headers=shop.context_headers("development")
+    )
     assert response.status_code == 200
-    from app.data.sql import check_identifier
+    from app.data.sql import SqlError, check_identifier
 
-    with pytest.raises(Exception):
+    with pytest.raises(SqlError):
         check_identifier("stock; DROP TABLE stock")
 
 
 async def test_a_custom_route_hands_its_function_headers_and_the_client_address(shop):
-    out = await call(shop, "/echo/widget?x=1", {"a": 1}, headers={"X-Thing": "yes", "Apikey": "pb_pk_secret", "Cookie": "s=1", "X-Pawabase-Context": "forged", "X-Forwarded-For": "6.6.6.6, 203.0.113.9"})
+    out = await call(
+        shop,
+        "/echo/widget?x=1",
+        {"a": 1},
+        headers={
+            "X-Thing": "yes",
+            "Apikey": "pb_pk_secret",
+            "Cookie": "s=1",
+            "X-Pawabase-Context": "forged",
+            "X-Forwarded-For": "6.6.6.6, 203.0.113.9",
+        },
+    )
     assert out["headers"]["x-thing"] == "yes"
     # The platform's own credentials and browser session state are never handed to application code.
     assert not {"apikey", "cookie", "x-pawabase-context"} & set(out["headers"])

@@ -17,6 +17,10 @@ class GatewaySettings(PlatformSettings):
         rate_limit, rate_window: Requests per window, per key or client address.
         max_body_bytes: Largest request body forwarded (uploads included).
         upstream_timeout: Seconds to wait for an upstream response.
+        hosts: Which environment each hostname serves, as ``environment=host[|host...]`` pairs
+            separated by commas: ``production=api.example.com,staging=stg.example.com|stg.acme.io``.
+            Empty (the default) maps nothing. A key must belong to the environment its host serves;
+            a request on a host that is not listed is unaffected.
     """
 
     service_name: str = "gateway"
@@ -26,3 +30,4 @@ class GatewaySettings(PlatformSettings):
     rate_window: int = 60
     max_body_bytes: int = 100 * 1024 * 1024
     upstream_timeout: float = 60.0
+    hosts: str = ""

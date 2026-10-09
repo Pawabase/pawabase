@@ -54,7 +54,9 @@ ENVIRONMENTS = [
 @dataclass
 class FakeApi:
     calls: list[tuple[str, str, Any, Any]] = field(default_factory=list)
-    environments: list[dict[str, Any]] = field(default_factory=lambda: [dict(e) for e in ENVIRONMENTS])
+    environments: list[dict[str, Any]] = field(
+        default_factory=lambda: [dict(e) for e in ENVIRONMENTS]
+    )
 
     async def request(
         self, method: str, path: str, *, json: Any = None, params: Any = None, **kwargs: Any
@@ -70,7 +72,9 @@ class FakeApi:
         if path == "/platform/v1/blocks":
             return {"data": [{"name": "trigger.http"}]}
         env = path.removeprefix("/platform/v1/envs/").split("/")[0]
-        if path.startswith("/platform/v1/envs/") and env not in {e["name"] for e in self.environments}:
+        if path.startswith("/platform/v1/envs/") and env not in {
+            e["name"] for e in self.environments
+        }:
             raise ServiceError(404, {"detail": f"no environment {env!r}"}, service="api")
         if path == "/platform/v1/envs/main/overview":
             return {"resources": 2, "version": 3}
@@ -146,7 +150,10 @@ async def studio(tmp_path):
     )
     (dist / "assets" / "main-abc.js").write_text("console.log('studio')")
     settings = StudioSettings(
-        _env_file=None, app_env="testing", frontend_dir=str(tmp_path / "frontend"), project_name="Shop"
+        _env_file=None,
+        app_env="testing",
+        frontend_dir=str(tmp_path / "frontend"),
+        project_name="Shop",
     )
     api = FakeApi()
     akountz = FakeAkountz(master=settings.jwt_master_secret)

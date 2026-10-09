@@ -75,7 +75,9 @@ class DbSession:
         if self.dialect == "sqlite":
             return statement
         counter = iter(range(1, 10_000))
-        marker = (lambda _m: f"${next(counter)}") if self.dialect == "postgres" else (lambda _m: "%s")
+        marker = (
+            (lambda _m: f"${next(counter)}") if self.dialect == "postgres" else (lambda _m: "%s")
+        )
         return re.sub(r"\?", marker, statement)
 
     def _param(self, value: Any) -> Any:
@@ -99,7 +101,9 @@ class DbSession:
 
     async def fetch(self, statement: str, params: Sequence[Any] = ()) -> list[dict[str, Any]]:
         """Rows as dicts. JSON, boolean and datetime columns are decoded."""
-        rows = await timed(self.client, "execute_query_dict", self.sql(statement), [self._param(p) for p in params])
+        rows = await timed(
+            self.client, "execute_query_dict", self.sql(statement), [self._param(p) for p in params]
+        )
         return [self._row(dict(row)) for row in rows]
 
     async def one(self, statement: str, params: Sequence[Any] = ()) -> dict[str, Any] | None:
@@ -117,7 +121,9 @@ class DbSession:
 
     async def execute(self, statement: str, params: Sequence[Any] = ()) -> int:
         """Run a write. Returns the number of rows it changed."""
-        count, _ = await timed(self.client, "execute_query", self.sql(statement), [self._param(p) for p in params])
+        count, _ = await timed(
+            self.client, "execute_query", self.sql(statement), [self._param(p) for p in params]
+        )
         return int(count or 0)
 
     def _encode(self, table: str, data: Mapping[str, Any]) -> dict[str, Any]:
@@ -135,7 +141,9 @@ class DbSession:
         spec = self._by_table.get(table)
         values = dict(data)
         if spec is not None:
-            for field in spec.fields:  # declared defaults apply however the row arrives, as in ResourceStore.create
+            for field in (
+                spec.fields
+            ):  # declared defaults apply however the row arrives, as in ResourceStore.create
                 if "default" in field and field["name"] not in values:
                     values[field["name"]] = field["default"]
         if spec is not None and spec.primary_key not in values and spec.id_type in ("ulid", "uuid"):
@@ -159,10 +167,15 @@ class DbSession:
             )
             new_id = rows[0][key]
         else:
-            new_id = await timed(self.client, "execute_insert", self.sql(statement), list(encoded.values()))
+            new_id = await timed(
+                self.client, "execute_insert", self.sql(statement), list(encoded.values())
+            )
             if key in values:
                 new_id = values[key]
-        row = await self.one(f"SELECT * FROM {quote(self.dialect, table)} WHERE {quote(self.dialect, key)} = ?", [new_id])
+        row = await self.one(
+            f"SELECT * FROM {quote(self.dialect, table)} WHERE {quote(self.dialect, key)} = ?",
+            [new_id],
+        )
         return row or {key: new_id, **dict(data)}
 
     async def update(self, table: str, record_id: Any, data: Mapping[str, Any]) -> int:
@@ -184,7 +197,10 @@ class DbSession:
         check_identifier(table)
         spec = self._by_table.get(table)
         key = spec.primary_key if spec is not None else "id"
-        return await self.execute(f"DELETE FROM {quote(self.dialect, table)} WHERE {quote(self.dialect, key)} = ?", [record_id])
+        return await self.execute(
+            f"DELETE FROM {quote(self.dialect, table)} WHERE {quote(self.dialect, key)} = ?",
+            [record_id],
+        )
 
     @staticmethod
     def now() -> dt.datetime:

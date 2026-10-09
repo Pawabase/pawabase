@@ -59,9 +59,7 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
             await ws.close(code=4001, reason="an API key is required")
             return
         try:
-            auth, user_id = _auth_from_token(
-                realtime, ws.query_params.get("token"), context.env
-            )
+            auth, user_id = _auth_from_token(realtime, ws.query_params.get("token"), context.env)
         except TokenInvalid:
             await ws.close(code=4003, reason="invalid access token")
             return
@@ -142,9 +140,7 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
                 await realtime.join(connection, channel)
                 await ack(channel=channel)
                 if message.get("since") is not None:
-                    missed = await realtime.history(
-                        connection.env, channel, limit=rule.history
-                    )
+                    missed = await realtime.history(connection.env, channel, limit=rule.history)
                     for item in missed:
                         if item["seq"] > int(message["since"]):
                             await peer.send(item)
@@ -153,9 +149,7 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
                         {
                             "type": "presence_state",
                             "channel": channel,
-                            "members": realtime.presence_members(
-                                connection.env, channel
-                            ),
+                            "members": realtime.presence_members(connection.env, channel),
                         }
                     )
                     if isinstance(message.get("presence"), dict):
@@ -217,9 +211,7 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
                         "type": "history",
                         "ref": ref,
                         "channel": channel,
-                        "messages": await realtime.history(
-                            connection.env, channel, limit
-                        ),
+                        "messages": await realtime.history(connection.env, channel, limit),
                     }
                 )
             else:
@@ -371,27 +363,13 @@ def register_routes(app: SilloApp, realtime: Realtime) -> None:
 
     @i.get("/realtime/{env}/connections", auth=SERVICE_ONLY)
     async def connections(ctx: HttpContext, env: str):
-        return {
-            "data": [
-                c.describe()
-                for c in realtime.connections.values()
-                if c.env == env
-            ]
-        }
+        return {"data": [c.describe() for c in realtime.connections.values() if c.env == env]}
 
     @i.get("/realtime/{env}/activity", auth=SERVICE_ONLY)
     async def activity(ctx: HttpContext, env: str):
         return {
-            "deliveries": [
-                item
-                for item in reversed(realtime.recent)
-                if item["env"] == env
-            ][:100],
-            "errors": [
-                item
-                for item in reversed(realtime.errors)
-                if item["env"] == env
-            ][:100],
+            "deliveries": [item for item in reversed(realtime.recent) if item["env"] == env][:100],
+            "errors": [item for item in reversed(realtime.errors) if item["env"] == env][:100],
         }
 
     app.mount_router(i)

@@ -10,7 +10,9 @@ async def test_boot_into_a_single_runtime_with_its_default_environment(api):
     runtime = await api.studio.get("/platform/v1/runtime")
     assert runtime["name"] == "Pawabase"
     # A fresh runtime is usable at once: one default environment, no project to create first.
-    assert [(e["name"], e["is_default"]) for e in runtime["environments"]] == [("development", True)]
+    assert [(e["name"], e["is_default"]) for e in runtime["environments"]] == [
+        ("development", True)
+    ]
     # There is no project or organization to manage.
     for gone in ("/platform/v1/projects", "/platform/v1/orgs"):
         assert (await api.http.get(gone)).status_code in (401, 404)
@@ -34,7 +36,19 @@ async def test_updates_of_existing_rows(api):
     from pawabase_core.records import upsert
 
     for processed in (1, 2):
-        await upsert(WorkerHeartbeat, name="w1", defaults={"kind": "worker", "queues": [], "status": "running", "started_at": datetime.now(UTC), "last_seen": datetime.now(UTC), "processed": processed, "concurrency": 1})
+        await upsert(
+            WorkerHeartbeat,
+            name="w1",
+            defaults={
+                "kind": "worker",
+                "queues": [],
+                "status": "running",
+                "started_at": datetime.now(UTC),
+                "last_seen": datetime.now(UTC),
+                "processed": processed,
+                "concurrency": 1,
+            },
+        )
     assert (await WorkerHeartbeat.get(name="w1")).processed == 2
 
     await api.studio.post("/platform/v1/envs", json={"name": "dev"})
@@ -45,9 +59,13 @@ async def test_updates_of_existing_rows(api):
     assert await Secret.filter(name="TOKEN").count() == 1
     assert (await Secret.get(name="TOKEN")).description == "rotated"
 
-    await api.studio.post(f"{env}/policies", json={"name": "p1", "condition": {"authenticated": True}})
+    await api.studio.post(
+        f"{env}/policies", json={"name": "p1", "condition": {"authenticated": True}}
+    )
     await api.studio.post(f"{env}/promote", json={"to": "prod"})
-    await api.studio.put(f"{env}/policies/p1", json={"name": "p1", "condition": True, "description": "open"})
+    await api.studio.put(
+        f"{env}/policies/p1", json={"name": "p1", "condition": True, "description": "open"}
+    )
     await api.studio.post(f"{env}/promote", json={"to": "prod"})
     promoted = await api.studio.get("/platform/v1/envs/prod/policies/p1")
     assert promoted["description"] == "open"
@@ -55,21 +73,21 @@ async def test_updates_of_existing_rows(api):
 
 async def test_deploy_preview_is_an_expiring_isolated_environment(api):
     source = "/platform/v1/envs/development"
-    await api.studio.post(
-        f"{source}/policies", json={"name": "public", "condition": True}
-    )
+    await api.studio.post(f"{source}/policies", json={"name": "public", "condition": True})
     preview = await api.studio.post(
         f"{source}/previews",
-        json={"ref": "123", "expires_in_hours": 24, "infra": {"database_url": "sqlite://preview.db"}},
+        json={
+            "ref": "123",
+            "expires_in_hours": 24,
+            "infra": {"database_url": "sqlite://preview.db"},
+        },
     )
     assert preview["name"] == "pr-123"
     assert preview["preview_source"] == "development"
     assert preview["preview_expires_at"] is not None
     assert preview["infra"] == {"database_url": "sqlite://preview.db"}
     assert set(preview["keys"]) == {"publishable", "secret"}
-    policies = await api.studio.get(
-        "/platform/v1/envs/pr-123/policies"
-    )
+    policies = await api.studio.get("/platform/v1/envs/pr-123/policies")
     assert policies["data"][0]["name"] == "public"
 
 

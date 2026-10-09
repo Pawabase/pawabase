@@ -58,15 +58,11 @@ async def consume(
     """Verify and use up a token. Every failure is the same 400."""
     invalid = HTTPException(status_code=400, detail="the link is invalid or has expired")
     try:
-        payload = akountz.serializer(config.env, purpose).loads(
-            token, max_age=LIFETIMES[purpose]
-        )
+        payload = akountz.serializer(config.env, purpose).loads(token, max_age=LIFETIMES[purpose])
     except (BadSignature, ValueError, TypeError) as exc:
         raise invalid from exc
     row = (
-        await OneTimeToken.filter(
-            id=str(payload.get("id", "")), env=config.env, purpose=purpose
-        )
+        await OneTimeToken.filter(id=str(payload.get("id", "")), env=config.env, purpose=purpose)
         .prefetch_related("user")
         .first()
     )

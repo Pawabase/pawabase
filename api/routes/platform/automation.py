@@ -30,7 +30,9 @@ class RunBody(BaseModel):
     as_user: dict[str, Any] | None = Field(
         default=None, description="Run as if this auth context called it"
     )
-    branch: str | None = Field(default=None, description="Run the code deployed on this branch (functions only)")
+    branch: str | None = Field(
+        default=None, description="Run the code deployed on this branch (functions only)"
+    )
 
 
 def _source_of(key: str) -> str:
@@ -97,11 +99,7 @@ def register(r: Router, platform: Platform) -> None:
         except NotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except FlowError as exc:
-            record = (
-                await FlowRun.filter(env=env, flow=name)
-                .order_by("-created_at")
-                .first()
-            )
+            record = await FlowRun.filter(env=env, flow=name).order_by("-created_at").first()
             return {
                 "status": "failed",
                 "error": exc.message,
@@ -166,7 +164,10 @@ def register(r: Router, platform: Platform) -> None:
         code = platform.ensure_code()
         branch = ctx.query_params.get("branch") or None
         return {
-            "data": [{**spec.describe(), "source": _source_of(spec.project)} for spec in platform.function_specs(env, branch)],
+            "data": [
+                {**spec.describe(), "source": _source_of(spec.project)}
+                for spec in platform.function_specs(env, branch)
+            ],
             "branch": branch or "main",
             "modules": code.modules,
             "errors": code.errors,
@@ -288,7 +289,9 @@ def register(r: Router, platform: Platform) -> None:
         # is still "no ordering given". Postgres then refuses DISTINCT with an
         # ORDER BY column outside the select list, so order by a column that
         # actually is selected instead of trying to clear the ordering.
-        seen = await EventLog.filter(env=env).order_by("name").distinct().values_list("name", "source")
+        seen = (
+            await EventLog.filter(env=env).order_by("name").distinct().values_list("name", "source")
+        )
         for name, source in seen:
             produce(name, f"service:{source}")
 
@@ -306,9 +309,7 @@ def register(r: Router, platform: Platform) -> None:
                     )
             from pawabase_core.events import PlatformEvent
 
-            for flow_name, node in flow_event_entries(
-                state, PlatformEvent(name=name, env=env)
-            ):
+            for flow_name, node in flow_event_entries(state, PlatformEvent(name=name, env=env)):
                 consumers.append({"type": "flow", "target": flow_name, "via": f"trigger:{node}"})
             for endpoint in state.webhooks:
                 if any(fnmatch.fnmatchcase(name, pattern) for pattern in endpoint.events or ["*"]):

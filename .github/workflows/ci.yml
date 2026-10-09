@@ -12,6 +12,7 @@ concurrency:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -21,6 +22,9 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    # A suite that finishes in about a minute. Without a limit, one that never exits holds the
+    # runner for GitHub's six-hour default (it did, when a leaked thread kept pytest alive).
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -33,10 +37,13 @@ jobs:
         working-directory: ${{ matrix.package }}
         env:
           SILLO_ENV_FILE: ""
-        run: uv run pytest -q tests
+        # `faulthandler_timeout` prints every thread's stack if a single test stalls, so a hang
+        # explains itself in the log instead of just timing out.
+        run: uv run pytest -q -o faulthandler_timeout=240 tests
 
   studio:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: studio/frontend
@@ -51,6 +58,7 @@ jobs:
       - run: npm run build
 
   compose:
+    timeout-minutes: 30
     # Builds the image and brings up the whole stack on Postgres and Redis,
     # then checks the gateway, Studio sign-in and a request through a key.
     runs-on: ubuntu-latest
@@ -64,6 +72,7 @@ jobs:
             echo "PAWABASE_JWT_MASTER_SECRET=$(openssl rand -hex 32)"
             echo "PAWABASE_MASTER_KEY=$(openssl rand -hex 32)"
             echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)"
+            echo "MINIO_ROOT_PASSWORD=$(openssl rand -hex 16)"
           } > .env
       - run: docker compose build
       - run: docker compose up -d --wait --wait-timeout 180

@@ -124,6 +124,7 @@ main{{max-width:30rem;padding:2rem;text-align:center}}h1{{margin:.5rem 0}}p{{col
     async def usage(ctx: HttpContext):
         return {
             **await quota.usage(),
+            "environments": await proxy.env_limits.usage(),
             "connections": {
                 "active": settings.max_active_connections - proxy.connections._value
                 if proxy.connections is not None
@@ -138,5 +139,6 @@ main{{max-width:30rem;padding:2rem;text-align:center}}h1{{margin:.5rem 0}}p{{col
             await client.aclose()
         await api.close()
         await quota.close()
+        await proxy.env_limits.close()
 
     return app

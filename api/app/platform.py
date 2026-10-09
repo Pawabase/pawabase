@@ -24,11 +24,13 @@ from tortoise.exceptions import IntegrityError
 
 from app.config import ApiSettings, function_install_enabled
 from app.data.source import DataSourcePool
+from app.deployment_mirror import DeploymentMirror
 from app.deployments import Deployments
 from app.mail import MailManager
 from app.secrets import SecretBox, is_reference, reference_name
 from app.state import EnvironmentCache, EnvironmentState
 from app.storage.manager import StorageManager
+from pawabase_core import envvars
 from pawabase_core.clients import ServiceClient
 from pawabase_core.context import PlatformContext
 from pawabase_core.events import EventBus
@@ -74,6 +76,7 @@ class Platform:
         bus: EventBus | None = None,
     ) -> None:
         self.settings = settings
+        self._deprecations: set[tuple[str, str]] = set()
         self.box = SecretBox(settings.master_key)
         self.sources = DataSourcePool()
         self.envs = EnvironmentCache(self)
@@ -92,6 +95,7 @@ class Platform:
             timeout=30.0, follow_redirects=False, headers={"user-agent": "Pawabase/0.1"}
         )
         self.code: ProjectCode | None = None
+        self.deployment_mirror = DeploymentMirror(self)
         self.deployments = Deployments(
             settings.deployments_path or Path(settings.code_path) / ".deployments",
             install_requirements=function_install_enabled(settings),
@@ -125,11 +129,55 @@ class Platform:
         self.bind()
         await self.bus.start()
         logger.info(await self.storage.prepare_default())
+        try:
+            await self.deployment_mirror.restore()
+        except Exception as exc:  # a failed restore must not stop the API starting
+            logger.error("could not restore function deployments from storage: %s", exc)
+
+    async def audit_configuration(self) -> None:
+        """Say, once at start-up, which configuration is kept where it should not be.
+
+        An environment that still stores ``infra`` settings gets one warning per setting, and any
+        ``<ENV>_...`` variable that looks like a setting but names none (a typo) is reported, so
+        a misspelt ``PRODUCTION_STORAGE_BUKET`` is not silently ignored.
+        """
+        from database.models import Environment
+
+        try:
+            environments = await Environment.all()
+        except Exception:  # the schema may not be migrated yet; nothing to audit then
+            return
+        for environment in environments:
+            infra = environment.infra or {}
+            prefix = envvars.prefix_for(environment.name)
+            if infra.get("database_url"):
+                self.deprecated(
+                    environment.name, "infra.database_url", f"set {prefix}_DATA_URL instead"
+                )
+            if infra.get("storage"):
+                self.deprecated(
+                    environment.name, "infra.storage", f"set {prefix}_STORAGE_* variables instead"
+                )
+            if infra.get("mail"):
+                self.deprecated(
+                    environment.name,
+                    "infra.mail",
+                    f"set PAWABASE_MAIL_* or {prefix}_MAIL_* variables "
+                    "(`python -m app.export_config` prints them from the old settings)",
+                    removed=True,
+                )
+        for env, variables in envvars.unrecognised([e.name for e in environments]).items():
+            logger.warning(
+                "environment %r: %s name no known setting and are ignored (see pawabase_core.envvars.KEYS)",
+                env,
+                ", ".join(variables),
+            )
 
     async def stop(self) -> None:
         await self.bus.stop()
         await self.sources.close()
         await self.storage.close()
+        await self.deployment_mirror.close()
         await self.mail.close()
         await self.angula.close()
         await self.akountz.close()
@@ -183,11 +231,38 @@ class Platform:
 
     def reload_code(self) -> ProjectCode:
         clear_functions(RUNTIME)
-        for name in [name for name in list(__import__("sys").modules) if name.startswith(f"pawabase_code.{RUNTIME}.")]:
+        for name in [
+            name
+            for name in list(__import__("sys").modules)
+            if name.startswith(f"pawabase_code.{RUNTIME}.")
+        ]:
             del __import__("sys").modules[name]
         self.code = None
         self.envs.forget()
         return self.ensure_code()
+
+    def deprecated(self, env: str, what: str, advice: str, *, removed: bool = False) -> None:
+        """Warn, once per environment and setting, about configuration kept somewhere it should not be.
+
+        ``removed`` says the old place is no longer read at all, so the setting has no effect.
+        """
+        if (env, what) not in self._deprecations:
+            self._deprecations.add((env, what))
+            state = "is no longer read" if removed else "is deprecated"
+            logger.warning("environment %r: %s %s; %s", env, what, state, advice)
+
+    def limit(self, env: str, key: str, default: int) -> int:
+        """An environment's numeric limit: ``<ENV>_<KEY>`` from the process environment, else *default*."""
+        return envvars.integer(env, key, default)
+
+    def env_setting(self, state: EnvironmentState, key: str, default: Any = "") -> Any:
+        """An environment's setting from the process environment (``<ENV>_<KEY>``), else *default*.
+
+        The value may be a ``secret://NAME`` reference, which is resolved here, so a
+        deployment can keep a password in the environment's secrets and name it in a variable.
+        """
+        value = envvars.get(state.env_name, key)
+        return default if value is None else self.resolve_value(state, value)
 
     def resolve_value(self, state: EnvironmentState, value: Any) -> Any:
         """Replace a ``secret://NAME`` reference with the secret's value."""

@@ -1,0 +1,81 @@
+# Pawabase for a host that already runs Postgres (and, optionally, Redis and S3-compatible storage).
+#
+# One service: every Pawabase process in a single container under a small supervisor, no database
+# of its own. Everything infrastructural comes from environment variables, so one image serves any
+# number of deployments that differ only in what they are given. Compare docker-compose.hosted.yml,
+# which bundles Postgres and Redis next to Pawabase.
+#
+# Required:
+#   PAWABASE_INTERNAL_SECRET, PAWABASE_JWT_MASTER_SECRET, PAWABASE_MASTER_KEY   32+ random characters each
+#   PAWABASE_DATABASE_URL            the platform database, e.g. postgres://user:pw@db:5432/app
+#   PAWABASE_AKOUNTZ_DATABASE_URL    Akountz's database (identity). Without it Akountz uses a database
+#                                    named "akountz" next to the platform one, which the role must be able to open.
+#
+# Optional:
+#   PAWABASE_DEFAULT_DATA_URL        where environments keep their data (default: the platform database,
+#                                    one schema per environment). <ENV>_DATA_URL gives one environment its own.
+#   PAWABASE_REDIS_URL               without it, events, cache and queues stay inside the process
+#   PAWABASE_STORAGE_*               S3-compatible storage; without it objects live on the `data` volume
+#   PAWABASE_MAIL_*                  SMTP; without a host mail is logged, not sent
+#   <ENVIRONMENT>_*                  per-environment overrides, e.g. PRODUCTION_STORAGE_BUCKET, STAGING_MAX_USERS
+#
+# Sized for many small deployments on one host: the worker and scheduler run inside the API process
+# (two fewer processes), each process keeps no idle database connection, and the container has a
+# memory ceiling. Raise PAWABASE_MEMORY_LIMIT and PAWABASE_DB_POOL_MAX for a busy one.
+
+services:
+  pawabase:
+    build: .
+    restart: unless-stopped
+    command: ["all"]
+    mem_limit: ${PAWABASE_MEMORY_LIMIT:-768m}
+    cpus: ${PAWABASE_CPUS:-1.0}
+    environment:
+      PAWABASE_APP_ENV: production
+      PAWABASE_INTERNAL_SECRET: ${PAWABASE_INTERNAL_SECRET:?set PAWABASE_INTERNAL_SECRET}
+      PAWABASE_JWT_MASTER_SECRET: ${PAWABASE_JWT_MASTER_SECRET:?set PAWABASE_JWT_MASTER_SECRET}
+      PAWABASE_MASTER_KEY: ${PAWABASE_MASTER_KEY:?set PAWABASE_MASTER_KEY}
+      PAWABASE_PROJECT_NAME: ${PAWABASE_PROJECT_NAME:-Pawabase}
+      PAWABASE_PUBLIC_URL: ${PAWABASE_PUBLIC_URL:-http://localhost:8080}
+      PAWABASE_PUBLIC_GATEWAY_URL: ${PAWABASE_PUBLIC_GATEWAY_URL:-http://localhost:8080}
+      PAWABASE_COOKIE_SECURE: ${PAWABASE_COOKIE_SECURE:-false}
+      PAWABASE_STUDIO_ACCESS_SECRET: ${PAWABASE_STUDIO_ACCESS_SECRET:-}
+      PAWABASE_DATABASE_URL: ${PAWABASE_DATABASE_URL:?set PAWABASE_DATABASE_URL}
+      PAWABASE_AKOUNTZ_DATABASE_URL: ${PAWABASE_AKOUNTZ_DATABASE_URL:-}
+      PAWABASE_DEFAULT_DATA_URL: ${PAWABASE_DEFAULT_DATA_URL:-${PAWABASE_DATABASE_URL}}
+      PAWABASE_REDIS_URL: ${PAWABASE_REDIS_URL:-}
+      PAWABASE_STORAGE_ROOT: /data/objects
+      PAWABASE_CODE_PATH: /code
+      PAWABASE_DEPLOYMENTS_PATH: /data/deployments
+      # One process fewer each: the API runs its own worker and scheduler.
+      PAWABASE_INLINE_WORKER: ${PAWABASE_INLINE_WORKER:-true}
+      PAWABASE_INLINE_SCHEDULER: ${PAWABASE_INLINE_SCHEDULER:-true}
+      PAWABASE_STUDIO: ${PAWABASE_STUDIO:-on}
+      # No idle connections, a small ceiling; PgBouncer 1.21+ needs no statement-cache change.
+      PAWABASE_DB_POOL_MIN: ${PAWABASE_DB_POOL_MIN:-0}
+      PAWABASE_DB_POOL_MAX: ${PAWABASE_DB_POOL_MAX:-3}
+    env_file:
+      # Everything else a deployment sets (PAWABASE_STORAGE_*, PAWABASE_MAIL_*, <ENV>_*, ...) lives
+      # in `external.env` next to this file, so this file need not name every variable.
+      - path: external.env
+        required: false
+    ports:
+      - "${PAWABASE_GATEWAY_PORT:-8080}:8080"
+      - "127.0.0.1:${PAWABASE_STUDIO_PORT:-8090}:8090"
+    volumes:
+      - data:/data
+      - code:/code
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  data:
+  code:

@@ -90,13 +90,13 @@ async def create_backup(
             "settings": environment.settings or {},
         }
     if "users" in parts:
-        document["users"] = await platform.akountz.get(
-            f"{_users_path(environment.name)}/backup"
-        )
+        document["users"] = await platform.akountz.get(f"{_users_path(environment.name)}/backup")
     if "data" in parts:
         document["data"] = await _export_data(platform, environment, snapshot["definitions"])
     document["not_included"] = {
-        "secrets": sorted(await Secret.filter(environment=environment).values_list("name", flat=True)),
+        "secrets": sorted(
+            await Secret.filter(environment=environment).values_list("name", flat=True)
+        ),
         "note": (
             "API keys, secret values, stored files, sessions, logs and jobs are not part of a "
             "backup. Recreate secrets and keys after restoring into a new installation."
@@ -150,7 +150,9 @@ def verify(document: dict[str, Any]) -> list[str]:
 def summarise(document: dict[str, Any]) -> dict[str, Any]:
     summary: dict[str, Any] = {}
     if "definitions" in document:
-        summary["definitions"] = {kind: len(items) for kind, items in document["definitions"].items()}
+        summary["definitions"] = {
+            kind: len(items) for kind, items in document["definitions"].items()
+        }
     if "settings" in document:
         summary["settings"] = sorted(document["settings"])
     if "users" in document:
@@ -173,10 +175,16 @@ async def restore_backup(
     *,
     replace: bool,
 ) -> dict[str, Any]:
-    report: dict[str, Any] = {"restored": parts, "strategy": "replace" if replace else "merge", "warnings": []}
+    report: dict[str, Any] = {
+        "restored": parts,
+        "strategy": "replace" if replace else "merge",
+        "warnings": [],
+    }
 
     if "definitions" in parts:
-        report["definitions"] = await _restore_definitions(environment, document["definitions"], replace)
+        report["definitions"] = await _restore_definitions(
+            environment, document["definitions"], replace
+        )
     if "settings" in parts:
         incoming = document["settings"]
         auth = incoming.get("auth", {})
@@ -197,7 +205,9 @@ async def restore_backup(
         report["warnings"].extend(result.get("warnings", []))
 
     if "data" in parts:
-        report["data"] = await _restore_data(platform, environment, document["data"], replace, report["warnings"])
+        report["data"] = await _restore_data(
+            platform, environment, document["data"], replace, report["warnings"]
+        )
     return report
 
 
@@ -269,4 +279,13 @@ async def _restore_data(
     return counts
 
 
-__all__ = ["FORMAT", "PARTS", "BackupError", "create_backup", "parse_parts", "restore_backup", "summarise", "verify"]
+__all__ = [
+    "FORMAT",
+    "PARTS",
+    "BackupError",
+    "create_backup",
+    "parse_parts",
+    "restore_backup",
+    "summarise",
+    "verify",
+]

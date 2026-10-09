@@ -59,7 +59,10 @@ class RequestQuota:
         monthly_limit: int = 0,
         reservation: int = 64,
         redis_url: str = "",
+        scope: str = "",
     ) -> None:
+        #: Counts one environment's requests when set; empty counts the whole deployment.
+        self.scope = scope
         self.daily_limit = max(daily_limit, 0)
         self.monthly_limit = max(monthly_limit, 0)
         self.reservation = max(reservation, 1)
@@ -71,6 +74,17 @@ class RequestQuota:
             import redis.asyncio as aioredis
 
             self._redis = aioredis.from_url(redis_url, decode_responses=True)
+
+    @property
+    def _local_prefix(self) -> str:
+        return f"{self.scope}:" if self.scope else ""
+
+    @property
+    def _redis_prefix(self) -> str:
+        # The deployment-wide counters keep the names they have always had.
+        return (
+            f"pawabase:quota:requests:{self.scope}:" if self.scope else "pawabase:quota:requests:"
+        )
 
     @property
     def enabled(self) -> bool:
@@ -94,7 +108,7 @@ class RequestQuota:
         now = datetime.now(UTC)
         day, day_ttl, month, month_ttl = _windows(now)
         if self._redis is None:
-            keys = (f"day:{day}", f"month:{month}")
+            keys = (f"{self._local_prefix}day:{day}", f"{self._local_prefix}month:{month}")
             limits = (self.daily_limit, self.monthly_limit)
             granted = self.reservation
             for key, limit in zip(keys, limits, strict=True):
@@ -110,8 +124,8 @@ class RequestQuota:
             await self._redis.eval(
                 _RESERVE_LUA,
                 2,
-                f"pawabase:quota:requests:day:{day}",
-                f"pawabase:quota:requests:month:{month}",
+                f"{self._redis_prefix}day:{day}",
+                f"{self._redis_prefix}month:{month}",
                 self.reservation,
                 self.daily_limit,
                 self.monthly_limit,
@@ -129,12 +143,12 @@ class RequestQuota:
         now = datetime.now(UTC)
         day, day_ttl, month, month_ttl = _windows(now)
         if self._redis is None:
-            daily = self._local.get(f"day:{day}", 0)
-            monthly = self._local.get(f"month:{month}", 0)
+            daily = self._local.get(f"{self._local_prefix}day:{day}", 0)
+            monthly = self._local.get(f"{self._local_prefix}month:{month}", 0)
         else:
             daily, monthly = await self._redis.mget(
-                f"pawabase:quota:requests:day:{day}",
-                f"pawabase:quota:requests:month:{month}",
+                f"{self._redis_prefix}day:{day}",
+                f"{self._redis_prefix}month:{month}",
             )
             daily, monthly = int(daily or 0), int(monthly or 0)
         return {

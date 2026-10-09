@@ -180,4 +180,6 @@ class ServiceBackend(AuthenticationBackend):
         except TokenInvalid:
             return _FAIL
         claims.setdefault("roles", ["admin"])
-        return AuthResult(success=True, identity=encode_identity("service", claims), scope="service")
+        return AuthResult(
+            success=True, identity=encode_identity("service", claims), scope="service"
+        )

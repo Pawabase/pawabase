@@ -35,6 +35,7 @@ from database.models import (
     TransformerDef,
     WebhookEndpoint,
 )
+from pawabase_core import envvars
 from pawabase_core.policies import Policy, PolicyEngine, python_policies
 from pawabase_core.schemas import compile_schemas
 
@@ -88,16 +89,38 @@ class EnvironmentState:
     # ── data ─────────────────────────────────────────────────────────────
 
     def database_url(self) -> str:
+        """Where this environment's resource data lives.
+
+        In order: ``<ENV>_DATA_URL`` from the process environment; the deprecated
+        ``infra.database_url`` an older install stored on the environment; the
+        platform default (``PAWABASE_DEFAULT_DATA_URL``), one schema per environment.
+        """
+        own = self.platform.env_setting(self, "DATA_URL")
+        if own:
+            return own
         configured = self.infra.get("database_url")
         if configured:
+            self.platform.deprecated(
+                self.env_name,
+                "infra.database_url",
+                f"set {envvars.prefix_for(self.env_name)}_DATA_URL instead",
+            )
             return self.platform.resolve_value(self, configured)
         # ``{project}`` from an older configuration names nothing now: drop it, with its separator.
-        template = self.platform.settings.default_data_url.replace("{project}__", "").replace("{project}", "")
+        template = self.platform.settings.default_data_url.replace("{project}__", "").replace(
+            "{project}", ""
+        )
         url = template.replace("{env}", self.env_name)
         if url.startswith(("postgres://", "postgresql://")) and "schema=" not in url:
             # One shared Postgres database, one schema per environment (see ``data_schema``).
             url += ("&" if "?" in url else "?") + f"schema={self.data_schema()}"
         return url
+
+    def database_source(self) -> str:
+        """Where the data database comes from: ``environment`` (a variable), ``stored`` (deprecated ``infra``) or ``default``."""
+        if envvars.get(self.env_name, "DATA_URL"):
+            return "environment"
+        return "stored" if self.infra.get("database_url") else "default"
 
     def data_schema(self) -> str:
         """The Postgres schema holding this environment's resource tables in the shared default database."""
@@ -117,7 +140,7 @@ class EnvironmentState:
 
     async def source(self) -> DataSource:
         return await self.platform.sources.get(
-            self.database_url(), alias=self.env_name
+            self.platform.settings.tuned(self.database_url()), alias=self.env_name
         )
 
     def spec(self, name: str) -> ResourceSpec:
@@ -128,7 +151,9 @@ class EnvironmentState:
 
     async def store(self, name: str) -> ResourceStore:
         spec = self.spec(name)
-        return ResourceStore(await self.source(), replace(spec, table=self.database_table(spec.table)))
+        return ResourceStore(
+            await self.source(), replace(spec, table=self.database_table(spec.table))
+        )
 
     # ── compiled API ─────────────────────────────────────────────────────
 
@@ -196,7 +221,7 @@ async def load_state(platform: Platform, environment: Environment) -> Environmen
     state.schedules = list(schedules)
     for secret in secrets:
         try:
-            state.secret_values[secret.name] = platform.box.open(secret.ciphertext)
+            state.secret_values[secret.name] = platform.box.open(secret.ciphertext, state.env_name)
         except Exception:  # sealed under another master key
             continue
     state.engine = PolicyEngine(state.policies, python=python_policies())

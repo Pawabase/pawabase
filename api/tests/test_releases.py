@@ -10,7 +10,11 @@ PUBLIC = {"list": {"enabled": True, "policy": "public"}}
 async def test_versioned_releases_and_rollback(api):
     await api.studio.post(
         f"{ENV}/resources",
-        json={"name": "posts", "fields": [{"name": "title", "type": "string"}], "operations": PUBLIC},
+        json={
+            "name": "posts",
+            "fields": [{"name": "title", "type": "string"}],
+            "operations": PUBLIC,
+        },
     )
     await api.studio.post(f"{ENV}/resources/posts/migrate")
 
@@ -27,7 +31,11 @@ async def test_versioned_releases_and_rollback(api):
 
     await api.studio.post(
         f"{ENV}/resources",
-        json={"name": "widgets", "fields": [{"name": "label", "type": "string"}], "operations": PUBLIC},
+        json={
+            "name": "widgets",
+            "fields": [{"name": "label", "type": "string"}],
+            "operations": PUBLIC,
+        },
     )
     await api.studio.post(f"{ENV}/resources/widgets/migrate")
     rev2 = await api.studio.post(f"{ENV}/branches/main/revisions", json={"message": "add widgets"})
@@ -45,7 +53,9 @@ async def test_versioned_releases_and_rollback(api):
     assert "/rest/v2/widgets" in v2_document["paths"]
 
     await api.studio.delete(f"{ENV}/resources/widgets")
-    rev3 = await api.studio.post(f"{ENV}/branches/main/revisions", json={"message": "remove widgets"})
+    rev3 = await api.studio.post(
+        f"{ENV}/branches/main/revisions", json={"message": "remove widgets"}
+    )
     try:
         await api.studio.post(
             f"{ENV}/releases",
@@ -80,7 +90,10 @@ async def test_feature_branch_definition_edits_are_isolated_until_merge(api):
     flow = {
         "name": "notify",
         "description": "main definition",
-        "definition": {"nodes": [{"id": "start", "data": {"block": "trigger.manual", "config": {}}}], "edges": []},
+        "definition": {
+            "nodes": [{"id": "start", "data": {"block": "trigger.manual", "config": {}}}],
+            "edges": [],
+        },
     }
     await api.studio.post(f"{env}/flows", json=flow)
     await api.studio.post(f"{env}/branches", json={"name": "feature-notify"})
@@ -89,15 +102,15 @@ async def test_feature_branch_definition_edits_are_isolated_until_merge(api):
     await api.studio.put(f"{env}/flows/notify", json=feature, params={"branch": "feature-notify"})
 
     assert (await api.studio.get(f"{env}/flows/notify"))["description"] == "main definition"
-    assert (
-        await api.studio.get(f"{env}/flows/notify", params={"branch": "feature-notify"})
-    )["description"] == "feature definition"
+    assert (await api.studio.get(f"{env}/flows/notify", params={"branch": "feature-notify"}))[
+        "description"
+    ] == "feature definition"
     await api.studio.post(
         f"{env}/branches", json={"name": "feature-copy", "from_branch": "feature-notify"}
     )
-    assert (
-        await api.studio.get(f"{env}/flows/notify", params={"branch": "feature-copy"})
-    )["description"] == "feature definition"
+    assert (await api.studio.get(f"{env}/flows/notify", params={"branch": "feature-copy"}))[
+        "description"
+    ] == "feature definition"
 
     route = await api.studio.post(
         f"{env}/routes",
@@ -106,7 +119,9 @@ async def test_feature_branch_definition_edits_are_isolated_until_merge(api):
     )
     assert is_ulid(route["id"])
     assert (await api.studio.get(f"{env}/routes"))["data"] == []
-    assert (await api.studio.get(f"{env}/routes/{route['id']}", params={"branch": "feature-notify"}))["path"] == "/notify"
+    assert (
+        await api.studio.get(f"{env}/routes/{route['id']}", params={"branch": "feature-notify"})
+    )["path"] == "/notify"
 
     revision = await api.studio.post(
         f"{env}/branches/feature-notify/revisions", json={"message": "feature work"}

@@ -207,9 +207,7 @@ async def refresh_session(
     if user is None or user.is_disabled:
         raise HTTPException(status_code=401, detail="invalid refresh token")
     try:
-        pair = await user.refresh_token_pair(
-            refresh_token, akountz.refresh_secret(config.env)
-        )
+        pair = await user.refresh_token_pair(refresh_token, akountz.refresh_secret(config.env))
     except ValueError as exc:
         await log_event(
             config.env,

@@ -13,8 +13,10 @@ from tortoise.functions import Count
 
 from app import route_stats
 from app.analytics import DEFAULT_RANGE, environment_analytics
-from app.system_health import system_report
+from app.capacity import report as capacity_report
+from app.configuration import report as configuration_report
 from app.platform import PLATFORM_QUEUES, Platform
+from app.system_health import system_report
 from database.models import (
     ApiKey,
     AuditEntry,
@@ -145,17 +147,13 @@ def register(r: Router, platform: Platform) -> None:
             source="retry",
             **found.payload,
         )
-        await audit(
-            ctx, "job.retried", env=env, target=job_id, details={"new_job": new_id}
-        )
+        await audit(ctx, "job.retried", env=env, target=job_id, details={"new_job": new_id})
         return {"job_id": new_id}
 
     @r.get(f"{base}/failed-jobs", auth=MANAGE, tags=["queues"], summary="Permanently failed jobs")
     async def failed_jobs(ctx: HttpContext, env: str):
         limit, offset = page_params(ctx)
-        ids = await JobRun.filter(env=env, status="failed").values_list(
-            "id", flat=True
-        )
+        ids = await JobRun.filter(env=env, status="failed").values_list("id", flat=True)
         rows = (
             await FailedJobRecord.filter(job_id__in=list(ids))
             .order_by("-id")
@@ -164,9 +162,7 @@ def register(r: Router, platform: Platform) -> None:
         )
         return {"data": [dump(row) for row in rows]}
 
-    @r.get(
-        "/workers", auth=MANAGE, tags=["queues"], summary="Workers and schedulers, as last seen"
-    )
+    @r.get("/workers", auth=MANAGE, tags=["queues"], summary="Workers and schedulers, as last seen")
     async def workers(ctx: HttpContext):
         cutoff = datetime.now(UTC) - timedelta(seconds=45)
         rows = await WorkerHeartbeat.all()
@@ -277,12 +273,30 @@ def register(r: Router, platform: Platform) -> None:
 
     # ── mail ─────────────────────────────────────────────────────────────
 
+    @r.get(
+        f"{base}/configuration",
+        auth=MANAGE,
+        tags=["environments"],
+        summary="The infrastructure and limits an environment runs under, and which variable each comes from",
+    )
+    async def configuration(ctx: HttpContext, env: str):
+        await get_environment(env)
+        return configuration_report(platform, await platform.state(env))
+
+    @r.get(
+        f"{base}/mail/config",
+        auth=MANAGE,
+        tags=["mail"],
+        summary="The mail setup this environment has, and which variable each part comes from",
+    )
+    async def mail_config(ctx: HttpContext, env: str):
+        await get_environment(env)
+        return platform.mail.describe(await platform.state(env))
+
     @r.get(f"{base}/mail/log", auth=MANAGE, tags=["mail"], summary="Messages sent or suppressed")
     async def mail_log(ctx: HttpContext, env: str):
         limit, offset = page_params(ctx)
-        rows = (
-            await MailLog.filter(env=env).order_by("-id").offset(offset).limit(limit)
-        )
+        rows = await MailLog.filter(env=env).order_by("-id").offset(offset).limit(limit)
         return {"data": [dump(row) for row in rows]}
 
     @r.post(
@@ -345,21 +359,13 @@ def register(r: Router, platform: Platform) -> None:
     async def request_trace(ctx: HttpContext, env: str, request_id: str):
         await get_environment(env)
         await platform.app.state["request_rollup"].flush()
-        request_rows = await RequestLog.filter(
-            env=env, request_id=request_id
-        ).order_by("id")
-        runs = await FlowRun.filter(env=env, request_id=request_id).order_by(
+        request_rows = await RequestLog.filter(env=env, request_id=request_id).order_by("id")
+        runs = await FlowRun.filter(env=env, request_id=request_id).order_by("created_at")
+        events = await EventLog.filter(env=env, request_id=request_id).order_by("id")
+        jobs = await JobRun.filter(env=env, request_id=request_id).order_by("created_at")
+        function_runs = await FunctionRun.filter(env=env, request_id=request_id).order_by(
             "created_at"
         )
-        events = await EventLog.filter(env=env, request_id=request_id).order_by(
-            "id"
-        )
-        jobs = await JobRun.filter(env=env, request_id=request_id).order_by(
-            "created_at"
-        )
-        function_runs = await FunctionRun.filter(
-            env=env, request_id=request_id
-        ).order_by("created_at")
         if not (request_rows or runs or events or jobs or function_runs):
             raise HTTPException(status_code=404, detail="no such request trace")
         logs, seen = [], set()
@@ -369,7 +375,11 @@ def register(r: Router, platform: Platform) -> None:
             item.setdefault("request_id", request_id)
             item.update({k: v for k, v in extra.items() if v is not None})
             item["source"] = source
-            stamp = (item.get("timestamp") or item.get("at"), item.get("level"), item.get("message"))
+            stamp = (
+                item.get("timestamp") or item.get("at"),
+                item.get("level"),
+                item.get("message"),
+            )
             if stamp in seen:  # a function's own log is also noted on the request it ran in
                 return
             seen.add(stamp)
@@ -413,8 +423,12 @@ def register(r: Router, platform: Platform) -> None:
                 "logs": len(logs),
                 "spans": len(spans),
                 "db_queries": len(db),
-                "db_ms": round(sum(item.get("duration_ms", 0) for item in db if item.get("parent") is None), 3),
-                "slowest_span": max(spans, key=lambda item: item.get("duration_ms", 0), default=None),
+                "db_ms": round(
+                    sum(item.get("duration_ms", 0) for item in db if item.get("parent") is None), 3
+                ),
+                "slowest_span": max(
+                    spans, key=lambda item: item.get("duration_ms", 0), default=None
+                ),
                 "failed_spans": len(failed_spans),
                 "failed": any(row.status >= 500 for row in request_rows)
                 or any(run.status == "failed" for run in runs)
@@ -442,7 +456,10 @@ def register(r: Router, platform: Platform) -> None:
         except ValueError:
             raise HTTPException(status_code=422, detail="limit must be a whole number") from None
         return await route_stats.routes_for(
-            env, minutes=minutes_param(ctx), sort=ctx.query_params.get("sort", "errors"), limit=limit
+            env,
+            minutes=minutes_param(ctx),
+            sort=ctx.query_params.get("sort", "errors"),
+            limit=limit,
         )
 
     @r.get(
@@ -531,9 +548,7 @@ def register(r: Router, platform: Platform) -> None:
             },
             "last_24h": {
                 "events": await EventLog.filter(env=env, created_at__gte=day).count(),
-                "flow_runs": await FlowRun.filter(
-                    env=env, created_at__gte=day
-                ).count(),
+                "flow_runs": await FlowRun.filter(env=env, created_at__gte=day).count(),
                 "flow_failures": await FlowRun.filter(
                     env=env, created_at__gte=day, status="failed"
                 ).count(),
@@ -549,10 +564,12 @@ def register(r: Router, platform: Platform) -> None:
             ),
             "problems": compiled.state.get("problems", []),
             "infrastructure": {
-                "database": "configured" if state.infra.get("database_url") else "platform default",
-                "storage": (state.infra.get("storage") or {}).get("driver", "local"),
+                "database": "platform default"
+                if state.database_source() == "default"
+                else "configured",
+                "storage": platform.storage._config(state).get("driver", "local"),
                 "mail": "configured"
-                if (state.infra.get("mail") or {}).get("host")
+                if platform.mail.describe(state)["configured"]
                 else "suppressed (not configured)",
                 "cache": type(platform.cache).__name__,
                 "queue": type(platform.queue).__name__,
@@ -573,6 +590,15 @@ def register(r: Router, platform: Platform) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="minutes must be an integer") from exc
         return await system_report(platform, env, minutes)
+
+    @r.get(
+        "/capacity",
+        auth=MANAGE,
+        tags=["runtime"],
+        summary="What this deployment is using: process memory, and per environment its database, storage and keys",
+    )
+    async def capacity(ctx: HttpContext):
+        return await capacity_report(platform)
 
     @r.get(
         f"{base}/analytics",

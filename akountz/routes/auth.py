@@ -120,7 +120,7 @@ def register(r: Router, akountz: Akountz) -> None:
             username=body.username,
             name=body.name,
             user_metadata=body.data,
-            max_users=akountz.settings.max_users,
+            max_users=akountz.max_users(config.env),
         )
         await akountz.emit(
             config.env,

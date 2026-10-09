@@ -131,7 +131,9 @@ async def call_function(
                 code="invalid",
                 details=json.loads(exc.json(include_url=False)),
             ) from exc
-    runtime = ApiRuntime(platform, state, auth=auth, request_id=request_id, depth=depth, branch=branch)
+    runtime = ApiRuntime(
+        platform, state, auth=auth, request_id=request_id, depth=depth, branch=branch
+    )
     context = function_context(runtime, input, trigger, request)
     started = time.perf_counter()
     status, output, error = "succeeded", None, None
@@ -141,7 +143,9 @@ async def call_function(
         return output
     except TimeoutError as exc:
         status, error = "failed", f"function {name!r} exceeded {spec.timeout}s"
-        raise FlowError(f"function {name!r} exceeded {spec.timeout}s", status=504, code="timeout") from exc
+        raise FlowError(
+            f"function {name!r} exceeded {spec.timeout}s", status=504, code="timeout"
+        ) from exc
     except FunctionError as exc:
         # A function that chose to fail: its status and code reach the caller as they are, not as a 500.
         status, error = "failed", exc.message

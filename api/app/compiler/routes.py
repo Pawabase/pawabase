@@ -90,7 +90,8 @@ def register_route(app: SilloApp, state: EnvironmentState, route: Any) -> str:
             "headers": {
                 name.lower(): value
                 for name, value in ctx.headers.items()
-                if name.lower() not in _PRIVATE_HEADERS and not name.lower().startswith("x-pawabase-")
+                if name.lower() not in _PRIVATE_HEADERS
+                and not name.lower().startswith("x-pawabase-")
             },
             "client_ip": _client_ip(ctx, platform.settings.trusted_proxy_hops),
         }
@@ -102,7 +103,9 @@ def register_route(app: SilloApp, state: EnvironmentState, route: Any) -> str:
                 return json_response(
                     cached["body"], status_code=cached["status"], headers=cached["headers"]
                 )
-        decision = await state.engine.check(policy, build_policy_context(ctx, input=payload["body"]))
+        decision = await state.engine.check(
+            policy, build_policy_context(ctx, input=payload["body"])
+        )
         if not decision:
             user = ctx.scope.get("user")
             if user is None or not getattr(user, "is_authenticated", False):
@@ -185,9 +188,7 @@ def register_route(app: SilloApp, state: EnvironmentState, route: Any) -> str:
         # The plan-time gate and the full re-check once the body is read
         # (both above, in run_handler) can each raise 401 or 403; a route
         # with a body can also fail validation before either runs.
-        responses=responses(
-            UNAUTHENTICATED, FORBIDDEN, UNPROCESSABLE if request_model else {}
-        ),
+        responses=responses(UNAUTHENTICATED, FORBIDDEN, UNPROCESSABLE if request_model else {}),
         auth=gate,
         middleware=limits,
     )
@@ -201,7 +202,11 @@ _PRIVATE_HEADERS = {"cookie", "apikey", "x-api-key", "proxy-authorization"}
 def _client_ip(ctx: HttpContext, trusted_hops: int = 0) -> str | None:
     """The caller's address. ``X-Forwarded-For`` is a list each proxy *appends* to, so everything the caller put in it is on the left and cannot be
     trusted; the gateway appends the address it actually saw, and ``trusted_hops`` more proxies in front of it each add one more."""
-    forwarded = [part.strip() for part in (ctx.headers.get("x-forwarded-for") or "").split(",") if part.strip()]
+    forwarded = [
+        part.strip()
+        for part in (ctx.headers.get("x-forwarded-for") or "").split(",")
+        if part.strip()
+    ]
     if forwarded:
         return forwarded[max(0, len(forwarded) - 1 - trusted_hops)]
     client = ctx.scope.get("client")

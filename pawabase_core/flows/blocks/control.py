@@ -131,9 +131,7 @@ class While(Block):
         validate_condition(condition)
         max_iterations = int(config.get("max_iterations") or 1000)
         if max_iterations < 1 or max_iterations > 10_000:
-            raise FlowError(
-                "max_iterations must be between 1 and 10000", code="bad_config"
-            )
+            raise FlowError("max_iterations must be between 1 and 10000", code="bad_config")
 
         node_id = run.current_node
         outputs = []

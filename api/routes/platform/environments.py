@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
@@ -17,6 +18,7 @@ from app import blueprints, env_settings
 from app.platform import Platform
 from app.secrets import mask
 from database.models import ApiKey, Environment, Secret
+from pawabase_core import envvars
 from pawabase_core.records import upsert
 from routes.common import (
     MANAGE,
@@ -161,8 +163,47 @@ def key_view(key: ApiKey) -> dict[str, Any]:
     return data
 
 
+def check_infra(infra: dict[str, Any] | None) -> None:
+    """Refuse the one ``infra`` setting that is no longer read: mail.
+
+    ``database_url`` and ``storage`` still work, deprecated. Mail comes from environment
+    variables only, so storing it here would be silently ignored. ``null`` is allowed, to
+    clear what an older install left behind.
+    """
+    if infra and infra.get("mail") is not None:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "infra.mail is no longer supported: configure mail with PAWABASE_MAIL_* "
+                "(or <ENVIRONMENT>_MAIL_*) environment variables"
+            ),
+        )
+
+
+def deprecations(environment: Environment) -> list[str]:
+    """What an environment still keeps in ``infra``, and where it belongs now."""
+    prefix = envvars.prefix_for(environment.name)
+    infra = environment.infra or {}
+    notes = []
+    if infra.get("database_url"):
+        notes.append(f"infra.database_url is deprecated: set {prefix}_DATA_URL")
+    if infra.get("storage"):
+        notes.append(f"infra.storage is deprecated: set {prefix}_STORAGE_* variables")
+    if infra.get("mail"):
+        notes.append(f"infra.mail is ignored: set PAWABASE_MAIL_* or {prefix}_MAIL_* variables")
+    return notes
+
+
+async def check_environment_name(name: str, also: Iterable[str] = ()) -> None:
+    """Refuse a name whose ``<NAME>_*`` variables would be read by another environment."""
+    existing = await Environment.all().values_list("name", flat=True)
+    problem = envvars.name_problem(name, [*existing, *also])
+    if problem:
+        raise HTTPException(status_code=422, detail=problem)
+
+
 def environment_view(environment: Environment) -> dict[str, Any]:
-    return dump(environment)
+    return {**dump(environment), "deprecations": deprecations(environment)}
 
 
 def register(r: Router, platform: Platform) -> None:
@@ -174,8 +215,10 @@ def register(r: Router, platform: Platform) -> None:
                 status_code=403, detail="the installation environment limit has been reached"
             )
 
-    def key_limit() -> int:
-        return platform.settings.max_api_keys_per_environment
+    def key_limit(env: str) -> int:
+        return platform.limit(
+            env, "MAX_API_KEYS_PER_ENVIRONMENT", platform.settings.max_api_keys_per_environment
+        )
 
     # ── this runtime ─────────────────────────────────────────────────────
 
@@ -188,18 +231,40 @@ def register(r: Router, platform: Platform) -> None:
             "environments": [environment_view(e) for e in environments],
         }
 
-    @r.get("/usage", auth=MANAGE, tags=["runtime"], summary="Configured runtime limits and management-plane usage")
-    async def usage(ctx: HttpContext, env: str | None = None):
+    @r.get(
+        "/usage",
+        auth=MANAGE,
+        tags=["runtime"],
+        summary="Configured runtime limits and management-plane usage",
+    )
+    async def usage(ctx: HttpContext):
+        env = ctx.query_params.get("env") or None
         environments = await Environment.all()
+        # With an environment named, the limits are the ones it actually runs under: its
+        # own `<ENV>_*` variables first, the deployment-wide ones otherwise.
         keys = 0
         if env:
             environment = await get_environment(env)
             keys = await ApiKey.filter(environment=environment, revoked_at=None).count()
         return {
-            "environments": {"used": len(environments), "limit": platform.settings.max_environments},
-            "api_keys": {"used": keys, "limit": platform.settings.max_api_keys_per_environment},
-            "uploads": {"limit": platform.settings.max_upload_bytes},
-            "users": {"limit": platform.settings.max_users},
+            "environments": {
+                "used": len(environments),
+                "limit": platform.settings.max_environments,
+            },
+            "api_keys": {
+                "used": keys,
+                "limit": key_limit(env) if env else platform.settings.max_api_keys_per_environment,
+            },
+            "uploads": {
+                "limit": platform.limit(env, "MAX_UPLOAD_BYTES", platform.settings.max_upload_bytes)
+                if env
+                else platform.settings.max_upload_bytes
+            },
+            "users": {
+                "limit": platform.limit(env, "MAX_USERS", platform.settings.max_users)
+                if env
+                else platform.settings.max_users
+            },
         }
 
     @r.post(
@@ -226,6 +291,8 @@ def register(r: Router, platform: Platform) -> None:
         for name in names:
             if not re.match(NAME_PATTERN, name):
                 raise HTTPException(status_code=422, detail=f"invalid environment name {name!r}")
+        for name in names:
+            await check_environment_name(name, also=names)
         taken = [name for name in names if await Environment.filter(name=name).exists()]
         if taken:
             raise HTTPException(
@@ -243,14 +310,14 @@ def register(r: Router, platform: Platform) -> None:
                     "Default publishable key",
                     "publishable",
                     created_by=_actor(ctx),
-                    max_keys=key_limit(),
+                    max_keys=key_limit(environment.name),
                 )
                 secret, _ = await create_key(
                     environment,
                     "Default secret key",
                     "secret",
                     created_by=_actor(ctx),
-                    max_keys=key_limit(),
+                    max_keys=key_limit(environment.name),
                 )
                 keys[name] = {"publishable": publishable, "secret": secret}
         try:
@@ -334,27 +401,28 @@ def register(r: Router, platform: Platform) -> None:
         await require_environment_capacity()
         if await Environment.filter(name=body.name).exists():
             raise HTTPException(status_code=409, detail=f"environment {body.name!r} already exists")
+        await check_environment_name(body.name)
         environment = await Environment.create(name=body.name, settings={"public_docs": False})
         publishable, _ = await create_key(
             environment,
             "Default publishable key",
             "publishable",
             created_by=_actor(ctx),
-            max_keys=key_limit(),
+            max_keys=key_limit(environment.name),
         )
         secret, _ = await create_key(
             environment,
             "Default secret key",
             "secret",
             created_by=_actor(ctx),
-            max_keys=key_limit(),
+            max_keys=key_limit(environment.name),
         )
         copied = {}
         if body.copy_from:
             from routes.platform.promote import copy_definitions
 
             source = await get_environment(body.copy_from)
-            copied = await copy_definitions(source, environment)
+            copied = await copy_definitions(source, environment, box=platform.box)
         await audit(ctx, "environment.created", env=body.name, target=body.name)
         return created(
             {
@@ -378,6 +446,8 @@ def register(r: Router, platform: Platform) -> None:
         name = body.name or f"pr-{body.ref}"
         if await Environment.filter(name=name).exists():
             raise HTTPException(status_code=409, detail=f"environment {name!r} already exists")
+        await check_environment_name(name)
+        check_infra(body.infra)
         settings = {**(source.settings or {}), **(body.settings or {}), "public_docs": False}
         preview = await Environment.create(
             name=name,
@@ -393,7 +463,7 @@ def register(r: Router, platform: Platform) -> None:
             "publishable",
             expires_at=preview.preview_expires_at,
             created_by=_actor(ctx),
-            max_keys=key_limit(),
+            max_keys=key_limit(preview.name),
         )
         secret, _ = await create_key(
             preview,
@@ -401,11 +471,11 @@ def register(r: Router, platform: Platform) -> None:
             "secret",
             expires_at=preview.preview_expires_at,
             created_by=_actor(ctx),
-            max_keys=key_limit(),
+            max_keys=key_limit(preview.name),
         )
         from routes.platform.promote import copy_definitions
 
-        copied = await copy_definitions(source, preview)
+        copied = await copy_definitions(source, preview, box=platform.box)
         await audit(
             ctx,
             "preview.created",
@@ -445,6 +515,7 @@ def register(r: Router, platform: Platform) -> None:
     async def update_environment(ctx: HttpContext, env: str, body: EnvironmentUpdate):
         environment = await get_environment(env)
         updates = body.model_dump(exclude_unset=True)
+        check_infra(updates.get("infra"))
         if updates.get("settings") is not None:
             updates["settings"] = env_settings.validate(updates["settings"])
         for section in ("infra", "auth", "settings"):
@@ -501,7 +572,7 @@ def register(r: Router, platform: Platform) -> None:
 
         source = await get_environment(env)
         target = await get_environment(body.to)
-        copied = await copy_definitions(source, target, include=body.include)
+        copied = await copy_definitions(source, target, include=body.include, box=platform.box)
         await changed(ctx, target, "environment.promoted", body.to, {"from": env, "copied": copied})
         return {"from": env, "to": body.to, "copied": copied}
 
@@ -531,7 +602,7 @@ def register(r: Router, platform: Platform) -> None:
             allowed_ips=body.allowed_ips,
             allowed_routes=body.allowed_routes,
             created_by=_actor(ctx),
-            max_keys=key_limit(),
+            max_keys=key_limit(environment.name),
         )
         await audit(
             ctx,
@@ -599,7 +670,7 @@ def register(r: Router, platform: Platform) -> None:
             environment=environment,
             name=name,
             defaults={
-                "ciphertext": platform.box.seal(body.value),
+                "ciphertext": platform.box.seal(body.value, env),
                 "description": body.description,
                 "updated_by": _actor(ctx),
             },

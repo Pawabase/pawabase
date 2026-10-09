@@ -35,12 +35,14 @@ def register(app: Any, platform: Platform) -> None:
         if len(body) > MAX_HOOK_BYTES:
             raise HTTPException(status_code=413, detail="payload too large")
         if hook.verification != "none":
-            secret = platform.box.open(hook.secret_ciphertext or "")
+            secret = platform.box.open(hook.secret_ciphertext or "", env)
             provided = ctx.headers.get(hook.signature_header.lower(), "")
             if hook.verification == "hmac-sha256":
                 valid = bool(provided) and verify_plain_hmac(secret, body, provided)
             elif hook.verification == "hmac-sha512":
-                valid = bool(provided) and verify_plain_hmac(secret, body, provided, algorithm="sha512")
+                valid = bool(provided) and verify_plain_hmac(
+                    secret, body, provided, algorithm="sha512"
+                )
             elif hook.verification == "pawabase":
                 valid = bool(provided) and verify_signature(secret, body, provided)
             else:
@@ -115,9 +117,7 @@ def register(app: Any, platform: Platform) -> None:
         compiled = await state.compiled()
         spec = json.loads(compiled.build_openapi(REST_PREFIX))
         spec = add_apikey_security(spec)
-        return BaseResponse(
-            body=json.dumps(spec).encode(), content_type="application/json"
-        )
+        return BaseResponse(body=json.dumps(spec).encode(), content_type="application/json")
 
     @d.get("/{env}")
     async def public_docs(ctx: HttpContext, env: str):

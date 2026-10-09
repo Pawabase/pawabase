@@ -454,7 +454,9 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
             existing = await store.get(record_id)
             if existing is None:
                 raise HTTPException(status_code=404, detail="Not found")
-            decision = await state.engine.check(delete_policy, build_policy_context(ctx, record=existing))
+            decision = await state.engine.check(
+                delete_policy, build_policy_context(ctx, record=existing)
+            )
             if not decision:
                 raise HTTPException(
                     status_code=404 if not _auth_actor(ctx) else 403, detail=decision.reason

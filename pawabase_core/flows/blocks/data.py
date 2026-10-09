@@ -84,7 +84,12 @@ class RenameFields(Block):
     category = "data"
     config = [
         {"name": "value", "type": "json", "required": True},
-        {"name": "fields", "type": "json", "required": True, "description": "Map old field names to new field names"},
+        {
+            "name": "fields",
+            "type": "json",
+            "required": True,
+            "description": "Map old field names to new field names",
+        },
     ]
 
     async def run(self, config, run):
@@ -102,7 +107,9 @@ class RenameFields(Block):
                     output[str(new)] = output.pop(old)
             return output
 
-        return BlockResult(output=[rename(item) for item in value] if isinstance(value, list) else rename(value))
+        return BlockResult(
+            output=[rename(item) for item in value] if isinstance(value, list) else rename(value)
+        )
 
 
 class Validate(Block):
@@ -352,7 +359,9 @@ class Sort(Block):
         if not field:
             raise FlowError("sort needs a field", code="bad_config")
         try:
-            output = sorted(value, key=lambda item: (lookup(item, field) is None, lookup(item, field)))
+            output = sorted(
+                value, key=lambda item: (lookup(item, field) is None, lookup(item, field))
+            )
         except TypeError:
             output = sorted(value, key=lambda item: str(lookup(item, field) or ""))
         if config.get("descending"):
@@ -393,7 +402,11 @@ class Unique(Block):
     category = "data"
     config = [
         {"name": "value", "type": "json", "required": True},
-        {"name": "field", "type": "string", "description": "Field or dotted path used to identify duplicates"},
+        {
+            "name": "field",
+            "type": "string",
+            "description": "Field or dotted path used to identify duplicates",
+        },
     ]
 
     async def run(self, config, run):
@@ -427,8 +440,18 @@ class Summarize(Block):
             "name": "operation",
             "type": "string",
             "enum": [
-                "count", "count_distinct", "sum", "average", "min", "max", "median",
-                "mode", "first", "last", "collect", "distinct",
+                "count",
+                "count_distinct",
+                "sum",
+                "average",
+                "min",
+                "max",
+                "median",
+                "mode",
+                "first",
+                "last",
+                "collect",
+                "distinct",
             ],
             "required": True,
             "description": "The aggregation to calculate",
@@ -465,7 +488,11 @@ class Summarize(Block):
                 if operation == "count_distinct":
                     return len(unique)
                 seen = set()
-                return [item for item in extracted if not (identity(item) in seen or seen.add(identity(item)))]
+                return [
+                    item
+                    for item in extracted
+                    if not (identity(item) in seen or seen.add(identity(item)))
+                ]
             if operation == "collect":
                 return extracted
             if operation in {"first", "last"}:
@@ -489,7 +516,11 @@ class Summarize(Block):
             elif operation == "median":
                 ordered = sorted(numbers)
                 middle = len(ordered) // 2
-                result = ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2
+                result = (
+                    ordered[middle]
+                    if len(ordered) % 2
+                    else (ordered[middle - 1] + ordered[middle]) / 2
+                )
             elif operation == "mode":
                 counts: dict[float, int] = {}
                 for number in numbers:
@@ -526,7 +557,9 @@ class Batch(Block):
         size = int(config.get("size") or 0)
         if size < 1 or size > 1000:
             raise FlowError("batch size must be between 1 and 1000", code="bad_config")
-        return BlockResult(output=[value[index : index + size] for index in range(0, len(value), size)])
+        return BlockResult(
+            output=[value[index : index + size] for index in range(0, len(value), size)]
+        )
 
 
 class Flatten(Block):
@@ -549,7 +582,9 @@ class Flatten(Block):
             raise FlowError("flatten depth must be between 1 and 20", code="bad_config")
         output = value
         for _ in range(depth):
-            output = [child for item in output for child in (item if isinstance(item, list) else [item])]
+            output = [
+                child for item in output for child in (item if isinstance(item, list) else [item])
+            ]
         return BlockResult(output=output)
 
 
@@ -573,7 +608,9 @@ class Slice(Block):
         limit = config.get("limit")
         if offset < 0 or (limit is not None and int(limit) < 0):
             raise FlowError("slice offset and limit cannot be negative", code="bad_config")
-        return BlockResult(output=value[offset:] if limit is None else value[offset : offset + int(limit)])
+        return BlockResult(
+            output=value[offset:] if limit is None else value[offset : offset + int(limit)]
+        )
 
 
 BLOCKS = [
