@@ -2,6 +2,7 @@ import { useState } from "react";
 import Layout from "../../components/Layout";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, Field, IconButton, Json, Loading, Modal, PageHead, Section, Segmented, Switch, Table, TagInput, Tabs, useAction, when } from "../../components/ui";
+import { PermissionPicker, RolePicker } from "../../components/AccessPickers";
 import { api, del, envPath, patch, post, put, useApi } from "../../lib/api";
 
 const AUTH = { service: "auth" };
@@ -103,24 +104,32 @@ function UserDetail({ base, id, onClose }) {
 }
 
 function Grants({ base, id, user, onDone }) {
-  const [roles, setRoles] = useState((user.roles || []).join(", "));
-  const [permission, setPermission] = useState("");
+  const roleList = useApi(`${base}/roles`, AUTH);
+  const resources = useApi(`${base}/resources`, { params: { limit: 500 } });
+  const [roles, setRoles] = useState(user.roles || []);
+  const [permissions, setPermissions] = useState(user.permissions || []);
   const [run, busy] = useAction();
-  const list = (text) => text.split(",").map((s) => s.trim()).filter(Boolean);
+  const sameSet = (x, y) => x.length === y.length && x.every((v) => y.includes(v));
+  const saveRoles = async () => { if (await run(() => patch(`${base}/users/${id}`, { roles }, AUTH), "Roles saved")) onDone(); };
+  const savePermissions = async () => {
+    const before = user.permissions || [];
+    const add = permissions.filter((p) => !before.includes(p));
+    const remove = before.filter((p) => !permissions.includes(p));
+    const steps = [];
+    if (add.length) steps.push(() => post(`${base}/users/${id}/permissions`, { permissions: add }, AUTH));
+    if (remove.length) steps.push(() => api("DELETE", `${base}/users/${id}/permissions`, { permissions: remove }, AUTH));
+    if (await run(async () => { for (const step of steps) await step(); return true; }, "Permissions saved")) onDone();
+  };
   return (
-    <div className="stack" style={{ gap: 10 }}>
-      <div className="row" style={{ alignItems: "flex-end" }}>
-        <Field label="Roles" hint="Comma-separated role names from the Roles tab."><input value={roles} onChange={(e) => setRoles(e.target.value)} /></Field>
-        <Button disabled={busy} onClick={async () => { if (await run(() => patch(`${base}/users/${id}`, { roles: list(roles) }, AUTH), "Roles saved")) onDone(); }}>Save roles</Button>
-      </div>
-      <div className="row wrap">
-        <span className="muted" style={{ fontSize: 12.5 }}>Direct permissions:</span>
-        {(user.permissions || []).map((p) => (
-          <span key={p} className="badge">{p} <a href="#" onClick={async (e) => { e.preventDefault(); if (await run(() => api("DELETE", `${base}/users/${id}/permissions`, { permissions: [p] }, AUTH), "Revoked")) onDone(); }}>✕</a></span>
-        ))}
-        <input value={permission} onChange={(e) => setPermission(e.target.value)} placeholder="posts:write" style={{ width: 160 }} />
-        <Button size="sm" disabled={busy || !permission} onClick={async () => { if (await run(() => post(`${base}/users/${id}/permissions`, { permissions: list(permission) }, AUTH), "Granted")) { setPermission(""); onDone(); } }}>Grant</Button>
-      </div>
+    <div className="stack" style={{ gap: 14 }}>
+      <Field label="Roles" hint="Click to give or take away a role. Hover a role to see what it allows.">
+        <RolePicker value={roles} onChange={setRoles} roles={roleList.data?.data || []} />
+      </Field>
+      <div><Button disabled={busy || sameSet(roles, user.roles || [])} onClick={saveRoles}>Save roles</Button></div>
+      <Field label="Direct permissions" hint="On top of what the roles allow.">
+        <PermissionPicker value={permissions} onChange={setPermissions} known={roleList.data?.permissions || []} resources={(resources.data?.data || []).map((r) => r.name)} />
+      </Field>
+      <div><Button disabled={busy || sameSet(permissions, user.permissions || [])} onClick={savePermissions}>Save permissions</Button></div>
     </div>
   );
 }
@@ -139,12 +148,13 @@ function NewUser({ base, onClose, onCreated }) {
 
 function Roles({ base }) {
   const roles = useApi(`${base}/roles`, AUTH);
+  const resources = useApi(`${base}/resources`, { params: { limit: 500 } });
   const [editing, setEditing] = useState(null);
   const [run, busy] = useAction();
   return (
-    <Card flush title="Roles" actions={<Button size="sm" variant="primary" onClick={() => setEditing({ isNew: true, name: "", description: "", permissions: "" })}>New role</Button>}>
+    <Card flush title="Roles" actions={<Button size="sm" variant="primary" onClick={() => setEditing({ isNew: true, name: "", description: "", permissions: [] })}>New role</Button>}>
       <Loading state={roles} empty="No roles yet.">
-        {(data) => <Table rows={data.data} onRowClick={(r) => setEditing({ ...r, permissions: (r.permissions || []).join(", ") })} columns={[
+        {(data) => <Table rows={data.data} onRowClick={(r) => setEditing({ ...r, permissions: r.permissions || [] })} columns={[
           { label: "Role", render: (r) => <b>{r.name}</b> }, { label: "Description", key: "description" },
           { label: "Permissions", render: (r) => <div className="row wrap">{(r.permissions || []).map((p) => <Badge key={p}>{p}</Badge>)}</div> },
           { label: "Members", key: "members" },
@@ -155,13 +165,15 @@ function Roles({ base }) {
           {!editing.isNew && <Button variant="danger" onClick={async () => { if (await run(() => del(`${base}/roles/${editing.name}`, AUTH), "Deleted")) { setEditing(null); roles.reload(); } }}>Delete</Button>}
           <span className="grow" />
           <Button variant="primary" disabled={busy || !editing.name} onClick={async () => {
-            const body = { name: editing.name, description: editing.description || "", permissions: editing.permissions.split(",").map((s) => s.trim()).filter(Boolean) };
+            const body = { name: editing.name, description: editing.description || "", permissions: editing.permissions };
             if (await run(() => put(`${base}/roles`, body, AUTH), "Saved")) { setEditing(null); roles.reload(); }
           }}>Save</Button>
         </>}>
           <Field label="Name"><input value={editing.name} disabled={!editing.isNew} onChange={(e) => setEditing({ ...editing, name: e.target.value })} placeholder="editor" /></Field>
           <Field label="Description"><input value={editing.description || ""} onChange={(e) => setEditing({ ...editing, description: e.target.value })} /></Field>
-          <Field label="Permissions" hint="Comma-separated, e.g. posts:write, posts:publish. * grants everything."><input value={editing.permissions} onChange={(e) => setEditing({ ...editing, permissions: e.target.value })} /></Field>
+          <Field label="Permissions" hint="Click to allow. * grants everything.">
+            <PermissionPicker value={editing.permissions} onChange={(permissions) => setEditing({ ...editing, permissions })} known={roles.data?.permissions || []} resources={(resources.data?.data || []).map((r) => r.name)} />
+          </Field>
         </Modal>
       )}
     </Card>
