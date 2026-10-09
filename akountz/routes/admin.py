@@ -21,7 +21,16 @@ from app.accounts import check_password_policy, create_account, get_user, user_v
 from app.environment import load_config
 from app.platform import Akountz
 from app.sessions import list_sessions, revoke_all, revoke_session
-from database.models import AuthUser, Identity, LoginEvent, Membership, Organization, Team
+from database.models import (
+    AuthUser,
+    Identity,
+    LoginEvent,
+    Membership,
+    OneTimeToken,
+    Organization,
+    Team,
+)
+from database.models.framework import JWTToken
 from pawabase_core.service import SERVICE_ONLY
 
 
@@ -92,6 +101,30 @@ def register(r: Router, akountz: Akountz) -> None:
         total = await query.count()
         rows = await query.order_by("-id").offset(offset).limit(limit)
         return {"data": [await user_view(u, admin=True) for u in rows], "total": total}
+
+    @r.delete(
+        f"{base}",
+        auth=SERVICE_ONLY,
+        tags=["admin"],
+        summary="Permanently purge one environment's identities",
+    )
+    async def purge_environment(ctx: HttpContext, env: str):
+        """Remove all identity data belonging to an environment.
+
+        This endpoint is intentionally service-only: Studio never calls it
+        directly; the API's environment-purge worker does after confirmation.
+        """
+        users = await AuthUser.filter(env=env).values_list("id", flat=True)
+        counts = {"users": len(users), "organizations": await Organization.filter(env=env).count()}
+        if users:
+            await JWTToken.filter(user_id__in=[str(user_id) for user_id in users]).delete()
+        await OneTimeToken.filter(env=env).delete()
+        await LoginEvent.filter(env=env).delete()
+        # Cascades remove memberships, teams, invitations, identities, MFA,
+        # recovery codes and sessions linked to these rows.
+        await Organization.filter(env=env).delete()
+        await AuthUser.filter(env=env).delete()
+        return {"purged": counts}
 
     @r.post(
         f"{base}/users",

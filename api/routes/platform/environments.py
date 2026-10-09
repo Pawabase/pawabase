@@ -15,6 +15,7 @@ from sillo.exceptions import HTTPException
 from tortoise.transactions import in_transaction
 
 from app import blueprints, env_settings
+from app.jobs.environments import PurgeEnvironmentJob
 from app.platform import Platform
 from app.secrets import mask
 from database.models import ApiKey, Environment, Secret
@@ -23,6 +24,7 @@ from pawabase_core.records import upsert
 from routes.common import (
     MANAGE,
     NAME_PATTERN,
+    actor,
     audit,
     changed,
     dump,
@@ -539,10 +541,28 @@ def register(r: Router, platform: Platform) -> None:
         environment = await get_environment(env)
         if await Environment.all().count() <= 1:
             raise HTTPException(status_code=409, detail="a runtime keeps at least one environment")
-        await environment.delete()
-        platform.envs.forget(env)
-        await audit(ctx, "environment.deleted", env=env, target=env)
-        return no_content()
+        if (environment.settings or {}).get("deletion_pending"):
+            raise HTTPException(
+                status_code=409, detail="this environment is already queued for deletion"
+            )
+
+        # Keep the environment in place until the worker has removed every
+        # external concern (identity records, resource tables and objects).
+        # This makes the operation durable and avoids a request timeout
+        # leaving orphaned data behind.
+        environment.settings = {**(environment.settings or {}), "deletion_pending": True}
+        await environment.save()
+        job_id = await platform.dispatch(
+            PurgeEnvironmentJob,
+            env=env,
+            target=env,
+            source="environment.delete",
+            requested_by=actor(ctx),
+        )
+        await audit(
+            ctx, "environment.deletion_queued", env=env, target=env, details={"job_id": job_id}
+        )
+        return {"queued": True, "job_id": job_id}
 
     @r.delete(
         "/envs/{env}/previews/{preview}",
