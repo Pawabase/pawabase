@@ -72,6 +72,7 @@ jobs:
             echo "PAWABASE_JWT_MASTER_SECRET=$(openssl rand -hex 32)"
             echo "PAWABASE_MASTER_KEY=$(openssl rand -hex 32)"
             echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)"
+            echo "MINIO_ROOT_PASSWORD=$(openssl rand -hex 16)"
           } > .env
       - run: docker compose build
       - run: docker compose up -d --wait --wait-timeout 180
