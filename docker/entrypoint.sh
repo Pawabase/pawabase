@@ -3,6 +3,14 @@
 # (Not named `pawabase`: the Python kit installs a `pawabase` command, the deploy CLI, on the same PATH.)
 set -e
 
+# PAWABASE_EXTRA_CA_B64: a certificate authority to trust besides the system's, base64-encoded (for a database or storage server that signs with its
+# own certificate). The container runs as an unprivileged user, so rather than installing it the system bundle plus the certificate is written to a
+# file that Python's ssl module and OpenSSL read through SSL_CERT_FILE.
+if [ -n "${PAWABASE_EXTRA_CA_B64:-}" ]; then
+  { cat /etc/ssl/certs/ca-certificates.crt; printf '\n'; printf '%s' "$PAWABASE_EXTRA_CA_B64" | base64 -d; } > /tmp/ca-bundle.pem
+  export SSL_CERT_FILE=/tmp/ca-bundle.pem
+fi
+
 # PAWABASE_RELOAD=true (set by docker-compose.dev.yml) restarts a service
 # whenever its own code or pawabase_core changes on the bind-mounted source.
 serve() {
