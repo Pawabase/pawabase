@@ -145,7 +145,7 @@ variables, never through the API. `PAWABASE_<KEY>` applies to every environment 
 `<ENV>_<KEY>` overrides it for one (`PRODUCTION_STORAGE_BUCKET`, `STAGING_MAX_USERS`).
 See `.env.example` for the keys. Studio's Settings page shows what is in effect and where
 each value came from; `GET /platform/v1/capacity` reports what a deployment is using, and
-`docker-compose.external.yml` runs one container against your own Postgres, Redis and S3.
+`docker-compose.external.yml` runs one container against your own Postgres, Redis and S3, and `docker-compose.cloud.yml` is the same container as Pawabase Cloud deploys it (databases and storage on a shared data plane, TLS to the database trusted through `PAWABASE_EXTRA_CA_B64`).
 
 **Upgrading.** Stored `infra.database_url` and `infra.storage` still work and are reported
 as deprecated; `python -m app.export_config` prints them as variables. **Mail is the one

@@ -136,6 +136,7 @@ function SettingsBody({ env, path, data, usage, configuration, policyNames, relo
   const editable = !["infrastructure", "limits", "advanced"].includes(active);
 
   return <div className="stack lg">
+    {data.settings?.deletion_pending && <div className="alert error"><b>Deletion queued.</b> This environment is being purged in the background.</div>}
     {maintenance.enabled && !dirty && <div className="alert warn"><b>Maintenance mode is on.</b> Publishable keys get 503 responses{maintenance.allow_secret_keys ? "; secret keys still work" : " and so do secret keys"}.</div>}
     <div style={{ display: "flex", gap: 18, alignItems: "flex-start" }}>
       <nav className="card" style={{ width: 230, flexShrink: 0, padding: 8 }} aria-label="Settings sections">
@@ -195,7 +196,7 @@ function SettingsBody({ env, path, data, usage, configuration, policyNames, relo
         {active === "advanced" && <Advanced env={env} path={path} data={data} settings={original} draftDirty={dirty} onImport={(incoming) => { setDraft((d) => ({ ...d, ...incoming })); setActive("general"); }} onDelete={() => setConfirmDelete(true)} reload={reload} />}
       </Card>
     </div>
-    {confirmDelete && <DeleteEnvironment env={env} path={path} onClose={() => setConfirmDelete(false)} onDeleted={() => router.visit("/environments")} />}
+    {confirmDelete && <DeleteEnvironment env={env} path={path} onClose={() => setConfirmDelete(false)} onQueued={() => router.visit("/environments")} />}
   </div>;
 }
 
@@ -315,17 +316,18 @@ function Advanced({ env, path, data, settings, draftDirty, onImport, onDelete, r
       </div>
     </Section>
     {!data.is_default && <Section title="Danger zone" description="Deleting an environment removes its data, keys, secrets and users for good.">
-      <Button variant="danger" onClick={onDelete}>Delete environment</Button>
+      <Button variant="danger" disabled={data.settings?.deletion_pending} onClick={onDelete}>{data.settings?.deletion_pending ? "Deletion queued" : "Delete environment"}</Button>
     </Section>}
   </div>;
 }
 
-function DeleteEnvironment({ env, path, onClose, onDeleted }) {
+function DeleteEnvironment({ env, path, onClose, onQueued }) {
   const [value, setValue] = useState("");
   const [run, busy] = useAction();
   const ready = value === env;
-  return <Modal title={`Delete ${env}?`} onClose={onClose} footer={<><Button onClick={onClose} disabled={busy}>Cancel</Button><Button variant="danger" disabled={!ready || busy} onClick={async () => { if (await run(() => del(path), "Environment deleted")) onDeleted(); }}>Permanently delete</Button></>}>
-    <div className="alert danger"><b>This cannot be undone.</b> The environment’s resource data, API keys, secrets and users are removed permanently.</div>
+  return <Modal title={`Delete ${env}?`} onClose={onClose} footer={<><Button onClick={onClose} disabled={busy}>Cancel</Button><Button variant="danger" disabled={!ready || busy} onClick={async () => { if (await run(() => del(path), "Deletion queued in the background")) onQueued(); }}>Permanently delete</Button></>}>
+    <div className="alert danger"><b>This cannot be undone.</b> The background purge permanently removes this environment’s resource records and tables, storage objects, API keys, secrets, users, sessions, MFA data, organizations, mail, request, flow, event and audit logs.</div>
+    <p className="muted" style={{ margin: 0 }}>The environment is marked for deletion and will disappear once the worker finishes. A final installation-level receipt is retained for accountability.</p>
     <Field label={`Type ${env} to confirm`}><input autoFocus value={value} onChange={(e) => setValue(e.target.value)} autoComplete="off" /></Field>
   </Modal>;
 }

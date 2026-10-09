@@ -1,0 +1,75 @@
+# One Pawabase project as Pawabase Cloud deploys it.
+#
+# A single service: every Pawabase process in one container under a small supervisor. There is no Postgres, Redis or MinIO here: the project's
+# databases and bucket live on Cloud's shared data plane, and Cloud passes their addresses and keys in as environment variables. Events, cache
+# and queues stay inside the project's own process (Redis is not shared between projects, their keys have fixed names).
+#
+# Compare docker-compose.external.yml (the same service for a host you run yourself) and docker-compose.hosted.yml (Postgres and Redis bundled).
+# Until Pawabase publishes an image, the host builds it from this repository; the build is cached, so projects on one host share its layers.
+#
+# Every ${...} below is set by Cloud. A variable marked :? is required: the stack refuses to start without it.
+
+services:
+  pawabase:
+    build: .
+    image: ${PAWABASE_IMAGE:-pawabase:cloud}
+    restart: unless-stopped
+    command: ["all"]
+    mem_limit: ${PAWABASE_MEMORY_LIMIT:-768m}
+    cpus: ${PAWABASE_CPUS:-1.0}
+    environment:
+      PAWABASE_APP_ENV: production
+      PAWABASE_INTERNAL_SECRET: ${PAWABASE_INTERNAL_SECRET:?set PAWABASE_INTERNAL_SECRET}
+      PAWABASE_JWT_MASTER_SECRET: ${PAWABASE_JWT_MASTER_SECRET:?set PAWABASE_JWT_MASTER_SECRET}
+      PAWABASE_MASTER_KEY: ${PAWABASE_MASTER_KEY:?set PAWABASE_MASTER_KEY}
+      PAWABASE_PROJECT_NAME: ${PAWABASE_PROJECT_NAME:-Pawabase}
+      PAWABASE_PUBLIC_URL: ${PAWABASE_PUBLIC_URL:?set PAWABASE_PUBLIC_URL}
+      PAWABASE_PUBLIC_GATEWAY_URL: ${PAWABASE_PUBLIC_GATEWAY_URL:?set PAWABASE_PUBLIC_GATEWAY_URL}
+      PAWABASE_COOKIE_SECURE: ${PAWABASE_COOKIE_SECURE:-true}
+      PAWABASE_STUDIO_ACCESS_SECRET: ${PAWABASE_STUDIO_ACCESS_SECRET:?set PAWABASE_STUDIO_ACCESS_SECRET}
+      # The shared data plane: this project's databases and bucket, behind PgBouncer and over TLS.
+      PAWABASE_DATABASE_URL: ${PAWABASE_DATABASE_URL:?set PAWABASE_DATABASE_URL}
+      PAWABASE_AKOUNTZ_DATABASE_URL: ${PAWABASE_AKOUNTZ_DATABASE_URL:?set PAWABASE_AKOUNTZ_DATABASE_URL}
+      PAWABASE_DEFAULT_DATA_URL: ${PAWABASE_DATABASE_URL}
+      PAWABASE_EXTRA_CA_B64: ${PAWABASE_EXTRA_CA_B64:-}
+      PAWABASE_STORAGE_DRIVER: ${PAWABASE_STORAGE_DRIVER:-s3}
+      PAWABASE_STORAGE_ENDPOINT: ${PAWABASE_STORAGE_ENDPOINT:?set PAWABASE_STORAGE_ENDPOINT}
+      PAWABASE_STORAGE_BUCKET: ${PAWABASE_STORAGE_BUCKET:?set PAWABASE_STORAGE_BUCKET}
+      PAWABASE_STORAGE_REGION: ${PAWABASE_STORAGE_REGION:-us-east-1}
+      PAWABASE_STORAGE_ACCESS_KEY: ${PAWABASE_STORAGE_ACCESS_KEY:?set PAWABASE_STORAGE_ACCESS_KEY}
+      PAWABASE_STORAGE_SECRET_KEY: ${PAWABASE_STORAGE_SECRET_KEY:?set PAWABASE_STORAGE_SECRET_KEY}
+      PAWABASE_STORAGE_PATH_STYLE: ${PAWABASE_STORAGE_PATH_STYLE:-true}
+      PAWABASE_STORAGE_ROOT: /data/objects
+      PAWABASE_CODE_PATH: /code
+      PAWABASE_DEPLOYMENTS_PATH: /data/deployments
+      # One process fewer each: the API runs its own worker and scheduler. Small pools, since PgBouncer sits in front.
+      PAWABASE_INLINE_WORKER: ${PAWABASE_INLINE_WORKER:-true}
+      PAWABASE_INLINE_SCHEDULER: ${PAWABASE_INLINE_SCHEDULER:-true}
+      PAWABASE_STUDIO: ${PAWABASE_STUDIO:-on}
+      PAWABASE_DB_POOL_MIN: ${PAWABASE_DB_POOL_MIN:-0}
+      PAWABASE_DB_POOL_MAX: ${PAWABASE_DB_POOL_MAX:-3}
+      PAWABASE_MAIL_HOST: ${PAWABASE_MAIL_HOST:-}
+      PAWABASE_MAIL_PORT: ${PAWABASE_MAIL_PORT:-587}
+      PAWABASE_MAIL_USERNAME: ${PAWABASE_MAIL_USERNAME:-}
+      PAWABASE_MAIL_PASSWORD: ${PAWABASE_MAIL_PASSWORD:-}
+      PAWABASE_MAIL_FROM: ${PAWABASE_MAIL_FROM:-}
+    ports:
+      - "${PAWABASE_GATEWAY_PORT:-8080}:8080"
+      - "127.0.0.1:${PAWABASE_STUDIO_PORT:-8090}:8090"
+    volumes:
+      - data:/data
+      - code:/code
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  data:
+  code:
