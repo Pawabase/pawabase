@@ -15,6 +15,8 @@ from app.runtime import ApiRuntime, function_context
 from app.state import EnvironmentState
 from database.models import FlowRun as FlowRunRecord
 from database.models import FunctionRun
+from pawabase_core.errors import FunctionFailed
+from pawabase_core.failures import report
 from pawabase_core.flows import FlowError, FlowRun
 from pawabase_core.functions import MAIN, FunctionError
 from pawabase_core.ids import new_ulid
@@ -151,8 +153,11 @@ async def call_function(
         status, error = "failed", exc.message
         raise FlowError(exc.message, status=exc.status, code=exc.code, details=exc.details) from exc
     except Exception as exc:
-        status, error = "failed", f"{type(exc).__name__}: {exc}"
-        raise
+        # Whatever the function raised without meaning to: the run keeps what broke and where in the function (not thirty frames of the
+        # framework), and the caller gets a function error carrying a request id. The original stays as its cause, for the log.
+        failure = report(exc, roots=_function_roots(platform))
+        status, error = "failed", failure.line()
+        raise FunctionFailed(f"function {name!r} failed") from exc
     finally:
         try:
             await FunctionRun.create(
@@ -175,6 +180,12 @@ async def call_function(
             # Observability must not turn a successful user function into a
             # failure when the platform control database is degraded.
             logger.exception("could not record function run %s", name)
+
+
+def _function_roots(platform: Platform) -> tuple[str, ...]:
+    """Where function code lives, so a failure is placed in the function's own file."""
+    settings = platform.settings
+    return tuple(str(path) for path in (settings.deployments_path, settings.code_path) if path)
 
 
 def _deployment_of(platform: Platform, spec: Any) -> str | None:

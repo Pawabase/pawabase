@@ -16,6 +16,7 @@ from sillo import HttpContext, Router, SilloApp, json
 from sillo.auth import useAuth
 from sillo.auth.backend import AuthenticationBackend
 
+from . import errors
 from .auth import ContextMiddleware, ServiceBackend
 from .clients import ServiceError
 from .principal import Principal
@@ -97,6 +98,7 @@ def create_service(
         return json(body, status_code=exc.status if exc.status < 600 else 502)
 
     app.add_exception_handler(ServiceError, service_error)
+    errors.install(app, name, debug=settings.debug)
     app.mount_router(internal_router(name, telemetry))
     app.get("/health", handler=_health(name), name="health", exclude_from_schema=True)
     return app

@@ -23,6 +23,7 @@ from app.compiler.routes import register_route
 from app.data.source import DataSourceError
 from app.data.sql import SqlError
 from app.execution import NotFound
+from pawabase_core import errors
 from pawabase_core.auth import UserBackend
 from pawabase_core.flows import FlowError
 from pawabase_core.principal import Principal
@@ -108,6 +109,8 @@ def compile_environment(state: EnvironmentState) -> SilloApp:
     app.add_exception_handler(DataSourceError, unavailable)
     app.add_exception_handler(ValidationError, invalid)
     app.add_exception_handler(TransformerError, transformer_error)
+    # Anything not named above (a function that raised, a bug) is one log line and a clean JSON answer with a request id, never a traceback.
+    errors.install(app, "data", debug=settings.debug)
 
     for resource in state.resources.values():
         try:
