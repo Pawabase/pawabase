@@ -1,10 +1,11 @@
-import { Link } from "@inertiajs/react";
+import { Link, usePage } from "@inertiajs/react";
 import { useEffect, useRef, useState } from "react";
-import Chart, { Sparkline, compact } from "../../components/Chart";
+import Chart, { compact } from "../../components/Chart";
+import DateRange, { formatDay, rangeParams } from "../../components/DateRange";
 import Layout, { envHref } from "../../components/Layout";
 import { Icon } from "../../components/icons";
-import { Card, PageHead, Segmented, when } from "../../components/ui";
-import { get } from "../../lib/api";
+import { Badge, Button, Card, CopyText, PageHead, Segmented, Tabs, copyToClipboard, useToast, when } from "../../components/ui";
+import { envPath, get, useApi } from "../../lib/api";
 
 const RANGES = [["1h", "1h"], ["24h", "24h"], ["7d", "7d"], ["30d", "30d"]];
 const RANGE_NAMES = { "1h": "last hour", "24h": "last 24 hours", "7d": "last 7 days", "30d": "last 30 days" };
@@ -19,18 +20,40 @@ const C = {
   failures: "var(--danger)",
 };
 
+const TABS = [
+  { value: "traffic", label: "Traffic" },
+  { value: "latency", label: "Latency" },
+  { value: "automation", label: "Automation" },
+];
+
+function CopyServiceUrl({ url }) {
+  const toast = useToast();
+  if (!url) return null;
+  return (
+    <Button size="sm" title={url} onClick={async () => toast((await copyToClipboard(url)) ? "Service URL copied" : "Could not copy. Select it from the API keys section.", "ok")}>
+      <Icon name="copy" size={14} /> Copy service URL
+    </Button>
+  );
+}
+
 export default function Overview({ runtime, env, overview }) {
+  const { gateway_url: gatewayUrl } = usePage().props;
   const [range, setRange] = useState(overview.analytics?.range || "24h");
+  const [custom, setCustom] = useState(null);
+  const [tab, setTab] = useState("traffic");
   const [stats, setStats] = useState(overview.analytics);
   const [loading, setLoading] = useState(false);
   const first = useRef(true);
+  const keys = useApi(envPath(env, "/keys"));
+  const functions = useApi(envPath(env, "/functions"));
 
   useEffect(() => {
     let alive = true;
     async function load() {
       setLoading(true);
       try {
-        const data = await get(`/envs/${env}/analytics`, { params: { range } });
+        const params = custom ? rangeParams(custom) : { range };
+        const data = await get(`/envs/${env}/analytics`, { params });
         if (alive) setStats(data);
       } catch {
         /* keep what's on screen */
@@ -40,18 +63,18 @@ export default function Overview({ runtime, env, overview }) {
     }
     if (first.current) first.current = false;
     else load();
-    const timer = setInterval(load, range === "1h" ? 30000 : 60000);
+    const timer = custom ? null : setInterval(load, range === "1h" ? 30000 : 60000);
     return () => {
       alive = false;
-      clearInterval(timer);
+      if (timer) clearInterval(timer);
     };
-  }, [range, env]);
+  }, [range, custom, env]);
 
   const s = stats?.summary || {};
-  const p = stats?.previous || {};
   const series = stats?.series || [];
   const step = stats?.step_seconds || 3600;
-  const href = (section) => envHref(env, section);
+  const stepName = step < 3600 ? `${Math.round(step / 60)} min` : step < 86400 ? `${step / 3600} h` : "day";
+  const span = custom ? (custom[0].getTime() === custom[1].getTime() ? formatDay(custom[0]) : `${formatDay(custom[0])} – ${formatDay(custom[1])}`) : RANGE_NAMES[range];
 
   return (
     <Layout title={`${runtime.name} · ${env}`}>
@@ -59,10 +82,11 @@ export default function Overview({ runtime, env, overview }) {
         title="Overview"
         description={`${runtime.name} · ${env} · definitions v${overview.version}`}
         actions={
-          <div className="row" style={{ gap: 10 }}>
-            {loading && <span className="live-dot busy" title="Refreshing" />}
-            {!loading && <span className="live-dot" title="Live: refreshes automatically" />}
-            <Segmented options={RANGES} value={range} onChange={setRange} />
+          <div className="row wrap" style={{ gap: 10, justifyContent: "flex-end" }}>
+            <CopyServiceUrl url={gatewayUrl} />
+            {loading ? <span className="live-dot busy" title="Refreshing" /> : <span className={`live-dot ${custom ? "off" : ""}`} title={custom ? "A fixed range does not refresh" : "Live: refreshes automatically"} />}
+            <Segmented options={RANGES} value={custom ? null : range} onChange={(value) => { setCustom(null); setRange(value); }} />
+            <DateRange value={custom} active={Boolean(custom)} onApply={setCustom} />
           </div>
         }
       />
@@ -74,76 +98,79 @@ export default function Overview({ runtime, env, overview }) {
         </div>
       )}
 
-      <div className="kpis">
-        <Kpi label="API requests" value={compact(s.requests)} now={s.requests} before={p.requests} spark={series.map((b) => b.requests)} color={C.requests} />
-        <Kpi label="Error rate" value={`${(s.error_rate ?? 0).toFixed(s.error_rate >= 10 ? 0 : 1)}%`} now={s.error_rate} before={p.error_rate} lowerIsBetter spark={series.map((b) => b.errors)} color={C.errors} sub={`${compact(s.errors)} server errors`} />
-        <Kpi label="Avg latency" value={`${compact(s.avg_latency_ms)} ms`} now={s.avg_latency_ms} before={p.avg_latency_ms} lowerIsBetter spark={series.map((b) => b.latency_ms)} color={C.latency} />
-        <Kpi label="Flow runs" value={compact(s.flow_runs)} now={s.flow_runs} before={p.flow_runs} spark={series.map((b) => b.flow_runs)} color={C.events} sub={s.flow_success_rate == null ? "no runs yet" : `${s.flow_success_rate}% succeeded`} />
-      </div>
-
-      <Card
-        title="Traffic"
-        className="chart-card"
-        actions={<Legend items={[["Requests", C.requests], ["4xx", C.client], ["5xx", C.errors]]} />}
-      >
-        <Chart
-          height={280}
-          stepSeconds={step}
-          data={series}
-          series={[
-            { key: "requests", label: "Requests", color: C.requests, type: "area" },
-            { key: "client_errors", label: "Client errors (4xx)", color: C.client, type: "line", dashed: true },
-            { key: "errors", label: "Server errors (5xx)", color: C.errors, type: "line" },
-          ]}
-          empty="No API traffic in this range. Requests through the gateway appear here."
-        />
+      <Card className="chart-card">
+        <div className="chart-top">
+          <Tabs tabs={TABS} value={tab} onChange={setTab} />
+          <span className="muted small">{span} · per {stepName}</span>
+        </div>
+        {tab === "traffic" && (
+          <>
+            <p className="chart-sum"><b>{compact(s.requests)}</b> requests · <b>{(s.error_rate ?? 0).toFixed(s.error_rate >= 10 ? 0 : 1)}%</b> server errors<Legend items={[["Requests", C.requests], ["4xx", C.client], ["5xx", C.errors]]} /></p>
+            <Chart
+              height={320}
+              stepSeconds={step}
+              data={series}
+              series={[
+                { key: "requests", label: "Requests", color: C.requests, type: "area" },
+                { key: "client_errors", label: "Client errors (4xx)", color: C.client, type: "line", dashed: true },
+                { key: "errors", label: "Server errors (5xx)", color: C.errors, type: "line" },
+              ]}
+              empty="No API traffic in this range. Requests through the gateway appear here."
+            />
+          </>
+        )}
+        {tab === "latency" && (
+          <>
+            <p className="chart-sum"><b>{compact(s.avg_latency_ms)} ms</b> average latency</p>
+            <Chart height={320} stepSeconds={step} data={series} format={(v) => `${compact(v)}`} series={[{ key: "latency_ms", label: "Avg latency (ms)", color: C.latency, type: "line" }]} empty="No requests to measure yet." />
+          </>
+        )}
+        {tab === "automation" && (
+          <>
+            <p className="chart-sum"><b>{compact(s.flow_runs)}</b> flow runs{s.flow_success_rate != null && <> · <b>{s.flow_success_rate}%</b> succeeded</>} · <b>{compact(s.events)}</b> events<Legend items={[["Events", C.events], ["Flow runs", C.runs], ["Failed", C.failures]]} /></p>
+            <Chart
+              height={320}
+              stepSeconds={step}
+              data={series.map((b) => ({ ...b, ok_runs: b.flow_runs - b.flow_failures }))}
+              series={[
+                { key: "ok_runs", label: "Flow runs", color: C.runs, type: "bar" },
+                { key: "flow_failures", label: "Failed runs", color: C.failures, type: "bar" },
+                { key: "events", label: "Events", color: C.events, type: "line" },
+              ]}
+              empty="No events or flow runs in this range."
+            />
+          </>
+        )}
       </Card>
 
-      <div className="grid two" style={{ marginTop: 14 }}>
-        <Card title="Latency" className="chart-card" actions={<span className="muted small">average per {step < 3600 ? "5 min" : step < 86400 ? `${step / 3600}h` : "day"}</span>}>
-          <Chart
-            height={200}
-            stepSeconds={step}
-            data={series}
-            format={(v) => `${compact(v)}`}
-            series={[{ key: "latency_ms", label: "Avg latency (ms)", color: C.latency, type: "line" }]}
-            empty="No requests to measure yet."
-          />
-        </Card>
-        <Card title="Automation" className="chart-card" actions={<Legend items={[["Events", C.events], ["Flow runs", C.runs], ["Failed", C.failures]]} />}>
-          <Chart
-            height={200}
-            stepSeconds={step}
-            data={series.map((b) => ({ ...b, ok_runs: b.flow_runs - b.flow_failures }))}
-            series={[
-              { key: "ok_runs", label: "Flow runs", color: C.runs, type: "bar" },
-              { key: "flow_failures", label: "Failed runs", color: C.failures, type: "bar" },
-              { key: "events", label: "Events", color: C.events, type: "line" },
-            ]}
-            empty="No events or flow runs in this range."
-          />
-        </Card>
-      </div>
-
-      <div className="grid three insights" style={{ marginTop: 14 }}>
-        <Card title="Top events" actions={<Link className="link-more" href={href("events")}>All events <Icon name="chevronRight" size={14} /></Link>}>
-          <Ranked rows={stats?.top_events || []} color={C.events} empty="No events yet." />
-        </Card>
-        <Card title="Busiest flows" actions={<Link className="link-more" href={href("flows")}>Flows <Icon name="chevronRight" size={14} /></Link>}>
-          <Ranked rows={stats?.top_flows || []} color={C.runs} empty="No flow runs yet." />
-        </Card>
-        <Card title="Recent failures" actions={<Link className="link-more" href={href("events")}>Runs <Icon name="chevronRight" size={14} /></Link>}>
-          {(stats?.recent_failures || []).length === 0 ? (
-            <div className="calm"><span className="calm-icon"><Icon name="check" size={18} /></span>No failed runs in the {RANGE_NAMES[range]}.</div>
-          ) : (
-            <ul className="failures">
-              {stats.recent_failures.map((f) => (
-                <li key={f.id}>
-                  <div className="row" style={{ justifyContent: "space-between", gap: 8 }}>
-                    <b className="mono">{f.flow}</b>
-                    <span className="faint small">{when(f.at)}</span>
+      <div className="grid two ov-lists">
+        <Card flush title="API keys" actions={<Link className="link-more" href={envHref(env, "keys")}>Manage <Icon name="chevronRight" size={14} /></Link>}>
+          {keys.loading ? <p className="muted small pad">Loading…</p> : (keys.data?.data || []).length === 0 ? <p className="muted small pad">No keys yet. Create one to call this environment from an application.</p> : (
+            <ul className="ov-rows">
+              {keys.data.data.map((k) => (
+                <li key={k.id}>
+                  <div className="grow">
+                    <b>{k.name}</b>
+                    <span className="muted small"><code>{k.prefix}…</code> · last used {k.last_used_at ? when(k.last_used_at) : "never"}</span>
                   </div>
-                  <span className="muted small clamp">{f.error || "failed"}</span>
+                  <Badge tone={k.role === "secret" ? "yellow" : "blue"}>{k.role}</Badge>
+                  <Badge tone={k.active ? "green" : "red"}>{k.active ? "active" : "revoked"}</Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+        <Card flush title="Functions" actions={<Link className="link-more" href={envHref(env, "functions")}>All functions <Icon name="chevronRight" size={14} /></Link>}>
+          {functions.loading ? <p className="muted small pad">Loading…</p> : (functions.data?.data || []).length === 0 ? <p className="muted small pad">No functions loaded. Add a module under functions/ and deploy it.</p> : (
+            <ul className="ov-rows">
+              {functions.data.data.map((f) => (
+                <li key={f.name}>
+                  <div className="grow">
+                    <b>{f.name}</b>
+                    <span className="muted small clip">{f.description || (gatewayUrl ? `${gatewayUrl}/functions/v1/${f.name}` : `/functions/v1/${f.name}`)}</span>
+                  </div>
+                  <code className="faint small">{f.timeout ? `${f.timeout}s` : "—"}</code>
+                  {gatewayUrl && <CopyText text={`${gatewayUrl}/functions/v1/${f.name}`} />}
                 </li>
               ))}
             </ul>
@@ -154,51 +181,10 @@ export default function Overview({ runtime, env, overview }) {
   );
 }
 
-function Kpi({ label, value, sub, now, before, lowerIsBetter, spark, color }) {
-  let delta = null;
-  if (before > 0 && now != null) delta = ((now - before) / before) * 100;
-  else if (!before && now > 0) delta = null;
-  const good = delta == null ? null : lowerIsBetter ? delta <= 0 : delta >= 0;
-  return (
-    <div className="kpi card">
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <span className="kpi-label">{label}</span>
-        {delta != null && Math.abs(delta) >= 0.5 && (
-          <span className={`delta ${good ? "good" : "bad"}`}>
-            <Icon name={delta >= 0 ? "arrowUp" : "arrowDown"} size={12} />
-            {Math.abs(delta) >= 100 ? Math.round(Math.abs(delta)) : Math.abs(delta).toFixed(1)}%
-          </span>
-        )}
-      </div>
-      <div className="kpi-value">{value}</div>
-      <span className="kpi-sub">{sub || "vs previous period"}</span>
-      <Sparkline values={spark} color={color} />
-    </div>
-  );
-}
-
 function Legend({ items }) {
   return (
-    <div className="legend">
+    <span className="legend" style={{ marginLeft: "auto" }}>
       {items.map(([label, color]) => <span key={label}><i className="swatch" style={{ background: color }} />{label}</span>)}
-    </div>
-  );
-}
-
-function Ranked({ rows, color, empty }) {
-  if (!rows.length) return <p className="muted small" style={{ margin: 0 }}>{empty}</p>;
-  const peak = Math.max(...rows.map((r) => r.count));
-  return (
-    <ul className="ranked">
-      {rows.map((r) => (
-        <li key={r.name}>
-          <div className="row" style={{ justifyContent: "space-between", gap: 8 }}>
-            <span className="mono clip">{r.name}</span>
-            <b>{compact(r.count)}</b>
-          </div>
-          <span className="bar"><span style={{ width: `${Math.max(3, (r.count / peak) * 100)}%`, background: color }} /></span>
-        </li>
-      ))}
-    </ul>
+    </span>
   );
 }

@@ -279,8 +279,6 @@ export default function Layout({ title, crumbs = [], children, full }) {
   const [sidebar, setSidebar] = useSidebarMode();
   const [envMenu, setEnvMenu] = useState(false);
   const [newEnv, setNewEnv] = useState(false);
-  const [closed, setClosed] = useState(() => { try { return JSON.parse(localStorage.getItem("pawabase.navclosed") || "[]"); } catch { return []; } });
-  const toggleGroup = (title) => setClosed((items) => { const next = items.includes(title) ? items.filter((t) => t !== title) : [...items, title]; try { localStorage.setItem("pawabase.navclosed", JSON.stringify(next)); } catch { /* session only */ } return next; });
   const [historyOpen, setHistoryOpen] = useState(() => new URLSearchParams(url.split("?")[1] || "").has("history"));
   useEffect(() => { setNavOpen(false); setEnvMenu(false); }, [url]);
   useEffect(() => setHistoryOpen(new URLSearchParams(url.split("?")[1] || "").has("history")), [url]);
@@ -302,24 +300,18 @@ export default function Layout({ title, crumbs = [], children, full }) {
           <Link href="/" className="brand" title="Pawabase Studio"><Logo sub="Studio" /></Link>
           <nav className="nav">
             {env ? (
-              ENV_NAV.map((group) => {
-                const shut = closed.includes(group.title) && !group.items.some(([key]) => key === section);
-                return (
-                  <div key={group.title} className={`nav-group ${shut ? "closed" : ""}`}>
-                    <button type="button" className="nav-title" aria-expanded={!shut} onClick={() => toggleGroup(group.title)}>
-                      <span>{group.title}</span>
-                      <Icon name="chevronDown" size={13} />
-                    </button>
-                    <div className="nav-items">
-                      {group.items.map(([key, label]) => (
-                        <Link key={key} href={envHref(env, key)} className={section === key ? "active" : ""} title={label}>
-                          <Icon name={key} /><span className="label">{label}</span>
-                        </Link>
-                      ))}
-                    </div>
+              ENV_NAV.map((group) => (
+                <div key={group.title} className="nav-group">
+                  <div className="nav-title">{group.title}</div>
+                  <div className="nav-items">
+                    {group.items.map(([key, label]) => (
+                      <Link key={key} href={envHref(env, key)} className={section === key ? "active" : ""} title={label}>
+                        <Icon name={key} /><span className="label">{label}</span>
+                      </Link>
+                    ))}
                   </div>
-                );
-              })
+                </div>
+              ))
             ) : (
               <>
                 <div className="nav-title">{name}</div>

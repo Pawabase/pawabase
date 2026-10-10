@@ -41,3 +41,20 @@ async def test_overview_charts_come_from_recorded_activity(api):
         overview["analytics"]["range"] == "24h"
         and overview["analytics"]["summary"]["requests"] == 5
     )
+
+
+async def test_custom_window_picks_its_bucket_size_from_its_span(api):
+    from datetime import UTC, datetime, timedelta
+
+    end = datetime.now(UTC)
+    day = await api.studio.get(
+        f"{ENV}/analytics",
+        params={"from": (end - timedelta(days=1)).isoformat(), "to": end.isoformat()},
+    )
+    assert day["range"] == "custom" and day["step_seconds"] == 3600
+    assert len(day["series"]) == 24
+    month = await api.studio.get(
+        f"{ENV}/analytics",
+        params={"from": (end - timedelta(days=30)).isoformat(), "to": end.isoformat()},
+    )
+    assert month["step_seconds"] == 86400 and len(month["series"]) == 30

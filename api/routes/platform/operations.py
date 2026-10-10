@@ -59,6 +59,20 @@ class MailTestBody(BaseModel):
     data: dict[str, Any] = Field(default_factory=dict)
 
 
+def _custom_window(start: str | None, end: str | None) -> tuple[datetime, datetime] | None:
+    """A custom analytics window from ``from`` and ``to`` ISO timestamps; nothing when either is missing or unreadable."""
+    if not start or not end:
+        return None
+    try:
+        first = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        last = datetime.fromisoformat(end.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(422, "from and to must be ISO 8601 timestamps") from None
+    if last <= first:
+        raise HTTPException(422, "to must be after from")
+    return first, last
+
+
 def register(r: Router, platform: Platform) -> None:
     base = "/envs/{env}"
 
@@ -608,7 +622,8 @@ def register(r: Router, platform: Platform) -> None:
     )
     async def analytics(ctx: HttpContext, env: str):
         await get_environment(env)
-        return await environment_analytics(env, ctx.query_params.get("range", DEFAULT_RANGE))
+        window = _custom_window(ctx.query_params.get("from"), ctx.query_params.get("to"))
+        return await environment_analytics(env, ctx.query_params.get("range", DEFAULT_RANGE), window)
 
     @r.get("/overview", auth=MANAGE, tags=["observability"], summary="Runtime overview")
     async def installation(ctx: HttpContext):

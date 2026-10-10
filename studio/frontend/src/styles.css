@@ -979,3 +979,49 @@ html, body { background: var(--canvas); }
 
 /* behind a sheet or modal, the page softens */
 .sheet-overlay { background: rgba(20, 17, 32, 0.22); backdrop-filter: blur(5px); }
+
+/* ═════════ Overview: one chart with tabs, then keys and functions ═════════ */
+.nav .nav-title { cursor: default; }
+.nav .nav-title:hover { color: var(--faint); }
+.live-dot.off { background: var(--faint); box-shadow: none; }
+.chart-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.chart-top .tabs { margin-bottom: 0; }
+.chart-sum { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin: 0 0 8px; color: var(--muted); font-size: 13.5px; }
+.chart-sum b { color: var(--text); font-size: 22px; font-weight: 750; letter-spacing: -0.03em; }
+.chart-sum b + b, .chart-sum b:not(:first-child) { font-size: 15px; }
+.ov-lists { margin-top: 14px; align-items: start; }
+.ov-lists .card-head { border-bottom: 1px solid var(--line); }
+.ov-rows { list-style: none; margin: 0; padding: 0; }
+.ov-rows li { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
+.ov-rows li:last-child { border-bottom: 0; }
+.ov-rows li .grow { display: grid; gap: 1px; min-width: 0; }
+.ov-rows li b { font-size: 13.5px; }
+.ov-rows .clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pad { padding: 18px 20px; margin: 0; }
+
+/* date range picker */
+.daterange { position: relative; }
+.range-btn { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 99px; background: var(--surface); color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.range-btn:hover, .range-btn[aria-expanded="true"] { color: var(--text); border-color: var(--faint); }
+.range-btn.active { background: var(--brand-soft); border-color: transparent; color: var(--brand-strong); }
+.range-pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; display: flex; background: var(--surface); border: 1px solid var(--line-2); border-radius: 0; }
+.range-presets { display: grid; align-content: start; gap: 2px; padding: 10px; min-width: 150px; border-right: 1px solid var(--line); background: var(--sunken); }
+.range-presets button { text-align: left; padding: 7px 10px; border: 0; border-radius: 8px; background: none; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.range-presets button:hover { background: var(--surface); }
+.range-cal { padding: 14px 16px 12px; width: 292px; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.cal-head .icon-btn { width: 30px; height: 30px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px 0; }
+.cal-dow { text-align: center; font-size: 11px; font-weight: 700; color: var(--faint); padding: 4px 0 6px; }
+.cal-day { height: 34px; border: 0; background: none; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; border-radius: 0; }
+.cal-day:hover:not(:disabled) { background: var(--sunken); }
+.cal-day:disabled { color: var(--line-2); cursor: not-allowed; }
+.cal-day.today { font-weight: 800; color: var(--brand-strong); }
+.cal-day.in { background: var(--brand-soft); }
+.cal-day.edge { background: var(--ink); color: var(--on-ink); border-radius: 8px; }
+.range-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.range-fields label { display: grid; gap: 4px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.range-fields input { padding: 6px 8px; font-size: 12.5px; border-radius: 8px; }
+.range-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.danger-text { color: var(--danger); }
+@media (max-width: 720px) { .range-pop { flex-direction: column; right: auto; left: 0; max-width: calc(100vw - 32px); } .range-presets { grid-template-columns: repeat(3, 1fr); border-right: 0; border-bottom: 1px solid var(--line); } }
