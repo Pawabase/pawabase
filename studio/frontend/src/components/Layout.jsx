@@ -208,11 +208,20 @@ function SidebarControl({ mode, onChange }) {
   );
 }
 
-/** The breadcrumb's project and environment, as one control that opens a wide menu to switch between environments. */
-function EnvMenu({ name, env, envs, section, open, setOpen }) {
+/** The breadcrumb's project and environment, as one control that opens a wide menu: switch environment, create one, and the runtime-wide pages. */
+function EnvMenu({ name, env, envs, section, open, setOpen, onHistory }) {
   const ref = useRef(null);
   useDismiss(open, () => setOpen(false), ref);
   const index = Math.max(0, (envs || []).findIndex((e) => e.name === env));
+  const go = (href) => { setOpen(false); router.visit(href); };
+  const actions = [
+    ["audit", "Audit log", "Who changed what, across the project", () => go("/audit")],
+    ["layers", "All environments", "Promote, export and import blueprints", () => go("/environments")],
+    ...(env ? [
+      ["settings", "Environment settings", `Configuration for ${env}`, () => go(envHref(env, "settings"))],
+      ["gitBranch", "Branches and history", "Checkout, merge and releases", () => { setOpen(false); onHistory(); }],
+    ] : []),
+  ];
   return (
     <div className="envmenu-wrap" ref={ref}>
       <button type="button" className="crumb-btn" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
@@ -223,29 +232,38 @@ function EnvMenu({ name, env, envs, section, open, setOpen }) {
       </button>
       {open && (
         <div className="envmenu" role="dialog" aria-label="Project and environment">
-          <div className="envmenu-lead">
-            <div className="eyebrow">Project</div>
-            <div className="envmenu-project">
-              <span className="avatar pastel lavender">{name.slice(0, 1).toUpperCase()}</span>
-              <div><b>{name}</b><small>This Studio manages one project</small></div>
-            </div>
-            <p>Each environment has its own definitions, keys, secrets and infrastructure.</p>
-            <div className="row wrap">
-              <Button variant="primary" size="sm" onClick={() => { setOpen(false); router.visit("/environments?new=1"); }}><Icon name="plus" size={15} /> Create environment</Button>
-              <Link href="/environments" className="btn sm" onClick={() => setOpen(false)}>All environments</Link>
-            </div>
-          </div>
-          <div className="envmenu-envs">
-            <div className="eyebrow">Environments</div>
-            <div className="envmenu-grid">
-              {(envs || []).map((e, i) => (
-                <Link key={e.name} href={envHref(e.name, section || "overview")} className={`envmenu-item ${e.name === env ? "current" : ""}`} onClick={() => setOpen(false)}>
-                  <span className={`avatar pastel ${envTone(e.name, i)}`}>{e.name.slice(0, 1).toUpperCase()}</span>
-                  <span className="grow"><b>{e.name}</b><small>{e.name === env ? "Current" : e.is_default ? "Default" : e.version ? `Version ${e.version}` : "Switch to"}</small></span>
-                  {e.name === env && <Icon name="check" size={15} />}
-                </Link>
-              ))}
-            </div>
+          <div className="envmenu-body">
+            <section className="envmenu-col">
+              <div className="envmenu-head"><span className="eyebrow">Project</span></div>
+              <div className="envmenu-project">
+                <span className="avatar pastel lavender">{name.slice(0, 1).toUpperCase()}</span>
+                <div><b>{name}</b><small>This Studio manages one project</small></div>
+              </div>
+              <div className="envmenu-list">
+                {actions.map(([icon, label, hint, onClick]) => (
+                  <button key={label} type="button" className="envmenu-action" onClick={onClick}>
+                    <Icon name={icon} size={16} />
+                    <span className="grow"><b>{label}</b><small>{hint}</small></span>
+                    <Icon name="chevronRight" size={14} className="faint" />
+                  </button>
+                ))}
+              </div>
+            </section>
+            <section className="envmenu-col envmenu-envs">
+              <div className="envmenu-head">
+                <span className="eyebrow">Environments</span>
+                <Button size="sm" variant="primary" onClick={() => go("/environments?new=1")}><Icon name="plus" size={14} /> Create environment</Button>
+              </div>
+              <div className="envmenu-grid">
+                {(envs || []).map((e, i) => (
+                  <Link key={e.name} href={envHref(e.name, section || "overview")} className={`envmenu-item ${e.name === env ? "current" : ""}`} onClick={() => setOpen(false)}>
+                    <span className={`avatar pastel ${envTone(e.name, i)}`}>{e.name.slice(0, 1).toUpperCase()}</span>
+                    <span className="grow"><b>{e.name}</b><small>{e.name === env ? "Current environment" : e.is_default ? "Default environment" : e.version ? `Version ${e.version}` : "Switch to this"}</small></span>
+                    {e.name === env ? <Icon name="check" size={15} /> : <Icon name="chevronRight" size={14} className="faint" />}
+                  </Link>
+                ))}
+              </div>
+            </section>
           </div>
         </div>
       )}
@@ -315,9 +333,6 @@ export default function Layout({ title, crumbs = [], children, full }) {
                 ))}
               </>
             )}
-            <div className="nav-title">Runtime</div>
-            <Link href="/environments" className={title === "Environments" ? "active" : ""}><Icon name="layers" /><span className="label">Environments</span></Link>
-            <Link href="/audit" className={title === "Audit log" ? "active" : ""}><Icon name="audit" /><span className="label">Audit log</span></Link>
           </nav>
           <SidebarControl mode={sidebar} onChange={setSidebar} />
         </aside>
@@ -329,7 +344,7 @@ export default function Layout({ title, crumbs = [], children, full }) {
             <div className="row" style={{ minWidth: 0 }}>
               <button type="button" className="icon-btn menu-btn" onClick={() => setNavOpen(true)} aria-label="Open navigation"><Icon name="menu" /></button>
               <div className="crumbs">
-                <EnvMenu name={name} env={env} envs={envs} section={section} open={envMenu} setOpen={setEnvMenu} />
+                <EnvMenu name={name} env={env} envs={envs} section={section} open={envMenu} setOpen={setEnvMenu} onHistory={() => setHistoryOpen(true)} />
                 {crumbs.map((c, i) => <span key={i} className="row" style={{ gap: 4 }}><span className="sep">/</span><span className="here">{c}</span></span>)}
               </div>
             </div>

@@ -66,13 +66,35 @@ function terminalOutput(value) {
 
 const HELP_TEXT = ["PawaBase Console — commands", "", ...COMMANDS.map(([name, description]) => `  ${name.padEnd(44)} ${description}`), "", "Tip: press Tab to complete a command. Add --confirm to commands that run or change state."].join("\n");
 
+const newTab = (id) => ({ id, name: `terminal ${id}`, input: "", lines: [], busy: false, history: [], historyIndex: -1 });
+
 export default function Console({ env }) {
   const [open, setOpen] = useState(false);
-  const [input, setInput] = useState("");
-  const [lines, setLines] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const [history, setHistory] = useState([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [tabs, setTabs] = useState(() => [newTab(1)]);
+  const [active, setActive] = useState(1);
+  const [counter, setCounter] = useState(1);
+  const [maximized, setMaximized] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState("");
+  const [match, setMatch] = useState(0);
+  const tab = tabs.find((item) => item.id === active) || tabs[0];
+  const patchTab = (id, fn) => setTabs((items) => items.map((item) => (item.id === id ? { ...item, ...fn(item) } : item)));
+  const { input, lines, busy, history, historyIndex } = tab;
+  const setInput = (value) => patchTab(tab.id, () => ({ input: value }));
+  const setHistoryIndex = (value) => patchTab(tab.id, () => ({ historyIndex: value }));
+  const addTab = () => {
+    const id = counter + 1;
+    setCounter(id);
+    setTabs((items) => [...items, newTab(id)]);
+    setActive(id);
+    setOpen(true);
+  };
+  const closeTab = (id) => {
+    if (tabs.length === 1) { setOpen(false); setTabs([newTab(counter + 1)]); setActive(counter + 1); setCounter(counter + 1); return; }
+    const rest = tabs.filter((item) => item.id !== id);
+    setTabs(rest);
+    if (active === id) setActive(rest[rest.length - 1].id);
+  };
   const inputRef = useRef(null);
   const outputRef = useRef(null);
   const base = env ? envPath(env) : null;
@@ -99,17 +121,16 @@ export default function Console({ env }) {
   }, [lines, open]);
   if (!env) return null;
 
-  const append = (command, output, error = false) => setLines((items) => [...items, { command, output: terminalOutput(output), error }]);
   const requireConfirmation = (raw) => {
     if (!raw.includes("--confirm")) throw new Error("This command changes data. Run it again with --confirm.");
   };
   const run = async (raw) => {
     const trimmed = raw.trim();
     if (!trimmed || busy) return;
-    setInput("");
-    setHistory((items) => [trimmed, ...items.filter((item) => item !== trimmed)].slice(0, 50));
-    setHistoryIndex(-1);
-    if (trimmed === "clear") { setLines([]); return; }
+    const id = tab.id;
+    const append = (command, output, error = false) => patchTab(id, (t) => ({ lines: [...t.lines, { command, output: terminalOutput(output), error }] }));
+    patchTab(id, (t) => ({ input: "", historyIndex: -1, history: [trimmed, ...t.history.filter((item) => item !== trimmed)].slice(0, 50) }));
+    if (trimmed === "clear") { patchTab(id, () => ({ lines: [] })); return; }
     if (trimmed === "close") { setOpen(false); return; }
     if (trimmed === "help") { append(trimmed, HELP_TEXT); return; }
     if (trimmed === "status") { append(trimmed, { environment: env }); return; }
@@ -117,7 +138,7 @@ export default function Console({ env }) {
     const clean = commandLine(trimmed);
     const [first, second, third] = clean.split(/\s+/, 3);
     try {
-      setBusy(true);
+      patchTab(id, () => ({ busy: true }));
       let output;
       if (first === "open" && SECTIONS.includes(second)) {
         router.visit(second === "overview" ? `/envs/${env}` : `/envs/${env}/${second}`);
@@ -155,24 +176,72 @@ export default function Console({ env }) {
       else if (first === "jobs" && second === "retry") { requireConfirmation(trimmed); output = await post(`${base}/jobs/${third}/retry`); }
       else throw new Error("Unknown command. Run help to see available commands.");
       append(trimmed, output ?? { ok: true });
-    } catch (error) { append(trimmed, error.message || String(error), true); } finally { setBusy(false); }
+    } catch (error) { append(trimmed, error.message || String(error), true); } finally { patchTab(id, () => ({ busy: false })); }
   };
 
+  const needle = query.trim().toLowerCase();
+  const matches = needle ? lines.flatMap((line, index) => [line.command, line.output].some((text) => text.toLowerCase().includes(needle)) ? [index] : []) : [];
+  const focusMatch = (next) => {
+    if (!matches.length) return;
+    const at = (next + matches.length) % matches.length;
+    setMatch(at);
+    outputRef.current?.querySelector(`[data-line="${matches[at]}"]`)?.scrollIntoView({ block: "center" });
+  };
+  const mark = (text) => {
+    if (!needle) return text;
+    const parts = [];
+    let rest = text;
+    let at = rest.toLowerCase().indexOf(needle);
+    while (at >= 0) {
+      parts.push(rest.slice(0, at), <mark key={parts.length}>{rest.slice(at, at + needle.length)}</mark>);
+      rest = rest.slice(at + needle.length);
+      at = rest.toLowerCase().indexOf(needle);
+    }
+    parts.push(rest);
+    return parts;
+  };
   return (
-    <div className={`dock ${open ? "open" : ""}`}>
+    <div className={`dock ${open ? "open" : ""} ${maximized ? "max" : ""}`}>
       {open && (
         <section className="term" aria-label="Pawabase terminal">
-          <div ref={outputRef} className="term-out">
+          <div className="term-head">
+            <div className="term-tabs" role="tablist">
+              {tabs.map((item) => (
+                <div key={item.id} role="tab" aria-selected={item.id === tab.id} className={`term-tab ${item.id === tab.id ? "on" : ""}`} onClick={() => setActive(item.id)}>
+                  <Icon name="terminal" size={13} />
+                  <span>{item.name}</span>
+                  <button type="button" aria-label={`Close ${item.name}`} onClick={(event) => { event.stopPropagation(); closeTab(item.id); }}><Icon name="x" size={12} /></button>
+                </div>
+              ))}
+              <button type="button" className="term-icon" onClick={addTab} title="New terminal" aria-label="New terminal"><Icon name="plus" size={15} /></button>
+            </div>
+            <div className="term-tools">
+              <button type="button" className={`term-icon ${searching ? "on" : ""}`} onClick={() => { setSearching((value) => !value); setQuery(""); }} title="Search" aria-label="Search terminal"><Icon name="search" size={15} /></button>
+              <button type="button" className="term-icon" onClick={() => patchTab(tab.id, () => ({ lines: [] }))} title="Clear" aria-label="Clear terminal"><Icon name="trash" size={15} /></button>
+              <button type="button" className="term-icon" onClick={() => setMaximized((value) => !value)} title={maximized ? "Restore size" : "Maximize"} aria-label={maximized ? "Restore size" : "Maximize terminal"}><Icon name={maximized ? "minimize" : "maximize"} size={15} /></button>
+              <button type="button" className="term-icon" onClick={() => setOpen(false)} title="Close (Esc)" aria-label="Close terminal"><Icon name="x" size={15} /></button>
+            </div>
+          </div>
+          {searching && (
+            <div className="term-find">
+              <Icon name="search" size={14} />
+              <input autoFocus value={query} onChange={(event) => { setQuery(event.target.value); setMatch(0); }} onKeyDown={(event) => { if (event.key === "Enter") focusMatch(match + (event.shiftKey ? -1 : 1)); if (event.key === "Escape") { setSearching(false); setQuery(""); } }} placeholder="Find in output" spellCheck={false} />
+              <span>{needle ? (matches.length ? `${match + 1} of ${matches.length}` : "No results") : ""}</span>
+              <button type="button" className="term-icon" onClick={() => focusMatch(match - 1)} aria-label="Previous match"><Icon name="chevronUp" size={14} /></button>
+              <button type="button" className="term-icon" onClick={() => focusMatch(match + 1)} aria-label="Next match"><Icon name="chevronDown" size={14} /></button>
+            </div>
+          )}
+          <div ref={outputRef} className="term-out" onClick={() => !window.getSelection()?.toString() && inputRef.current?.focus()}>
             {!lines.length && <pre className="term-hello">{"Pawabase terminal\nType help for commands. Tab completes. Up arrow recalls history.\n\n"}</pre>}
             {lines.map((line, index) => (
-              <div key={index} className="term-entry">
-                <div className="term-cmd"><span className="term-ps">pawabase@{env}:~$</span> {line.command}</div>
-                <pre className={line.error ? "term-err" : ""}>{line.output}</pre>
+              <div key={index} data-line={index} className="term-entry">
+                <div className="term-cmd"><span className="term-ps"><b>pawabase</b>@{env}</span><span className="term-path"> ~</span> $ {mark(line.command)}</div>
+                <pre className={line.error ? "term-err" : ""}>{mark(line.output)}</pre>
               </div>
             ))}
           </div>
           <div className="term-in">
-            <span className="term-ps">pawabase@{env}:~$</span>
+            <span className="term-ps"><b>pawabase</b>@{env}</span><span className="term-path">~</span><span>$</span>
             <input
               ref={inputRef}
               value={input}
@@ -180,9 +249,11 @@ export default function Console({ env }) {
               onKeyDown={(event) => {
                 if (event.key === "Enter") run(input);
                 if (event.key === "ArrowUp") { event.preventDefault(); const next = Math.min(historyIndex + 1, history.length - 1); setHistoryIndex(next); setInput(history[next] || ""); }
+                if (event.key === "ArrowDown") { event.preventDefault(); const next = Math.max(historyIndex - 1, -1); setHistoryIndex(next); setInput(next < 0 ? "" : history[next] || ""); }
                 if (event.key === "Tab") { event.preventDefault(); if (suggestions.length) setInput(suggestions[0][0]); }
+                if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") { event.preventDefault(); setSearching(true); }
               }}
-              placeholder={busy ? "running…" : "type a command"}
+              placeholder={busy ? "running…" : ""}
               disabled={busy}
               spellCheck={false}
               autoComplete="off"
