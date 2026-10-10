@@ -11,7 +11,7 @@ from sillo.exceptions import HTTPException
 from sillo.hashing import validate_password
 
 from app.environment import AuthConfig
-from database.models import AuthUser, Identity
+from database.models import AuthUser, Identity, Membership
 from pawabase_core.ids import is_ulid
 
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -72,8 +72,11 @@ async def create_account(
     app_metadata: dict[str, Any] | None = None,
     verified: bool = False,
     max_users: int = 0,
+    enforce_restrictions: bool = True,
 ) -> AuthUser:
     email = normalise_email(email)
+    if enforce_restrictions and (refusal := config.email_refused(email)):
+        raise HTTPException(status_code=403, detail=refusal)
     if await find_by_email(config.env, email):
         raise HTTPException(status_code=409, detail="an account with this email already exists")
     if username and await AuthUser.filter(env=config.env, username=username.lower()).exists():
@@ -160,6 +163,10 @@ async def user_view(user: AuthUser, *, admin: bool = False) -> dict[str, Any]:
                 "last_sign_in_ip": user.last_sign_in_ip,
                 "has_password": user.has_usable_password(),
                 "permissions": await rbac.permissions_of(user),
+                "organizations": [
+                    {"slug": m.organization.slug, "name": m.organization.name, "role": m.role}
+                    for m in await Membership.filter(user=user).prefetch_related("organization")
+                ],
             }
         )
     return data

@@ -1098,3 +1098,12 @@ html, body { background: var(--canvas); }
 .provider-head p { margin: 0; font-size: 13px; }
 .statstrip .v.bad { color: var(--danger); }
 .statstrip > div { min-width: 0; }
+
+/* users & auth */
+.user-avatar { display: inline-grid; place-items: center; flex-shrink: 0; border-radius: 50%; background: var(--sunken); border: 1px solid var(--line-2); color: var(--text); font-weight: 700; letter-spacing: 0.02em; }
+.user-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.user-search { margin: 0; min-width: 280px; }
+.pager { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-top: 1px solid var(--line); }
+.rule-list { padding: 14px 16px; border-radius: var(--r-md); background: var(--sunken); }
+.rule-list ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; display: grid; gap: 4px; }
+.form-section-head .row, .form-section-head > .btn { flex-shrink: 0; }

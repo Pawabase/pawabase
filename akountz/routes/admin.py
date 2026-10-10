@@ -28,10 +28,11 @@ from database.models import (
     Membership,
     OneTimeToken,
     Organization,
+    SessionInfo,
     Team,
 )
 from database.models.framework import JWTToken
-from database.models.orgs import ORG_ROLES
+from database.models.orgs import ORG_ROLES, Invitation
 from pawabase_core.service import SERVICE_ONLY
 
 
@@ -120,6 +121,12 @@ def register(r: Router, akountz: Akountz) -> None:
             query = query.filter(disabled_at__not_isnull=True)
         elif q.get("status") == "unverified":
             query = query.filter(email_verified_at=None)
+        elif q.get("status") == "locked":
+            query = query.filter(locked_until__gt=datetime.now(UTC))
+        elif q.get("status") == "mfa":
+            query = query.filter(mfa_enabled=True)
+        elif q.get("status") == "no_mfa":
+            query = query.filter(mfa_enabled=False)
         total = await query.count()
         rows = await query.order_by("-id").offset(offset).limit(limit)
         return {"data": [await user_view(u, admin=True) for u in rows], "total": total}
@@ -167,6 +174,7 @@ def register(r: Router, akountz: Akountz) -> None:
             app_metadata=body.app_metadata,
             verified=body.email_verified,
             max_users=akountz.max_users(config.env),
+            enforce_restrictions=False,
         )
         for role in body.roles:
             await rbac.assign_role(user, role)
@@ -543,6 +551,110 @@ def register(r: Router, akountz: Akountz) -> None:
         if member.role == "owner" and await last_owner(org, user_id):
             raise HTTPException(status_code=422, detail="an organization needs at least one owner")
         await member.delete()
+        return no_content()
+
+    # ── sessions and invitations, across the environment ─────────────────
+
+    @r.get(
+        f"{base}/sessions",
+        auth=SERVICE_ONLY,
+        tags=["admin"],
+        summary="Active sessions of every user in the environment",
+    )
+    async def all_sessions(ctx: HttpContext, env: str):
+        limit = max(1, min(int(ctx.query_params.get("limit", 200)), 500))
+        rows = (
+            await SessionInfo.filter(env=env, revoked_at=None)
+            .order_by("-created_at")
+            .limit(limit)
+            .prefetch_related("user")
+        )
+        live = set(
+            await JWTToken.filter(
+                token_family__in=[row.family for row in rows],
+                token_type="refresh",
+                revoked=False,
+                consumed_at=None,
+                expires_at__gt=datetime.now(UTC),
+            ).values_list("token_family", flat=True)
+        )
+        return {
+            "data": [
+                {
+                    "id": row.family,
+                    "user_id": str(row.user.id),
+                    "email": row.user.email,
+                    "method": row.method,
+                    "aal": row.aal,
+                    "org": row.org,
+                    "ip": row.ip,
+                    "user_agent": row.user_agent,
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                    "last_refreshed_at": row.last_refreshed_at.isoformat()
+                    if row.last_refreshed_at
+                    else None,
+                }
+                for row in rows
+                if row.family in live
+            ]
+        }
+
+    @r.delete(
+        f"{base}/sessions/{{family}}",
+        auth=SERVICE_ONLY,
+        tags=["admin"],
+        summary="End one session of any user",
+    )
+    async def end_any_session(ctx: HttpContext, env: str, family: str):
+        row = await SessionInfo.get_or_none(env=env, family=family).prefetch_related("user")
+        if row is None or not await revoke_session(row.user, family):
+            raise HTTPException(status_code=404, detail="no such session")
+        return no_content()
+
+    @r.get(
+        f"{base}/invitations",
+        auth=SERVICE_ONLY,
+        tags=["admin"],
+        summary="Pending invitations across every organization",
+    )
+    async def pending_invitations(ctx: HttpContext, env: str):
+        rows = (
+            await Invitation.filter(
+                organization__env=env,
+                accepted_at=None,
+                revoked_at=None,
+                expires_at__gt=datetime.now(UTC),
+            )
+            .order_by("-id")
+            .prefetch_related("organization")
+        )
+        return {
+            "data": [
+                {
+                    "id": row.id,
+                    "email": row.email,
+                    "role": row.role,
+                    "org": row.organization.slug,
+                    "org_name": row.organization.name,
+                    "expires_at": row.expires_at.isoformat(),
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                }
+                for row in rows
+            ]
+        }
+
+    @r.delete(
+        f"{base}/invitations/{{invitation_id}}",
+        auth=SERVICE_ONLY,
+        tags=["admin"],
+        summary="Revoke a pending invitation",
+    )
+    async def revoke_invitation(ctx: HttpContext, env: str, invitation_id: str):
+        row = await Invitation.get_or_none(id=invitation_id, organization__env=env)
+        if row is None or row.accepted_at is not None or row.revoked_at is not None:
+            raise HTTPException(status_code=404, detail="no such pending invitation")
+        row.revoked_at = datetime.now(UTC)
+        await row.save(update_fields=["revoked_at"])
         return no_content()
 
     # ── activity ─────────────────────────────────────────────────────────

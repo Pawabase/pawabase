@@ -1,23 +1,57 @@
 import { useState } from "react";
 import Layout, { envHref } from "../../components/Layout";
 import { Icon } from "../../components/icons";
-import { Badge, Button, Card, Field, IconButton, Json, Loading, Modal, PageHead, Section, Segmented, Switch, Table, TagInput, Tabs, useAction, when } from "../../components/ui";
+import { Badge, Button, Card, Field, IconButton, Json, JsonInput, Loading, Modal, PageHead, Section, Segmented, Sheet, Switch, Table, TagInput, Tabs, useAction, when } from "../../components/ui";
 import { PermissionPicker, RolePicker } from "../../components/AccessPickers";
 import { api, del, envPath, patch, post, put, useApi } from "../../lib/api";
+import Domains from "./auth/Domains";
+import Invitations from "./auth/Invitations";
+import Mfa from "./auth/Mfa";
+import Passwords from "./auth/Passwords";
+import Protection from "./auth/Protection";
+import Restrictions from "./auth/Restrictions";
+import Sessions from "./auth/Sessions";
+import { AUTH, AUTH_DEFAULTS, Avatar, device } from "./auth/shared";
+import Transfer from "./auth/Transfer";
 
-const AUTH = { service: "auth" };
 
 const AUTH_PARTS = [
   ["users", "Users"],
   ["orgs", "Organizations"],
+  ["invitations", "Invitations"],
   ["roles", "Roles"],
   ["providers", "Social providers"],
   ["oauth", "OAuth servers"],
+  ["passwords", "Passwords"],
+  ["mfa", "Multi-factor"],
+  ["sessions", "Sessions"],
+  ["protection", "Attack protection"],
+  ["restrictions", "Restrictions"],
+  ["domains", "Domains"],
   ["events", "Sign-in activity"],
-  ["config", "Configuration"],
+  ["transfer", "Import & export"],
   ["emails", "Email templates"],
+  ["config", "Configuration"],
 ];
 const AUTH_LABELS = Object.fromEntries(AUTH_PARTS);
+const AUTH_ABOUT = {
+  users: "Everyone who has signed up to this environment. Open a person to manage their profile, security and access.",
+  orgs: "Companies, teams and workspaces your users belong to.",
+  invitations: "People who have been invited and have not joined yet.",
+  roles: "Named bundles of permissions you can give to people.",
+  providers: "Let people sign in with an account they already have. Choose a provider to set it up.",
+  oauth: "Your own OAuth or OpenID Connect servers, for an identity provider that is not on the list.",
+  passwords: "How strong passwords must be, and signing in without one.",
+  mfa: "A second step at sign-in, and who has set it up.",
+  sessions: "Everyone who is signed in right now, and how long a sign-in lasts.",
+  protection: "Slow down guessing: lock accounts after repeated failures, and see who is locked.",
+  restrictions: "Who may create an account, and with which email addresses.",
+  domains: "Where a browser may be sent after signing in.",
+  events: "Every sign-in, refresh and failure, newest first.",
+  transfer: "Move people, roles and organizations between environments.",
+  emails: "The messages Pawabase sends for verification, recovery and invitations.",
+  config: "Everything above in one place, for people who prefer a single form.",
+};
 
 export default function Users({ env }) {
   const [tab, setTab] = useState("users");
@@ -30,15 +64,23 @@ export default function Users({ env }) {
   };
   return (
     <Layout title="Users & auth" subnav={subnav}>
-      <PageHead title={AUTH_LABELS[tab]} description={tab === "providers" ? "Let people sign in with an account they already have. Choose a provider to set it up." : tab === "oauth" ? "Your own OAuth or OpenID Connect servers, for sign-in with an identity provider that is not on the list." : undefined} />
+      <PageHead title={AUTH_LABELS[tab]} description={AUTH_ABOUT[tab]} />
       {tab === "users" && <UserList base={base} />}
-      {tab === "roles" && <Roles base={base} />}
       {tab === "orgs" && <Orgs base={base} />}
-      {tab === "events" && <Events base={base} />}
-      {tab === "config" && <AuthConfig env={env} parts={["general"]} title="Configuration" />}
+      {tab === "invitations" && <Invitations base={base} />}
+      {tab === "roles" && <Roles base={base} />}
       {tab === "providers" && <Providers env={env} kind="social" />}
       {tab === "oauth" && <Providers env={env} kind="custom" />}
+      {tab === "passwords" && <Passwords env={env} />}
+      {tab === "mfa" && <Mfa env={env} base={base} />}
+      {tab === "sessions" && <Sessions env={env} base={base} />}
+      {tab === "protection" && <Protection env={env} base={base} />}
+      {tab === "restrictions" && <Restrictions env={env} />}
+      {tab === "domains" && <Domains env={env} />}
+      {tab === "events" && <Events base={base} />}
+      {tab === "transfer" && <Transfer env={env} base={base} />}
       {tab === "emails" && <AuthConfig env={env} parts={["emails"]} title="Email templates" />}
+      {tab === "config" && <AuthConfig env={env} parts={["general", "providers", "emails"]} title="Configuration" />}
     </Layout>
   );
 }
@@ -133,30 +175,64 @@ function ProviderSheet({ name, isNew, shipped, value, busy, taken, onClose, onSa
   );
 }
 
+const USER_FILTERS = [["", "All"], ["unverified", "Unverified"], ["disabled", "Disabled"], ["locked", "Locked"], ["mfa", "MFA on"], ["no_mfa", "MFA off"]];
+const USER_PAGE = 50;
+
+function UserStatus({ u }) {
+  return (
+    <span className="row wrap" style={{ gap: 6 }}>
+      {u.disabled ? <Badge tone="red">disabled</Badge> : u.locked_until && new Date(u.locked_until) > new Date() ? <Badge tone="yellow">locked</Badge> : <Badge tone="green">active</Badge>}
+      {!u.email_verified && <Badge tone="yellow">unverified</Badge>}
+      {u.mfa_enabled && <Badge tone="blue">MFA</Badge>}
+    </span>
+  );
+}
+
 function UserList({ base }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
-  const users = useApi(`${base}/users`, { ...AUTH, params: { search, status } });
+  const [page, setPage] = useState(0);
+  const users = useApi(`${base}/users`, { ...AUTH, params: { search, status, limit: USER_PAGE, offset: page * USER_PAGE } });
   const [selected, setSelected] = useState(null);
   const [creating, setCreating] = useState(false);
+  const total = users.data?.total ?? 0;
+  const from = total ? page * USER_PAGE + 1 : 0;
+  const to = Math.min(total, (page + 1) * USER_PAGE);
   return (
     <div className="stack lg">
-      <Card flush title={<div className="row"><input placeholder="Search email or name" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 260 }} />
-        <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 150 }}><option value="">all</option><option value="disabled">disabled</option><option value="unverified">unverified</option></select></div>}
-        actions={<Button variant="primary" size="sm" onClick={() => setCreating(true)}>New user</Button>}>
-        <Loading state={users} empty="No users yet.">
+      <div className="user-bar">
+        <div className="subnav-search user-search">
+          <Icon name="search" size={14} />
+          <input placeholder="Search by email, name or username" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} aria-label="Search users" />
+        </div>
+        <Segmented options={USER_FILTERS} value={status} onChange={(v) => { setStatus(v); setPage(0); }} />
+        <span className="grow" />
+        <Button variant="primary" size="sm" onClick={() => setCreating(true)}><Icon name="plus" size={14} /> New user</Button>
+      </div>
+      <Card flush>
+        <Loading state={users} empty="No users match.">
           {(data) => (
-            <Table
-              rows={data.data}
-              onRowClick={setSelected}
-              columns={[
-                { label: "Email", render: (u) => <b>{u.email}</b> },
-                { label: "Name", key: "name" },
-                { label: "Roles", render: (u) => <div className="row wrap">{(u.roles || []).map((r) => <Badge key={r}>{r}</Badge>)}</div> },
-                { label: "State", render: (u) => <div className="row">{u.disabled ? <Badge tone="red">disabled</Badge> : <Badge tone="green">active</Badge>}{!u.email_verified && <Badge tone="yellow">unverified</Badge>}{u.mfa_enabled && <Badge tone="blue">MFA</Badge>}</div> },
-                { label: "Last sign-in", render: (u) => when(u.last_sign_in_at) },
-              ]}
-            />
+            <>
+              <Table
+                rows={data.data}
+                onRowClick={setSelected}
+                empty={search || status ? "No users match." : "No users yet. They appear here when someone signs up, or you create one."}
+                columns={[
+                  { label: "User", render: (u) => <span className="row" style={{ gap: 12 }}><Avatar text={u.name || u.email} /><span className="stack sm" style={{ gap: 0 }}><b>{u.name || u.email}</b>{u.name && <span className="muted small">{u.email}</span>}</span></span> },
+                  { label: "Roles", render: (u) => <div className="row wrap" style={{ gap: 4 }}>{(u.roles || []).length ? u.roles.map((r) => <Badge key={r}>{r}</Badge>) : <span className="faint">—</span>}</div> },
+                  { label: "Status", render: (u) => <UserStatus u={u} /> },
+                  { label: "Sign-in", render: (u) => <span className="row" style={{ gap: 6 }}>{(u.identities || []).map((i) => <Badge key={i.id}>{i.provider}</Badge>)}{u.has_password !== false && <Badge>password</Badge>}</span> },
+                  { label: "Last sign-in", render: (u) => (u.last_sign_in_at ? when(u.last_sign_in_at) : <span className="faint">never</span>) },
+                  { label: "Joined", render: (u) => when(u.created_at) },
+                ]}
+              />
+              {total > USER_PAGE && (
+                <div className="pager">
+                  <span className="muted small">{from}–{to} of {total}</span>
+                  <span className="row"><Button size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</Button><Button size="sm" disabled={to >= total} onClick={() => setPage(page + 1)}>Next</Button></span>
+                </div>
+              )}
+            </>
           )}
         </Loading>
       </Card>
@@ -166,48 +242,125 @@ function UserList({ base }) {
   );
 }
 
+const USER_TABS = [{ value: "profile", label: "Profile" }, { value: "security", label: "Security" }, { value: "access", label: "Access" }, { value: "orgs", label: "Organizations" }, { value: "activity", label: "Activity" }];
+
 function UserDetail({ base, id, onClose }) {
   const user = useApi(`${base}/users/${id}`, AUTH);
   const history = useApi(`${base}/users/${id}/history`, AUTH);
-  const [run] = useAction();
+  const [tab, setTab] = useState("profile");
+  const [run, busy] = useAction();
   const act = async (fn, label) => { if (await run(fn, label)) user.reload(); };
   const u = user.data;
+  const locked = u?.locked_until && new Date(u.locked_until) > new Date();
   return (
-    <Modal wide title={u?.email || "User"} onClose={onClose}>
+    <Sheet
+      title={u ? (u.name || u.email) : "User"}
+      subtitle={u?.name ? u.email : undefined}
+      icon="users"
+      tabs={USER_TABS}
+      tab={tab}
+      onTab={setTab}
+      onClose={onClose}
+      footer={<Button onClick={onClose}>Done</Button>}
+    >
       <Loading state={user}>
         {() => (
           <>
-            <div className="row wrap">
-              <Button onClick={() => act(() => patch(`${base}/users/${id}`, { disabled: !u.disabled }, AUTH), u.disabled ? "Enabled" : "Disabled")}>{u.disabled ? "Enable" : "Disable"}</Button>
-              {!u.email_verified && <Button onClick={() => act(() => patch(`${base}/users/${id}`, { email_verified: true }, AUTH), "Marked verified")}>Mark verified</Button>}
-              <Button onClick={() => act(() => post(`${base}/users/${id}/sessions/revoke`, {}, AUTH), "Signed out everywhere")}>Sign out everywhere</Button>
-              {u.mfa_enabled && <Button onClick={() => act(() => post(`${base}/users/${id}/mfa/reset`, {}, AUTH), "MFA reset")}>Reset MFA</Button>}
-              <Button onClick={() => { const password = prompt("New password"); if (password) act(() => patch(`${base}/users/${id}`, { password }, AUTH), "Password set"); }}>Set password</Button>
-              <span className="grow" />
-              <Button variant="danger" onClick={async () => { if (confirm(`Delete ${u.email}?`) && await run(() => del(`${base}/users/${id}`, AUTH), "Deleted")) onClose(); }}>Delete</Button>
-            </div>
-            <Grants base={base} id={id} user={u} onDone={user.reload} />
-            <Json value={{ ...u, sessions: undefined }} />
-            <h3>Sessions</h3>
-            <div className="card flush">
-              <Table rows={u.sessions || []} empty="No active sessions." columns={[
-                { label: "Session", render: (s) => <code>{String(s.id).slice(0, 8)}</code> },
-                { label: "Device", render: (s) => s.user_agent || "—" },
-                { label: "IP", key: "ip" },
-                { label: "Last active", render: (s) => when(s.last_seen_at || s.created_at) },
-                { label: "", render: (s) => <Button size="sm" onClick={() => act(() => del(`${base}/users/${id}/sessions/${s.id}`, AUTH), "Session revoked")}>Revoke</Button> },
+            {tab === "profile" && <UserProfile base={base} id={id} u={u} act={act} busy={busy} />}
+            {tab === "security" && (
+              <>
+                <section className="form-section">
+                  <div className="form-section-head"><div><h3>Account</h3><p><UserStatus u={u} /></p></div></div>
+                  <div className="row wrap">
+                    <Button disabled={busy} onClick={() => act(() => patch(`${base}/users/${id}`, { disabled: !u.disabled }, AUTH), u.disabled ? "Enabled" : "Disabled")}>{u.disabled ? "Enable account" : "Disable account"}</Button>
+                    {locked && <Button disabled={busy} onClick={() => act(() => patch(`${base}/users/${id}`, { unlock: true }, AUTH), "Unlocked")}>Unlock</Button>}
+                    {!u.email_verified && <Button disabled={busy} onClick={() => act(() => patch(`${base}/users/${id}`, { email_verified: true }, AUTH), "Marked verified")}>Mark email verified</Button>}
+                  </div>
+                  {locked && <p className="hint" style={{ margin: "10px 0 0" }}>Locked until {when(u.locked_until)} after repeated failed sign-ins.</p>}
+                </section>
+                <section className="form-section">
+                  <div className="form-section-head"><div><h3>Password</h3><p>{u.has_password ? "This person signs in with a password." : "No password is set. They sign in with a link or a social account."}</p></div></div>
+                  <SetPassword busy={busy} onSet={(password) => act(() => patch(`${base}/users/${id}`, { password }, AUTH), "Password set")} />
+                </section>
+                <section className="form-section">
+                  <div className="form-section-head"><div><h3>Second factor</h3><p>{u.mfa_enabled ? "An authenticator app is set up." : "None set up."}</p></div></div>
+                  {u.mfa_enabled && <Button disabled={busy} onClick={() => confirm("Remove this person's second factors?") && act(() => post(`${base}/users/${id}/mfa/reset`, {}, AUTH), "Second factors removed")}>Remove second factors</Button>}
+                </section>
+                <section className="form-section">
+                  <div className="form-section-head"><div><h3>Sessions</h3><p>Where this person is signed in.</p></div><Button size="sm" disabled={busy || !(u.sessions || []).length} onClick={() => act(() => post(`${base}/users/${id}/sessions/revoke`, {}, AUTH), "Signed out everywhere")}>Sign out everywhere</Button></div>
+                  <Table rows={u.sessions || []} empty="No active sessions." columns={[
+                    { label: "Device", render: (s) => device(s.user_agent) },
+                    { label: "IP", render: (s) => <code>{s.ip || "—"}</code> },
+                    { label: "Last active", render: (s) => when(s.last_seen_at || s.created_at) },
+                    { label: "", render: (s) => <Button size="sm" disabled={busy} onClick={() => act(() => del(`${base}/users/${id}/sessions/${s.id}`, AUTH), "Session ended")}>End</Button> },
+                  ]} />
+                </section>
+                <section className="form-section">
+                  <div className="form-section-head"><div><h3>Delete user</h3><p>Signs them out, removes their linked accounts and releases the email address. Their history stays.</p></div></div>
+                  <Button variant="danger" disabled={busy} onClick={async () => { if (confirm(`Delete ${u.email}?`) && await run(() => del(`${base}/users/${id}`, AUTH), "Deleted")) onClose(); }}>Delete user</Button>
+                </section>
+              </>
+            )}
+            {tab === "access" && <Grants base={base} id={id} user={u} onDone={user.reload} />}
+            {tab === "orgs" && (
+              <Table rows={u.organizations || []} empty="Not a member of any organization." columns={[
+                { label: "Organization", render: (o) => <b>{o.name}</b> },
+                { label: "Slug", render: (o) => <code>{o.slug}</code> },
+                { label: "Role", render: (o) => <Badge>{o.role}</Badge> },
               ]} />
-            </div>
-            <h3>History</h3>
-            <div className="card flush">
+            )}
+            {tab === "activity" && (
               <Loading state={history} empty="No activity.">
-                {(h) => <Table rows={h.data} columns={[{ label: "When", render: (e) => when(e.created_at) }, { label: "Event", key: "kind" }, { label: "OK", render: (e) => <Badge tone={e.success ? "green" : "red"}>{e.success ? "ok" : e.reason || "failed"}</Badge> }, { label: "IP", key: "ip" }]} />}
+                {(h) => <Table rows={h.data} empty="No activity." columns={[{ label: "When", render: (e) => when(e.created_at) }, { label: "Event", key: "kind" }, { label: "Method", key: "method" }, { label: "Result", render: (e) => <Badge tone={e.success ? "green" : "red"}>{e.success ? "ok" : e.reason || "failed"}</Badge> }, { label: "IP", render: (e) => <code>{e.ip || "—"}</code> }]} />}
               </Loading>
-            </div>
+            )}
           </>
         )}
       </Loading>
-    </Modal>
+    </Sheet>
+  );
+}
+
+function SetPassword({ busy, onSet }) {
+  const [value, setValue] = useState("");
+  return (
+    <div className="row">
+      <input type="password" value={value} onChange={(e) => setValue(e.target.value)} placeholder="New password" autoComplete="new-password" aria-label="New password" />
+      <Button disabled={busy || !value} onClick={() => { onSet(value); setValue(""); }}>Set password</Button>
+    </div>
+  );
+}
+
+function UserProfile({ base, id, u, act, busy }) {
+  const [name, setName] = useState(u.name || "");
+  const [meta, setMeta] = useState({ user: u.user_metadata || {}, app: u.app_metadata || {} });
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  return (
+    <>
+      <section className="form-section">
+        <div className="form-section-head"><div><h3>Profile</h3><p>{u.email}{u.email_verified ? " · verified" : " · not verified"}</p></div></div>
+        <div className="row">
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" aria-label="Name" />
+          <Button disabled={busy || name === (u.name || "")} onClick={() => act(() => patch(`${base}/users/${id}`, { name }, AUTH), "Saved")}>Save name</Button>
+        </div>
+        <dl className="kv" style={{ marginTop: 14 }}>
+          <dt>Username</dt><dd>{u.username}</dd>
+          <dt>Joined</dt><dd>{when(u.created_at)}</dd>
+          <dt>Last sign-in</dt><dd>{u.last_sign_in_at ? `${when(u.last_sign_in_at)}${u.last_sign_in_ip ? ` from ${u.last_sign_in_ip}` : ""}` : "never"}</dd>
+          <dt>Linked accounts</dt><dd>{(u.identities || []).length ? <span className="row wrap" style={{ gap: 6 }}>{u.identities.map((i) => <Badge key={i.id}>{i.provider}</Badge>)}</span> : "none"}</dd>
+        </dl>
+      </section>
+      <section className="form-section">
+        <div className="form-section-head"><div><h3>Public metadata</h3><p>Their own profile data. The person and your application can read and change it.</p></div></div>
+        <JsonInput value={meta.user} onChange={(v) => setMeta((m) => ({ ...m, user: v }))} rows={6} />
+        <div style={{ marginTop: 10 }}><Button disabled={busy || same(meta.user, u.user_metadata || {})} onClick={() => act(() => patch(`${base}/users/${id}`, { user_metadata: meta.user }, AUTH), "Metadata saved")}>Save public metadata</Button></div>
+      </section>
+      <section className="form-section">
+        <div className="form-section-head"><div><h3>Private metadata</h3><p>Only your servers can change this. It travels in the person's access token, so keep it small.</p></div></div>
+        <JsonInput value={meta.app} onChange={(v) => setMeta((m) => ({ ...m, app: v }))} rows={6} />
+        <div style={{ marginTop: 10 }}><Button disabled={busy || same(meta.app, u.app_metadata || {})} onClick={() => act(() => patch(`${base}/users/${id}`, { app_metadata: meta.app }, AUTH), "Metadata saved")}>Save private metadata</Button></div>
+      </section>
+    </>
   );
 }
 
@@ -395,24 +548,6 @@ function Events({ base }) {
   );
 }
 
-// Every field Akountz's AuthConfig actually reads (services/akountz/app/environment.py),
-// each with its own control — no raw JSON for an operator to get wrong.
-const AUTH_DEFAULTS = {
-  signup_enabled: true,
-  require_email_verification: false,
-  password_policy: "basic",
-  password_min_length: 8,
-  access_ttl: 900,
-  refresh_ttl: 30 * 24 * 3600,
-  magic_link_enabled: true,
-  mfa_enabled: true,
-  site_url: "",
-  redirect_urls: [],
-  providers: {},
-  default_roles: [],
-  emails: {},
-};
-
 const KNOWN_PROVIDERS = ["google", "github", "discord", "microsoft"];
 const EMAIL_KINDS = [
   ["verify", "Verify email", "Confirm your email for {project}"],
@@ -471,6 +606,16 @@ function AuthConfig({ env, parts = ['general', 'providers', 'emails'], title = '
                 <Switch checked={field("magic_link_enabled")} onChange={(v) => set({ magic_link_enabled: v })} label="Magic links" hint="Passwordless sign-in by emailed one-time link." />
                 <Switch checked={field("mfa_enabled")} onChange={(v) => set({ mfa_enabled: v })} label="MFA (TOTP)" hint="Let users add an authenticator app for aal2." />
               </div>
+            </Section>
+
+            <Section title="Security" description="Lockout and session limits.">
+              <div className="grid two">
+                <Field label="Failed attempts before a lock" hint="Empty uses the installation default."><input type="number" min={2} max={100} value={field("lockout_threshold") ?? ""} onChange={(e) => set({ lockout_threshold: e.target.value ? Number(e.target.value) : null })} /></Field>
+                <Field label="Lock for (minutes)" hint="Empty uses the installation default."><input type="number" min={1} max={1440} value={field("lockout_minutes") ?? ""} onChange={(e) => set({ lockout_minutes: e.target.value ? Number(e.target.value) : null })} /></Field>
+                <Field label="Sessions per user" hint="0 is unlimited."><input type="number" min={0} max={100} value={field("max_sessions") || 0} onChange={(e) => set({ max_sessions: Math.max(0, Number(e.target.value) || 0) })} /></Field>
+              </div>
+              <Field label="Only allow these email domains" hint="Empty allows any."><TagInput value={field("allowed_email_domains") || []} onChange={(v) => set({ allowed_email_domains: v })} placeholder="acme.com" /></Field>
+              <Field label="Always block these email domains"><TagInput value={field("blocked_email_domains") || []} onChange={(v) => set({ blocked_email_domains: v })} placeholder="mailinator.com" /></Field>
             </Section>
 
             <Section title="URLs" description="Where a browser is allowed to land after an OAuth or magic-link redirect.">

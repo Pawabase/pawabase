@@ -38,6 +38,14 @@ class AuthConfig:
     default_roles: list[str] = field(default_factory=list)
     emails: dict[str, dict[str, str]] = field(default_factory=dict)
     public_url: str = ""
+    #: Failed sign-ins before a temporary lock; unset uses the installation's default.
+    lockout_threshold: int | None = None
+    lockout_minutes: int | None = None
+    #: Who may sign up. An empty allow list means everyone; a blocked domain is always refused.
+    allowed_email_domains: list[str] = field(default_factory=list)
+    blocked_email_domains: list[str] = field(default_factory=list)
+    #: Most active sessions per user; 0 is unlimited. The oldest session ends when a new one starts over the limit.
+    max_sessions: int = 0
 
     @classmethod
     def from_api(cls, env: str, payload: dict[str, Any]) -> AuthConfig:
@@ -50,6 +58,24 @@ class AuthConfig:
             public_url=payload.get("public_url", ""),
             **values,
         )
+
+    def lockout(self, default_threshold: int, default_minutes: int) -> tuple[int, int]:
+        """The failed-attempt threshold and lock length, with the installation's defaults filled in."""
+        return (
+            self.lockout_threshold or default_threshold,
+            self.lockout_minutes or default_minutes,
+        )
+
+    def email_refused(self, email: str) -> str | None:
+        """Why *email* may not sign up, or None when it may."""
+        domain = email.rsplit("@", 1)[-1].strip().lower()
+        blocked = {d.strip().lower().lstrip("@") for d in self.blocked_email_domains if d.strip()}
+        allowed = {d.strip().lower().lstrip("@") for d in self.allowed_email_domains if d.strip()}
+        if domain in blocked:
+            return "sign-ups from that email domain are not allowed"
+        if allowed and domain not in allowed:
+            return "sign-ups are limited to specific email domains"
+        return None
 
     def redirect_allowed(self, url: str | None) -> bool:
         """Whether *url* may receive tokens: the site URL or an allowlisted prefix."""
