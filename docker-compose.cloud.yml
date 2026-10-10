@@ -43,6 +43,9 @@ services:
       PAWABASE_CODE_PATH: /code
       PAWABASE_DEPLOYMENTS_PATH: /data/deployments
       # One process fewer each: the API runs its own worker and scheduler. Small pools, since PgBouncer sits in front.
+      # Functions run in worker processes of their own; `inprocess` runs them on the API's event loop.
+      PAWABASE_FUNCTION_ISOLATION: ${PAWABASE_FUNCTION_ISOLATION:-process}
+      PAWABASE_SANDBOX_MEMORY_MB: ${PAWABASE_SANDBOX_MEMORY_MB:-1024}
       PAWABASE_INLINE_WORKER: ${PAWABASE_INLINE_WORKER:-true}
       PAWABASE_INLINE_SCHEDULER: ${PAWABASE_INLINE_SCHEDULER:-true}
       PAWABASE_STUDIO: ${PAWABASE_STUDIO:-on}

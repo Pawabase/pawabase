@@ -188,3 +188,41 @@ async def test_a_function_that_takes_too_much_memory_fails_alone(sandbox):
     run = await FunctionRun.filter(function="sb.memory").first()
     assert "MemoryError" in run.error or "SandboxCrashed" in run.error
     assert (await call(sandbox, "sb.echo"))["result"]["input"] == {}
+
+
+def test_isolation_is_the_default_and_in_process_is_the_opt_out():
+    from types import SimpleNamespace
+
+    from app.config import ApiSettings
+    from app.platform import Platform
+
+    assert ApiSettings(_env_file=None).function_isolation == "process"
+    deployed, mounted = (
+        SimpleNamespace(project="runtime/development"),
+        SimpleNamespace(project="runtime"),
+    )
+    platform = Platform.__new__(Platform)
+    platform.settings = ApiSettings(_env_file=None)
+    state = SimpleNamespace(env_name="development", secret_values={})
+    assert platform.isolated(state, deployed) is True
+    assert (
+        platform.isolated(state, mounted) is False
+    )  # the platform's own mounted code is never sandboxed
+    platform.settings = ApiSettings(_env_file=None, function_isolation="inprocess")
+    assert platform.isolated(state, deployed) is False
+
+
+def test_one_environment_can_opt_out(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.config import ApiSettings
+    from app.platform import Platform
+
+    monkeypatch.setenv("LEGACY_FUNCTION_ISOLATION", "inprocess")
+    platform = Platform.__new__(Platform)
+    platform.settings = ApiSettings(_env_file=None)
+    deployed = SimpleNamespace(project="runtime/legacy")
+    assert (
+        platform.isolated(SimpleNamespace(env_name="legacy", secret_values={}), deployed) is False
+    )
+    assert platform.isolated(SimpleNamespace(env_name="other", secret_values={}), deployed) is True

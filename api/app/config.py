@@ -95,9 +95,9 @@ class ApiSettings(PlatformSettings):
     #: How often function and flow run records are written, in seconds. They gather in memory and go to the database in one batch, so a request does
     #: not wait on the write. ``0`` writes each record before the request returns.
     record_buffer_seconds: float = 0.5
-    #: Where a deployment's functions run: ``inprocess`` (on the API's event loop, as always) or ``process`` (in worker processes of their own, with limits).
-    #: ``<ENV>_FUNCTION_ISOLATION`` sets it for one environment.
-    function_isolation: str = "inprocess"
+    #: Where a deployment's functions run: ``process`` (in worker processes of their own, with limits: the default) or ``inprocess`` (on the API's event loop,
+    #: the way functions used to run). ``<ENV>_FUNCTION_ISOLATION`` sets it for one environment.
+    function_isolation: str = "process"
     #: Address-space limit of a sandbox worker, in MB (not enforced on macOS).
     sandbox_memory_mb: int = 1024
     #: Most worker processes one deployment may use at once; further calls wait for one.
