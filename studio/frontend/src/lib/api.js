@@ -25,6 +25,13 @@ export class ApiError extends Error {
 function describe(body) {
   if (!body) return "";
   if (typeof body === "string") return body;
+  // A failure the API explains: what broke and where in your code, what to try, and the request to look up. Never a traceback.
+  if (body.failure) {
+    const f = body.failure;
+    const where = f.where && f.where[0] ? ` at ${f.where[0]}` : "";
+    return [`${f.kind}: ${f.message}${where}.`, f.hint, body.request_id && `Request ${body.request_id}.`].filter(Boolean).join(" ");
+  }
+  if (body.hint && body.message) return `${body.message} ${body.hint}`;
   const detail = body.detail ?? body.message ?? body.error;
   if (Array.isArray(detail)) return detail.map((d) => d.msg || JSON.stringify(d)).join("; ");
   if (detail && typeof detail === "object") return JSON.stringify(detail);

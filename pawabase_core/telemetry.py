@@ -16,7 +16,6 @@ from __future__ import annotations
 import contextvars
 import logging
 import time
-import traceback
 from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
@@ -27,6 +26,7 @@ from sillo.core.http import HttpContext
 from sillo.http import RequestIdMiddleware, get_request_id_from_request
 
 from .context import SCOPE_KEY
+from .failures import report
 
 Sink = Callable[["RequestRecord"], Awaitable[None]]
 
@@ -200,9 +200,11 @@ class RequestLogHandler(logging.Handler):
             else:
                 trace["logs_dropped"] = trace.get("logs_dropped", 0) + 1
             if record.exc_info and record.exc_info[0] is not None and "traceback" not in trace:
-                kind, value, tb = record.exc_info
-                trace["traceback"] = "".join(traceback.format_exception(kind, value, tb))[-4_000:]
-                trace.setdefault("error", f"{kind.__name__}: {value}"[:MAX_TEXT])
+                failure = report(
+                    record.exc_info[1]
+                )  # the frames of your code, not the framework's thirty
+                trace["traceback"] = failure.trace()[-4_000:]
+                trace.setdefault("error", failure.summary[:MAX_TEXT])
         except Exception:  # logging must never fail a request
             pass
 
@@ -235,7 +237,7 @@ class TelemetryRecorder:
             await self.app(scope, receive, capture)
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
-            trace.setdefault("traceback", traceback.format_exc()[-4_000:])
+            trace.setdefault("traceback", report(exc).trace()[-4_000:])
             raise
         finally:
             _trace.reset(token)

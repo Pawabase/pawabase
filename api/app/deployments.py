@@ -312,6 +312,10 @@ class Deployments:
                 ],
             )
 
+    def libraries(self, env: str, branch: str = MAIN) -> list[Path]:
+        """The installed libraries of what is live for *env*/*branch* (restored if the shared volume lost them)."""
+        return self._library_paths(self.stamp(env, branch), self.current(env, branch))
+
     def _library_paths(self, stamp: dict[str, Any] | None, current: Path) -> list[Path]:
         digest = (stamp or {}).get("packages")
         if not digest:

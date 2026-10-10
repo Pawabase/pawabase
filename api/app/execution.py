@@ -15,6 +15,8 @@ from app.runtime import ApiRuntime, function_context
 from app.state import EnvironmentState
 from database.models import FlowRun as FlowRunRecord
 from database.models import FunctionRun
+from pawabase_core.errors import FunctionFailed
+from pawabase_core.failures import report
 from pawabase_core.flows import FlowError, FlowRun
 from pawabase_core.functions import MAIN, FunctionError
 from pawabase_core.ids import new_ulid
@@ -85,20 +87,22 @@ async def run_flow(
         request_flow["status"] = status
         request_flow["duration_ms"] = round((time.perf_counter() - started) * 1000, 3)
         if flow.record_runs:
-            await FlowRunRecord.create(
-                id=run.id,
-                env=state.env_name,
-                flow=name,
-                trigger=trigger,
-                status=status,
-                input=json_safe(input),
-                output=json_safe(run.result()) if status == "succeeded" else None,
-                error=error,
-                trace=run.trace(),
-                logs=json_safe(run.logs),
-                duration_ms=request_flow["duration_ms"],
-                request_id=request_id,
-                job_id=job_id,
+            await platform.records.add(
+                FlowRunRecord(
+                    id=run.id,
+                    env=state.env_name,
+                    flow=name,
+                    trigger=trigger,
+                    status=status,
+                    input=json_safe(input),
+                    output=json_safe(run.result()) if status == "succeeded" else None,
+                    error=error,
+                    trace=run.trace(),
+                    logs=json_safe(run.logs),
+                    duration_ms=request_flow["duration_ms"],
+                    request_id=request_id,
+                    job_id=job_id,
+                )
             )
 
 
@@ -139,7 +143,21 @@ async def call_function(
     status, output, error = "succeeded", None, None
     try:
         with span("function", name, trigger=trigger):
-            output = await asyncio.wait_for(spec.handler(context), timeout=spec.timeout)
+            owner = _owner_of(spec) if platform.isolated(state, spec) else None
+            work = (
+                platform.sandboxes.invoke(
+                    platform.deployments,
+                    env=owner[0],
+                    branch=owner[1],
+                    function=name,
+                    context=context,
+                    runtime=runtime,
+                    transactions=platform.sandbox_transactions,
+                )
+                if owner is not None
+                else spec.handler(context)
+            )
+            output = await asyncio.wait_for(work, timeout=spec.timeout)
         return output
     except TimeoutError as exc:
         status, error = "failed", f"function {name!r} exceeded {spec.timeout}s"
@@ -151,30 +169,52 @@ async def call_function(
         status, error = "failed", exc.message
         raise FlowError(exc.message, status=exc.status, code=exc.code, details=exc.details) from exc
     except Exception as exc:
-        status, error = "failed", f"{type(exc).__name__}: {exc}"
-        raise
+        # Whatever the function raised without meaning to: the run keeps what broke and where in the function (not thirty frames of the
+        # framework), and the caller gets a function error carrying a request id. The original stays as its cause, for the log.
+        failure = report(exc, roots=_function_roots(platform))
+        status, error = "failed", failure.line()
+        raise FunctionFailed(f"function {name!r} failed") from exc
     finally:
         try:
-            await FunctionRun.create(
-                id=new_ulid(),
-                env=state.env_name,
-                branch=branch or MAIN,
-                function=name,
-                deployment_id=_deployment_of(platform, spec),
-                trigger=trigger,
-                status=status,
-                input=json_safe(input) if input is not None else {},
-                # The columns are NOT NULL on Postgres (the migration gave them no null=True): a failed run records an empty output, not SQL NULL.
-                output=json_safe(output) if status == "succeeded" and output is not None else {},
-                error=error,
-                logs=json_safe([*context.logs, *runtime.logs]),
-                duration_ms=round((time.perf_counter() - started) * 1000, 3),
-                request_id=request_id,
+            await platform.records.add(
+                FunctionRun(
+                    id=new_ulid(),
+                    env=state.env_name,
+                    branch=branch or MAIN,
+                    function=name,
+                    deployment_id=_deployment_of(platform, spec),
+                    trigger=trigger,
+                    status=status,
+                    input=json_safe(input) if input is not None else {},
+                    # The columns are NOT NULL on Postgres (the migration gave them no null=True): a failed run records an empty output, not SQL NULL.
+                    output=json_safe(output)
+                    if status == "succeeded" and output is not None
+                    else {},
+                    error=error,
+                    logs=json_safe([*context.logs, *runtime.logs]),
+                    duration_ms=round((time.perf_counter() - started) * 1000, 3),
+                    request_id=request_id,
+                )
             )
         except Exception:
             # Observability must not turn a successful user function into a
             # failure when the platform control database is degraded.
             logger.exception("could not record function run %s", name)
+
+
+def _function_roots(platform: Platform) -> tuple[str, ...]:
+    """Where function code lives, so a failure is placed in the function's own file."""
+    settings = platform.settings
+    return tuple(str(path) for path in (settings.deployments_path, settings.code_path) if path)
+
+
+def _owner_of(spec: Any) -> tuple[str, str] | None:
+    """The environment and branch whose deployment defines *spec* (a branch may use the environment's), or ``None`` for mounted code."""
+    if "/" not in spec.project:
+        return None
+    _, rest = spec.project.split("/", 1)
+    env, _, branch = rest.partition("@")
+    return env, branch or MAIN
 
 
 def _deployment_of(platform: Platform, spec: Any) -> str | None:

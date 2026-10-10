@@ -107,7 +107,10 @@ def test_an_error_with_an_exception_gives_the_request_its_error_and_traceback(
     except KeyError:
         log_capture.exception("handler failed")
     assert request_scope["error"] == "KeyError: 'sku'"
-    assert "Traceback" in request_scope["traceback"] and "KeyError" in request_scope["traceback"]
+    # The short account: the frames of the code that failed, then the error. Not the framework's whole traceback.
+    trace = request_scope["traceback"]
+    assert "test_an_error_with_an_exception" in trace and trace.endswith("KeyError: 'sku'")
+    assert "Traceback (most recent call last)" not in trace
 
 
 def test_logs_are_capped(request_scope, log_capture):
