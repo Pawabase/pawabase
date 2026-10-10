@@ -41,8 +41,8 @@ function AuthOverview({ base, onOpen }) {
   return (
     <div className="stack lg">
       {stats.data && (
-        <div className="grid">
-          {Object.entries(stats.data).filter(([, v]) => typeof v === "number").map(([k, v]) => <div key={k} className="card stat"><b>{v}</b><span>{k.replace(/_/g, " ")}</span></div>)}
+        <div className="statstrip">
+          {Object.entries(stats.data).filter(([, v]) => typeof v === "number").map(([k, v]) => <div key={k}><b>{v}</b><span>{k.replace(/_/g, " ")}</span></div>)}
         </div>
       )}
       <Card flush title="Recent sign-in activity" actions={<Button size="sm" onClick={() => onOpen("events")}>All activity</Button>}>

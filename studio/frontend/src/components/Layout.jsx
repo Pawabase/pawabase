@@ -316,7 +316,7 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
   return (
     <ToastProvider>
       <Head title={title} />
-      <div className={`shell side-${subnav && sidebar === "expanded" ? "collapsed" : sidebar} ${subnav ? "has-sub" : ""} ${navOpen ? "nav-open" : ""}`}>
+      <div className={`shell side-${subnav && sidebar === "expanded" ? "hover" : sidebar} ${subnav ? "has-sub" : ""} ${navOpen ? "nav-open" : ""}`}>
        <div className="frame">
         <div className="side-slot">
         <aside className="sidebar">

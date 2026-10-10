@@ -26,7 +26,7 @@ export default function Realtime({ env }) {
       />
 
       <div className="stack lg">
-        <div className="grid">
+        <div className="statstrip">
           <StatTile icon="users" value={connections.data?.data?.length ?? "–"} label="connections" />
           <StatTile icon="realtime" value={channels.data?.data?.length ?? "–"} label="active channels" />
           <StatTile icon="pulse" value={socket.stats.received} label="messages seen (this console)" />
@@ -107,13 +107,8 @@ function ConnectionBadge({ status }) {
   );
 }
 
-function StatTile({ icon, value, label, tone }) {
-  return (
-    <div className={`card stat-tile ${tone || ""}`}>
-      <span className="tile-icon"><Icon name={icon} /></span>
-      <div className="stack" style={{ gap: 2 }}><b>{value}</b><span>{label}</span></div>
-    </div>
-  );
+function StatTile({ value, label, tone }) {
+  return <div className={tone === "danger" ? "bad" : undefined}><b>{value}</b><span>{label}</span></div>;
 }
 
 /** The live console for one channel: a real subscription over the shared
