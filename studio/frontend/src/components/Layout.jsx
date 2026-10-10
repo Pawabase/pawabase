@@ -2,6 +2,7 @@ import { Head, Link, router, usePage } from "@inertiajs/react";
 import { useEffect, useRef, useState } from "react";
 import CommandSearch from "./CommandSearch";
 import Console from "./Console";
+import NewEnvironment from "./NewEnvironment";
 import StatusLights from "./StatusLights";
 import { Icon } from "./icons";
 import { Logo } from "./Logo";
@@ -209,14 +210,13 @@ function SidebarControl({ mode, onChange }) {
 }
 
 /** The breadcrumb's project and environment, as one control that opens a wide menu: switch environment, create one, and the runtime-wide pages. */
-function EnvMenu({ name, env, envs, section, open, setOpen, onHistory }) {
+function EnvMenu({ name, env, envs, section, open, setOpen, onHistory, onCreate }) {
   const ref = useRef(null);
   useDismiss(open, () => setOpen(false), ref);
   const index = Math.max(0, (envs || []).findIndex((e) => e.name === env));
   const go = (href) => { setOpen(false); router.visit(href); };
   const actions = [
     ["audit", "Audit log", "Who changed what, across the project", () => go("/audit")],
-    ["layers", "All environments", "Promote, export and import blueprints", () => go("/environments")],
     ...(env ? [
       ["settings", "Environment settings", `Configuration for ${env}`, () => go(envHref(env, "settings"))],
       ["gitBranch", "Branches and history", "Checkout, merge and releases", () => { setOpen(false); onHistory(); }],
@@ -252,7 +252,7 @@ function EnvMenu({ name, env, envs, section, open, setOpen, onHistory }) {
             <section className="envmenu-col envmenu-envs">
               <div className="envmenu-head">
                 <span className="eyebrow">Environments</span>
-                <Button size="sm" variant="primary" onClick={() => go("/environments?new=1")}><Icon name="plus" size={14} /> Create environment</Button>
+                <Button size="sm" variant="primary" onClick={() => { setOpen(false); onCreate(); }}><Icon name="plus" size={14} /> Create environment</Button>
               </div>
               <div className="envmenu-grid">
                 {(envs || []).map((e, i) => (
@@ -278,6 +278,9 @@ export default function Layout({ title, crumbs = [], children, full }) {
   const [navOpen, setNavOpen] = useState(false);
   const [sidebar, setSidebar] = useSidebarMode();
   const [envMenu, setEnvMenu] = useState(false);
+  const [newEnv, setNewEnv] = useState(false);
+  const [closed, setClosed] = useState(() => { try { return JSON.parse(localStorage.getItem("pawabase.navclosed") || "[]"); } catch { return []; } });
+  const toggleGroup = (title) => setClosed((items) => { const next = items.includes(title) ? items.filter((t) => t !== title) : [...items, title]; try { localStorage.setItem("pawabase.navclosed", JSON.stringify(next)); } catch { /* session only */ } return next; });
   const [historyOpen, setHistoryOpen] = useState(() => new URLSearchParams(url.split("?")[1] || "").has("history"));
   useEffect(() => { setNavOpen(false); setEnvMenu(false); }, [url]);
   useEffect(() => setHistoryOpen(new URLSearchParams(url.split("?")[1] || "").has("history")), [url]);
@@ -297,31 +300,26 @@ export default function Layout({ title, crumbs = [], children, full }) {
         <div className="side-slot">
         <aside className="sidebar">
           <Link href="/" className="brand" title="Pawabase Studio"><Logo sub="Studio" /></Link>
-          {env && (
-            <label className="switcher" title="Switch environment">
-              <span className={`avatar pastel ${envTone(env, envIndex)}`}>{name.slice(0, 1).toUpperCase()}</span>
-              <span className="grow label">
-                <b>{name}</b>
-                <span className="sub">{env}</span>
-              </span>
-              <Icon name="chevronDown" size={16} className="faint label" />
-              <select value={env} onChange={(e) => router.visit(envHref(e.target.value, section || "overview"))} aria-label="Environment">
-                {(envs || []).map((e) => <option key={e.name} value={e.name}>{name} · {e.name}</option>)}
-              </select>
-            </label>
-          )}
           <nav className="nav">
             {env ? (
-              ENV_NAV.map((group) => (
-                <div key={group.title}>
-                  <div className="nav-title">{group.title}</div>
-                  {group.items.map(([key, label]) => (
-                    <Link key={key} href={envHref(env, key)} className={section === key ? "active" : ""}>
-                      <Icon name={key} /><span className="label">{label}</span>
-                    </Link>
-                  ))}
-                </div>
-              ))
+              ENV_NAV.map((group) => {
+                const shut = closed.includes(group.title) && !group.items.some(([key]) => key === section);
+                return (
+                  <div key={group.title} className={`nav-group ${shut ? "closed" : ""}`}>
+                    <button type="button" className="nav-title" aria-expanded={!shut} onClick={() => toggleGroup(group.title)}>
+                      <span>{group.title}</span>
+                      <Icon name="chevronDown" size={13} />
+                    </button>
+                    <div className="nav-items">
+                      {group.items.map(([key, label]) => (
+                        <Link key={key} href={envHref(env, key)} className={section === key ? "active" : ""} title={label}>
+                          <Icon name={key} /><span className="label">{label}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })
             ) : (
               <>
                 <div className="nav-title">{name}</div>
@@ -344,7 +342,7 @@ export default function Layout({ title, crumbs = [], children, full }) {
             <div className="row" style={{ minWidth: 0 }}>
               <button type="button" className="icon-btn menu-btn" onClick={() => setNavOpen(true)} aria-label="Open navigation"><Icon name="menu" /></button>
               <div className="crumbs">
-                <EnvMenu name={name} env={env} envs={envs} section={section} open={envMenu} setOpen={setEnvMenu} onHistory={() => setHistoryOpen(true)} />
+                <EnvMenu name={name} env={env} envs={envs} section={section} open={envMenu} setOpen={setEnvMenu} onHistory={() => setHistoryOpen(true)} onCreate={() => setNewEnv(true)} />
                 {crumbs.map((c, i) => <span key={i} className="row" style={{ gap: 4 }}><span className="sep">/</span><span className="here">{c}</span></span>)}
               </div>
             </div>
@@ -362,6 +360,7 @@ export default function Layout({ title, crumbs = [], children, full }) {
         <Console env={env} />
         </div>
        </div>
+        {newEnv && <NewEnvironment envs={envs || []} onClose={() => setNewEnv(false)} onDone={(created) => router.visit(envHref(created, "overview"))} />}
         {historyOpen && env && <BranchHistory runtime={runtime || { name }} env={env} url={url} onClose={closeHistory} />}
       </div>
     </ToastProvider>
