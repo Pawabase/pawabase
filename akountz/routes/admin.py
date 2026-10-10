@@ -17,6 +17,7 @@ from tortoise.expressions import Q
 from tortoise.functions import Count
 
 from app import backup, mfa, rbac
+from app import invitations as invites
 from app.accounts import check_password_policy, create_account, get_user, user_view
 from app.environment import load_config
 from app.platform import Akountz
@@ -83,6 +84,16 @@ class AdminMemberAdd(BaseModel):
 
 class AdminMemberRole(BaseModel):
     role: str
+
+
+class AdminInvite(BaseModel):
+    email: str
+    role: str = "member"
+    redirect_to: str | None = None
+
+
+class AdminResend(BaseModel):
+    redirect_to: str | None = None
 
 
 class GrantBody(BaseModel):
@@ -642,6 +653,56 @@ def register(r: Router, akountz: Akountz) -> None:
                 for row in rows
             ]
         }
+
+    @r.post(
+        f"{base}/orgs/{{slug}}/invitations",
+        auth=SERVICE_ONLY,
+        tags=["admin"],
+        request_model=AdminInvite,
+        summary="Invite someone to an organization by email",
+    )
+    async def invite_member(ctx: HttpContext, env: str, slug: str, body: AdminInvite):
+        org = await org_or_404(env, slug)
+        config = await load_config(akountz, env)
+        if body.redirect_to and not config.redirect_allowed(body.redirect_to):
+            raise HTTPException(status_code=400, detail="redirect_to is not an allowed URL")
+        invitation = await invites.invite(
+            akountz,
+            config,
+            org,
+            email=body.email,
+            role=body.role,
+            invited_by=None,
+            redirect_to=body.redirect_to,
+            actor="admin",
+        )
+        return created(
+            {
+                "id": invitation.id,
+                "email": invitation.email,
+                "role": invitation.role,
+                "expires_at": invitation.expires_at.isoformat(),
+            }
+        )
+
+    @r.post(
+        f"{base}/invitations/{{invitation_id}}/resend",
+        auth=SERVICE_ONLY,
+        tags=["admin"],
+        request_model=AdminResend,
+        summary="Email a pending invitation again with a fresh link",
+    )
+    async def resend_invitation(ctx: HttpContext, env: str, invitation_id: str, body: AdminResend):
+        row = await Invitation.get_or_none(id=invitation_id, organization__env=env).prefetch_related(
+            "organization"
+        )
+        if row is None or row.accepted_at is not None or row.revoked_at is not None:
+            raise HTTPException(status_code=404, detail="no such pending invitation")
+        config = await load_config(akountz, env)
+        if body.redirect_to and not config.redirect_allowed(body.redirect_to):
+            raise HTTPException(status_code=400, detail="redirect_to is not an allowed URL")
+        row = await invites.resend(akountz, config, row, redirect_to=body.redirect_to, actor="admin")
+        return {"id": row.id, "email": row.email, "expires_at": row.expires_at.isoformat()}
 
     @r.delete(
         f"{base}/invitations/{{invitation_id}}",

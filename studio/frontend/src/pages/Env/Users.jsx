@@ -5,7 +5,7 @@ import { Badge, Button, Card, Field, IconButton, Json, JsonInput, Loading, Modal
 import { PermissionPicker, RolePicker } from "../../components/AccessPickers";
 import { api, del, envPath, patch, post, put, useApi } from "../../lib/api";
 import Domains from "./auth/Domains";
-import Invitations from "./auth/Invitations";
+import Invitations, { InviteSheet } from "./auth/Invitations";
 import Mfa from "./auth/Mfa";
 import Passwords from "./auth/Passwords";
 import Protection from "./auth/Protection";
@@ -487,6 +487,7 @@ function OrgDetail({ base, slug, onClose }) {
   const org = useApi(`${base}/orgs/${slug}`, AUTH);
   const [name, setName] = useState(null);
   const [add, setAdd] = useState({ email: "", role: "member" });
+  const [inviting, setInviting] = useState(false);
   const [run, busy] = useAction();
   const o = org.data;
   const act = async (fn, label) => { if (await run(fn, label)) org.reload(); };
@@ -503,7 +504,7 @@ function OrgDetail({ base, slug, onClose }) {
               </div>
             </section>
             <section className="form-section">
-              <div className="form-section-head"><div><h3>Members</h3><p>Owners and admins manage the organization from the application. Here an operator can change roles directly.</p></div></div>
+              <div className="form-section-head"><div><h3>Members</h3><p>Owners and admins manage the organization from the application. Here an operator can change roles directly.</p></div><Button size="sm" onClick={() => setInviting(true)}>Invite by email</Button></div>
               <Table
                 rows={o.members}
                 empty="No members yet."
@@ -514,6 +515,7 @@ function OrgDetail({ base, slug, onClose }) {
                 ]}
               />
               <div className="row" style={{ marginTop: 12 }}>
+                <Button onClick={() => setInviting(true)}>Invite by email</Button>
                 <input type="email" value={add.email} onChange={(e) => setAdd({ ...add, email: e.target.value })} placeholder="Existing user's email" aria-label="Email to add" />
                 <select value={add.role} onChange={(e) => setAdd({ ...add, role: e.target.value })} style={{ width: 130 }}>{ORG_ROLES.map((r) => <option key={r}>{r}</option>)}</select>
                 <Button variant="primary" disabled={busy || !add.email.trim()} onClick={() => act(async () => { await post(`${base}/orgs/${slug}/members`, { email: add.email.trim(), role: add.role }, AUTH); setAdd({ email: "", role: "member" }); }, "Member added")}>Add member</Button>
@@ -532,6 +534,7 @@ function OrgDetail({ base, slug, onClose }) {
           </>
         )}
       </Loading>
+      {inviting && <InviteSheet base={base} org={slug} onClose={() => setInviting(false)} onSent={() => {}} />}
     </Modal>
   );
 }

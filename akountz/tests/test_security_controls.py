@@ -72,3 +72,31 @@ async def test_pending_invitations_are_listed_and_can_be_revoked(akz):
     assert [(i["email"], i["org"]) for i in pending] == [("bob@example.com", "acme-inc")]
     await akz.admin.delete(f"{BASE}/invitations/{pending[0]['id']}")
     assert (await akz.admin.get(f"{BASE}/invitations"))["data"] == []
+
+
+async def test_an_operator_invites_and_resends(akz):
+    from pawabase_core.clients import ServiceError
+
+    ada = await akz.signup("ada@example.com")
+    await akz.http.post(
+        "/auth/v1/orgs", json={"slug": "acme-inc", "name": "Acme"}, headers=akz.headers(token=ada["access_token"])
+    )
+    sent = await akz.admin.post(f"{BASE}/orgs/acme-inc/invitations", json={"email": "bob@example.com", "role": "admin"})
+    assert sent["email"] == "bob@example.com" and sent["role"] == "admin"
+    first = akz.api.last_token()
+    with pytest.raises(ServiceError) as already:
+        await akz.admin.post(f"{BASE}/orgs/acme-inc/invitations", json={"email": "ada@example.com"})
+    assert already.value.status == 409
+    with pytest.raises(ServiceError) as bad:
+        await akz.admin.post(f"{BASE}/orgs/acme-inc/invitations", json={"email": "bob@example.com", "role": "king"})
+    assert bad.value.status == 422
+
+    await akz.admin.post(f"{BASE}/invitations/{sent['id']}/resend", json={})
+    second = akz.api.last_token()
+    assert second != first
+    bob = await akz.signup("bob@example.com")
+    headers = akz.headers(token=bob["access_token"])
+    old = await akz.http.post("/auth/v1/invitations/accept", json={"token": first}, headers=headers)
+    assert old.status_code == 400
+    new = await akz.http.post("/auth/v1/invitations/accept", json={"token": second}, headers=headers)
+    assert new.status_code == 200 and new.json()["role"] == "admin"
