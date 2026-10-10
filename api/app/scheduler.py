@@ -20,11 +20,14 @@ import logging
 import os
 import signal
 import socket
+import time
 from datetime import UTC, datetime
 from typing import Any
 
 from sillo.work.scheduler import CronTrigger, IntervalTrigger, SchedulerManager
 
+from app import alarms
+from app import status as status_page
 from app.platform import Platform
 from database.models import Environment, Schedule
 from pawabase_core.records import upsert
@@ -184,15 +187,14 @@ class PlatformScheduler:
     # ── lifecycle ────────────────────────────────────────────────────────
 
     #: Platform housekeeping that runs on a timer: name, seconds between runs.
-    TASKS = (("alarms", 60),)
+    TASKS = (("alarms", 60), ("status", 300))
 
     async def tick(self) -> None:
         """Run whichever platform tasks are due. A failing task is logged and tried again next time."""
-        import time
-
-        from app import alarms
-
-        runners = {"alarms": lambda: alarms.evaluate_all(self.platform)}
+        runners = {
+            "alarms": lambda: alarms.evaluate_all(self.platform),
+            "status": lambda: status_page.sample_local(self.platform),
+        }
         for name, every in self.TASKS:
             if time.monotonic() - self._last.get(name, -1e9) < every:
                 continue

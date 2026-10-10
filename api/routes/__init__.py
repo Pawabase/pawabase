@@ -25,6 +25,7 @@ def register_routes(app: SilloApp, platform: Platform) -> None:
         operations,
         releases,
         runtime,
+        status,
     )
 
     management = Router(prefix="/platform/v1")
@@ -39,6 +40,7 @@ def register_routes(app: SilloApp, platform: Platform) -> None:
         functions,
         insights,
         runtime,
+        status,
     ):
         module.register(management, platform)
     app.mount_router(management)
