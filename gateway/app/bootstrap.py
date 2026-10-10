@@ -12,6 +12,7 @@ from sillo.exceptions import HTTPException
 from sillo.security import CorsConfig, CORSMiddleware
 
 from app.config import GatewaySettings
+from app.domains import DomainSync
 from app.keys import KeyResolver
 from app.proxy import GatewayProxy
 from app.quotas import RequestQuota
@@ -89,7 +90,9 @@ def create_app(
         )
     )
     prober = StatusProber(api, clients, every=settings.status_probe_interval)
+    domains = DomainSync(api, proxy, every=settings.domain_refresh_interval)
     app.state["proxy"] = proxy
+    app.state["domain_sync"] = domains
     app.state["status_prober"] = prober
     app.state["request_quota"] = quota
 
@@ -157,10 +160,12 @@ main{{max-width:30rem;padding:2rem;text-align:center}}h1{{margin:.5rem 0}}p{{col
     @app.on_startup
     async def begin_probing() -> None:
         prober.start()
+        domains.start()
 
     @app.on_shutdown
     async def close() -> None:
         await prober.stop()
+        await domains.stop()
         for client in clients.values():
             await client.aclose()
         await api.close()

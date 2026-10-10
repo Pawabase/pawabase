@@ -17,7 +17,7 @@ from sillo.exceptions import HTTPException
 
 from app import status as status_page
 from app.platform import Platform
-from database.models import ApiKey, Environment, PolicyDef, StatusPage
+from database.models import ApiKey, Domain, Environment, FirewallRule, PolicyDef, StatusPage
 from pawabase_core.service import SERVICE_ONLY
 
 
@@ -82,6 +82,10 @@ def register(app: Any, platform: Platform) -> None:
             "cors_origins": (environment.settings or {}).get("cors_origins", []),
             "ip_allowlist": (environment.settings or {}).get("ip_allowlist", []),
             "maintenance": (environment.settings or {}).get("maintenance") or {},
+            "firewall": [
+                {"id": r.id, "name": r.name, "action": r.action, "match": r.match or {}}
+                for r in await FirewallRule.filter(env=environment.name, enabled=True)
+            ],
             "expires_at": key.expires_at.isoformat() if key.expires_at else None,
         }
 
@@ -181,6 +185,11 @@ def register(app: Any, platform: Platform) -> None:
     async def status_samples(ctx: HttpContext, env: str):
         body = await ctx.json or {}
         return {"recorded": await status_page.record(env, list(body.get("samples") or []))}
+
+    @r.get("/domains", auth=SERVICE_ONLY)
+    async def domains(ctx: HttpContext):
+        rows = await Domain.filter(status="verified")
+        return {"data": [{"hostname": d.hostname, "env": d.env} for d in rows]}
 
     @r.get("/environments", auth=SERVICE_ONLY)
     async def environments(ctx: HttpContext):

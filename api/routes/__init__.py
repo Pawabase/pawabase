@@ -22,6 +22,7 @@ def register_routes(app: SilloApp, platform: Platform) -> None:
         environments,
         functions,
         insights,
+        networking,
         operations,
         releases,
         runtime,
@@ -39,6 +40,7 @@ def register_routes(app: SilloApp, platform: Platform) -> None:
         operations,
         functions,
         insights,
+        networking,
         runtime,
         status,
     ):
