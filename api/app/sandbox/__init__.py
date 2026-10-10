@@ -7,7 +7,7 @@ deployment's functions run in a worker process instead:
 * :mod:`app.sandbox.worker` is that process. It imports the deployment once, applies its limits, and answers invocations over its pipes.
 * :mod:`app.sandbox.host` is the API's side: a pool of workers per deployment, started on demand, stopped when idle, killed on a timeout.
 
-The worker has no credentials and no network of its own. ``ctx.runtime`` inside it is the kit's :class:`~pawabase.runtime.RemoteRuntime` over the pipe, and
+The worker has no credentials and starts with an empty environment (its network is not isolated: that is a later step). ``ctx.runtime`` inside it is the kit's :class:`~pawabase.runtime.RemoteRuntime` over the pipe, and
 the API runs every call (data, cache, events, secrets, outbound HTTP through the platform's guard) against the real runtime of that invocation.
 """
 

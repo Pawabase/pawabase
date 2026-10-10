@@ -155,13 +155,17 @@ ciphertext still opens, and `python -m app.reseal` rebinds it.
 
 ## Function isolation
 
-Deployed functions run in worker processes of their own, started on demand, reused while the deployment is live and stopped when idle. A function that
-loops forever (the timeout kills its process), uses too much memory (`PAWABASE_SANDBOX_MEMORY_MB`, Linux) or calls `exit()` stops only itself. The worker gets
-no secret, no database address and no network: `ctx.runtime` reaches the platform over a pipe, as the caller the API chose, and outbound HTTP leaves from the
-API through its guard. A warm call costs under a millisecond more; the first call after a deploy or an idle period waits about a second for the worker.
+Deployed functions run in worker processes of their own, started on demand, reused while the deployment is live and stopped when idle. A worker runs many calls
+at once (up to `PAWABASE_SANDBOX_CONCURRENCY`), as the event loop did, and a busier deployment starts more workers (up to `PAWABASE_SANDBOX_WORKERS`). A function
+that loops forever (a call that runs out of time is cancelled, and a worker that does not answer is killed), uses too much memory (`PAWABASE_SANDBOX_MEMORY_MB`, Linux)
+or calls `exit()` stops only itself. The worker is started with an empty environment: it holds no secret and no database address. `ctx.runtime` reaches the
+platform over a pipe, as the caller the API chose, and `ctx.runtime.http_request` leaves from the API through its guard. **The network itself is not isolated yet:**
+a function can still open sockets or use an SDK directly, and those requests are not checked. A warm call costs under a millisecond more; the first call after
+a deploy or an idle period waits about a second for the worker.
 
-What changes for a function: module-level state (a cache in a global) is per worker, and up to `PAWABASE_SANDBOX_WORKERS` workers serve a deployment at once, so
-keep shared state in the database or `ctx.runtime.cache_*`. Code mounted from the `code/` folder is the platform's own and still runs in the API process.
+What changes for a function: module-level state (a cache in a global) is per worker, and several workers can serve a deployment at once, so keep shared state in
+the database or `ctx.runtime.cache_*`. Environment variables of the API are not visible to a function: read configuration with `ctx.runtime.secret(...)`.
+Code mounted from the `code/` folder is the platform's own and still runs in the API process.
 
 To run deployed functions on the API's event loop instead, set `PAWABASE_FUNCTION_ISOLATION=inprocess` (or `<ENV>_FUNCTION_ISOLATION=inprocess` for one
 environment).
