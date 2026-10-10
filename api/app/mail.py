@@ -1,7 +1,7 @@
 """Mail for every environment, through Sillo's mail client.
 
-Mail is configured by environment variables: ``PAWABASE_MAIL_*`` for every environment,
-``<ENV>_MAIL_*`` to give one environment its own SMTP service. Without a host, messages are suppressed (Sillo's ``suppress_send``) and still logged, so
+Each environment brings its own provider: the SMTP service saved in Studio (``infra.mail``). An environment that has not saved one falls
+back to ``<ENV>_MAIL_*`` or ``PAWABASE_MAIL_*`` variables, for deployments that prefer them. Without a host, messages are suppressed (Sillo's ``suppress_send``) and still logged, so
 development works with no mail server and Studio shows what would have gone out.
 Stored templates render in Jinja2's sandbox: templates are written in Studio
 and must not reach Python internals.
@@ -35,19 +35,34 @@ class MailManager:
         """``<ENV>_<KEY>`` from the process environment (secret references resolved), else *fallback*."""
         return str(self.platform.env_setting(state, key, None) or fallback or "")
 
-    def _config(self, state: EnvironmentState) -> MailConfig:
-        """The environment's SMTP service, from environment variables only.
+    def _stored(self, state: EnvironmentState) -> dict[str, Any]:
+        """The provider saved on the environment in Studio, with secret references resolved; empty when none."""
+        raw = {
+            key: self.platform.resolve_value(state, value)
+            for key, value in (state.infra.get("mail") or {}).items()
+        }
+        return raw if raw.get("host") else {}
 
-        ``<ENV>_MAIL_*`` wins over ``PAWABASE_MAIL_*``. Older installs kept this in the
-        environment's ``infra.mail``; that is no longer read, and is said so in the log.
+    def _config(self, state: EnvironmentState) -> MailConfig:
+        """The environment's SMTP service: the provider saved in Studio, else variables.
+
+        A host saved on the environment wins. Without one, ``<ENV>_MAIL_*`` beats ``PAWABASE_MAIL_*``.
         """
-        if state.infra.get("mail"):
-            self.platform.deprecated(
-                state.env_name,
-                "infra.mail",
-                f"configure mail with PAWABASE_MAIL_* (or {envvars.prefix_for(state.env_name)}_MAIL_*) "
-                "variables; `python -m app.export_config` prints them from the old settings",
-                removed=True,
+        stored = self._stored(state)
+        if stored:
+            port = int(stored.get("port") or 587)
+            use_ssl = bool(stored.get("use_ssl", port == 465))
+            return MailConfig(
+                smtp_host=stored["host"],
+                smtp_port=port,
+                smtp_username=stored.get("username") or None,
+                smtp_password=stored.get("password") or None,
+                use_ssl=use_ssl,
+                use_tls=bool(stored.get("use_tls", not use_ssl and port == 587)),
+                default_from=stored.get("from") or "no-reply@pawabase.local",
+                default_reply_to=stored.get("reply_to") or None,
+                suppress_send=bool(stored.get("suppress")),
+                template_directory=None,
             )
         settings = self.platform.settings
         name = state.env_name
@@ -96,7 +111,8 @@ class MailManager:
         config = self._config(state)
         settings = self.platform.settings
         prefix = envvars.prefix_for(state.env_name)
-        host = self._text(state, "MAIL_HOST", settings.mail_host)
+        stored = self._stored(state)
+        host = stored.get("host") or self._text(state, "MAIL_HOST", settings.mail_host)
         effective = {
             "host": host,
             "port": config.smtp_port,
@@ -106,12 +122,16 @@ class MailManager:
             "use_tls": config.use_tls,
             "from": config.default_from,
             "reply_to": config.default_reply_to or "",
-            "suppress": envvars.boolean(state.env_name, "MAIL_SUPPRESS", settings.mail_suppress),
+            "suppress": config.suppress_send and bool(stored.get("suppress"))
+            if stored
+            else envvars.boolean(state.env_name, "MAIL_SUPPRESS", settings.mail_suppress),
         }
         rows = []
         for name, key, attribute in self.FIELDS:
             default = type(settings).model_fields[attribute].default
-            if envvars.get(state.env_name, key) is not None:
+            if stored:
+                source = "saved"
+            elif envvars.get(state.env_name, key) is not None:
                 source = "environment"
             elif getattr(settings, attribute) != default:
                 source = "deployment"
@@ -130,7 +150,7 @@ class MailManager:
             "configured": bool(effective["host"]),
             "suppressed": config.suppress_send,
             "settings": rows,
-            "legacy": bool(state.infra.get("mail")),
+            "source": "saved" if stored else ("variables" if host else "none"),
             "environment_prefix": f"{prefix}_MAIL_",
         }
 

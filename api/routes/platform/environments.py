@@ -166,20 +166,8 @@ def key_view(key: ApiKey) -> dict[str, Any]:
 
 
 def check_infra(infra: dict[str, Any] | None) -> None:
-    """Refuse the one ``infra`` setting that is no longer read: mail.
-
-    ``database_url`` and ``storage`` still work, deprecated. Mail comes from environment
-    variables only, so storing it here would be silently ignored. ``null`` is allowed, to
-    clear what an older install left behind.
-    """
-    if infra and infra.get("mail") is not None:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "infra.mail is no longer supported: configure mail with PAWABASE_MAIL_* "
-                "(or <ENVIRONMENT>_MAIL_*) environment variables"
-            ),
-        )
+    """Validate what is stored in ``infra``. Mail is the environment's own provider, so any block is accepted."""
+    return None
 
 
 def deprecations(environment: Environment) -> list[str]:
@@ -191,8 +179,6 @@ def deprecations(environment: Environment) -> list[str]:
         notes.append(f"infra.database_url is deprecated: set {prefix}_DATA_URL")
     if infra.get("storage"):
         notes.append(f"infra.storage is deprecated: set {prefix}_STORAGE_* variables")
-    if infra.get("mail"):
-        notes.append(f"infra.mail is ignored: set PAWABASE_MAIL_* or {prefix}_MAIL_* variables")
     return notes
 
 

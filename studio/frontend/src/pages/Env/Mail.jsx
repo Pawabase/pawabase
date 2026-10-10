@@ -1,10 +1,20 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/Layout";
 import { Stat, StatStrip } from "./observability/kit";
 import { Icon } from "../../components/icons";
-import { Badge, Button, Card, EmptyState, Field, JsonInput, Loading, Modal, PageHead, Segmented, Sheet, Spinner, Status, Table, Tile, copyToClipboard, useAction, useToast, when } from "../../components/ui";
+import { Badge, Button, Card, EmptyState, Field, JsonInput, Loading, Modal, PageHead, Segmented, Sheet, Spinner, Status, Switch, Table, Tile, copyToClipboard, useAction, useToast, when } from "../../components/ui";
 import { del, envPath, patch, post, put, useApi } from "../../lib/api";
 
+const PROVIDERS = [
+  ["custom", "Custom", {}],
+  ["resend", "Resend", { host: "smtp.resend.com", port: 465, username: "resend" }],
+  ["sendgrid", "SendGrid", { host: "smtp.sendgrid.net", port: 587, username: "apikey" }],
+  ["mailgun", "Mailgun", { host: "smtp.mailgun.org", port: 587, username: "" }],
+  ["gmail", "Gmail", { host: "smtp.gmail.com", port: 587, username: "" }],
+  ["ses", "Amazon SES", { host: "email-smtp.us-east-1.amazonaws.com", port: 587, username: "" }],
+  ["postmark", "Postmark", { host: "smtp.postmarkapp.com", port: 587, username: "" }],
+];
+const PASSWORD_SECRET = "MAIL_SMTP_PASSWORD";
 const STATUSES = [["all", "All"], ["sent", "Sent"], ["suppressed", "Suppressed"], ["failed", "Failed"]];
 
 export default function Mail({ env }) {
@@ -69,7 +79,7 @@ export default function Mail({ env }) {
 
       {open && <MessageSheet message={open} onClose={() => setOpen(null)} />}
       {test && <TestSheet base={base} onClose={() => setTest(false)} onSent={() => { setTest(false); log.reload(); }} />}
-      {config && <ConfigSheet base={base} environment={environment} setup={setup} onClose={() => setConfig(false)} />}
+      {config && <ConfigSheet base={base} environment={environment} onSaved={() => { setup.reload(); environment.reload(); }} onClose={() => setConfig(false)} />}
     </Layout>
   );
 }
@@ -129,7 +139,7 @@ function TestSheet({ base, onClose, onSent }) {
   );
 }
 
-function ConfigSheet({ base, environment, setup, onClose }) {
+function ConfigSheet({ base, environment, onSaved, onClose }) {
   const [tab, setTab] = useState("delivery");
   return (
     <Sheet
@@ -143,63 +153,71 @@ function ConfigSheet({ base, environment, setup, onClose }) {
       onClose={onClose}
       footer={<Button onClick={onClose}>Done</Button>}
     >
-      {tab === "delivery" ? <Delivery base={base} environment={environment} setup={setup} /> : <Templates base={base} />}
+      {tab === "delivery" ? <Delivery base={base} environment={environment} onSaved={onSaved} /> : <Templates base={base} />}
     </Sheet>
   );
 }
 
-const SOURCES = { environment: ["this environment", "green"], deployment: ["every environment", "blue"], default: ["default", ""] };
-
-/** Mail is configured by environment variables, not here: this shows what is in effect and how to change it. */
-function Delivery({ base, environment, setup }) {
-  const toast = useToast();
+function Delivery({ base, environment, onSaved }) {
+  const saved = environment.data?.infra?.mail || {};
+  const [form, setForm] = useState(null);
+  const [provider, setProvider] = useState("custom");
   const [run, busy] = useAction();
-  const data = setup.data;
-  if (!data) return <Loading state={setup}>{() => <div className="empty"><Spinner /></div>}</Loading>;
-
-  const prefix = data.environment_prefix;
-  const lines = ["HOST", "PORT", "USERNAME", "PASSWORD", "FROM"].map((key) => `${prefix}${key}=`).join("\n");
-  const clearStored = async () => {
-    if (await run(() => patch(base, { infra: { mail: null } }), "Stored mail settings removed")) environment.reload();
+  useEffect(() => {
+    if (!environment.data || form) return;
+    const referencesSecret = String(saved.password || "").startsWith("secret://");
+    setForm({
+      host: saved.host || "", port: saved.port || 587, username: saved.username || "", password: "", has_password: referencesSecret || Boolean(saved.password),
+      from: saved.from || "", reply_to: saved.reply_to || "", suppress: Boolean(saved.suppress),
+    });
+    setProvider((PROVIDERS.find(([, , preset]) => preset.host && preset.host === saved.host) || ["custom"])[0]);
+  }, [environment.data]);
+  if (!form) return <Loading state={environment}>{() => <div className="empty"><Spinner /></div>}</Loading>;
+  const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+  const choose = (key) => {
+    setProvider(key);
+    const preset = PROVIDERS.find(([k]) => k === key)[2];
+    setForm((f) => ({ ...f, ...preset, username: preset.username !== undefined && preset.username !== "" ? preset.username : f.username }));
   };
-  const show = (row) => {
-    if (row.setting === "password") return row.value ? "set" : "";
-    if (typeof row.value === "boolean") return row.value ? "yes" : "no";
-    return String(row.value ?? "");
+
+  const save = async () => {
+    const ok = await run(async () => {
+      let password = saved.password;
+      if (form.password) {
+        // The password never goes into the configuration itself: it is stored as an encrypted secret and referenced.
+        await put(`${base}/secrets/${PASSWORD_SECRET}`, { value: form.password, description: "SMTP password for outgoing mail" });
+        password = `secret://${PASSWORD_SECRET}`;
+      }
+      const block = form.host.trim() ? {
+        host: form.host.trim(), port: Number(form.port) || 587, username: form.username.trim() || undefined, password: password || undefined,
+        from: form.from.trim() || undefined, reply_to: form.reply_to.trim() || undefined, suppress: form.suppress || undefined,
+      } : null;
+      await patch(base, { infra: { mail: block } });
+    }, form.host.trim() ? "Mail settings saved" : "Mail settings cleared: nothing will be delivered");
+    if (ok) { setForm((f) => ({ ...f, password: "", has_password: true })); environment.reload(); onSaved?.(); }
   };
 
   return (
     <div className="stack">
-      {data.legacy && (
-        <div className="alert warn">
-          <b>Mail settings stored on this environment are no longer used.</b> Older versions kept the mail server here; it now comes from environment variables. Print the old values as variables with{" "}
-          <code>python -m app.export_config --env {environment.data?.name || "…"}</code>, set them on the deployment, then remove the stored copy.
-          <div style={{ marginTop: 8 }}><Button size="sm" disabled={busy} onClick={clearStored}>Remove stored settings</Button></div>
+      <section className="form-section">
+        <div className="form-section-head"><div><h3>Mail server</h3><p>Any SMTP service. Without a host, mail is recorded as suppressed and not delivered.</p></div></div>
+        <Field label="Provider"><Segmented value={provider} onChange={choose} options={PROVIDERS.map(([k, label]) => [k, label])} /></Field>
+        <div className="row top" style={{ gap: 12 }}>
+          <Field label="Host" className="grow"><input value={form.host} onChange={(e) => set("host", e.target.value)} placeholder="smtp.example.com" /></Field>
+          <Field label="Port" hint="465 uses SSL, 587 uses STARTTLS."><input type="number" value={form.port} onChange={(e) => set("port", e.target.value)} style={{ width: 96 }} /></Field>
         </div>
-      )}
-      <section className="form-section">
-        <div className="form-section-head"><div><h3>What is in effect</h3><p>{data.configured ? (data.suppressed ? "A server is configured but delivery is paused." : "Mail is delivered through this server.") : "No mail server is configured: mail is recorded, not sent."}</p></div></div>
-        <Table
-          rows={data.settings.map((row) => ({ ...row, id: row.setting }))}
-          columns={[
-            { label: "Setting", render: (row) => <code>{row.variable}</code> },
-            { label: "Value", render: (row) => (show(row) ? <span>{show(row)}</span> : <span className="faint">not set</span>) },
-            { label: "From", render: (row) => <Badge tone={SOURCES[row.source][1]}>{SOURCES[row.source][0]}</Badge> },
-          ]}
-        />
-        <p className="muted" style={{ margin: "8px 0 0" }}>
-          An environment's own <code>{data.environment_prefix}*</code> variable wins over the deployment-wide <code>PAWABASE_MAIL_*</code> one. The password is never shown.
-        </p>
+        <Field label="Username"><input value={form.username} onChange={(e) => set("username", e.target.value)} autoComplete="off" /></Field>
+        <Field label="Password or API key" hint={form.has_password ? "A password is stored (encrypted). Leave empty to keep it." : "Stored as an encrypted secret, never shown again."}>
+          <input type="password" value={form.password} onChange={(e) => set("password", e.target.value)} placeholder={form.has_password ? "••••••••" : ""} autoComplete="new-password" />
+        </Field>
       </section>
       <section className="form-section">
-        <div className="form-section-head"><div><h3>Set it up</h3><p>Add these to the deployment's environment (its <code>.env</code> or its host's variables) and restart it.</p></div></div>
-        <pre className="code-block">{lines}</pre>
-        <div><Button size="sm" onClick={async () => toast((await copyToClipboard(lines)) ? "Copied" : "Could not copy", "ok")}><Icon name="copy" />Copy</Button></div>
-        <p className="muted" style={{ margin: "8px 0 0" }}>
-          Use <code>PAWABASE_MAIL_*</code> instead to set them for every environment. Also available: <code>{prefix}REPLY_TO</code>, <code>{prefix}USE_SSL</code>, <code>{prefix}USE_TLS</code> and <code>{prefix}SUPPRESS=true</code> to keep the settings but pause delivery.
-          A password can name one of this environment's secrets (<code>secret://NAME</code>) instead of holding the value.
-        </p>
+        <div className="form-section-head"><div><h3>Sender</h3><p>The sender's domain must be verified with your provider (SPF and DKIM), or mail lands in spam.</p></div></div>
+        <Field label="From"><input value={form.from} onChange={(e) => set("from", e.target.value)} placeholder="Sell4me <orders@yourdomain.com>" /></Field>
+        <Field label="Reply to" optional><input value={form.reply_to} onChange={(e) => set("reply_to", e.target.value)} placeholder="support@yourdomain.com" /></Field>
+        <Switch checked={form.suppress} onChange={(v) => set("suppress", v)} label="Pause delivery" hint="Keep the settings but record messages as suppressed (useful while testing)." />
       </section>
+      <div><Button variant="primary" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save mail settings"}</Button></div>
     </div>
   );
 }
