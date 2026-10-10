@@ -88,6 +88,12 @@ class Secret(Model):
     ciphertext = fields.TextField()
     description = fields.TextField(default="")
     updated_by = fields.CharField(max_length=255, null=True)
+    #: The value this one replaced, kept so a bad rotation can be undone.
+    previous_ciphertext = fields.TextField(null=True)
+    version = fields.IntField(default=1)
+    rotated_at = fields.DatetimeField(null=True)
+    #: A reminder, not a job: a secret older than this is shown as due for rotation.
+    rotate_every_days = fields.IntField(null=True)
 
     class Meta:
         table = "pb_secrets"

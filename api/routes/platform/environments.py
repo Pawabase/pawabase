@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+import secrets
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
@@ -109,6 +110,24 @@ class KeyCreate(BaseModel):
 class SecretPut(BaseModel):
     value: str = Field(min_length=1, max_length=65536)
     description: str = ""
+    rotate_every_days: int | None = Field(default=None, ge=1, le=3650)
+
+
+class SecretRotate(BaseModel):
+    """Rotate to a value you give, or leave it empty to have Pawabase generate one."""
+
+    value: str | None = Field(default=None, min_length=1, max_length=65536)
+
+
+class SecretSettings(BaseModel):
+    description: str | None = None
+    #: ``0`` clears the schedule.
+    rotate_every_days: int | None = Field(default=None, ge=0, le=3650)
+
+
+class KeyRotate(BaseModel):
+    #: How long the old key keeps working, so clients can switch over.
+    grace_hours: int = Field(default=24, ge=0, le=24 * 30)
 
 
 class PromoteRequest(BaseModel):
@@ -163,6 +182,21 @@ def key_view(key: ApiKey) -> dict[str, Any]:
         key.expires_at is None or key.expires_at > datetime.now(UTC)
     )
     return data
+
+
+def secret_status(secret: Secret) -> dict[str, Any]:
+    """How old a secret's value is, and whether its rotation reminder has come due."""
+    since = secret.rotated_at or secret.created_at
+    age = (datetime.now(UTC) - since).days if since else None
+    every = secret.rotate_every_days
+    return {
+        "version": secret.version,
+        "rotated_at": secret.rotated_at.isoformat() if secret.rotated_at else None,
+        "age_days": age,
+        "rotate_every_days": every,
+        "due": bool(every and age is not None and age >= every),
+        "has_previous": bool(secret.previous_ciphertext),
+    }
 
 
 def check_infra(infra: dict[str, Any] | None) -> None:
@@ -620,6 +654,50 @@ def register(r: Router, platform: Platform) -> None:
         return created({**key_view(key), "key": full})
 
     @r.post(
+        "/envs/{env}/keys/{key_id}/rotate",
+        auth=MANAGE,
+        tags=["keys"],
+        request_model=KeyRotate,
+        summary="Issue a replacement key; the old one keeps working for a grace period",
+    )
+    async def rotate_key(ctx: HttpContext, env: str, key_id: str, body: KeyRotate):
+        environment = await get_environment(env)
+        old = await ApiKey.get_or_none(id=key_id, environment=environment)
+        if old is None or old.revoked_at is not None:
+            raise HTTPException(status_code=404, detail="no such active key")
+        full, new = await create_key(
+            environment,
+            old.name,
+            old.role,
+            scopes=list(old.scopes or []),
+            expires_at=None,
+            allowed_ips=list(old.allowed_ips or []),
+            allowed_routes=list(old.allowed_routes or []),
+            created_by=_actor(ctx),
+            max_keys=0,  # a replacement is not a new key: the old one is on its way out
+        )
+        ends = datetime.now(UTC) + timedelta(hours=body.grace_hours)
+        old.expires_at = ends if old.expires_at is None else min(old.expires_at, ends)
+        if body.grace_hours == 0:
+            old.revoked_at = datetime.now(UTC)
+        await old.save(update_fields=["expires_at", "revoked_at"])
+        await audit(
+            ctx,
+            "key.rotated",
+            env=env,
+            target=str(old.id),
+            details={"new_key": str(new.id), "grace_hours": body.grace_hours},
+        )
+        return created(
+            {
+                **key_view(new),
+                "key": full,
+                "replaces": str(old.id),
+                "old_key_ends": ends.isoformat(),
+            }
+        )
+
+    @r.post(
         "/envs/{env}/keys/{key_id}/revoke",
         auth=MANAGE,
         tags=["keys"],
@@ -655,6 +733,7 @@ def register(r: Router, platform: Platform) -> None:
                     "preview": mask(state.secret_values.get(s.name)),
                     "updated_at": s.updated_at.isoformat() if s.updated_at else None,
                     "updated_by": s.updated_by,
+                    **secret_status(s),
                 }
                 for s in secrets
             ]
@@ -671,18 +750,85 @@ def register(r: Router, platform: Platform) -> None:
         if not SECRET_NAME.match(name):
             raise HTTPException(status_code=422, detail="secret names are UPPER_SNAKE_CASE")
         environment = await get_environment(env)
-        await upsert(
-            Secret,
-            environment=environment,
-            name=name,
-            defaults={
-                "ciphertext": platform.box.seal(body.value, env),
-                "description": body.description,
-                "updated_by": _actor(ctx),
-            },
-        )
+        existing = await Secret.get_or_none(environment=environment, name=name)
+        defaults: dict[str, Any] = {
+            "ciphertext": platform.box.seal(body.value, env),
+            "description": body.description,
+            "updated_by": _actor(ctx),
+        }
+        if existing is not None:
+            defaults.update(
+                previous_ciphertext=existing.ciphertext,
+                version=existing.version + 1,
+                rotated_at=datetime.now(UTC),
+            )
+        if body.rotate_every_days is not None:
+            defaults["rotate_every_days"] = body.rotate_every_days
+        await upsert(Secret, environment=environment, name=name, defaults=defaults)
         await changed(ctx, environment, "secret.set", name)
         return {"name": name, "reference": f"secret://{name}"}
+
+    @r.patch(
+        "/envs/{env}/secrets/{name}",
+        auth=MANAGE,
+        tags=["secrets"],
+        request_model=SecretSettings,
+        summary="Change a secret's description or rotation reminder",
+    )
+    async def secret_settings(ctx: HttpContext, env: str, name: str, body: SecretSettings):
+        environment = await get_environment(env)
+        found = await Secret.get_or_none(environment=environment, name=name)
+        if found is None:
+            raise HTTPException(status_code=404, detail="no such secret")
+        if body.description is not None:
+            found.description = body.description
+        if body.rotate_every_days is not None:
+            found.rotate_every_days = body.rotate_every_days or None
+        await found.save()
+        await audit(ctx, "secret.updated", env=env, target=name)
+        return {"name": name, **secret_status(found)}
+
+    @r.post(
+        "/envs/{env}/secrets/{name}/rotate",
+        auth=MANAGE,
+        tags=["secrets"],
+        request_model=SecretRotate,
+        summary="Replace a secret's value, keeping the old one for rollback",
+    )
+    async def rotate_secret(ctx: HttpContext, env: str, name: str, body: SecretRotate):
+        environment = await get_environment(env)
+        found = await Secret.get_or_none(environment=environment, name=name)
+        if found is None:
+            raise HTTPException(status_code=404, detail="no such secret")
+        generated = body.value is None
+        value = body.value or secrets.token_urlsafe(32)
+        found.previous_ciphertext = found.ciphertext
+        found.ciphertext = platform.box.seal(value, env)
+        found.version += 1
+        found.rotated_at = datetime.now(UTC)
+        found.updated_by = _actor(ctx)
+        await found.save()
+        await changed(ctx, environment, "secret.rotated", name, {"version": found.version})
+        # A generated value is shown once, here; a value you supplied you already have.
+        return {"name": name, "version": found.version, **({"value": value} if generated else {})}
+
+    @r.post(
+        "/envs/{env}/secrets/{name}/rollback",
+        auth=MANAGE,
+        tags=["secrets"],
+        summary="Put back the value a rotation replaced",
+    )
+    async def rollback_secret(ctx: HttpContext, env: str, name: str):
+        environment = await get_environment(env)
+        found = await Secret.get_or_none(environment=environment, name=name)
+        if found is None or not found.previous_ciphertext:
+            raise HTTPException(status_code=404, detail="there is no earlier value to go back to")
+        found.ciphertext, found.previous_ciphertext = found.previous_ciphertext, found.ciphertext
+        found.version += 1
+        found.rotated_at = datetime.now(UTC)
+        await found.save()
+        await changed(ctx, environment, "secret.rolled_back", name, {"version": found.version})
+        return {"name": name, "version": found.version}
 
     @r.delete(
         "/envs/{env}/secrets/{name}",
