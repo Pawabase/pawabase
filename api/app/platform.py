@@ -27,6 +27,7 @@ from app.data.source import DataSourcePool
 from app.deployment_mirror import DeploymentMirror
 from app.deployments import Deployments
 from app.mail import MailManager
+from app.record_buffer import RecordBuffer
 from app.secrets import SecretBox, is_reference, reference_name
 from app.state import EnvironmentCache, EnvironmentState
 from app.storage.manager import StorageManager
@@ -96,6 +97,7 @@ class Platform:
         )
         self.code: ProjectCode | None = None
         self.deployment_mirror = DeploymentMirror(self)
+        self.records = RecordBuffer(settings.record_buffer_seconds)
         self.deployments = Deployments(
             settings.deployments_path or Path(settings.code_path) / ".deployments",
             install_requirements=function_install_enabled(settings),
@@ -128,6 +130,7 @@ class Platform:
     async def start(self) -> None:
         self.bind()
         await self.bus.start()
+        self.records.start()
         logger.info(await self.storage.prepare_default())
         try:
             await self.deployment_mirror.restore()
@@ -174,6 +177,7 @@ class Platform:
             )
 
     async def stop(self) -> None:
+        await self.records.stop()  # before the database closes
         await self.bus.stop()
         await self.sources.close()
         await self.storage.close()

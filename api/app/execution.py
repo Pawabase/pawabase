@@ -87,20 +87,22 @@ async def run_flow(
         request_flow["status"] = status
         request_flow["duration_ms"] = round((time.perf_counter() - started) * 1000, 3)
         if flow.record_runs:
-            await FlowRunRecord.create(
-                id=run.id,
-                env=state.env_name,
-                flow=name,
-                trigger=trigger,
-                status=status,
-                input=json_safe(input),
-                output=json_safe(run.result()) if status == "succeeded" else None,
-                error=error,
-                trace=run.trace(),
-                logs=json_safe(run.logs),
-                duration_ms=request_flow["duration_ms"],
-                request_id=request_id,
-                job_id=job_id,
+            await platform.records.add(
+                FlowRunRecord(
+                    id=run.id,
+                    env=state.env_name,
+                    flow=name,
+                    trigger=trigger,
+                    status=status,
+                    input=json_safe(input),
+                    output=json_safe(run.result()) if status == "succeeded" else None,
+                    error=error,
+                    trace=run.trace(),
+                    logs=json_safe(run.logs),
+                    duration_ms=request_flow["duration_ms"],
+                    request_id=request_id,
+                    job_id=job_id,
+                )
             )
 
 
@@ -160,21 +162,25 @@ async def call_function(
         raise FunctionFailed(f"function {name!r} failed") from exc
     finally:
         try:
-            await FunctionRun.create(
-                id=new_ulid(),
-                env=state.env_name,
-                branch=branch or MAIN,
-                function=name,
-                deployment_id=_deployment_of(platform, spec),
-                trigger=trigger,
-                status=status,
-                input=json_safe(input) if input is not None else {},
-                # The columns are NOT NULL on Postgres (the migration gave them no null=True): a failed run records an empty output, not SQL NULL.
-                output=json_safe(output) if status == "succeeded" and output is not None else {},
-                error=error,
-                logs=json_safe([*context.logs, *runtime.logs]),
-                duration_ms=round((time.perf_counter() - started) * 1000, 3),
-                request_id=request_id,
+            await platform.records.add(
+                FunctionRun(
+                    id=new_ulid(),
+                    env=state.env_name,
+                    branch=branch or MAIN,
+                    function=name,
+                    deployment_id=_deployment_of(platform, spec),
+                    trigger=trigger,
+                    status=status,
+                    input=json_safe(input) if input is not None else {},
+                    # The columns are NOT NULL on Postgres (the migration gave them no null=True): a failed run records an empty output, not SQL NULL.
+                    output=json_safe(output)
+                    if status == "succeeded" and output is not None
+                    else {},
+                    error=error,
+                    logs=json_safe([*context.logs, *runtime.logs]),
+                    duration_ms=round((time.perf_counter() - started) * 1000, 3),
+                    request_id=request_id,
+                )
             )
         except Exception:
             # Observability must not turn a successful user function into a
