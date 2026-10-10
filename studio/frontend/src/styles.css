@@ -959,7 +959,7 @@ html, body { background: var(--canvas); }
 /* ═════════ Sheets and modals: flush to the right edge, square, ruled like the sidebar ═════════
    One component draws every modal and drawer. It runs the full height of the screen against the right edge, its header is as tall as the
    top bar and its footer as tall as the terminal bar, so their rules line up across the page. No rounding, no shadow, no blur. */
-.sheet-overlay { background: rgba(20, 17, 32, 0.28); backdrop-filter: none; }
+.sheet-overlay { background: rgba(20, 17, 32, 0.28); }
 .sheet { top: 0; right: 0; bottom: 0; width: min(860px, 100vw); background: var(--canvas); border-radius: 0; border-left: 1px solid var(--line-2); box-shadow: none; overflow: hidden; }
 .sheet-head { height: var(--bar); box-sizing: border-box; padding: 0 24px; border-bottom: 1px solid var(--line-2); background: var(--canvas); }
 .sheet-head .tile-icon { width: 34px; height: 34px; border-radius: 10px; background: var(--sunken); color: var(--text); border: 1px solid var(--line-2); }
@@ -976,3 +976,6 @@ html, body { background: var(--canvas); }
 .toast { border-radius: 0; box-shadow: none; border: 1px solid var(--line-2); }
 .side-menu { border-radius: 0; }
 .side-menu button { border-radius: 0; }
+
+/* behind a sheet or modal, the page softens */
+.sheet-overlay { background: rgba(20, 17, 32, 0.22); backdrop-filter: blur(5px); }
