@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sillo import HttpContext, Router, created, no_content
 from sillo.exceptions import HTTPException
 
@@ -21,8 +21,9 @@ from app.data.sql import SqlError
 from app.data.store import Filter, parse_filters, parse_sort
 from app.openapi_scope import add_apikey_security
 from app.platform import Platform
-from app.resources import after_write
+from app.resources import after_write, resource_tag
 from pawabase_core.context import PlatformContext
+from pawabase_core.schemas import compile_model
 from routes.common import MANAGE, actor, audit
 
 
@@ -30,6 +31,27 @@ class QueryBody(BaseModel):
     sql: str = Field(min_length=1, max_length=100_000)
     params: list[Any] = Field(default_factory=list)
     allow_write: bool = False
+
+
+class ImportBody(BaseModel):
+    rows: list[dict[str, Any]] = Field(min_length=1, max_length=2000)
+    #: ``insert`` always adds; ``upsert`` updates the row whose key is given, and adds the rest.
+    mode: Literal["insert", "upsert"] = "insert"
+    #: Check every row and say what would happen, writing nothing.
+    dry_run: bool = False
+    #: Run the resource's events, flows and realtime messages for each row. A bulk import usually should not.
+    emit_events: bool = False
+
+
+EXPORT_DEFAULT = 50_000
+EXPORT_MAX = 200_000
+
+
+def _problems(error: ValidationError) -> str:
+    return "; ".join(
+        f"{'.'.join(str(part) for part in item['loc']) or 'row'}: {item['msg']}"
+        for item in error.errors()
+    )
 
 
 def register(r: Router, platform: Platform) -> None:
@@ -79,6 +101,124 @@ def register(r: Router, platform: Platform) -> None:
         except SqlError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"data": rows, "page": page, "per_page": per_page, "total": total}
+
+    @r.get(
+        f"{base}/resources/{{name}}/export",
+        auth=MANAGE,
+        tags=["resources"],
+        summary="Every record of a resource, for a file download",
+    )
+    async def export_records(ctx: HttpContext, env: str, name: str):
+        state = await platform.state(env)
+        store = await state.store(name)
+        limit = max(1, min(int(ctx.query_params.get("limit", EXPORT_DEFAULT)), EXPORT_MAX))
+        rows: list[dict[str, Any]] = []
+        total = 0
+        try:
+            while len(rows) < limit:
+                batch, total = await store.list(
+                    filters=[],
+                    sort=parse_sort(None, store.spec),
+                    limit=min(500, limit - len(rows)),
+                    offset=len(rows),
+                )
+                if not batch:
+                    break
+                rows.extend(batch)
+        except SqlError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {
+            "resource": name,
+            "columns": store.spec.columns,
+            "data": rows,
+            "total": total,
+            "truncated": total > len(rows),
+        }
+
+    @r.post(
+        f"{base}/resources/{{name}}/import",
+        auth=MANAGE,
+        tags=["resources"],
+        request_model=ImportBody,
+        summary="Add or update records from parsed rows",
+    )
+    async def import_records(ctx: HttpContext, env: str, name: str, body: ImportBody):
+        state = await platform.state(env)
+        store = await state.store(name)
+        model = compile_model(
+            f"{name}Import", store.spec.fields, mode="create", registry=state.compiled_schemas
+        )
+        key_name = store.spec.primary_key
+        report: dict[str, Any] = {"created": 0, "updated": 0, "failed": 0, "errors": [], "rows": []}
+
+        def fail(index: int, why: str) -> None:
+            report["failed"] += 1
+            if len(report["errors"]) < 100:
+                report["errors"].append({"row": index + 1, "error": why})
+
+        for index, raw in enumerate(body.rows):
+            row = {k: v for k, v in raw.items() if v is not None}
+            key = row.get(key_name)
+            existing = None
+            if body.mode == "upsert" and key is not None:
+                try:
+                    existing = await store.get(key)
+                except SqlError:
+                    existing = None
+            try:
+                checked = model.model_validate({k: v for k, v in row.items() if k != key_name})
+            except ValidationError as exc:
+                # An update only has to be valid for what it sets, so only required fields of a new row can fail it.
+                if existing is None:
+                    fail(index, _problems(exc))
+                    continue
+                checked = None
+            data = row
+            if checked is not None:
+                full = checked.model_dump(mode="json")
+                data = {
+                    k: v for k, v in full.items() if k in checked.model_fields_set or v is not None
+                }
+                if key is not None:
+                    data[key_name] = key
+            if existing is not None:
+                data = {k: v for k, v in data.items() if k != key_name}
+            change = "updated" if existing is not None else "created"
+            if body.dry_run:
+                report[change] += 1
+                continue
+            try:
+                record = (
+                    await store.update(existing[key_name], data)
+                    if existing is not None
+                    else await store.create(data)
+                )
+            except SqlError as exc:
+                fail(index, str(exc))
+                continue
+            except Exception as exc:  # a database constraint, a duplicate key
+                fail(index, str(exc).splitlines()[0][:300])
+                continue
+            report[change] += 1
+            if body.emit_events and record is not None:
+                await after_write(platform, state, name, change, record, actor=actor(ctx))
+        if not body.dry_run and (report["created"] or report["updated"]):
+            if not body.emit_events:
+                await platform.cache_invalidate(state, [resource_tag(name)])
+            await audit(
+                ctx,
+                "resource.imported",
+                env=env,
+                target=name,
+                details={
+                    "created": report["created"],
+                    "updated": report["updated"],
+                    "failed": report["failed"],
+                },
+            )
+        report["dry_run"] = body.dry_run
+        report.pop("rows")
+        return report
 
     @r.post(
         f"{base}/resources/{{name}}/records",

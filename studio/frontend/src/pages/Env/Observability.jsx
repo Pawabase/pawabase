@@ -6,6 +6,7 @@ import { envPath, get } from "../../lib/api";
 import AuditLog from "./observability/Audit";
 import { CacheAndMetrics, Database } from "./observability/Data";
 import Errors from "./observability/Errors";
+import { Alarms, Logs, Metrics } from "./observability/Explore";
 import Flows from "./observability/Flows";
 import { Events, Mail, Webhooks } from "./observability/Messaging";
 import Overview from "./observability/Overview";
@@ -27,6 +28,7 @@ const TABS = [
   ["background", "Background", [["queues", "Queues & jobs"], ["workers", "Workers & schedules"], ["flows", "Flows"]]],
   ["messaging", "Messaging", [["events", "Events"], ["webhooks", "Webhooks"], ["mail", "Mail"], ["realtime", "Realtime"]]],
   ["data", "Data", [["database", "Database & storage"], ["cache", "Cache & metrics"]]],
+  ["explore", "Explore", [["metrics", "Metrics"], ["logs", "Logs"], ["alarms", "Alarms"]]],
   ["audit", "Audit", [["audit", "Audit log"]]],
 ];
 const SECTIONS = TABS.flatMap(([, , items]) => items.map(([key]) => key));
@@ -130,6 +132,9 @@ export default function Observability({ env }) {
           {section === "realtime" && <RealtimeHealth env={env} />}
           {section === "database" && <Database env={env} />}
           {section === "cache" && <CacheAndMetrics env={env} minutes={minutes} />}
+          {section === "metrics" && <Metrics env={env} />}
+          {section === "logs" && <Logs env={env} onTrace={openTrace} />}
+          {section === "alarms" && <Alarms env={env} />}
           {section === "audit" && <AuditLog env={env} />}
         </div>
       </div>

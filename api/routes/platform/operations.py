@@ -73,6 +73,18 @@ def _custom_window(start: str | None, end: str | None) -> tuple[datetime, dateti
     return first, last
 
 
+class ReplayBody(BaseModel):
+    """Which recorded jobs to queue again: named ids, or every job matching a filter (failed by default)."""
+
+    ids: list[str] = Field(default_factory=list, max_length=500)
+    status: str = "failed"
+    queue: str | None = None
+    job: str | None = None
+    since_minutes: int | None = Field(default=None, ge=1)
+    limit: int = Field(default=200, ge=1, le=1000)
+    dry_run: bool = False
+
+
 def register(r: Router, platform: Platform) -> None:
     base = "/envs/{env}"
 
@@ -132,37 +144,106 @@ def register(r: Router, platform: Platform) -> None:
         failure = await FailedJobRecord.filter(job_id=job_id).first()
         return {**dump(found), "failure": dump(failure) if failure else None}
 
-    @r.post(
-        f"{base}/jobs/{{job_id}}/retry",
-        auth=MANAGE,
-        tags=["queues"],
-        summary="Queue a failed job again",
-    )
-    async def retry(ctx: HttpContext, env: str, job_id: str):
+    async def replay_one(env: str, found: JobRun, source: str) -> tuple[str | None, str | None]:
+        """Queue a recorded job again from its payload. Returns (new job id, why not)."""
         import app.jobs as job_classes
 
-        found = await JobRun.get_or_none(id=job_id, env=env)
-        if found is None:
-            raise HTTPException(status_code=404, detail="no such job")
         job_class = getattr(job_classes, found.job, None)
         if (
             job_class is None
             or not isinstance(found.payload, dict)
             or found.payload.get("truncated")
         ):
-            raise HTTPException(
-                status_code=409, detail="this job cannot be retried from its record"
-            )
+            return None, "its payload was not kept in full"
         new_id = await platform.dispatch(
             job_class,
             env=env,
             queue=found.queue,
             target=found.target,
-            source="retry",
+            source=source,
             **found.payload,
         )
+        return new_id, None
+
+    @r.post(
+        f"{base}/jobs/{{job_id}}/retry",
+        auth=MANAGE,
+        tags=["queues"],
+        summary="Queue a job again from its record",
+    )
+    async def retry(ctx: HttpContext, env: str, job_id: str):
+        found = await JobRun.get_or_none(id=job_id, env=env)
+        if found is None:
+            raise HTTPException(status_code=404, detail="no such job")
+        new_id, why = await replay_one(env, found, "retry")
+        if new_id is None:
+            raise HTTPException(status_code=409, detail=f"this job cannot be retried: {why}")
         await audit(ctx, "job.retried", env=env, target=job_id, details={"new_job": new_id})
         return {"job_id": new_id}
+
+    @r.post(
+        f"{base}/jobs/replay",
+        auth=MANAGE,
+        tags=["queues"],
+        request_model=ReplayBody,
+        summary="Queue many recorded jobs again",
+    )
+    async def replay(ctx: HttpContext, env: str, body: ReplayBody):
+        query = JobRun.filter(env=env)
+        if body.ids:
+            query = query.filter(id__in=body.ids)
+        else:
+            query = query.filter(status=body.status)
+            if body.queue:
+                query = query.filter(queue=body.queue)
+            if body.job:
+                query = query.filter(job=body.job)
+            if body.since_minutes:
+                query = query.filter(
+                    created_at__gte=datetime.now(UTC) - timedelta(minutes=body.since_minutes)
+                )
+        matched = await query.order_by("created_at").limit(body.limit)
+        queued: list[str] = []
+        skipped: list[dict[str, str]] = []
+        for found in matched:
+            if body.dry_run:
+                ok = isinstance(found.payload, dict) and not found.payload.get("truncated")
+                (queued if ok else skipped).append(
+                    found.id if ok else {"job": found.id, "why": "its payload was not kept in full"}
+                )
+                continue
+            new_id, why = await replay_one(env, found, "replay")
+            if new_id:
+                queued.append(new_id)
+            else:
+                skipped.append({"job": found.id, "why": why or "not replayable"})
+        if queued and not body.dry_run:
+            await audit(
+                ctx,
+                "job.replayed",
+                env=env,
+                target="jobs",
+                details={"count": len(queued), "status": body.status if not body.ids else "ids"},
+            )
+        return {
+            "matched": len(matched),
+            "queued": len(queued),
+            "skipped": skipped[:50],
+            "dry_run": body.dry_run,
+        }
+
+    @r.delete(
+        f"{base}/failed-jobs/{{job_id}}",
+        auth=MANAGE,
+        tags=["queues"],
+        summary="Dismiss a permanently failed job",
+    )
+    async def dismiss_failed(ctx: HttpContext, env: str, job_id: str):
+        found = await JobRun.get_or_none(id=job_id, env=env)
+        if found is None:
+            raise HTTPException(status_code=404, detail="no such job")
+        await FailedJobRecord.filter(job_id=job_id).delete()
+        return no_content()
 
     @r.get(f"{base}/failed-jobs", auth=MANAGE, tags=["queues"], summary="Permanently failed jobs")
     async def failed_jobs(ctx: HttpContext, env: str):

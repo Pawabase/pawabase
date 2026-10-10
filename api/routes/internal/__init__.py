@@ -15,8 +15,9 @@ from sillo import HttpContext, Router, accepted
 from sillo.auth.apikey import hash_api_key
 from sillo.exceptions import HTTPException
 
+from app import status as status_page
 from app.platform import Platform
-from database.models import ApiKey, Environment, PolicyDef
+from database.models import ApiKey, Domain, Environment, FirewallRule, PolicyDef, StatusPage
 from pawabase_core.service import SERVICE_ONLY
 
 
@@ -81,6 +82,10 @@ def register(app: Any, platform: Platform) -> None:
             "cors_origins": (environment.settings or {}).get("cors_origins", []),
             "ip_allowlist": (environment.settings or {}).get("ip_allowlist", []),
             "maintenance": (environment.settings or {}).get("maintenance") or {},
+            "firewall": [
+                {"id": r.id, "name": r.name, "action": r.action, "match": r.match or {}}
+                for r in await FirewallRule.filter(env=environment.name, enabled=True)
+            ],
             "expires_at": key.expires_at.isoformat() if key.expires_at else None,
         }
 
@@ -154,6 +159,37 @@ def register(app: Any, platform: Platform) -> None:
         state = await platform.state(body.env)
         event_id = await platform.emit(state, body.name, body.payload, actor=body.actor)
         return accepted({"event_id": event_id})
+
+    @r.get("/status/{env}", auth=SERVICE_ONLY)
+    async def public_status(ctx: HttpContext, env: str):
+        page = await status_page.build(env)
+        if page is None:
+            raise HTTPException(
+                status_code=404, detail="this environment has no public status page"
+            )
+        return page
+
+    @r.get("/status-default", auth=SERVICE_ONLY)
+    async def default_status(ctx: HttpContext):
+        default = await Environment.filter(is_default=True).first()
+        page = await status_page.build(default.name) if default else None
+        if page is None:
+            raise HTTPException(status_code=404, detail="no public status page")
+        return page
+
+    @r.get("/status-enabled", auth=SERVICE_ONLY)
+    async def status_enabled(ctx: HttpContext):
+        return {"data": [row.env for row in await StatusPage.filter(enabled=True)]}
+
+    @r.post("/status/{env}/samples", auth=SERVICE_ONLY)
+    async def status_samples(ctx: HttpContext, env: str):
+        body = await ctx.json or {}
+        return {"recorded": await status_page.record(env, list(body.get("samples") or []))}
+
+    @r.get("/domains", auth=SERVICE_ONLY)
+    async def domains(ctx: HttpContext):
+        rows = await Domain.filter(status="verified")
+        return {"data": [{"hostname": d.hostname, "env": d.env} for d in rows]}
 
     @r.get("/environments", auth=SERVICE_ONLY)
     async def environments(ctx: HttpContext):

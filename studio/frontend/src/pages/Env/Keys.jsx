@@ -41,7 +41,7 @@ export default function Keys({ env }) {
                 { label: "Restrictions", render: (k) => [k.allowed_ips?.length && `IPs: ${k.allowed_ips.join(", ")}`, k.allowed_routes?.length && `Routes: ${k.allowed_routes.join(", ")}`].filter(Boolean).join(" · ") || "none" },
                 { label: "Last used", render: (k) => when(k.last_used_at) },
                 { label: "State", render: (k) => <Badge tone={k.active ? "green" : "red"}>{k.active ? "active" : "revoked"}</Badge> },
-                { label: "", render: (k) => k.active && <Button size="sm" variant="danger" onClick={async () => { if (confirm(`Revoke ${k.name}? Clients using it stop working at once.`) && await run(() => post(`${base}/${k.id}/revoke`), "Key revoked")) keys.reload(); }}>Revoke</Button> },
+                { label: "", render: (k) => k.active && <span className="row" style={{ gap: 6 }}><Button size="sm" onClick={async () => { const hours = prompt(`Issue a replacement for ${k.name}. How many hours should the old key keep working? (0 ends it now)`, "24"); if (hours === null) return; const fresh = await run(() => post(`${base}/${k.id}/rotate`, { grace_hours: Number(hours) || 0 })); if (fresh && fresh !== true) { setRevealed(fresh); keys.reload(); } }}>Rotate</Button><Button size="sm" variant="danger" onClick={async () => { if (confirm(`Revoke ${k.name}? Clients using it stop working at once.`) && await run(() => post(`${base}/${k.id}/revoke`), "Key revoked")) keys.reload(); }}>Revoke</Button></span> },
               ]}
             />
           )}

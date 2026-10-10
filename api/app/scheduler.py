@@ -20,11 +20,14 @@ import logging
 import os
 import signal
 import socket
+import time
 from datetime import UTC, datetime
 from typing import Any
 
 from sillo.work.scheduler import CronTrigger, IntervalTrigger, SchedulerManager
 
+from app import alarms, snapshots
+from app import status as status_page
 from app.platform import Platform
 from database.models import Environment, Schedule
 from pawabase_core.records import upsert
@@ -39,6 +42,7 @@ class PlatformScheduler:
         self.platform = platform
         self.manager = SchedulerManager()
         self._registered: dict[str, str] = {}
+        self._last: dict[str, float] = {}
         self._task: asyncio.Task | None = None
         self._running = False
 
@@ -182,12 +186,32 @@ class PlatformScheduler:
 
     # ── lifecycle ────────────────────────────────────────────────────────
 
+    #: Platform housekeeping that runs on a timer: name, seconds between runs.
+    TASKS = (("alarms", 60), ("status", 300), ("backups", 120))
+
+    async def tick(self) -> None:
+        """Run whichever platform tasks are due. A failing task is logged and tried again next time."""
+        runners = {
+            "alarms": lambda: alarms.evaluate_all(self.platform),
+            "status": lambda: status_page.sample_local(self.platform),
+            "backups": lambda: snapshots.run_due(self.platform),
+        }
+        for name, every in self.TASKS:
+            if time.monotonic() - self._last.get(name, -1e9) < every:
+                continue
+            self._last[name] = time.monotonic()
+            try:
+                await runners[name]()
+            except Exception:
+                logger.exception("platform task %s failed", name)
+
     async def _loop(self) -> None:
         while self._running:
             try:
                 await self.reconcile()
             except Exception:
                 logger.exception("schedule reconciliation failed")
+            await self.tick()
             await asyncio.sleep(RECONCILE_SECONDS)
 
     async def start(self) -> None:

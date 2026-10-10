@@ -8,12 +8,15 @@ from typing import Any
 
 import httpx
 from sillo import HttpContext, SilloApp, html
+from sillo.exceptions import HTTPException
 from sillo.security import CorsConfig, CORSMiddleware
 
 from app.config import GatewaySettings
+from app.domains import DomainSync
 from app.keys import KeyResolver
 from app.proxy import GatewayProxy
 from app.quotas import RequestQuota
+from app.status import StatusProber, fetch, render
 from pawabase_core.clients import ServiceClient
 from pawabase_core.service import SERVICE_ONLY, create_service
 
@@ -86,7 +89,11 @@ def create_app(
             )
         )
     )
+    prober = StatusProber(api, clients, every=settings.status_probe_interval)
+    domains = DomainSync(api, proxy, every=settings.domain_refresh_interval)
     app.state["proxy"] = proxy
+    app.state["domain_sync"] = domains
+    app.state["status_prober"] = prober
     app.state["request_quota"] = quota
 
     @app.get("/", exclude_from_schema=True)
@@ -103,6 +110,23 @@ main{{max-width:30rem;padding:2rem;text-align:center}}h1{{margin:.5rem 0}}p{{col
 <p>Send requests with your project's API key in the <code>apikey</code> header, for example <code>/auth/v1/signup</code>, <code>/rest/v1/…</code> or <code>/functions/v1/…</code>.</p>
 <p><a href="/v1/status">Service status</a></p></main></body></html>"""
         )
+
+    async def status_data(env: str | None) -> dict[str, Any]:
+        data = await fetch(api, env)
+        if data is None:
+            raise HTTPException(status_code=404, detail="no public status page")
+        return data
+
+    @app.get("/status", exclude_from_schema=True)
+    async def status_default_page(ctx: HttpContext):
+        return html(render(await status_data(None)))
+
+    @app.get("/status/{env}", exclude_from_schema=True)
+    async def status_page(ctx: HttpContext, env: str):
+        """The page, or its data as JSON when the name ends in ``.json``."""
+        if env.endswith(".json"):
+            return await status_data(env.removesuffix(".json"))
+        return html(render(await status_data(env)))
 
     @app.get("/v1/status", summary="Health of every Pawabase service", tags=["gateway"])
     async def status(ctx: HttpContext):
@@ -133,8 +157,15 @@ main{{max-width:30rem;padding:2rem;text-align:center}}h1{{margin:.5rem 0}}p{{col
             },
         }
 
+    @app.on_startup
+    async def begin_probing() -> None:
+        prober.start()
+        domains.start()
+
     @app.on_shutdown
     async def close() -> None:
+        await prober.stop()
+        await domains.stop()
         for client in clients.values():
             await client.aclose()
         await api.close()

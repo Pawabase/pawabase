@@ -26,6 +26,10 @@ class GatewaySettings(PlatformSettings):
     service_name: str = "gateway"
     cors_origins: str = "*"
     key_cache_ttl: int = 30
+    #: Seconds between status-page probes of the services; 0 turns probing off.
+    status_probe_interval: float = 300
+    #: Seconds between refreshes of the verified custom domains; 0 turns it off.
+    domain_refresh_interval: float = 30
     rate_limit: int = 600
     rate_window: int = 60
     max_body_bytes: int = 100 * 1024 * 1024

@@ -41,6 +41,7 @@ from app.keys import KeyRejected, KeyResolver
 from app.limits import EnvironmentLimits
 from app.quotas import RequestQuota
 from app.routing import route_for
+from pawabase_core import firewall
 from pawabase_core.clients import ServiceError
 from pawabase_core.context import CONTEXT_HEADER, SCOPE_KEY
 from pawabase_core.telemetry import note
@@ -122,6 +123,8 @@ class GatewayProxy:
         self.request_quota = request_quota or RequestQuota()
         #: Which environment each hostname serves (``PAWABASE_HOSTS``); empty maps nothing.
         self.hosts: dict[str, str] = parse_hosts(getattr(settings, "hosts", ""))
+        #: Verified custom domains from Studio, refreshed by :class:`app.domains.DomainSync`.
+        self.domains: dict[str, str] = {}
         #: Limits an environment adds with its own ``<ENV>_*`` variables, built on first use.
         self.env_limits = EnvironmentLimits(
             settings, key_func=_limit_key, rate_backend=rate_backend
@@ -194,7 +197,7 @@ class GatewayProxy:
         if mode == "none":
             return None, None, None
         # The caller can name the environment; failing that, the hostname can.
-        env = self._scope(scope, headers) or self.hosts.get(normalise(headers.get("host", "")))
+        env = self._scope(scope, headers) or self._served(headers)
         try:
             context, info = await self.resolver.resolve(raw, env=env)
         except KeyRejected as exc:
@@ -265,9 +268,32 @@ class GatewayProxy:
                 return "route_not_allowed"
         return None
 
+    def _served(self, headers: dict[str, str]) -> str | None:
+        """The environment the request's hostname serves: the configured mapping first, then verified custom domains."""
+        host = normalise(headers.get("host", ""))
+        return self.hosts.get(host) or self.domains.get(host)
+
+    @staticmethod
+    def _firewalled(
+        scope: dict[str, Any], headers: dict[str, str], info: dict[str, Any]
+    ) -> str | None:
+        """The name of the firewall rule that blocks this request, if one does."""
+        rules = info.get("firewall") or []
+        if not rules:
+            return None
+        client = scope.get("client")
+        hit = firewall.evaluate(
+            rules,
+            ip=client[0] if client else "",
+            path=scope.get("path", ""),
+            method=scope.get("method", "GET"),
+            user_agent=headers.get("user-agent", ""),
+        )
+        return str(hit.get("name") or "rule") if hit and hit.get("action") == "block" else None
+
     def _host_mismatch(self, headers: dict[str, str], context: Any) -> bool:
         """Whether the key belongs to a different environment than the hostname serves."""
-        served = self.hosts.get(normalise(headers.get("host", "")))
+        served = self._served(headers)
         return bool(served and context is not None and context.env != served)
 
     @staticmethod
@@ -353,6 +379,16 @@ class GatewayProxy:
                     send,
                     403,
                     {"error": denied, "message": "This API key is not allowed for this request."},
+                )
+                return
+            if blocked := self._firewalled(scope, headers, info or {}):
+                await _json(
+                    send,
+                    403,
+                    {
+                        "error": "firewall_blocked",
+                        "message": f"This request was blocked by a firewall rule ({blocked}).",
+                    },
                 )
                 return
             if self._host_mismatch(headers, context):
@@ -497,6 +533,9 @@ class GatewayProxy:
             return
         if context is not None and (denied := self._key_allowed(scope, info or {})):
             await send({"type": "websocket.close", "code": 4003, "reason": denied})
+            return
+        if context is not None and self._firewalled(scope, headers, info or {}):
+            await send({"type": "websocket.close", "code": 4003, "reason": "firewall_blocked"})
             return
         if self._host_mismatch(headers, context):
             await send(

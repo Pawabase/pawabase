@@ -133,21 +133,26 @@ async def test_a_password_can_name_one_of_the_environments_secrets(api, monkeypa
     assert api.platform.mail._config(await state_of(api)).smtp_password == "from-the-vault"
 
 
-async def test_old_infra_mail_is_ignored_and_says_so(api, caplog):
-    """The one deliberate break: mail configuration stored on the environment is not read."""
+async def test_a_provider_saved_in_studio_beats_the_variables(api, monkeypatch):
+    """An environment brings its own provider; variables are only the fallback."""
+    monkeypatch.setenv("DEVELOPMENT_MAIL_HOST", "smtp.variable.example")
     await api.studio.patch(
-        ENV, json={"infra": {"database_url": ""}}
-    )  # a harmless key: infra exists
-    environment = await __import__("database.models", fromlist=["Environment"]).Environment.get(
-        name="development"
+        ENV,
+        json={
+            "infra": {
+                "mail": {"host": "smtp.saved.example", "port": 465, "from": "hi@saved.example"}
+            }
+        },
     )
-    environment.infra = {"mail": {"host": "smtp.stored.example", "from": "old@example.com"}}
-    await environment.save()
-    with caplog.at_level(logging.WARNING, logger="pawabase.api"):
-        config = api.platform.mail._config(await state_of(api))
-    assert config.suppress_send is True and config.smtp_host == "localhost"
-    assert "infra.mail is no longer read" in caplog.text
-    assert "PAWABASE_MAIL_*" in caplog.text
+    config = api.platform.mail._config(await state_of(api))
+    assert (config.smtp_host, config.smtp_port, config.default_from) == (
+        "smtp.saved.example",
+        465,
+        "hi@saved.example",
+    )
+    assert config.use_ssl is True and config.suppress_send is False
+    described = await api.studio.get(f"{ENV}/mail/config")
+    assert described["source"] == "saved" and described["configured"] is True
 
 
 # ── limits ───────────────────────────────────────────────────────────────
@@ -260,13 +265,9 @@ async def test_the_exported_variables_configure_the_environment_the_same_way(api
 # ── what the API accepts ─────────────────────────────────────────────────
 
 
-async def test_storing_mail_on_an_environment_is_refused_with_the_way_forward(api):
-    from pawabase_core.clients import ServiceError
-
-    with pytest.raises(ServiceError) as caught:
-        await api.studio.patch(ENV, json={"infra": {"mail": {"host": "smtp.example.com"}}})
-    assert caught.value.status == 422
-    assert "PAWABASE_MAIL_*" in str(caught.value.body)
+async def test_mail_can_be_stored_on_an_environment(api):
+    answer = await api.studio.patch(ENV, json={"infra": {"mail": {"host": "smtp.example.com"}}})
+    assert answer["infra"]["mail"]["host"] == "smtp.example.com"
 
 
 async def test_database_and_storage_infra_are_still_accepted_and_flagged(api, tmp_path):
@@ -277,16 +278,10 @@ async def test_database_and_storage_infra_are_still_accepted_and_flagged(api, tm
     assert saved["deprecations"] == ["infra.database_url is deprecated: set DEVELOPMENT_DATA_URL"]
 
 
-async def test_mail_left_by_an_older_install_can_be_cleared(api):
-    from database.models import Environment
-
-    environment = await Environment.get(name="development")
-    environment.infra = {"mail": {"host": "smtp.stored.example"}}
-    await environment.save()
-    view = await api.studio.get(ENV)
-    assert any("infra.mail is ignored" in note for note in view["deprecations"])
-    cleared = await api.studio.patch(ENV, json={"infra": {"mail": None}})
-    assert cleared["infra"].get("mail") is None and cleared["deprecations"] == []
+async def test_a_saved_provider_can_be_cleared(api):
+    await api.studio.patch(ENV, json={"infra": {"mail": {"host": "smtp.example.com"}}})
+    await api.studio.patch(ENV, json={"infra": {"mail": None}})
+    assert (await api.studio.get(f"{ENV}/mail/config"))["configured"] is False
 
 
 async def test_a_name_that_would_read_another_environments_variables_is_refused(api):
@@ -339,7 +334,7 @@ async def test_the_mail_setup_says_where_each_part_comes_from(api, monkeypatch):
 async def test_with_no_host_the_mail_setup_is_unconfigured(api):
     described = await api.studio.get(f"{ENV}/mail/config")
     assert described["configured"] is False and described["suppressed"] is True
-    assert described["legacy"] is False
+    assert described["source"] == "none"
 
 
 async def test_the_overview_reflects_variables_not_only_stored_settings(api, monkeypatch, tmp_path):

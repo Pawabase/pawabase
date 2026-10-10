@@ -2,7 +2,8 @@ import { useRef, useState } from "react";
 import Layout from "../../components/Layout";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, Field, Json, PageHead, Segmented, useAction } from "../../components/ui";
-import { envPath, get, post } from "../../lib/api";
+import { envPath, get, post, useApi } from "../../lib/api";
+import Snapshots from "./backups/Snapshots";
 
 const PARTS = [
   ["definitions", "Definitions", "Resources, policies, schemas, transformers, flows, routes, buckets, mail templates, subscriptions, webhooks, inbound hooks and schedules."],
@@ -32,6 +33,7 @@ export default function Backups({ env }) {
   const [checking, setChecking] = useState(false);
   const [problem, setProblem] = useState(null);
   const input = useRef(null);
+  const snapshots = useApi(`${base}/snapshots`);
   const [run, busy] = useAction();
 
   const toggle = (list, setList, key) => setList(list.includes(key) ? list.filter((k) => k !== key) : [...list, key]);
@@ -82,8 +84,9 @@ export default function Backups({ env }) {
 
   return (
     <Layout title="Backups">
-      <PageHead title="Backups" description="Download everything that makes up this environment as one file, and restore from it later: into this environment after a mistake, or into another one." />
+      <PageHead title="Backups" description="Save everything that makes up this environment, on a schedule or on demand, and restore from it later. Or download it as one file to restore into another environment." />
       <div className="stack lg">
+        <Snapshots env={env} base={base} list={snapshots} />
         <Card title="Download a backup">
           <div className="stack">
             {PARTS.map(([key, label, hint]) => (
