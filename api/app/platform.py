@@ -105,6 +105,7 @@ class Platform:
             Limits(
                 memory_mb=settings.sandbox_memory_mb,
                 workers=settings.sandbox_workers,
+                concurrency=settings.sandbox_concurrency,
                 idle_seconds=settings.sandbox_idle_seconds,
             )
         )

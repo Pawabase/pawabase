@@ -1,11 +1,13 @@
 """Functions run in worker processes of their own when the environment asks for it, and everything else about them stays the same."""
 
+import asyncio
 import base64
 import io
 import os
 import sys
 import tarfile
 import textwrap
+import time
 
 import pytest
 
@@ -17,6 +19,7 @@ THINGS = {"name": "things", "fields": [{"name": "name", "type": "string"}], "ope
 
 CODE = textwrap.dedent(
     """
+    import asyncio
     import os
     from pawabase_core.functions import FunctionError, function
 
@@ -45,6 +48,15 @@ CODE = textwrap.dedent(
     async def spin(ctx):
         while True:  # blocks the event loop: nothing in Python can interrupt this
             pass
+
+    @function("sb.wait", policy="public")
+    async def wait(ctx):
+        await asyncio.sleep(0.5)  # like waiting on a payment API
+        return {"pid": os.getpid()}
+
+    @function("sb.wait_too_long", policy="public", timeout=1)
+    async def wait_too_long(ctx):
+        await asyncio.sleep(30)
 
     @function("sb.die", policy="public")
     async def die(ctx):
@@ -226,3 +238,24 @@ def test_one_environment_can_opt_out(monkeypatch):
         platform.isolated(SimpleNamespace(env_name="legacy", secret_values={}), deployed) is False
     )
     assert platform.isolated(SimpleNamespace(env_name="other", secret_values={}), deployed) is True
+
+
+async def test_calls_that_wait_run_at_once_in_a_worker_as_they_did_on_the_event_loop(sandbox):
+    """40 calls of half a second each take half a second, not ten: a worker runs many calls, it does not queue them."""
+    await call(sandbox, "sb.wait")  # the worker is warm
+    started = time.perf_counter()
+    results = await asyncio.gather(*[call(sandbox, "sb.wait") for _ in range(40)])
+    elapsed = time.perf_counter() - started
+    assert all(r["result"] for r in results)
+    assert elapsed < 3.0, elapsed  # one at a time would be 20 s; four at a time, 5 s
+    assert sandbox.platform.sandboxes.started <= 4  # no worker per call
+
+
+async def test_a_call_that_runs_out_of_time_does_not_cost_its_worker_its_life(sandbox):
+    before = (await call(sandbox, "sb.echo"))["result"]["pid"]
+    error = await failing(sandbox, "sb.wait_too_long")
+    assert error["code"] == "timeout"
+    assert (await call(sandbox, "sb.echo"))["result"][
+        "pid"
+    ] == before  # cancelled politely, so the same process goes on
+    assert sandbox.platform.sandboxes.started == 1

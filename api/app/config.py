@@ -102,6 +102,8 @@ class ApiSettings(PlatformSettings):
     sandbox_memory_mb: int = 1024
     #: Most worker processes one deployment may use at once; further calls wait for one.
     sandbox_workers: int = 4
+    #: Calls one worker runs at once (functions are async, so it runs many, like the event loop did).
+    sandbox_concurrency: int = 16
     #: How long an unused worker is kept before it is stopped.
     sandbox_idle_seconds: int = 300
     query_timeout: float = 15.0

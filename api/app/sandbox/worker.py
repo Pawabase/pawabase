@@ -6,7 +6,7 @@
 * worker → host: ``ready``, ``call`` and ``db`` (a ``ctx.runtime`` method the function used), ``done`` (the end of an invocation).
 
 Standard output is the protocol, so it is pointed at standard error for the function's own ``print``. The worker is started with an empty environment: no
-secrets, no database URL. It does one invocation at a time; the host starts more workers for more concurrency.
+secrets, no database URL. It runs several invocations at once (functions are async); the host decides how many.
 """
 
 from __future__ import annotations
@@ -65,21 +65,41 @@ class Channel:
             data = data[os.write(self.fd, data) :]
 
 
-class PipeClient:
-    """What :class:`RemoteRuntime` calls in place of an HTTP client: each request is a message to the host, answered by a ``reply``."""
+class Link:
+    """The worker's side of the conversation with the host, shared by every invocation running here: replies come back by number."""
 
     def __init__(self, channel: Channel) -> None:
         self.channel = channel
         self.pending: dict[int, asyncio.Future] = {}
         self.counter = 0
 
+    def resolve(self, message: dict[str, Any]) -> None:
+        waiting = self.pending.pop(message["id"], None)
+        if waiting is not None and not waiting.done():
+            waiting.set_result(message)
+
+
+class PipeClient:
+    """What :class:`RemoteRuntime` calls in place of an HTTP client: each request is a message to the host, answered by a ``reply``.
+
+    One per invocation, so the host knows which call a request belongs to (several run in a worker at once).
+    """
+
+    def __init__(self, link: Link, invocation: int) -> None:
+        self.link = link
+        self.invocation = invocation
+
     async def _ask(self, kind: str, **fields: Any) -> Any:
-        self.counter += 1
-        number = self.counter
+        link = self.link
+        link.counter += 1
+        number = link.counter
         waiting = asyncio.get_running_loop().create_future()
-        self.pending[number] = waiting
-        self.channel.send({"t": kind, "id": number, **fields})
-        reply = await waiting
+        link.pending[number] = waiting
+        try:
+            link.channel.send({"t": kind, "id": number, "inv": self.invocation, **fields})
+            reply = await waiting
+        finally:
+            link.pending.pop(number, None)
         if not reply["ok"]:
             raise PawabaseError(reply["status"], reply["body"])
         return reply["body"]
@@ -90,11 +110,6 @@ class PipeClient:
 
     async def runtime_db(self, op, **fields):
         return await self._ask("db", op=op, fields=fields)
-
-    def resolve(self, message: dict[str, Any]) -> None:
-        waiting = self.pending.pop(message["id"], None)
-        if waiting is not None and not waiting.done():
-            waiting.set_result(message)
 
 
 class _NoHttp:
@@ -129,17 +144,16 @@ def _where(failure: Any) -> list[dict[str, Any]]:
     ]
 
 
-async def invoke(
-    message: dict[str, Any], client: PipeClient, channel: Channel, loaded: dict[str, Any]
-) -> None:
+async def invoke(message: dict[str, Any], link: Link, loaded: dict[str, Any]) -> None:
     """Run one function and send ``done``."""
     number = message["id"]
+    channel = link.channel
     spec = get_exact(loaded["key"], message["function"])
     if spec is None:
         channel.send({"t": "done", "id": number, "outcome": "missing"})
         return
     runtime = SandboxRuntime(
-        client, auth=message.get("auth"), branch=loaded["branch"], http=_NO_HTTP
+        PipeClient(link, number), auth=message.get("auth"), branch=loaded["branch"], http=_NO_HTTP
     )  # type: ignore[arg-type]
     context = FunctionContext(
         input=decode(message.get("input")),
@@ -159,6 +173,10 @@ async def invoke(
         )
     except TimeoutError:
         reply.update(outcome="timeout")
+    except asyncio.CancelledError:
+        # The host gave up on this call (its time ran out). Saying so is how it learns this worker is still healthy and need not be killed.
+        channel.send({"t": "done", "id": number, "outcome": "cancelled"})
+        return
     except FunctionError as exc:
         reply.update(
             outcome="error",
@@ -211,14 +229,14 @@ async def serve() -> None:
     loop = asyncio.get_running_loop()
     reader = asyncio.StreamReader(limit=MAX_MESSAGE)
     await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(reader), sys.stdin)
-    client = PipeClient(channel)
+    link = Link(channel)
     loaded: dict[str, Any] = {}
-    running: set[asyncio.Task] = set()
+    running: dict[int, asyncio.Task] = {}
     while line := await reader.readline():
         message = json.loads(line)
         kind = message.get("t")
         if kind == "reply":
-            client.resolve(message)
+            link.resolve(message)
         elif kind == "init":
             try:
                 loaded = load(message)
@@ -230,9 +248,13 @@ async def serve() -> None:
                     {"t": "ready", "functions": [], "errors": [f"{type(exc).__name__}: {exc}"]}
                 )
         elif kind == "invoke":
-            task = asyncio.create_task(invoke(message, client, channel, loaded))
-            running.add(task)
-            task.add_done_callback(running.discard)
+            task = asyncio.create_task(invoke(message, link, loaded))
+            running[message["id"]] = task
+            task.add_done_callback(lambda _t, number=message["id"]: running.pop(number, None))
+        elif kind == "cancel":
+            task = running.get(message["id"])
+            if task is not None:
+                task.cancel()
         elif kind == "stop":
             break
 
