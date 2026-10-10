@@ -7,13 +7,24 @@ import { api, del, envPath, patch, post, put, useApi } from "../../lib/api";
 
 const AUTH = { service: "auth" };
 
+const AUTH_PARTS = [
+  { key: "overview", label: "Overview" },
+  { key: "users", label: "Users" },
+  { key: "orgs", label: "Organizations" },
+  { key: "roles", label: "Roles" },
+  { key: "events", label: "Sign-in activity" },
+  { key: "config", label: "Configuration" },
+];
+
 export default function Users({ env }) {
-  const [tab, setTab] = useState("users");
+  const [tab, setTab] = useState("overview");
   const base = `/envs/${env}`;
+  const current = AUTH_PARTS.find((part) => part.key === tab);
+  const subnav = { title: "Users & auth", groups: [{ items: AUTH_PARTS }], active: tab, onSelect: setTab };
   return (
-    <Layout title="Users & auth">
-      <PageHead title="Users & auth" description="End users of this environment, managed by Akountz: accounts, sessions, MFA, roles and organizations." />
-      <Tabs value={tab} onChange={setTab} tabs={[{ value: "users", label: "Users" }, { value: "roles", label: "Roles" }, { value: "orgs", label: "Organizations" }, { value: "events", label: "Sign-in activity" }, { value: "config", label: "Configuration" }]} />
+    <Layout title="Users & auth" subnav={subnav}>
+      <PageHead title={current.label} description={tab === "overview" ? "End users of this environment, managed by Akountz: accounts, sessions, MFA, roles and organizations." : undefined} />
+      {tab === "overview" && <AuthOverview base={base} onOpen={setTab} />}
       {tab === "users" && <UserList base={base} />}
       {tab === "roles" && <Roles base={base} />}
       {tab === "orgs" && <Orgs base={base} />}
@@ -23,16 +34,34 @@ export default function Users({ env }) {
   );
 }
 
+/** Counts from Akountz and the latest sign-in activity: the page a visitor lands on. */
+function AuthOverview({ base, onOpen }) {
+  const stats = useApi(`${base}/stats`, AUTH);
+  const events = useApi(`${base}/events`, AUTH);
+  return (
+    <div className="stack lg">
+      {stats.data && (
+        <div className="grid">
+          {Object.entries(stats.data).filter(([, v]) => typeof v === "number").map(([k, v]) => <div key={k} className="card stat"><b>{v}</b><span>{k.replace(/_/g, " ")}</span></div>)}
+        </div>
+      )}
+      <Card flush title="Recent sign-in activity" actions={<Button size="sm" onClick={() => onOpen("events")}>All activity</Button>}>
+        <Loading state={events} empty="No activity yet.">
+          {(data) => <Table rows={(data.data || []).slice(0, 8)} columns={[{ label: "When", render: (e) => when(e.created_at) }, { label: "Event", key: "kind" }, { label: "Email", key: "email" }]} />}
+        </Loading>
+      </Card>
+    </div>
+  );
+}
+
 function UserList({ base }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const users = useApi(`${base}/users`, { ...AUTH, params: { search, status } });
-  const stats = useApi(`${base}/stats`, AUTH);
   const [selected, setSelected] = useState(null);
   const [creating, setCreating] = useState(false);
   return (
     <div className="stack lg">
-      {stats.data && <div className="grid">{Object.entries(stats.data).filter(([, v]) => typeof v === "number").map(([k, v]) => <div key={k} className="card stat"><b>{v}</b><span>{k.replace(/_/g, " ")}</span></div>)}</div>}
       <Card flush title={<div className="row"><input placeholder="Search email or name" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 260 }} />
         <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 150 }}><option value="">all</option><option value="disabled">disabled</option><option value="unverified">unverified</option></select></div>}
         actions={<Button variant="primary" size="sm" onClick={() => setCreating(true)}>New user</Button>}>

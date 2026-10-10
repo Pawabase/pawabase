@@ -209,6 +209,29 @@ function SidebarControl({ mode, onChange }) {
   );
 }
 
+/** A second column of navigation for a section with parts of its own; the main sidebar folds to icons while it is open. */
+function SubNav({ subnav, backHref }) {
+  return (
+    <aside className="subnav" aria-label={subnav.title}>
+      <div className="subnav-head"><b>{subnav.title}</b></div>
+      <nav className="subnav-list">
+        {subnav.groups.map((group, index) => (
+          <div key={group.title || index} className="subnav-group">
+            {group.title && <div className="nav-title">{group.title}</div>}
+            {group.items.map((item) => (
+              <button key={item.key} type="button" className={subnav.active === item.key ? "active" : ""} aria-current={subnav.active === item.key ? "page" : undefined} onClick={() => subnav.onSelect(item.key)}>
+                <span className="grow">{item.label}</span>
+                {item.flag && <i className={`obs-dot ${item.flag}`} />}
+              </button>
+            ))}
+          </div>
+        ))}
+      </nav>
+      <Link href={backHref} className="subnav-foot"><Icon name="chevronRight" size={14} className="rotate-180" /> Overview</Link>
+    </aside>
+  );
+}
+
 /** The breadcrumb's project and environment, as one control that opens a wide menu: switch environment, create one, and the runtime-wide pages. */
 function EnvMenu({ name, env, envs, section, open, setOpen, onHistory, onCreate }) {
   const ref = useRef(null);
@@ -271,7 +294,7 @@ function EnvMenu({ name, env, envs, section, open, setOpen, onHistory, onCreate 
   );
 }
 
-export default function Layout({ title, crumbs = [], children, full }) {
+export default function Layout({ title, crumbs = [], children, full, subnav }) {
   const { props, url } = usePage();
   const { runtime, envs, env, section } = props;
   const [dark, toggleTheme] = useTheme();
@@ -293,7 +316,7 @@ export default function Layout({ title, crumbs = [], children, full }) {
   return (
     <ToastProvider>
       <Head title={title} />
-      <div className={`shell side-${sidebar} ${navOpen ? "nav-open" : ""}`}>
+      <div className={`shell side-${subnav && sidebar === "expanded" ? "collapsed" : sidebar} ${subnav ? "has-sub" : ""} ${navOpen ? "nav-open" : ""}`}>
        <div className="frame">
         <div className="side-slot">
         <aside className="sidebar">
@@ -327,6 +350,7 @@ export default function Layout({ title, crumbs = [], children, full }) {
           <SidebarControl mode={sidebar} onChange={setSidebar} />
         </aside>
         </div>
+        {subnav && <SubNav subnav={subnav} backHref={env ? envHref(env, "overview") : "/"} />}
         {navOpen && <div className="sheet-overlay" style={{ zIndex: 39 }} onClick={() => setNavOpen(false)} />}
         <div className="main-col">
         <main className="main">

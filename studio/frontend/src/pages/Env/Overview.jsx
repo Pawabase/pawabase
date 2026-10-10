@@ -45,7 +45,6 @@ export default function Overview({ runtime, env, overview }) {
   const [loading, setLoading] = useState(false);
   const first = useRef(true);
   const keys = useApi(envPath(env, "/keys"));
-  const functions = useApi(envPath(env, "/functions"));
 
   useEffect(() => {
     let alive = true;
@@ -143,7 +142,7 @@ export default function Overview({ runtime, env, overview }) {
         )}
       </Card>
 
-      <div className="grid two ov-lists">
+      <div className="ov-lists">
         <Card flush title="API keys" actions={<Link className="link-more" href={envHref(env, "keys")}>Manage <Icon name="chevronRight" size={14} /></Link>}>
           {keys.loading ? <p className="muted small pad">Loading…</p> : (keys.data?.data || []).length === 0 ? <p className="muted small pad">No keys yet. Create one to call this environment from an application.</p> : (
             <ul className="ov-rows">
@@ -155,22 +154,6 @@ export default function Overview({ runtime, env, overview }) {
                   </div>
                   <Badge tone={k.role === "secret" ? "yellow" : "blue"}>{k.role}</Badge>
                   <Badge tone={k.active ? "green" : "red"}>{k.active ? "active" : "revoked"}</Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-        <Card flush title="Functions" actions={<Link className="link-more" href={envHref(env, "functions")}>All functions <Icon name="chevronRight" size={14} /></Link>}>
-          {functions.loading ? <p className="muted small pad">Loading…</p> : (functions.data?.data || []).length === 0 ? <p className="muted small pad">No functions loaded. Add a module under functions/ and deploy it.</p> : (
-            <ul className="ov-rows">
-              {functions.data.data.map((f) => (
-                <li key={f.name}>
-                  <div className="grow">
-                    <b>{f.name}</b>
-                    <span className="muted small clip">{f.description || (gatewayUrl ? `${gatewayUrl}/functions/v1/${f.name}` : `/functions/v1/${f.name}`)}</span>
-                  </div>
-                  <code className="faint small">{f.timeout ? `${f.timeout}s` : "—"}</code>
-                  {gatewayUrl && <CopyText text={`${gatewayUrl}/functions/v1/${f.name}`} />}
                 </li>
               ))}
             </ul>
