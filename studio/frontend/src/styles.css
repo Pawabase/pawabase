@@ -424,11 +424,11 @@ tr.clickable:hover td { background: var(--sunken); }
 .small { font-size: 12.5px; }
 .lights { position: relative; display: flex; align-items: center; gap: 5px; padding: 8px 10px; border-radius: 99px; cursor: default; outline: none; }
 .lights:hover, .lights:focus-visible { background: var(--surface); }
-.light { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
-.light.up { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 18%, transparent); }
-.light.down { background: var(--danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent); animation: blink 1.4s ease-in-out infinite; }
-.light.unknown { background: var(--line-2); }
-.light.pending { background: var(--line-2); animation: blink 1.4s ease-in-out infinite; }
+.lights .light { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+.lights .light.up { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 18%, transparent); }
+.lights .light.down { background: var(--danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent); animation: blink 1.4s ease-in-out infinite; }
+.lights .light.unknown { background: var(--line-2); }
+.lights .light.pending { background: var(--line-2); animation: blink 1.4s ease-in-out infinite; }
 @keyframes blink { 50% { opacity: 0.35; } }
 .lights-pop { position: absolute; right: 0; top: calc(100% + 8px); width: 270px; background: var(--surface); border-radius: var(--r-md); box-shadow: var(--shadow-pop); padding: 10px; opacity: 0; transform: translateY(-4px); pointer-events: none; transition: opacity 0.15s, transform 0.15s; z-index: 30; }
 .lights:hover .lights-pop, .lights:focus-within .lights-pop { opacity: 1; transform: none; pointer-events: auto; }
