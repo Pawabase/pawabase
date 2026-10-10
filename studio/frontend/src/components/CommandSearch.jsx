@@ -64,7 +64,6 @@ export default function CommandSearch() {
     for (const e of envs || []) {
       if (e.name !== env) all.push({ group: "Environments", label: `Switch to ${e.name}`, hint: runtime?.name, icon: "layers", href: envHref(e.name, "overview") });
     }
-    all.push({ group: "Runtime", label: "Environments", hint: "Create, promote, import, export", icon: "layers", href: "/environments" });
     all.push({ group: "Runtime", label: "Audit log", hint: "What changed", icon: "audit", href: "/audit" });
     return all
       .map((item) => ({ ...item, rank: Math.max(score(item.label, query), score(item.hint || "", query) * 0.6) }))

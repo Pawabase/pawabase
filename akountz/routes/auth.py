@@ -191,7 +191,10 @@ def register(r: Router, akountz: Akountz) -> None:
             raise HTTPException(status_code=429, detail="too many failed attempts; try again later")
         if not user.check_password(body.password):
             await record_failure(
-                user, akountz.settings.lockout_threshold, akountz.settings.lockout_minutes
+                user,
+                *config.lockout(
+                    akountz.settings.lockout_threshold, akountz.settings.lockout_minutes
+                ),
             )
             await log_event(
                 config.env,
@@ -237,7 +240,10 @@ def register(r: Router, akountz: Akountz) -> None:
         used = await mfa.verify(akountz, user, body.code)
         if used is None:
             await record_failure(
-                user, akountz.settings.lockout_threshold, akountz.settings.lockout_minutes
+                user,
+                *config.lockout(
+                    akountz.settings.lockout_threshold, akountz.settings.lockout_minutes
+                ),
             )
             await log_event(
                 config.env,

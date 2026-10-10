@@ -1,6 +1,5 @@
 import { Link } from "@inertiajs/react";
 import { Card, Loading, Table, when } from "../../../components/ui";
-import { Stat, StatStrip } from "./kit";
 import { envHref } from "../../../components/Layout";
 import { COLOR, RateBadge, SeriesCard, num } from "./system";
 import { ms } from "./shared";
@@ -13,11 +12,6 @@ export default function Flows({ env, system }) {
         const rate = f.totals.runs ? Math.round(((f.totals.runs - f.totals.failed) / f.totals.runs) * 1000) / 10 : null;
         return (
           <div className="stack lg">
-            <StatStrip>
-              <Stat tone="sky" icon="flows" value={num(f.totals.runs)} label="flow runs" />
-              <Stat tone={f.totals.failed ? "rose" : "mint"} icon="pulse" value={num(f.totals.failed)} label="failed" />
-              <Stat tone="mint" icon="check" value={rate == null ? "—" : `${rate}%`} label="success rate" />
-            </StatStrip>
             <SeriesCard title="Runs over time" window={s.window} data={f.series} lines={[["succeeded", "Succeeded", COLOR.ok], ["failed", "Failed", COLOR.bad, "line"]]} empty="No flow runs in this window." />
             <Card flush title="By flow" actions={<Link className="link-more" href={envHref(env, "events")}>All runs</Link>}>
               <Table rows={f.by_flow} empty="No flow runs in this window." columns={[

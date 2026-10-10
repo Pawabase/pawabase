@@ -1,7 +1,6 @@
 import { Link } from "@inertiajs/react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge, Button, Card, Field, Loading, Table, useAction } from "../../../components/ui";
-import { Stat, StatStrip } from "./kit";
 import { envHref } from "../../../components/Layout";
 import { envPath, get, post, useApi } from "../../../lib/api";
 import { num } from "./system";
@@ -30,12 +29,6 @@ export function Database({ env }) {
   const infra = overview.data?.infrastructure || {};
   return (
     <div className="stack lg">
-      <StatStrip>
-        <Stat tone={probe?.ok === false ? "rose" : "mint"} icon="database" value={probe ? (probe.ok ? `${probe.ms} ms` : "down") : "–"} label="round trip to the database" />
-        <Stat tone="sky" icon="layers" value={database.data ? tables.length : "–"} label={`tables · ${managed} managed`} />
-        <Stat tone="lavender" icon="resources" value={overview.data?.counts?.resources ?? "–"} label="resources defined" />
-        <Stat tone="butter" icon="buckets" value={buckets.data ? (buckets.data.data || buckets.data).length : "–"} label="storage buckets" />
-      </StatStrip>
       <Card title="Infrastructure" actions={<Link className="link-more" href={envHref(env, "database")}>Open database console</Link>}>
         <Loading state={overview}>
           {() => <div className="row wrap" style={{ gap: 28 }}>

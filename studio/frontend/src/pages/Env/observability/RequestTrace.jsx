@@ -19,7 +19,7 @@ export default function RequestTrace({ value, onClose }) {
             <span className="faint">{request.route || "unmatched route"}</span>
           </div>
         )}
-        <div className="trace-stats">
+        <div className="statstrip">
           <Stat label="Duration" value={ms(summary.duration_ms)} tone={summary.failed ? "red" : ""} />
           <Stat label="Steps" value={summary.spans || 0} hint={summary.failed_spans ? `${summary.failed_spans} failed` : null} />
           <Stat label="DB queries" value={summary.db_queries || 0} hint={summary.db_queries ? `${ms(summary.db_ms)} total` : null} />
@@ -96,10 +96,9 @@ export default function RequestTrace({ value, onClose }) {
 
 function Stat({ label, value, hint, tone }) {
   return (
-    <div className="trace-stat">
-      <div className="faint">{label}</div>
-      <div className={`trace-stat-value ${tone || ""}`}>{value}</div>
-      {hint && <div className="faint">{hint}</div>}
+    <div>
+      <span className={`v ${tone === "red" ? "bad" : ""}`}>{value}</span>
+      <span className="l">{label}{hint ? ` · ${hint}` : ""}</span>
     </div>
   );
 }

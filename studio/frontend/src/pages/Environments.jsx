@@ -3,10 +3,11 @@ import { useState } from "react";
 import Layout from "../components/Layout";
 import { Icon } from "../components/icons";
 import { Badge, Button, Card, CopyText, Field, Modal, PageHead, Switch, Table, copyToClipboard, useAction, useToast, when } from "../components/ui";
+import NewEnvironment from "../components/NewEnvironment";
 import { get, post } from "../lib/api";
 
 export default function Environments({ runtime, envs }) {
-  const [modal, setModal] = useState(null);
+  const [modal, setModal] = useState(() => (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("new") ? "env" : null));
   const [run, busy] = useAction();
   const reload = () => router.reload();
   const reloadCode = async () => {
@@ -45,23 +46,6 @@ export default function Environments({ runtime, envs }) {
   );
 }
 
-function NewEnvironment({ envs, onClose, onDone }) {
-  const [data, setData] = useState({ name: "", copy_from: "" });
-  const [run, busy] = useAction();
-  return (
-    <Modal title="New environment" onClose={onClose} footer={<Button variant="primary" disabled={busy || !data.name} onClick={async () => {
-      if (await run(() => post("/envs", { name: data.name, copy_from: data.copy_from || null }), "Environment created")) { onClose(); onDone(); }
-    }}>Create</Button>}>
-      <Field label="Name"><input autoFocus value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} placeholder="staging" /></Field>
-      <Field label="Copy definitions from">
-        <select value={data.copy_from} onChange={(e) => setData({ ...data, copy_from: e.target.value })}>
-          <option value="">Start empty</option>
-          {envs.map((e) => <option key={e.name}>{e.name}</option>)}
-        </select>
-      </Field>
-    </Modal>
-  );
-}
 
 const KINDS = ["schemas", "transformers", "policies", "resources", "routes", "flows", "buckets", "mail-templates", "subscriptions", "webhooks", "inbound-hooks", "schedules"];
 

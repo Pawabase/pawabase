@@ -72,6 +72,11 @@ AUTH_KEYS = (
     "mfa_enabled",
     "default_roles",
     "emails",
+    "lockout_threshold",
+    "lockout_minutes",
+    "allowed_email_domains",
+    "blocked_email_domains",
+    "max_sessions",
 )
 #: Environment settings that describe a deployment rather than the system.
 SETTINGS_SKIP = ("cors_origins",)

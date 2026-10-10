@@ -1,6 +1,5 @@
 import { Badge, Card, Loading, Table, when } from "../../../components/ui";
 import JobDetail from "./JobDetail";
-import { Stat, StatStrip } from "./kit";
 import { Link } from "@inertiajs/react";
 import { envHref } from "../../../components/Layout";
 import { useState } from "react";
@@ -18,12 +17,6 @@ export default function Queues({ env, system }) {
         const b = s.jobs.backlog;
         return (
           <div className="stack lg">
-            <StatStrip>
-              <Stat tone={b.waiting ? "butter" : "mint"} icon="jobs" value={num(b.waiting)} label="waiting to run" />
-              <Stat tone={b.oldest_seconds > 300 ? "rose" : "mint"} icon="clock" value={b.waiting ? span(b.oldest_seconds) : "—"} label="oldest waiting" />
-              <Stat tone={b.stuck.length ? "rose" : "mint"} icon="pulse" value={b.stuck.length} label="running over 15 min" />
-              <Stat tone="sky" icon="check" value={num(s.jobs.totals.total)} label="jobs in this window" />
-            </StatStrip>
             <SeriesCard title="Throughput" window={s.window} data={s.jobs.series} height={220}
               lines={[["succeeded", "Succeeded", COLOR.ok], ["failed", "Failed", COLOR.bad, "line"], ["retrying", "Retrying", COLOR.warn, "line"], ["queued", "Enqueued", COLOR.info, "line"]]} />
             {s.jobs.truncated && <div className="alert info">This window has more jobs than are summarised here; figures cover the newest 20,000.</div>}

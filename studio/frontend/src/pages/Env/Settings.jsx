@@ -64,7 +64,19 @@ function diff(original, draft) {
   return out;
 }
 
+const SETTINGS_SECTIONS = [
+  ["general", "General", "Name, timezone, currency, language"],
+  ["access", "API & access", "Docs, CORS and secret-key IPs"],
+  ["maintenance", "Maintenance", "Pause the public API"],
+  ["realtime", "Realtime", "Channel and policy rules"],
+  ["infrastructure", "Infrastructure", "Database, storage, mail"],
+  ["limits", "Limits", "Quotas on this installation"],
+  ["custom", "Custom values", "Your own $settings"],
+  ["advanced", "Advanced", "Export, import, delete"],
+];
+
 export default function Settings({ env }) {
+  const [active, setActive] = useState("general");
   const path = envPath(env);
   const state = useApi(path);
   const policiesState = useApi(envPath(env, "/policies"));
@@ -72,19 +84,18 @@ export default function Settings({ env }) {
   const configuration = useApi(`${path}/configuration`);
   const policyNames = (policiesState.data?.data || []).map((p) => p.name);
   return (
-    <Layout title="Settings">
-      <PageHead title="Settings" description={`Behaviour, access and defaults for the ${env} environment. Infrastructure and limits come from environment variables, not from here.`} />
+    <Layout title="Settings" subnav={{ title: "Settings", groups: [{ items: SETTINGS_SECTIONS.map(([key, label, sub]) => ({ key, label, sub })) }], active, onSelect: setActive }}>
+      <PageHead title={SETTINGS_SECTIONS.find(([key]) => key === active)?.[1] || "Settings"} description={`Behaviour, access and defaults for the ${env} environment. Infrastructure and limits come from environment variables, not from here.`} />
       <Loading state={state}>
-        {(data) => <SettingsBody key={data.version + ":" + JSON.stringify(data.settings)} env={env} path={path} data={data} usage={usage.data} configuration={configuration.data} policyNames={policyNames} reload={state.reload} />}
+        {(data) => <SettingsBody active={active} key={data.version + ":" + JSON.stringify(data.settings)} env={env} path={path} data={data} usage={usage.data} configuration={configuration.data} policyNames={policyNames} reload={state.reload} />}
       </Loading>
     </Layout>
   );
 }
 
-function SettingsBody({ env, path, data, usage, configuration, policyNames, reload }) {
+function SettingsBody({ active, env, path, data, usage, configuration, policyNames, reload }) {
   const original = data.settings || {};
   const [draft, setDraft] = useState(original);
-  const [active, setActive] = useState("general");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [run, busy] = useAction();
 
@@ -122,29 +133,13 @@ function SettingsBody({ env, path, data, usage, configuration, policyNames, relo
     maintenance: maintenance.enabled ? <Badge tone="yellow">on</Badge> : null,
   };
 
-  const sections = [
-    ["general", "General", "Name, timezone, currency, language"],
-    ["access", "API & access", "Docs, CORS and secret-key IPs"],
-    ["maintenance", "Maintenance", "Pause the public API"],
-    ["realtime", "Realtime", "Channel and policy rules"],
-    ["infrastructure", "Infrastructure", "Database, storage, mail"],
-    ["limits", "Limits", "Quotas on this installation"],
-    ["custom", "Custom values", "Your own $settings"],
-    ["advanced", "Advanced", "Export, import, delete"],
-  ];
-  const title = sections.find(([key]) => key === active)?.[1];
+  const title = SETTINGS_SECTIONS.find(([key]) => key === active)?.[1];
   const editable = !["infrastructure", "limits", "advanced"].includes(active);
 
   return <div className="stack lg">
     {data.settings?.deletion_pending && <div className="alert error"><b>Deletion queued.</b> This environment is being purged in the background.</div>}
     {maintenance.enabled && !dirty && <div className="alert warn"><b>Maintenance mode is on.</b> Publishable keys get 503 responses{maintenance.allow_secret_keys ? "; secret keys still work" : " and so do secret keys"}.</div>}
     <div style={{ display: "flex", gap: 18, alignItems: "flex-start" }}>
-      <nav className="card" style={{ width: 230, flexShrink: 0, padding: 8 }} aria-label="Settings sections">
-        {sections.map(([key, label, description]) => <button key={key} type="button" onClick={() => setActive(key)} style={{ width: "100%", textAlign: "left", border: 0, borderRadius: 8, padding: "11px 10px", background: active === key ? "var(--accent-soft)" : "transparent", color: "inherit", cursor: "pointer" }}>
-          <b style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>{label}{badges[key]}</b>
-          <span className="hint" style={{ display: "block" }}>{description}</span>
-        </button>)}
-      </nav>
       <Card title={title} className="grow" actions={editable && <>
         {dirty && <Button size="sm" disabled={busy} onClick={() => setDraft(original)}>Discard</Button>}
         <Button variant="primary" size="sm" disabled={busy || !dirty} onClick={save}>{dirty ? `Save ${changedKeys.length} change${changedKeys.length === 1 ? "" : "s"}` : "Save changes"}</Button>

@@ -24,6 +24,19 @@ RANGES: dict[str, tuple[timedelta, timedelta]] = {
     "30d": (timedelta(days=30), timedelta(days=1)),
 }
 DEFAULT_RANGE = "24h"
+#: The longest custom window, so one request cannot ask for years of buckets.
+MAX_WINDOW = timedelta(days=90)
+
+
+def window_step(span: timedelta) -> timedelta:
+    """The bucket size for a custom window: fine for short spans, a day for long ones."""
+    if span <= timedelta(hours=3):
+        return timedelta(minutes=5)
+    if span <= timedelta(days=2):
+        return timedelta(hours=1)
+    if span <= timedelta(days=21):
+        return timedelta(hours=6)
+    return timedelta(days=1)
 
 
 def _floor(moment: datetime, step: timedelta) -> datetime:
@@ -63,10 +76,23 @@ def _summary(totals: dict[str, float]) -> dict[str, Any]:
     }
 
 
-async def environment_analytics(env: str, range_name: str = DEFAULT_RANGE) -> dict[str, Any]:
-    span, step = RANGES.get(range_name, RANGES[DEFAULT_RANGE])
-    range_name = range_name if range_name in RANGES else DEFAULT_RANGE
-    end = _floor(datetime.now(UTC), step) + step
+async def environment_analytics(
+    env: str,
+    range_name: str = DEFAULT_RANGE,
+    window: tuple[datetime, datetime] | None = None,
+) -> dict[str, Any]:
+    """Analytics for a named range, or for a custom ``window`` of (from, to)."""
+    if window is not None:
+        first, last = _aware(window[0]), _aware(window[1])
+        span = min(max(last - first, timedelta(hours=1)), MAX_WINDOW)
+        step = window_step(span)
+        range_name = "custom"
+        end = _floor(last, step) + step
+        span = step * max(1, -(-span // step))
+    else:
+        span, step = RANGES.get(range_name, RANGES[DEFAULT_RANGE])
+        range_name = range_name if range_name in RANGES else DEFAULT_RANGE
+        end = _floor(datetime.now(UTC), step) + step
     start = end - span
     since = start - span
     count = int(span / step)

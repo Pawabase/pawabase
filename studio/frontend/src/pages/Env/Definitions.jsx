@@ -1,5 +1,6 @@
 import { useState } from "react";
-import Layout, { SECTION_TONES } from "../../components/Layout";
+import Layout, { DATA_PAGES, SECTION_TONES, dataSubnav } from "../../components/Layout";
+import { TableView } from "./Database";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, CopyText, EmptyState, Field, Loading, Modal, PageHead, Table, formatCell, useAction } from "../../components/ui";
 import { DefinitionSheet, singular } from "../../components/definitions/DefinitionSheet";
@@ -27,9 +28,11 @@ export default function Definitions({ env, kind }) {
   const [editing, setEditing] = useState(null);
   const [reveal, setReveal] = useState(null);
   const [extra, setExtra] = useState(null);
+  const [browse, setBrowse] = useState(null);
   const create = () => setEditing({ isNew: true, body: meta.blank || meta.template });
   return (
-    <Layout title={meta.title}>
+    <Layout title={meta.title} subnav={DATA_PAGES.some(([page]) => page === kind) ? dataSubnav(env, kind) : undefined}>
+      {browse ? <RecordsView env={env} resource={browse} onBack={() => setBrowse(null)} onEdit={() => { setEditing({ isNew: false, key: keyOf(kind, browse), body: editable(browse) }); }} /> : <>
       <PageHead
         title={meta.title}
         description={meta.description}
@@ -50,11 +53,15 @@ export default function Definitions({ env, kind }) {
             <Table
               rows={data.data}
               onRowClick={(row) => setEditing({ isNew: false, key: keyOf(kind, row), body: editable(row) })}
-              columns={meta.columns.map((c) => ({ label: c.replace(/_/g, " "), key: c, render: RENDER[c] }))}
+              columns={[
+                ...meta.columns.map((c) => ({ label: c.replace(/_/g, " "), key: c, render: RENDER[c] })),
+                ...(kind === "resources" ? [{ label: "", render: (row) => <Button size="sm" onClick={(event) => { event.stopPropagation(); setBrowse(row); }}>Records</Button> }] : []),
+              ]}
             />
           )}
         </Loading>
       </Card>
+      </>}
       {editing && (
         <DefinitionSheet
           kind={kind}
@@ -226,4 +233,24 @@ function RecordInput({ field, value, onChange }) {
     );
   }
   return <input type="text" value={value ?? ""} onChange={(e) => onChange(e.target.value)} />;
+}
+
+/** One resource's rows, read from its table, with the way back to the list and to its definition. */
+function RecordsView({ env, resource, onBack, onEdit }) {
+  const table = resource.table || resource.name;
+  const [run, busy] = useAction();
+  const [version, setVersion] = useState(0);
+  return (
+    <div className="stack lg">
+      <div className="row wrap">
+        <Button size="sm" onClick={onBack}><Icon name="chevronRight" size={14} className="rotate-180" /> Resources</Button>
+        <h1 style={{ fontSize: 20 }}>{resource.name}</h1>
+        <span className="muted small">table <code>{table}</code></span>
+        <span className="grow" />
+        <Button size="sm" disabled={busy} onClick={async () => { if (await run(() => post(envPath(env, `/resources/${resource.name}/migrate`)), "Table created or extended")) setVersion((v) => v + 1); }}><Icon name="database" size={14} /> Create / migrate table</Button>
+        <Button size="sm" variant="primary" onClick={onEdit}>Edit definition</Button>
+      </div>
+      <TableView key={`${table}:${version}`} base={envPath(env, "/database")} table={table} />
+    </div>
+  );
 }

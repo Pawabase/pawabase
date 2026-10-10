@@ -41,7 +41,6 @@ const fromHash = () => {
 const savedMinutes = () => {
   try { const n = Number(localStorage.getItem("pawabase.observability.minutes")); return WINDOWS.some(([v]) => v === n) ? n : 60; } catch { return 60; }
 };
-const tabOf = (section) => TABS.find(([, , items]) => items.some(([key]) => key === section));
 
 function ago(ms) {
   const s = Math.max(0, Math.round(ms / 1000));
@@ -91,13 +90,17 @@ export default function Observability({ env }) {
     }
     return out;
   }, [system.data]);
-  const tabFlag = (items) => items.reduce((level, [key]) => (flagged[key] === "critical" ? "critical" : flagged[key] && level !== "critical" ? "warning" : level), null);
 
-  const [tabKey, , items] = tabOf(section);
+  const subnav = {
+    title: "Observability",
+    groups: TABS.map(([key, label, tabItems]) => ({ title: key === "overview" ? undefined : label, items: tabItems.map(([k, l]) => ({ key: k, label: l, flag: flagged[k] })) })),
+    active: section,
+    onSelect: open,
+  };
   const shared = { env, minutes, system, onOpen: open };
 
   return (
-    <Layout title="Observability">
+    <Layout title="Observability" subnav={subnav}>
       <div className="stack lg">
         <div className="obs-bar">
           <div>
@@ -111,29 +114,6 @@ export default function Observability({ env }) {
             <button type="button" className="btn sm" onClick={() => system.reload()} aria-label="Refresh now"><Icon name="play" size={14} />Refresh</button>
             {NEEDS_WINDOW.has(section) && <Segmented options={WINDOWS} value={minutes} onChange={setMinutes} />}
           </div>
-        </div>
-
-        <div>
-          <div className="obs-tabs" role="tablist">
-            {TABS.map(([key, label, tabItems]) => {
-              const flag = tabFlag(tabItems);
-              return (
-                <button key={key} type="button" role="tab" aria-selected={key === tabKey} className={`obs-tab ${key === tabKey ? "active" : ""}`}
-                  onClick={() => open(key === tabKey ? section : tabItems[0][0])}>
-                  {label}{flag && <i className={`obs-dot ${flag}`} />}
-                </button>
-              );
-            })}
-          </div>
-          {items.length > 1 && (
-            <div className="obs-pills" style={{ marginTop: 14 }}>
-              {items.map(([key, label]) => (
-                <button key={key} type="button" className={`obs-pill ${key === section ? "active" : ""}`} onClick={() => open(key)}>
-                  {label}{flagged[key] && <i className={`obs-dot ${flagged[key]}`} />}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
 
         <div className="stack lg" style={{ minWidth: 0 }}>

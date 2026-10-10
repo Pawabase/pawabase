@@ -1,7 +1,6 @@
 import { Link } from "@inertiajs/react";
 import { useState } from "react";
 import { Badge, Card, Loading, Table, when } from "../../../components/ui";
-import { Stat, StatStrip } from "./kit";
 import { envHref } from "../../../components/Layout";
 import { num } from "./system";
 
@@ -17,12 +16,6 @@ export default function Workers({ env, system }) {
         const overdue = s.schedules.filter((x) => x.overdue).length;
         return (
           <div className="stack lg">
-            <StatStrip>
-              <Stat tone={w.alive ? "mint" : "rose"} icon="team" value={w.alive} label="queue workers alive" />
-              <Stat tone={w.schedulers_alive ? "mint" : "butter"} icon="clock" value={w.schedulers_alive} label="schedulers alive" />
-              <Stat tone="sky" icon="schedules" value={s.schedules.filter((x) => x.enabled).length} label="schedules enabled" />
-              <Stat tone={overdue ? "rose" : "mint"} icon="pulse" value={overdue} label="overdue" />
-            </StatStrip>
             <Card flush title="Workers and schedulers" actions={<span className="muted small">a process is alive when it reported in within 45 seconds</span>}>
               {stale.length > 0 && <div className="row" style={{ padding: "12px 16px", justifyContent: "space-between" }}>
                 <span className="muted small">{stale.length} process{stale.length > 1 ? "es" : ""} have not reported in for over an hour — usually old runs that were stopped without a clean shutdown.</span>

@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 from sillo import HttpContext, Router, created, no_content
 from sillo.exceptions import HTTPException
 
-from app import emails, links
-from app.accounts import find_by_email, normalise_email
+from app import invitations as invites
+from app import links
 from app.environment import load_config
 from app.platform import Akountz
 from database.models import AuthUser, Invitation, Membership, Organization, Team, TeamMember
@@ -230,44 +230,22 @@ def register(r: Router, akountz: Akountz) -> None:
     async def invite(ctx: HttpContext, slug: str, body: InviteBody):
         user, _ = await signed_in_user(ctx)
         org, _ = await membership(user, slug, manage=True)
-        _check_role(body.role)
         config = await load_config(akountz, user.env)
-        email = normalise_email(body.email)
-        existing = await find_by_email(user.env, email)
-        if existing and await Membership.filter(organization=org, user=existing).exists():
-            raise HTTPException(status_code=409, detail="already a member")
-        token = await links.issue(
-            akountz, config, "invite", email=email, data={"organization": org.id, "role": body.role}
-        )
-        row_id = akountz.serializer(config.env, "invite").loads(token)["id"]
-        invitation = await Invitation.create(
-            organization=org,
-            email=email,
-            role=body.role,
-            token_id=row_id,
-            invited_by=user.id,
-            expires_at=datetime.now(UTC) + timedelta(days=7),
-        )
-        await emails.send(
+        invitation = await invites.invite(
             akountz,
             config,
-            "invite",
-            email,
-            link=links.link(config, "invite", token, body.redirect_to),
-            organization=org.name,
+            org,
+            email=body.email,
             role=body.role,
-        )
-        await akountz.emit(
-            user.env,
-            "invitation.created",
-            {"organization": slug, "email": email, "role": body.role},
+            invited_by=user.id,
+            redirect_to=body.redirect_to,
             actor=str(user.id),
         )
         return created(
             {
                 "id": invitation.id,
-                "email": email,
-                "role": body.role,
+                "email": invitation.email,
+                "role": invitation.role,
                 "expires_at": invitation.expires_at.isoformat(),
             }
         )

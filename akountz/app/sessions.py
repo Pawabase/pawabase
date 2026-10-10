@@ -171,6 +171,11 @@ async def start_session(
         ip=ip,
         user_agent=agent,
     )
+    if config.max_sessions > 0:
+        # Over the limit, the oldest sessions end so the new one can start.
+        active = await SessionInfo.filter(user=user, revoked_at=None).order_by("created_at")
+        for old in active[: max(0, len(active) - config.max_sessions)]:
+            await revoke_session(user, old.family)
     from app.accounts import record_success
 
     await record_success(user, ip)

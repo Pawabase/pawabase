@@ -111,15 +111,20 @@ def register(r: Router, akountz: Akountz) -> None:
                 return _error_redirect(target, "email_required")
             if await find_by_email(env, profile.email):
                 return _error_redirect(target, "email_unverified_conflict")
-            user = await create_account(
-                config,
-                email=profile.email,
-                password=None,
-                username=profile.username,
-                name=profile.name or "",
-                verified=bool(profile.email_verified),
-                max_users=akountz.max_users(config.env),
-            )
+            try:
+                user = await create_account(
+                    config,
+                    email=profile.email,
+                    password=None,
+                    username=profile.username,
+                    name=profile.name or "",
+                    verified=bool(profile.email_verified),
+                    max_users=akountz.max_users(config.env),
+                )
+            except HTTPException as refused:
+                if refused.status_code != 403:
+                    raise
+                return _error_redirect(target, "signup_restricted")
             user.avatar_url = profile.avatar_url
             await user.save(update_fields=["avatar_url"])
             created = True
