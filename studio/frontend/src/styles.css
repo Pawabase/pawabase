@@ -1107,3 +1107,8 @@ html, body { background: var(--canvas); }
 .rule-list { padding: 14px 16px; border-radius: var(--r-md); background: var(--sunken); }
 .rule-list ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; display: grid; gap: 4px; }
 .form-section-head .row, .form-section-head > .btn { flex-shrink: 0; }
+
+/* import wizard */
+.map-row { display: grid; grid-template-columns: minmax(160px, 0.8fr) 1.2fr; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.map-row:last-child { border-bottom: 0; }
+.map-field { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

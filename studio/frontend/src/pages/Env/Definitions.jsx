@@ -1,5 +1,7 @@
 import { useState } from "react";
 import Layout, { DATA_PAGES, SECTION_TONES, dataSubnav } from "../../components/Layout";
+import ImportWizard from "../../components/ImportWizard";
+import { download, toCsv } from "../../lib/tabular";
 import { TableView } from "./Database";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, CopyText, EmptyState, Field, Loading, Modal, PageHead, Table, formatCell, useAction } from "../../components/ui";
@@ -240,6 +242,15 @@ function RecordsView({ env, resource, onBack, onEdit }) {
   const table = resource.table || resource.name;
   const [run, busy] = useAction();
   const [version, setVersion] = useState(0);
+  const [importing, setImporting] = useState(false);
+  const exportAs = async (format) => {
+    const data = await run(() => get(envPath(env, `/resources/${resource.name}/export`)));
+    if (!data || data === true) return;
+    const stem = `${resource.name}-${new Date().toISOString().slice(0, 10)}`;
+    if (format === "csv") download(`${stem}.csv`, toCsv(data.columns, data.data), "text/csv");
+    else download(`${stem}.json`, JSON.stringify(data.data, null, 2), "application/json");
+    if (data.truncated) alert(`Exported the first ${data.data.length.toLocaleString()} of ${data.total.toLocaleString()} records.`);
+  };
   return (
     <div className="stack lg">
       <div className="row wrap">
@@ -247,10 +258,14 @@ function RecordsView({ env, resource, onBack, onEdit }) {
         <h1 style={{ fontSize: 20 }}>{resource.name}</h1>
         <span className="muted small">table <code>{table}</code></span>
         <span className="grow" />
+        <Button size="sm" disabled={busy} onClick={() => exportAs("csv")}><Icon name="backups" size={14} /> Export CSV</Button>
+        <Button size="sm" disabled={busy} onClick={() => exportAs("json")}>Export JSON</Button>
+        <Button size="sm" onClick={() => setImporting(true)}>Import</Button>
         <Button size="sm" disabled={busy} onClick={async () => { if (await run(() => post(envPath(env, `/resources/${resource.name}/migrate`)), "Table created or extended")) setVersion((v) => v + 1); }}><Icon name="database" size={14} /> Create / migrate table</Button>
         <Button size="sm" variant="primary" onClick={onEdit}>Edit definition</Button>
       </div>
       <TableView key={`${table}:${version}`} base={envPath(env, "/database")} table={table} />
+      {importing && <ImportWizard env={env} resource={resource} onClose={() => setImporting(false)} onDone={() => setVersion((v) => v + 1)} />}
     </div>
   );
 }
