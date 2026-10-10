@@ -17,23 +17,8 @@ export default function Routes({ env, minutes, onRoute, onTrace }) {
   const [search, setSearch] = useState("");
   const state = useApi(`${base}/observability/routes`, { params: { minutes, sort, limit: 200 }, interval: 15000 });
   const routes = useMemo(() => (state.data?.routes || []).filter((r) => r.route.toLowerCase().includes(search.toLowerCase())), [state.data, search]);
-  const totals = useMemo(() => {
-    const all = state.data?.routes || [];
-    const requests = all.reduce((n, r) => n + r.requests, 0);
-    const server = all.reduce((n, r) => n + r.server_errors, 0);
-    const client = all.reduce((n, r) => n + r.client_errors, 0);
-    const slowest = [...all].sort((a, b) => b.p95_ms - a.p95_ms)[0];
-    return { requests, server, client, failing: all.filter((r) => r.server_errors > 0).length, slowest };
-  }, [state.data]);
   return (
     <div className="stack lg">
-      <div className="statstrip">
-        <Tile label="Requests" value={totals.requests.toLocaleString()} />
-        <Tile label="Server errors (5xx)" value={totals.server.toLocaleString()} tone={totals.server ? "red" : ""} hint={totals.requests ? percent((totals.server / totals.requests) * 100) : null} />
-        <Tile label="Client errors (4xx)" value={totals.client.toLocaleString()} hint={totals.requests ? percent((totals.client / totals.requests) * 100) : null} />
-        <Tile label="Routes failing" value={totals.failing} tone={totals.failing ? "red" : ""} />
-        <Tile label="Slowest route (p95)" value={totals.slowest ? ms(totals.slowest.p95_ms) : "—"} hint={totals.slowest?.route} />
-      </div>
       {state.data?.truncated && <div className="alert">This window has more than 50,000 requests; only the newest are analysed. Choose a shorter window for exact numbers.</div>}
       <Card flush title={<div className="row wrap">
         <Segmented options={SORTS} value={sort} onChange={setSort} />
@@ -65,11 +50,3 @@ export default function Routes({ env, minutes, onRoute, onTrace }) {
   );
 }
 
-function Tile({ label, value, hint, tone }) {
-  return (
-    <div>
-      <span className={`v ${tone === "red" ? "bad" : ""}`}>{value}</span>
-      <span className="l">{label}{hint ? ` · ${hint}` : ""}</span>
-    </div>
-  );
-}

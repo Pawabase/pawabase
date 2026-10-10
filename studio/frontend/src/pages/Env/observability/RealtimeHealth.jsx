@@ -1,6 +1,5 @@
 import { Link } from "@inertiajs/react";
 import { Badge, Card, Loading, Table, when } from "../../../components/ui";
-import { Stat, StatStrip } from "./kit";
 import { envHref } from "../../../components/Layout";
 import { useApi } from "../../../lib/api";
 import { num, span } from "./system";
@@ -17,12 +16,6 @@ export default function RealtimeHealth({ env }) {
   const counters = Object.entries(stats).filter(([k, v]) => typeof v === "number" && !["connections", "channels", "subscriptions", "uptime_seconds"].includes(k));
   return (
     <div className="stack lg">
-      <StatStrip>
-        <Stat tone="sky" icon="users" value={mine ?? "–"} label="connections (this environment)" />
-        <Stat tone="lavender" icon="realtime" value={channels.data?.data?.length ?? "–"} label="active channels" />
-        <Stat tone={errors.length ? "rose" : "mint"} icon="pulse" value={errors.length} label="recent policy errors" />
-        <Stat tone={stats.dropped || stats.failed ? "butter" : "mint"} icon="clock" value={`${num(stats.dropped)} / ${num(stats.failed)}`} label={`dropped / failed sends · up ${stats.uptime_seconds != null ? span(stats.uptime_seconds) : "–"}`} />
-      </StatStrip>
       <Card title="Realtime service" actions={<Link className="link-more" href={envHref(env, "realtime")}>Open console</Link>}>
         <Loading state={summary}>
           {() => <div className="row wrap" style={{ gap: 24 }}>

@@ -20,7 +20,6 @@ export default function Mail({ env }) {
   const settingOf = (name) => (setup.data?.settings || []).find((row) => row.setting === name)?.value;
   const configured = Boolean(setup.data?.configured) && !setup.data?.suppressed;
   const rows = log.data?.data || [];
-  const counts = useMemo(() => rows.reduce((n, r) => ({ ...n, [r.status]: (n[r.status] || 0) + 1 }), {}), [rows]);
   const shown = filter === "all" ? rows : rows.filter((r) => r.status === filter);
 
   return (
@@ -47,12 +46,6 @@ export default function Mail({ env }) {
         )
       )}
 
-      <StatStrip>
-        <Stat tone="mint" value={counts.sent || 0} label="sent" />
-        <Stat tone="butter" value={counts.suppressed || 0} label="suppressed" />
-        <Stat tone="rose" value={counts.failed || 0} label="failed" />
-        <Stat value={rows.length} label="recent messages" />
-      </StatStrip>
 
       <Card flush title="Sent mail" actions={<Segmented value={filter} onChange={setFilter} options={STATUSES} />}>
         <Loading state={log} empty="Nothing has been sent from this environment yet.">

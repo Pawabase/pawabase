@@ -7,7 +7,6 @@ export default function Jobs({ env }) {
   const base = envPath(env);
   const [tab, setTab] = useState("jobs");
   const [status, setStatus] = useState("");
-  const queues = useApi(`${base}/queues`, { interval: 5000 });
   const jobs = useApi(`${base}/jobs`, { params: { status, limit: 100 }, interval: 5000 });
   const failed = useApi(tab === "failed" ? `${base}/failed-jobs` : null);
   const workers = useApi(tab === "workers" ? "/workers" : null, { interval: 10000 });
@@ -17,21 +16,6 @@ export default function Jobs({ env }) {
   return (
     <Layout title="Jobs & queues">
       <PageHead title="Jobs & queues" description="Background work on Sillo's queue: flow runs, function calls, webhook deliveries, mail. Failed jobs retry with backoff, then land here." />
-      <Loading state={queues}>
-        {(data) => (
-          <Card flush title="Queues" style={{ marginBottom: 20 }}>
-            <Table
-              rows={data.data}
-              columns={[
-                { label: "Queue", render: (q) => <span className="row"><b>{q.name}</b>{q.platform && <Badge>platform</Badge>}</span> },
-                { label: "Waiting", render: (q) => q.depth },
-                { label: "In flight", render: (q) => (q.in_flight != null ? q.in_flight : "—") },
-                { label: "Jobs", render: (q) => <span className="row wrap" style={{ gap: 10 }}>{Object.entries(q.jobs).map(([st, n]) => <span key={st} className="row" style={{ gap: 4 }}><Status value={st} /><span className="faint">{n}</span></span>)}</span> },
-              ]}
-            />
-          </Card>
-        )}
-      </Loading>
       <Tabs value={tab} onChange={setTab} tabs={[{ value: "jobs", label: "Jobs" }, { value: "failed", label: "Failed" }, { value: "workers", label: "Workers" }]} />
       {tab === "jobs" && (
         <Card flush title={<select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 160 }}><option value="">every status</option>{["queued", "active", "retrying", "succeeded", "failed"].map((s) => <option key={s}>{s}</option>)}</select>}>
