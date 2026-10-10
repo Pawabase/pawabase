@@ -28,6 +28,9 @@ from app.deployment_mirror import DeploymentMirror
 from app.deployments import Deployments
 from app.mail import MailManager
 from app.record_buffer import RecordBuffer
+from app.runtime_rpc import Transactions
+from app.sandbox import SandboxPool
+from app.sandbox.host import Limits
 from app.secrets import SecretBox, is_reference, reference_name
 from app.state import EnvironmentCache, EnvironmentState
 from app.storage.manager import StorageManager
@@ -98,6 +101,14 @@ class Platform:
         self.code: ProjectCode | None = None
         self.deployment_mirror = DeploymentMirror(self)
         self.records = RecordBuffer(settings.record_buffer_seconds)
+        self.sandboxes = SandboxPool(
+            Limits(
+                memory_mb=settings.sandbox_memory_mb,
+                workers=settings.sandbox_workers,
+                idle_seconds=settings.sandbox_idle_seconds,
+            )
+        )
+        self.sandbox_transactions = Transactions()
         self.deployments = Deployments(
             settings.deployments_path or Path(settings.code_path) / ".deployments",
             install_requirements=function_install_enabled(settings),
@@ -177,6 +188,7 @@ class Platform:
             )
 
     async def stop(self) -> None:
+        await self.sandboxes.close()
         await self.records.stop()  # before the database closes
         await self.bus.stop()
         await self.sources.close()
@@ -267,6 +279,16 @@ class Platform:
         """
         value = envvars.get(state.env_name, key)
         return default if value is None else self.resolve_value(state, value)
+
+    def isolated(self, state: EnvironmentState, spec: Any) -> bool:
+        """Whether *spec* runs in a sandbox process: a deployed function, in an environment set to ``process`` isolation.
+
+        Code mounted on the runtime is the platform's own and always runs in the API process.
+        """
+        if "/" not in spec.project:
+            return False
+        mode = self.env_setting(state, "FUNCTION_ISOLATION", self.settings.function_isolation)
+        return str(mode).strip().lower() == "process"
 
     def resolve_value(self, state: EnvironmentState, value: Any) -> Any:
         """Replace a ``secret://NAME`` reference with the secret's value."""

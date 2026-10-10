@@ -153,6 +153,17 @@ break:** `infra.mail` is now ignored, so set `PAWABASE_MAIL_*` (or `<ENV>_MAIL_*
 upgrading or mail is only logged. Secrets are now bound to their environment; existing
 ciphertext still opens, and `python -m app.reseal` rebinds it.
 
+## Function isolation
+
+Deployed functions run on the API's event loop by default. With `PAWABASE_FUNCTION_ISOLATION=process` (or `<ENV>_FUNCTION_ISOLATION=process` for one
+environment) they run in worker processes instead, started on demand, reused while the deployment is live and stopped when idle. A function that loops
+forever (the timeout kills its process), uses too much memory (`PAWABASE_SANDBOX_MEMORY_MB`, Linux) or calls `exit()` stops only itself. The worker gets no
+secret, no database address and no network: `ctx.runtime` reaches the platform over a pipe, as the caller the API chose, and outbound HTTP leaves from the
+API through its guard. A warm call costs under a millisecond more; the first call after a deploy or an idle period waits about a second for the worker.
+
+Not yet covered: the API still imports a deployment's code to read its function list, so code that runs when the file is imported runs in the API.
+This is isolation from crashes, hangs and memory, not yet a sandbox for hostile code (no filesystem or network namespace).
+
 ## Related repositories
 
 | Repository | What it is |

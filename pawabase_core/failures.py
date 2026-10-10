@@ -189,6 +189,11 @@ def locate(exc: BaseException, *, roots: tuple[str, ...] = ()) -> list[Where]:
 
 def report(exc: BaseException, *, roots: tuple[str, ...] = ()) -> Failure:
     """Describe *exc*: what it was, where in your code, what to try."""
+    carried = getattr(exc, "failure", None)
+    if isinstance(
+        carried, Failure
+    ):  # a failure that was worked out elsewhere (a sandboxed function's), with its own frames
+        return carried
     cause = root_cause(exc)
     kind = type(cause).__name__
     message = " ".join(str(cause).split())[:MAX_MESSAGE]
