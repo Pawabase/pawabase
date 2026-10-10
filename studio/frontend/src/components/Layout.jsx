@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from "@inertiajs/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import CommandSearch from "./CommandSearch";
 import Console from "./Console";
 import StatusLights from "./StatusLights";
@@ -151,13 +151,117 @@ function BranchHistory({ runtime, env, url, onClose }) {
   </Sheet>;
 }
 
+
+const SIDEBAR_MODES = [
+  ["expanded", "Expanded", "panelLeft", "Always show labels"],
+  ["hover", "Expand on hover", "panelHover", "Icons only, labels on hover"],
+  ["collapsed", "Collapsed", "panelClosed", "Icons only"],
+];
+
+function useSidebarMode() {
+  const [mode, setMode] = useState(() => {
+    try { return localStorage.getItem("pawabase.sidebar") || "expanded"; } catch { return "expanded"; }
+  });
+  const choose = (next) => {
+    setMode(next);
+    try { localStorage.setItem("pawabase.sidebar", next); } catch { /* the choice lasts for this page only */ }
+  };
+  return [mode, choose];
+}
+
+/** Closes a popover on Escape or a click outside it. */
+function useDismiss(open, close, ref) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const key = (event) => { if (event.key === "Escape") close(); };
+    const down = (event) => { if (ref.current && !ref.current.contains(event.target)) close(); };
+    window.addEventListener("keydown", key);
+    window.addEventListener("pointerdown", down);
+    return () => { window.removeEventListener("keydown", key); window.removeEventListener("pointerdown", down); };
+  }, [open, close, ref]);
+}
+
+function SidebarControl({ mode, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useDismiss(open, () => setOpen(false), ref);
+  const current = SIDEBAR_MODES.find(([key]) => key === mode) || SIDEBAR_MODES[0];
+  return (
+    <div className="side-control" ref={ref}>
+      {open && (
+        <div className="side-menu" role="menu" aria-label="Sidebar control">
+          <div className="side-menu-title">Sidebar control</div>
+          {SIDEBAR_MODES.map(([key, label, icon, hint]) => (
+            <button key={key} type="button" role="menuitemradio" aria-checked={key === mode} className={key === mode ? "on" : ""} onClick={() => { onChange(key); setOpen(false); }}>
+              <Icon name={icon} size={16} />
+              <span className="grow"><b>{label}</b><small>{hint}</small></span>
+              {key === mode && <Icon name="check" size={15} />}
+            </button>
+          ))}
+        </div>
+      )}
+      <button type="button" className="side-toggle" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)} title="Sidebar control">
+        <Icon name={current[2]} size={18} />
+        <span className="label">Sidebar</span>
+      </button>
+    </div>
+  );
+}
+
+/** The breadcrumb's project and environment, as one control that opens a wide menu to switch between environments. */
+function EnvMenu({ name, env, envs, section, open, setOpen }) {
+  const ref = useRef(null);
+  useDismiss(open, () => setOpen(false), ref);
+  const index = Math.max(0, (envs || []).findIndex((e) => e.name === env));
+  return (
+    <div className="envmenu-wrap" ref={ref}>
+      <button type="button" className="crumb-btn" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span className={`avatar pastel ${envTone(env || "", index)}`}>{name.slice(0, 1).toUpperCase()}</span>
+        <span>{name}</span>
+        {env && <><span className="sep">/</span><span className="here">{env}</span></>}
+        <Icon name="chevronDown" size={14} className="faint" />
+      </button>
+      {open && (
+        <div className="envmenu" role="dialog" aria-label="Project and environment">
+          <div className="envmenu-lead">
+            <div className="eyebrow">Project</div>
+            <div className="envmenu-project">
+              <span className="avatar pastel lavender">{name.slice(0, 1).toUpperCase()}</span>
+              <div><b>{name}</b><small>This Studio manages one project</small></div>
+            </div>
+            <p>Each environment has its own definitions, keys, secrets and infrastructure.</p>
+            <div className="row wrap">
+              <Button variant="primary" size="sm" onClick={() => { setOpen(false); router.visit("/environments?new=1"); }}><Icon name="plus" size={15} /> Create environment</Button>
+              <Link href="/environments" className="btn sm" onClick={() => setOpen(false)}>All environments</Link>
+            </div>
+          </div>
+          <div className="envmenu-envs">
+            <div className="eyebrow">Environments</div>
+            <div className="envmenu-grid">
+              {(envs || []).map((e, i) => (
+                <Link key={e.name} href={envHref(e.name, section || "overview")} className={`envmenu-item ${e.name === env ? "current" : ""}`} onClick={() => setOpen(false)}>
+                  <span className={`avatar pastel ${envTone(e.name, i)}`}>{e.name.slice(0, 1).toUpperCase()}</span>
+                  <span className="grow"><b>{e.name}</b><small>{e.name === env ? "Current" : e.is_default ? "Default" : e.version ? `Version ${e.version}` : "Switch to"}</small></span>
+                  {e.name === env && <Icon name="check" size={15} />}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Layout({ title, crumbs = [], children, full }) {
   const { props, url } = usePage();
   const { runtime, envs, env, section } = props;
   const [dark, toggleTheme] = useTheme();
   const [navOpen, setNavOpen] = useState(false);
+  const [sidebar, setSidebar] = useSidebarMode();
+  const [envMenu, setEnvMenu] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(() => new URLSearchParams(url.split("?")[1] || "").has("history"));
-  useEffect(() => setNavOpen(false), [url]);
+  useEffect(() => { setNavOpen(false); setEnvMenu(false); }, [url]);
   useEffect(() => setHistoryOpen(new URLSearchParams(url.split("?")[1] || "").has("history")), [url]);
   const closeHistory = () => {
     setHistoryOpen(false);
@@ -167,21 +271,22 @@ export default function Layout({ title, crumbs = [], children, full }) {
   };
   const name = runtime?.name || "Pawabase";
   const envIndex = Math.max(0, (envs || []).findIndex((e) => e.name === env));
-  const home = env ? envHref(env, "overview") : "/";
   return (
     <ToastProvider>
       <Head title={title} />
-      <div className={`shell ${navOpen ? "nav-open" : ""}`}>
+      <div className={`shell side-${sidebar} ${navOpen ? "nav-open" : ""}`}>
+       <div className="frame">
+        <div className="side-slot">
         <aside className="sidebar">
-          <Link href="/" className="brand"><Logo sub="Studio" /></Link>
+          <Link href="/" className="brand" title="Pawabase Studio"><Logo sub="Studio" /></Link>
           {env && (
             <label className="switcher" title="Switch environment">
               <span className={`avatar pastel ${envTone(env, envIndex)}`}>{name.slice(0, 1).toUpperCase()}</span>
-              <span className="grow">
+              <span className="grow label">
                 <b>{name}</b>
                 <span className="sub">{env}</span>
               </span>
-              <Icon name="chevronDown" size={16} className="faint" />
+              <Icon name="chevronDown" size={16} className="faint label" />
               <select value={env} onChange={(e) => router.visit(envHref(e.target.value, section || "overview"))} aria-label="Environment">
                 {(envs || []).map((e) => <option key={e.name} value={e.name}>{name} · {e.name}</option>)}
               </select>
@@ -194,7 +299,7 @@ export default function Layout({ title, crumbs = [], children, full }) {
                   <div className="nav-title">{group.title}</div>
                   {group.items.map(([key, label]) => (
                     <Link key={key} href={envHref(env, key)} className={section === key ? "active" : ""}>
-                      <Icon name={key} />{label}
+                      <Icon name={key} /><span className="label">{label}</span>
                     </Link>
                   ))}
                 </div>
@@ -205,32 +310,26 @@ export default function Layout({ title, crumbs = [], children, full }) {
                 {(envs || []).map((e, i) => (
                   <Link key={e.name} href={envHref(e.name, "overview")}>
                     <span className={`avatar pastel ${envTone(e.name, i)}`} style={{ width: 18, height: 18, borderRadius: 6, fontSize: 10 }}>{e.name.slice(0, 1).toUpperCase()}</span>
-                    {e.name}
+                    <span className="label">{e.name}</span>
                   </Link>
                 ))}
               </>
             )}
             <div className="nav-title">Runtime</div>
-            <Link href="/environments" className={title === "Environments" ? "active" : ""}><Icon name="layers" />Environments</Link>
-            <Link href="/audit" className={title === "Audit log" ? "active" : ""}><Icon name="audit" />Audit log</Link>
+            <Link href="/environments" className={title === "Environments" ? "active" : ""}><Icon name="layers" /><span className="label">Environments</span></Link>
+            <Link href="/audit" className={title === "Audit log" ? "active" : ""}><Icon name="audit" /><span className="label">Audit log</span></Link>
           </nav>
-          {env && (
-            <div className="sidebar-card">
-              <p>Your API is live. Browse the generated docs.</p>
-              <a className="btn sm" href={`/envs/${env}/api-docs`} target="_blank" rel="noreferrer" title="Always available here. Publish them at /docs/v1 with public_docs in Settings.">
-                <Icon name="external" /> Open API docs
-              </a>
-            </div>
-          )}
+          <SidebarControl mode={sidebar} onChange={setSidebar} />
         </aside>
+        </div>
         {navOpen && <div className="sheet-overlay" style={{ zIndex: 39 }} onClick={() => setNavOpen(false)} />}
+        <div className="main-col">
         <main className="main">
           <div className="topbar">
             <div className="row" style={{ minWidth: 0 }}>
               <button type="button" className="icon-btn menu-btn" onClick={() => setNavOpen(true)} aria-label="Open navigation"><Icon name="menu" /></button>
               <div className="crumbs">
-                <Link href={home}>{name}</Link>
-                {env && <><span className="sep">/</span><Link href={envHref(env, "overview")}>{env}</Link></>}
+                <EnvMenu name={name} env={env} envs={envs} section={section} open={envMenu} setOpen={setEnvMenu} />
                 {crumbs.map((c, i) => <span key={i} className="row" style={{ gap: 4 }}><span className="sep">/</span><span className="here">{c}</span></span>)}
               </div>
             </div>
@@ -246,6 +345,8 @@ export default function Layout({ title, crumbs = [], children, full }) {
           <div className={`content ${full ? "full" : ""}`}>{children}</div>
         </main>
         <Console env={env} />
+        </div>
+       </div>
         {historyOpen && env && <BranchHistory runtime={runtime || { name }} env={env} url={url} onClose={closeHistory} />}
       </div>
     </ToastProvider>

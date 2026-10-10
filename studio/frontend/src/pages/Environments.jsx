@@ -6,7 +6,7 @@ import { Badge, Button, Card, CopyText, Field, Modal, PageHead, Switch, Table, c
 import { get, post } from "../lib/api";
 
 export default function Environments({ runtime, envs }) {
-  const [modal, setModal] = useState(null);
+  const [modal, setModal] = useState(() => (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("new") ? "env" : null));
   const [run, busy] = useAction();
   const reload = () => router.reload();
   const reloadCode = async () => {

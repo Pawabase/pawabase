@@ -1,5 +1,6 @@
 import { router } from "@inertiajs/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Icon } from "./icons";
 import { del, get, patch, post, envPath } from "../lib/api";
 
 const SECTIONS = [
@@ -157,15 +158,49 @@ export default function Console({ env }) {
     } catch (error) { append(trimmed, error.message || String(error), true); } finally { setBusy(false); }
   };
 
-  return <>
-    <button type="button" onClick={() => setOpen((value) => !value)} title="Open terminal (⌘/Ctrl J)" style={{ position: "fixed", right: 22, bottom: 18, zIndex: 35, border: "1px solid #41515d", borderRadius: 7, padding: "8px 12px", background: "#101820", color: "#9bf6c8", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontWeight: 700, boxShadow: "0 6px 20px rgba(0,0,0,.25)" }}>›_ terminal</button>
-    {open && <section aria-label="PawaBase terminal" style={{ position: "fixed", zIndex: 36, left: 20, right: 20, bottom: 16, maxWidth: 1100, margin: "auto", border: "1px solid #35434d", borderRadius: 9, overflow: "hidden", background: "#0b1117", color: "#d7e1e8", boxShadow: "0 -10px 48px rgba(0,0,0,.45)", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
-      <div className="row" style={{ justifyContent: "space-between", padding: "9px 13px", borderBottom: "1px solid #26323b", background: "#141d25", fontSize: 12 }}><span><i style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#ff5f57", marginRight: 6 }} /><i style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#ffbd2e", marginRight: 6 }} /><i style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#28c840", marginRight: 10 }} />pawabase — {env}</span><button type="button" onClick={() => setOpen(false)} style={{ border: 0, background: "transparent", color: "#94a3b8", cursor: "pointer" }}>esc</button></div>
-      <div ref={outputRef} style={{ minHeight: 260, maxHeight: 360, overflow: "auto", padding: 14, fontSize: 12, lineHeight: 1.55 }}>
-        {!lines.length && <pre style={{ margin: 0, color: "#9bf6c8", whiteSpace: "pre-wrap" }}>{"PawaBase Terminal\nType help for commands. Tab completes. Up arrow recalls history.\n\n"}</pre>}
-        {lines.map((line, index) => <div key={index} style={{ marginBottom: 14 }}><div style={{ color: "#9bf6c8" }}>pawabase@{env}:~$ <span style={{ color: "#e5edf3" }}>{line.command}</span></div><pre style={{ margin: "3px 0 0", whiteSpace: "pre-wrap", color: line.error ? "#ff8585" : "#c9d7e1" }}>{line.output}</pre></div>)}
+  return (
+    <div className={`dock ${open ? "open" : ""}`}>
+      {open && (
+        <section className="term" aria-label="Pawabase terminal">
+          <div ref={outputRef} className="term-out">
+            {!lines.length && <pre className="term-hello">{"Pawabase terminal\nType help for commands. Tab completes. Up arrow recalls history.\n\n"}</pre>}
+            {lines.map((line, index) => (
+              <div key={index} className="term-entry">
+                <div className="term-cmd"><span className="term-ps">pawabase@{env}:~$</span> {line.command}</div>
+                <pre className={line.error ? "term-err" : ""}>{line.output}</pre>
+              </div>
+            ))}
+          </div>
+          <div className="term-in">
+            <span className="term-ps">pawabase@{env}:~$</span>
+            <input
+              ref={inputRef}
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") run(input);
+                if (event.key === "ArrowUp") { event.preventDefault(); const next = Math.min(historyIndex + 1, history.length - 1); setHistoryIndex(next); setInput(history[next] || ""); }
+                if (event.key === "Tab") { event.preventDefault(); if (suggestions.length) setInput(suggestions[0][0]); }
+              }}
+              placeholder={busy ? "running…" : "type a command"}
+              disabled={busy}
+              spellCheck={false}
+              autoComplete="off"
+            />
+          </div>
+        </section>
+      )}
+      <div className="dockbar">
+        <button type="button" className="dock-btn" aria-expanded={open} onClick={() => setOpen((value) => !value)} title="Terminal (⌘/Ctrl J)">
+          <Icon name="terminal" size={15} />
+          <span>Terminal</span>
+          <kbd>⌘J</kbd>
+        </button>
+        <span className="dock-env">{env}</span>
+        <button type="button" className="dock-chevron" onClick={() => setOpen((value) => !value)} aria-label={open ? "Collapse terminal" : "Expand terminal"}>
+          <Icon name={open ? "chevronDown" : "chevronUp"} size={15} />
+        </button>
       </div>
-      <div style={{ borderTop: "1px solid #26323b", padding: "10px 14px", display: "flex", gap: 8, alignItems: "center", color: "#9bf6c8", fontSize: 12 }}><span>pawabase@{env}:~$</span><input ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") run(input); if (event.key === "ArrowUp") { event.preventDefault(); const next = Math.min(historyIndex + 1, history.length - 1); setHistoryIndex(next); setInput(history[next] || ""); } if (event.key === "Tab") { event.preventDefault(); if (suggestions.length) setInput(suggestions[0][0]); } }} placeholder={busy ? "running…" : "type a command"} style={{ flex: 1, minWidth: 0, border: 0, outline: "none", boxShadow: "none", appearance: "none", WebkitAppearance: "none", padding: 0, margin: 0, borderRadius: 0, background: "transparent", backgroundColor: "transparent", color: "#e5edf3", fontFamily: "inherit", fontSize: 12 }} disabled={busy} /></div>
-    </section>}
-  </>;
+    </div>
+  );
 }
