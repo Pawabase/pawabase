@@ -11,7 +11,7 @@ export default function RouteDetail({ env, route, minutes, onClose, onTrace }) {
         {(d) => (
           <div className="stack lg">
             {d.truncated && <div className="alert">This window has more requests than the {`50,000`} analysed; the newest are shown.</div>}
-            <div className="trace-stats">
+            <div className="statstrip">
               <Stat label="Requests" value={d.summary.requests} />
               <Stat label="Average" value={ms(d.summary.avg_ms)} />
               <Stat label="p50" value={ms(d.summary.p50_ms)} />
@@ -73,5 +73,5 @@ function RequestList({ title, rows, onTrace }) {
 }
 
 function Stat({ label, value }) {
-  return <div className="trace-stat"><div className="faint">{label}</div><div className="trace-stat-value">{value}</div></div>;
+  return <div><span className="v">{value}</span><span className="l">{label}</span></div>;
 }

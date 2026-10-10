@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import Layout from "../../components/Layout";
+import { Stat, StatStrip } from "./observability/kit";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, EmptyState, Field, JsonInput, Loading, Modal, PageHead, Segmented, Sheet, Spinner, Status, Table, Tile, copyToClipboard, useAction, useToast, when } from "../../components/ui";
 import { del, envPath, patch, post, put, useApi } from "../../lib/api";
@@ -46,12 +47,12 @@ export default function Mail({ env }) {
         )
       )}
 
-      <div className="grid" style={{ marginBottom: 16 }}>
-        <Tile tone="mint" icon="check" value={counts.sent || 0} label="Sent" i={0} />
-        <Tile tone="butter" icon="clock" value={counts.suppressed || 0} label="Suppressed" i={1} />
-        <Tile tone="rose" icon="x" value={counts.failed || 0} label="Failed" i={2} />
-        <Tile tone="lavender" icon="mail" value={rows.length} label="Recent messages" i={3} />
-      </div>
+      <StatStrip>
+        <Stat tone="mint" value={counts.sent || 0} label="sent" />
+        <Stat tone="butter" value={counts.suppressed || 0} label="suppressed" />
+        <Stat tone="rose" value={counts.failed || 0} label="failed" />
+        <Stat value={rows.length} label="recent messages" />
+      </StatStrip>
 
       <Card flush title="Sent mail" actions={<Segmented value={filter} onChange={setFilter} options={STATUSES} />}>
         <Loading state={log} empty="Nothing has been sent from this environment yet.">

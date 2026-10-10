@@ -19,15 +19,17 @@ export default function Jobs({ env }) {
       <PageHead title="Jobs & queues" description="Background work on Sillo's queue: flow runs, function calls, webhook deliveries, mail. Failed jobs retry with backoff, then land here." />
       <Loading state={queues}>
         {(data) => (
-          <div className="grid" style={{ marginBottom: 20 }}>
-            {data.data.map((q) => (
-              <div key={q.name} className="card stack" style={{ gap: 6 }}>
-                <div className="spread"><b>{q.name}</b>{q.platform && <Badge>platform</Badge>}</div>
-                <div className="row"><span className="stat"><b>{q.depth}</b><span>waiting</span></span>{q.in_flight != null && <span className="stat" style={{ marginLeft: 16 }}><b>{q.in_flight}</b><span>in flight</span></span>}</div>
-                <div className="row wrap">{Object.entries(q.jobs).map(([s, n]) => <span key={s} className="row" style={{ gap: 4 }}><Status value={s} /><span className="faint">{n}</span></span>)}</div>
-              </div>
-            ))}
-          </div>
+          <Card flush title="Queues" style={{ marginBottom: 20 }}>
+            <Table
+              rows={data.data}
+              columns={[
+                { label: "Queue", render: (q) => <span className="row"><b>{q.name}</b>{q.platform && <Badge>platform</Badge>}</span> },
+                { label: "Waiting", render: (q) => q.depth },
+                { label: "In flight", render: (q) => (q.in_flight != null ? q.in_flight : "—") },
+                { label: "Jobs", render: (q) => <span className="row wrap" style={{ gap: 10 }}>{Object.entries(q.jobs).map(([st, n]) => <span key={st} className="row" style={{ gap: 4 }}><Status value={st} /><span className="faint">{n}</span></span>)}</span> },
+              ]}
+            />
+          </Card>
         )}
       </Loading>
       <Tabs value={tab} onChange={setTab} tabs={[{ value: "jobs", label: "Jobs" }, { value: "failed", label: "Failed" }, { value: "workers", label: "Workers" }]} />

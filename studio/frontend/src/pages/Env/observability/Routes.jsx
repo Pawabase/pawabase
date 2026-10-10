@@ -27,7 +27,7 @@ export default function Routes({ env, minutes, onRoute, onTrace }) {
   }, [state.data]);
   return (
     <div className="stack lg">
-      <div className="trace-stats">
+      <div className="statstrip">
         <Tile label="Requests" value={totals.requests.toLocaleString()} />
         <Tile label="Server errors (5xx)" value={totals.server.toLocaleString()} tone={totals.server ? "red" : ""} hint={totals.requests ? percent((totals.server / totals.requests) * 100) : null} />
         <Tile label="Client errors (4xx)" value={totals.client.toLocaleString()} hint={totals.requests ? percent((totals.client / totals.requests) * 100) : null} />
@@ -67,10 +67,9 @@ export default function Routes({ env, minutes, onRoute, onTrace }) {
 
 function Tile({ label, value, hint, tone }) {
   return (
-    <div className="trace-stat">
-      <div className="faint">{label}</div>
-      <div className={`trace-stat-value ${tone || ""}`}>{value}</div>
-      {hint && <div className="faint trace-stat-hint">{hint}</div>}
+    <div>
+      <span className={`v ${tone === "red" ? "bad" : ""}`}>{value}</span>
+      <span className="l">{label}{hint ? ` · ${hint}` : ""}</span>
     </div>
   );
 }

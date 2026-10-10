@@ -1096,3 +1096,5 @@ html, body { background: var(--canvas); }
 .provider-tile:hover .provider-icon { background: var(--surface); }
 .provider-head { display: flex; align-items: center; gap: 14px; }
 .provider-head p { margin: 0; font-size: 13px; }
+.statstrip .v.bad { color: var(--danger); }
+.statstrip > div { min-width: 0; }
