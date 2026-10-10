@@ -209,24 +209,50 @@ function SidebarControl({ mode, onChange }) {
   );
 }
 
-/** A second column of navigation for a section with parts of its own; the main sidebar folds to icons while it is open. */
+/** A second column of navigation for a section with parts of its own; the main sidebar folds to an icon rail while it is open. */
 function SubNav({ subnav, backHref }) {
+  const row = (item) => {
+    const body = (
+      <>
+        {item.badge && <span className={`subnav-badge ${item.badgeTone || ""}`}>{item.badge}</span>}
+        <span className="subnav-text">
+          <span className={item.mono ? "mono" : ""}>{item.label}</span>
+          {item.sub && <small>{item.sub}</small>}
+        </span>
+        {item.tag && <span className="subnav-tag">{item.tag}</span>}
+        {item.flag && <i className={`obs-dot ${item.flag}`} />}
+      </>
+    );
+    const active = subnav.active === item.key;
+    return item.href ? (
+      <Link key={item.key} href={item.href} className="subnav-item">{body}<Icon name="chevronRight" size={13} className="faint" /></Link>
+    ) : (
+      <button key={item.key} type="button" className={`subnav-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined} title={item.title || item.label} onClick={() => subnav.onSelect(item.key)}>{body}</button>
+    );
+  };
   return (
-    <aside className="subnav" aria-label={subnav.title}>
-      <div className="subnav-head"><b>{subnav.title}</b></div>
+    <aside className={`subnav ${subnav.wide ? "wide" : ""}`} aria-label={subnav.title}>
+      <div className="subnav-head">
+        <b>{subnav.title}</b>
+        {subnav.action && <button type="button" className="subnav-action" onClick={subnav.action.onClick} title={subnav.action.label} aria-label={subnav.action.label}><Icon name="plus" size={16} /></button>}
+      </div>
+      {subnav.search && (
+        <div className="subnav-search">
+          <Icon name="search" size={14} />
+          <input value={subnav.search.value} onChange={(event) => subnav.search.onChange(event.target.value)} placeholder={subnav.search.placeholder} aria-label={subnav.search.placeholder} />
+        </div>
+      )}
       <nav className="subnav-list">
-        {subnav.groups.map((group, index) => (
+        {subnav.loading && <p className="subnav-empty">Loading…</p>}
+        {!subnav.loading && subnav.groups.every((group) => group.items.length === 0) && <p className="subnav-empty">{subnav.empty || "Nothing here yet."}</p>}
+        {subnav.groups.map((group, index) => group.items.length > 0 && (
           <div key={group.title || index} className="subnav-group">
             {group.title && <div className="nav-title">{group.title}</div>}
-            {group.items.map((item) => (
-              <button key={item.key} type="button" className={subnav.active === item.key ? "active" : ""} aria-current={subnav.active === item.key ? "page" : undefined} onClick={() => subnav.onSelect(item.key)}>
-                <span className="grow">{item.label}</span>
-                {item.flag && <i className={`obs-dot ${item.flag}`} />}
-              </button>
-            ))}
+            {group.items.map(row)}
           </div>
         ))}
       </nav>
+      {subnav.note && <div className="subnav-note">{subnav.note}</div>}
       <Link href={backHref} className="subnav-foot"><Icon name="chevronRight" size={14} className="rotate-180" /> Overview</Link>
     </aside>
   );

@@ -31,6 +31,7 @@ from database.models import (
     Team,
 )
 from database.models.framework import JWTToken
+from database.models.orgs import ORG_ROLES
 from pawabase_core.service import SERVICE_ONLY
 
 
@@ -60,6 +61,27 @@ class RoleBody(BaseModel):
     name: str = Field(pattern=r"^[a-z][a-z0-9_:-]{0,62}$")
     description: str = ""
     permissions: list[str] = Field(default_factory=list)
+
+
+class AdminOrgCreate(BaseModel):
+    slug: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{1,62}$")
+    name: str = Field(min_length=1, max_length=200)
+    owner_email: str | None = None
+    metadata: dict = Field(default_factory=dict)
+
+
+class AdminOrgUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    metadata: dict | None = None
+
+
+class AdminMemberAdd(BaseModel):
+    email: str
+    role: str = "member"
+
+
+class AdminMemberRole(BaseModel):
+    role: str
 
 
 class GrantBody(BaseModel):
@@ -395,6 +417,133 @@ def register(r: Router, akountz: Akountz) -> None:
             ],
             "teams": [{"slug": t.slug, "name": t.name} for t in teams],
         }
+
+    async def org_or_404(env: str, slug: str) -> Organization:
+        found = await Organization.get_or_none(env=env, slug=slug)
+        if found is None:
+            raise HTTPException(status_code=404, detail="no such organization")
+        return found
+
+    def check_org_role(role: str) -> None:
+        if role not in ORG_ROLES:
+            raise HTTPException(status_code=422, detail=f"role is one of {', '.join(ORG_ROLES)}")
+
+    async def user_by_email(env: str, email: str) -> AuthUser:
+        found = await AuthUser.get_or_none(env=env, email=email.strip().lower(), deleted_at=None)
+        if found is None:
+            raise HTTPException(status_code=404, detail=f"no user with email {email}")
+        return found
+
+    async def last_owner(org: Organization, user_id: str) -> bool:
+        owners = await Membership.filter(organization=org, role="owner").values_list(
+            "user_id", flat=True
+        )
+        return len(owners) == 1 and str(owners[0]) == str(user_id)
+
+    @r.post(
+        f"{base}/orgs",
+        auth=SERVICE_ONLY,
+        tags=["admin"],
+        request_model=AdminOrgCreate,
+        summary="Create an organization, optionally with an owner",
+    )
+    async def create_org(ctx: HttpContext, env: str, body: AdminOrgCreate):
+        if await Organization.filter(env=env, slug=body.slug).exists():
+            raise HTTPException(status_code=409, detail="that slug is taken")
+        owner = await user_by_email(env, body.owner_email) if body.owner_email else None
+        org = await Organization.create(
+            env=env, slug=body.slug, name=body.name, metadata=body.metadata, created_by=None
+        )
+        if owner is not None:
+            await Membership.create(organization=org, user=owner, role="owner")
+        await akountz.emit(
+            env,
+            "organization.created",
+            {"organization": org.slug, "user_id": str(owner.id) if owner else None},
+            actor="admin",
+        )
+        return created({"slug": org.slug, "name": org.name, "id": org.id})
+
+    @r.patch(
+        f"{base}/orgs/{{slug}}",
+        auth=SERVICE_ONLY,
+        tags=["admin"],
+        request_model=AdminOrgUpdate,
+        summary="Rename an organization or change its metadata",
+    )
+    async def update_org(ctx: HttpContext, env: str, slug: str, body: AdminOrgUpdate):
+        org = await org_or_404(env, slug)
+        if body.name is not None:
+            org.name = body.name
+        if body.metadata is not None:
+            org.metadata = body.metadata
+        await org.save()
+        return {"slug": org.slug, "name": org.name, "metadata": org.metadata}
+
+    @r.delete(
+        f"{base}/orgs/{{slug}}",
+        auth=SERVICE_ONLY,
+        tags=["admin"],
+        summary="Delete an organization with its memberships, teams and invitations",
+    )
+    async def delete_org(ctx: HttpContext, env: str, slug: str):
+        org = await org_or_404(env, slug)
+        await org.delete()
+        await akountz.emit(env, "organization.deleted", {"organization": slug}, actor="admin")
+        return no_content()
+
+    @r.post(
+        f"{base}/orgs/{{slug}}/members",
+        auth=SERVICE_ONLY,
+        tags=["admin"],
+        request_model=AdminMemberAdd,
+        summary="Add an existing user to an organization",
+    )
+    async def add_member(ctx: HttpContext, env: str, slug: str, body: AdminMemberAdd):
+        org = await org_or_404(env, slug)
+        check_org_role(body.role)
+        user = await user_by_email(env, body.email)
+        if await Membership.filter(organization=org, user=user).exists():
+            raise HTTPException(status_code=409, detail="already a member")
+        await Membership.create(organization=org, user=user, role=body.role)
+        return created({"user_id": str(user.id), "email": user.email, "role": body.role})
+
+    @r.patch(
+        f"{base}/orgs/{{slug}}/members/{{user_id}}",
+        auth=SERVICE_ONLY,
+        tags=["admin"],
+        request_model=AdminMemberRole,
+        summary="Change a member's role",
+    )
+    async def set_member_role(
+        ctx: HttpContext, env: str, slug: str, user_id: str, body: AdminMemberRole
+    ):
+        org = await org_or_404(env, slug)
+        check_org_role(body.role)
+        member = await Membership.get_or_none(organization=org, user_id=user_id)
+        if member is None:
+            raise HTTPException(status_code=404, detail="not a member")
+        if member.role == "owner" and body.role != "owner" and await last_owner(org, user_id):
+            raise HTTPException(status_code=422, detail="an organization needs at least one owner")
+        member.role = body.role
+        await member.save()
+        return {"user_id": user_id, "role": member.role}
+
+    @r.delete(
+        f"{base}/orgs/{{slug}}/members/{{user_id}}",
+        auth=SERVICE_ONLY,
+        tags=["admin"],
+        summary="Remove a member from an organization",
+    )
+    async def remove_member(ctx: HttpContext, env: str, slug: str, user_id: str):
+        org = await org_or_404(env, slug)
+        member = await Membership.get_or_none(organization=org, user_id=user_id)
+        if member is None:
+            raise HTTPException(status_code=404, detail="not a member")
+        if member.role == "owner" and await last_owner(org, user_id):
+            raise HTTPException(status_code=422, detail="an organization needs at least one owner")
+        await member.delete()
+        return no_content()
 
     # ── activity ─────────────────────────────────────────────────────────
 

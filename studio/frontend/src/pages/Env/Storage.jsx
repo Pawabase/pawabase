@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Layout from "../../components/Layout";
 import { Badge, Button, Card, CopyText, EmptyState, Field, Loading, Modal, PageHead, Table, useAction } from "../../components/ui";
 import { Icon } from "../../components/icons";
@@ -11,29 +11,26 @@ export default function Storage({ env }) {
   const buckets = useApi(base);
   const [bucket, setBucket] = useState(null);
   const [editing, setEditing] = useState(null);
+  const list = buckets.data?.data || [];
+  useEffect(() => { if (!bucket && list.length) setBucket(list[0]); }, [list.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const subnav = {
+    title: "Storage",
+    loading: buckets.loading,
+    empty: "No buckets yet. Create one with the + button.",
+    action: { label: "New bucket", onClick: () => setEditing({ isNew: true, body: KINDS.buckets.blank }) },
+    groups: [{ title: "Buckets", items: list.map((b) => ({ key: b.name, label: b.name, tag: b.public ? "public" : undefined })) }],
+    active: bucket?.name,
+    onSelect: (name) => setBucket(list.find((b) => b.name === name) || null),
+  };
   return (
-    <Layout title="Storage">
+    <Layout title="Storage" subnav={subnav}>
       <PageHead
-        title="Storage"
+        title={bucket ? bucket.name : "Storage"}
         description="Buckets on the environment's storage driver (local disk or any S3-compatible service), with policies and signed URLs."
-        actions={<Button variant="primary" onClick={() => setEditing({ isNew: true, body: KINDS.buckets.blank })}><Icon name="plus" />New bucket</Button>}
       />
-      <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16, alignItems: "start" }}>
-        <Card flush title="Buckets">
-          <Loading state={buckets} empty="No buckets yet.">
-            {(data) => (
-              <div className="nav" style={{ padding: 6 }}>
-                {data.data.map((b) => (
-                  <a key={b.name} href="#" className={bucket?.name === b.name ? "active" : ""} onClick={(e) => { e.preventDefault(); setBucket(b); }}>
-                    <span className="grow">{b.name}</span>{b.public && <Badge tone="blue">public</Badge>}
-                  </a>
-                ))}
-              </div>
-            )}
-          </Loading>
-        </Card>
-        {bucket ? <Objects base={base} bucket={bucket} onEdit={() => setEditing({ isNew: false, body: editable(bucket) })} /> : <Card><EmptyState icon="storage" tone="sky" title="Choose a bucket">Pick a bucket on the left to browse its objects, or create one.</EmptyState></Card>}
-      </div>
+      {bucket ? <Objects key={bucket.name} base={base} bucket={bucket} onEdit={() => setEditing({ isNew: false, body: editable(bucket) })} /> : (
+        <Card><EmptyState icon="storage" tone="sky" title="No bucket yet">Create a bucket with the + button in the column on the left.</EmptyState></Card>
+      )}
       {editing && (
         <DefinitionSheet
           kind="buckets"

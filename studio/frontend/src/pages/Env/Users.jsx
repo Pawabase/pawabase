@@ -1,5 +1,5 @@
 import { useState } from "react";
-import Layout from "../../components/Layout";
+import Layout, { envHref } from "../../components/Layout";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, Field, IconButton, Json, Loading, Modal, PageHead, Section, Segmented, Switch, Table, TagInput, Tabs, useAction, when } from "../../components/ui";
 import { PermissionPicker, RolePicker } from "../../components/AccessPickers";
@@ -7,50 +7,36 @@ import { api, del, envPath, patch, post, put, useApi } from "../../lib/api";
 
 const AUTH = { service: "auth" };
 
-const AUTH_PARTS = [
-  { key: "overview", label: "Overview" },
-  { key: "users", label: "Users" },
-  { key: "orgs", label: "Organizations" },
-  { key: "roles", label: "Roles" },
-  { key: "events", label: "Sign-in activity" },
-  { key: "config", label: "Configuration" },
+const AUTH_GROUPS = [
+  { title: "Directory", items: [["users", "Users"], ["orgs", "Organizations"], ["roles", "Roles"]] },
+  { title: "Sign-in", items: [["providers", "Social providers"], ["events", "Sign-in activity"]] },
+  { title: "Settings", items: [["config", "Configuration"], ["emails", "Email templates"]] },
 ];
+const AUTH_LABELS = Object.fromEntries(AUTH_GROUPS.flatMap((group) => group.items));
 
 export default function Users({ env }) {
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState("users");
   const base = `/envs/${env}`;
-  const current = AUTH_PARTS.find((part) => part.key === tab);
-  const subnav = { title: "Users & auth", groups: [{ items: AUTH_PARTS }], active: tab, onSelect: setTab };
+  const subnav = {
+    title: "Users & auth",
+    groups: [
+      ...AUTH_GROUPS.map((group) => ({ title: group.title, items: group.items.map(([key, label]) => ({ key, label })) })),
+      { title: "Access", items: [{ key: "policies", label: "Policies", href: envHref(env, "policies") }] },
+    ],
+    active: tab,
+    onSelect: setTab,
+  };
   return (
     <Layout title="Users & auth" subnav={subnav}>
-      <PageHead title={current.label} description={tab === "overview" ? "End users of this environment, managed by Akountz: accounts, sessions, MFA, roles and organizations." : undefined} />
-      {tab === "overview" && <AuthOverview base={base} onOpen={setTab} />}
+      <PageHead title={AUTH_LABELS[tab]} />
       {tab === "users" && <UserList base={base} />}
       {tab === "roles" && <Roles base={base} />}
       {tab === "orgs" && <Orgs base={base} />}
       {tab === "events" && <Events base={base} />}
-      {tab === "config" && <AuthConfig env={env} />}
+      {tab === "config" && <AuthConfig env={env} parts={["general"]} title="Configuration" />}
+      {tab === "providers" && <AuthConfig env={env} parts={["providers"]} title="Social providers" />}
+      {tab === "emails" && <AuthConfig env={env} parts={["emails"]} title="Email templates" />}
     </Layout>
-  );
-}
-
-/** Counts from Akountz and the latest sign-in activity: the page a visitor lands on. */
-function AuthOverview({ base, onOpen }) {
-  const stats = useApi(`${base}/stats`, AUTH);
-  const events = useApi(`${base}/events`, AUTH);
-  return (
-    <div className="stack lg">
-      {stats.data && (
-        <div className="statstrip">
-          {Object.entries(stats.data).filter(([, v]) => typeof v === "number").map(([k, v]) => <div key={k}><b>{v}</b><span>{k.replace(/_/g, " ")}</span></div>)}
-        </div>
-      )}
-      <Card flush title="Recent sign-in activity" actions={<Button size="sm" onClick={() => onOpen("events")}>All activity</Button>}>
-        <Loading state={events} empty="No activity yet.">
-          {(data) => <Table rows={(data.data || []).slice(0, 8)} columns={[{ label: "When", render: (e) => when(e.created_at) }, { label: "Event", key: "kind" }, { label: "Email", key: "email" }]} />}
-        </Loading>
-      </Card>
-    </div>
   );
 }
 
@@ -209,19 +195,98 @@ function Roles({ base }) {
   );
 }
 
+const ORG_ROLES = ["owner", "admin", "member", "viewer"];
+const slugify = (text) => text.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 63);
+
 function Orgs({ base }) {
   const orgs = useApi(`${base}/orgs`, AUTH);
   const [selected, setSelected] = useState(null);
-  const detail = useApi(selected ? `${base}/orgs/${selected}` : null, AUTH);
+  const [creating, setCreating] = useState(false);
   return (
     <div className="stack lg">
-      <Card flush title="Organizations">
-        <Loading state={orgs} empty="No organizations. Users create them through /auth/v1/orgs.">
-          {(data) => <Table rows={data.data} onRowClick={(o) => setSelected(o.slug)} columns={[{ label: "Name", render: (o) => <b>{o.name}</b> }, { label: "Slug", key: "slug" }, { label: "Members", key: "members" }, { label: "Created", render: (o) => when(o.created_at) }]} />}
+      <Card flush title="Organizations" actions={<Button variant="primary" size="sm" onClick={() => setCreating(true)}><Icon name="plus" size={14} /> New organization</Button>}>
+        <Loading state={orgs} empty="No organizations yet. Create one here, or users create them through /auth/v1/orgs.">
+          {(data) => <Table rows={data.data} onRowClick={(o) => setSelected(o.slug)} empty="No organizations yet. Create one here, or users create them through /auth/v1/orgs." columns={[{ label: "Name", render: (o) => <b>{o.name}</b> }, { label: "Slug", render: (o) => <code>{o.slug}</code> }, { label: "Members", key: "members" }, { label: "Created", render: (o) => when(o.created_at) }]} />}
         </Loading>
       </Card>
-      {selected && detail.data && <Card title={detail.data.name}><Json value={detail.data} /></Card>}
+      {selected && <OrgDetail base={base} slug={selected} onClose={() => { setSelected(null); orgs.reload(); }} />}
+      {creating && <NewOrg base={base} onClose={() => setCreating(false)} onCreated={(slug) => { setCreating(false); orgs.reload(); setSelected(slug); }} />}
     </div>
+  );
+}
+
+function NewOrg({ base, onClose, onCreated }) {
+  const [data, setData] = useState({ name: "", slug: "", owner_email: "" });
+  const [touched, setTouched] = useState(false);
+  const [run, busy] = useAction();
+  const slug = touched ? data.slug : slugify(data.name);
+  const valid = data.name.trim() && /^[a-z0-9][a-z0-9-]{1,62}$/.test(slug);
+  return (
+    <Modal title="New organization" onClose={onClose} footer={<Button variant="primary" disabled={busy || !valid} onClick={async () => {
+      const made = await run(() => post(`${base}/orgs`, { name: data.name.trim(), slug, owner_email: data.owner_email.trim() || null }, AUTH), "Organization created");
+      if (made) onCreated(slug);
+    }}>Create organization</Button>}>
+      <Field label="Name"><input autoFocus value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} placeholder="Acme Inc" /></Field>
+      <Field label="Slug" hint="Lowercase letters, digits and hyphens. It appears in URLs and in the organization claim of a session.">
+        <input value={slug} onChange={(e) => { setTouched(true); setData({ ...data, slug: slugify(e.target.value) }); }} placeholder="acme-inc" />
+      </Field>
+      <Field label="Owner's email" optional hint="An existing user to make the owner. Without one the organization starts with no members.">
+        <input type="email" value={data.owner_email} onChange={(e) => setData({ ...data, owner_email: e.target.value })} placeholder="ada@example.com" />
+      </Field>
+    </Modal>
+  );
+}
+
+function OrgDetail({ base, slug, onClose }) {
+  const org = useApi(`${base}/orgs/${slug}`, AUTH);
+  const [name, setName] = useState(null);
+  const [add, setAdd] = useState({ email: "", role: "member" });
+  const [run, busy] = useAction();
+  const o = org.data;
+  const act = async (fn, label) => { if (await run(fn, label)) org.reload(); };
+  return (
+    <Modal title={o?.name || slug} onClose={onClose} footer={<Button onClick={onClose}>Done</Button>}>
+      <Loading state={org}>
+        {() => (
+          <>
+            <section className="form-section">
+              <div className="form-section-head"><div><h3>Details</h3><p>The slug <code>{slug}</code> cannot change.</p></div></div>
+              <div className="row">
+                <input value={name ?? o.name} onChange={(e) => setName(e.target.value)} aria-label="Organization name" />
+                <Button variant="primary" disabled={busy || name === null || !name.trim() || name === o.name} onClick={() => act(async () => { await patch(`${base}/orgs/${slug}`, { name: name.trim() }, AUTH); setName(null); }, "Renamed")}>Rename</Button>
+              </div>
+            </section>
+            <section className="form-section">
+              <div className="form-section-head"><div><h3>Members</h3><p>Owners and admins manage the organization from the application. Here an operator can change roles directly.</p></div></div>
+              <Table
+                rows={o.members}
+                empty="No members yet."
+                columns={[
+                  { label: "Email", render: (m) => <b>{m.email}</b> },
+                  { label: "Role", render: (m) => <select value={m.role} disabled={busy} onChange={(e) => act(() => patch(`${base}/orgs/${slug}/members/${m.user_id}`, { role: e.target.value }, AUTH), "Role changed")} style={{ width: 130 }}>{ORG_ROLES.map((r) => <option key={r}>{r}</option>)}</select> },
+                  { label: "", render: (m) => <Button size="sm" variant="danger" disabled={busy} onClick={async () => { if (confirm(`Remove ${m.email} from ${o.name}?`)) await act(() => del(`${base}/orgs/${slug}/members/${m.user_id}`, AUTH), "Removed"); }}>Remove</Button> },
+                ]}
+              />
+              <div className="row" style={{ marginTop: 12 }}>
+                <input type="email" value={add.email} onChange={(e) => setAdd({ ...add, email: e.target.value })} placeholder="Existing user's email" aria-label="Email to add" />
+                <select value={add.role} onChange={(e) => setAdd({ ...add, role: e.target.value })} style={{ width: 130 }}>{ORG_ROLES.map((r) => <option key={r}>{r}</option>)}</select>
+                <Button variant="primary" disabled={busy || !add.email.trim()} onClick={() => act(async () => { await post(`${base}/orgs/${slug}/members`, { email: add.email.trim(), role: add.role }, AUTH); setAdd({ email: "", role: "member" }); }, "Member added")}>Add member</Button>
+              </div>
+            </section>
+            {o.teams?.length > 0 && (
+              <section className="form-section">
+                <div className="form-section-head"><div><h3>Teams</h3></div></div>
+                <div className="row wrap">{o.teams.map((t) => <Badge key={t.slug}>{t.name}</Badge>)}</div>
+              </section>
+            )}
+            <section className="form-section">
+              <div className="form-section-head"><div><h3>Delete organization</h3><p>Removes its memberships, teams and invitations for good. The users stay.</p></div></div>
+              <Button variant="danger" disabled={busy} onClick={async () => { if (confirm(`Delete ${o.name}? This cannot be undone.`) && await run(() => del(`${base}/orgs/${slug}`, AUTH), "Organization deleted")) onClose(); }}>Delete organization</Button>
+            </section>
+          </>
+        )}
+      </Loading>
+    </Modal>
   );
 }
 
@@ -264,7 +329,7 @@ const EMAIL_KINDS = [
   ["email_change", "Email change", "Confirm your new email for {project}"],
 ];
 
-function AuthConfig({ env }) {
+function AuthConfig({ env, parts = ['general', 'providers', 'emails'], title = 'Akountz configuration' }) {
   const envState = useApi(envPath(env));
   const [auth, setAuth] = useState(undefined);
   const [run, busy] = useAction();
@@ -274,12 +339,13 @@ function AuthConfig({ env }) {
   const field = (key) => value[key] ?? AUTH_DEFAULTS[key];
   return (
     <Card
-      title="Akountz configuration"
+      title={title}
       actions={<Button variant="primary" size="sm" disabled={busy || !dirty} onClick={async () => { if (await run(() => patch(envPath(env), { auth: { ...AUTH_DEFAULTS, ...value } }), "Saved")) { envState.reload(); setAuth(undefined); } }}>Save</Button>}
     >
       <Loading state={envState}>
         {() => (
           <div className="stack lg">
+            {parts.includes("general") && <>
             <Section title="Sign-up" description="Who can create an account, and whether their email must be confirmed first.">
               <div className="grid two">
                 <Switch checked={field("signup_enabled")} onChange={(v) => set({ signup_enabled: v })} label="Sign-up enabled" hint="Turn off to invite-only new accounts." />
@@ -321,8 +387,9 @@ function AuthConfig({ env }) {
               </Field>
             </Section>
 
-            <ProvidersSection value={field("providers")} onChange={(providers) => set({ providers })} />
-            <EmailsSection value={field("emails")} onChange={(emails) => set({ emails })} />
+            </>}
+            {parts.includes("providers") && <ProvidersSection value={field("providers")} onChange={(providers) => set({ providers })} />}
+            {parts.includes("emails") && <EmailsSection value={field("emails")} onChange={(emails) => set({ emails })} />}
           </div>
         )}
       </Loading>

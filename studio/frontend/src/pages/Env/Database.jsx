@@ -33,8 +33,19 @@ export default function Database({ env }) {
     });
     if (done && done !== true) { setResult(done); overview.reload(); }
   };
+  const tables = (overview.data?.tables || []).filter((t) => t.name.toLowerCase().includes(filter.trim().toLowerCase()));
+  const subnav = {
+    title: "Database",
+    loading: overview.loading,
+    empty: filter ? `No table matches “${filter}”.` : "No tables yet.",
+    search: { value: filter, onChange: setFilter, placeholder: "Filter tables…" },
+    groups: [{ title: `Tables${overview.data ? ` · ${overview.data.tables.length}` : ""}`, items: tables.map((t) => ({ key: t.name, label: t.name, mono: true, tag: t.resource ? "resource" : undefined, title: t.resource ? `Resource: ${t.resource}` : t.name })) }],
+    active: table,
+    onSelect: setTable,
+    note: overview.data ? `${overview.data.dialect} · ${overview.data.configured ? "your database" : "platform default"}` : undefined,
+  };
   return (
-    <Layout title="Database">
+    <Layout title="Database" subnav={subnav}>
       <PageHead
         title="Database"
         description="Browse the environment's database. Bring your own with a database URL in Settings."
@@ -51,32 +62,7 @@ export default function Database({ env }) {
           <span className="hint" style={{ display: "block" }}>Columns are only ever added: nothing is dropped or retyped.</span>
         </div>
       )}
-      <div className="db-layout">
-        <aside className="card flush db-tables">
-          <Loading state={overview} empty="No tables yet.">
-            {(data) => {
-              const shown = data.tables.filter((t) => t.name.toLowerCase().includes(filter.trim().toLowerCase()));
-              return (
-                <>
-                  <div className="db-tables-head">
-                    <div className="spread"><h2>Tables</h2><span className="faint" style={{ fontSize: 12 }}>{data.tables.length}</span></div>
-                    <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter tables…" />
-                  </div>
-                  <div className="db-list">
-                    {shown.map((t) => (
-                      <button key={t.name} type="button" title={t.name} className={`db-link ${table === t.name ? "active" : ""}`} onClick={() => setTable(t.name)}>
-                        <span className="db-name">{t.name}</span>
-                        {t.resource && <span className="db-tag" title={`Resource: ${t.resource}`}>resource</span>}
-                      </button>
-                    ))}
-                    {!shown.length && <div className="db-meta">No table matches “{filter}”.</div>}
-                  </div>
-                  <div className="db-meta" style={{ borderTop: "1px solid var(--line)" }}>{data.dialect} · {data.configured ? "your database" : "platform default"}</div>
-                </>
-              );
-            }}
-          </Loading>
-        </aside>
+      <div className="db-layout single">
         <div className="db-main">
           {table ? (
             <TableView key={table} base={base} table={table} />

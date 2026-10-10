@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Chart from "../../../components/Chart";
-import { Card, Empty, Loading, when } from "../../../components/ui";
+import { Card, Empty, Loading, Tabs, when } from "../../../components/ui";
 import { envPath, get } from "../../../lib/api";
 import JobDetail from "./JobDetail";
-import { Kpi } from "./kit";
 import { ms } from "./shared";
 import { AREA_SECTION, COLOR, Legend, num, pct } from "./system";
 
@@ -100,11 +99,7 @@ function Body({ s, services, focus, setFocus, filter, setFilter, showAll, setSho
         </span>
       </div>
 
-      <div className="kpis">
-        {items.map((i) => (
-          <Kpi key={i.key} label={i.label} value={i.value} sub={i.sub} bad={i.bad} values={i.rows.map(i.spark)} color={i.bad ? COLOR.bad : i.color} active={i.key === active.key} onClick={() => setFocus(i.key)} />
-        ))}
-      </div>
+      <Tabs tabs={items.map((i) => ({ value: i.key, label: i.label }))} value={active.key} onChange={setFocus} />
 
       <Card title={active.label} className="chart-card"
         actions={<><Legend items={active.lines.map(([, label, color]) => [label, color])} /><button type="button" className="chip" onClick={() => onOpen(active.section)}>Open {active.label.toLowerCase()} →</button></>}>
