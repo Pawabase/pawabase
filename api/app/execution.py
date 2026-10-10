@@ -143,7 +143,21 @@ async def call_function(
     status, output, error = "succeeded", None, None
     try:
         with span("function", name, trigger=trigger):
-            output = await asyncio.wait_for(spec.handler(context), timeout=spec.timeout)
+            owner = _owner_of(spec) if platform.isolated(state, spec) else None
+            work = (
+                platform.sandboxes.invoke(
+                    platform.deployments,
+                    env=owner[0],
+                    branch=owner[1],
+                    function=name,
+                    context=context,
+                    runtime=runtime,
+                    transactions=platform.sandbox_transactions,
+                )
+                if owner is not None
+                else spec.handler(context)
+            )
+            output = await asyncio.wait_for(work, timeout=spec.timeout)
         return output
     except TimeoutError as exc:
         status, error = "failed", f"function {name!r} exceeded {spec.timeout}s"
@@ -192,6 +206,15 @@ def _function_roots(platform: Platform) -> tuple[str, ...]:
     """Where function code lives, so a failure is placed in the function's own file."""
     settings = platform.settings
     return tuple(str(path) for path in (settings.deployments_path, settings.code_path) if path)
+
+
+def _owner_of(spec: Any) -> tuple[str, str] | None:
+    """The environment and branch whose deployment defines *spec* (a branch may use the environment's), or ``None`` for mounted code."""
+    if "/" not in spec.project:
+        return None
+    _, rest = spec.project.split("/", 1)
+    env, _, branch = rest.partition("@")
+    return env, branch or MAIN
 
 
 def _deployment_of(platform: Platform, spec: Any) -> str | None:

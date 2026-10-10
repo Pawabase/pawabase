@@ -50,6 +50,7 @@ KEYS: dict[str, str] = {
     "MAIL_FROM": "Default sender address.",
     "MAIL_REPLY_TO": "Default reply-to address.",
     "MAIL_SUPPRESS": "Log mail but never send it.",
+    "FUNCTION_ISOLATION": "Where functions run: inprocess, or process (a worker process per deployment, with limits).",
     "MAX_USERS": "Most active application users.",
     "MAX_API_KEYS_PER_ENVIRONMENT": "Most active API keys.",
     "MAX_UPLOAD_BYTES": "Largest single object upload.",
