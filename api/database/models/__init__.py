@@ -25,10 +25,30 @@ from database.models.definitions import (
 )
 from database.models.environments import ApiKey, AuditEntry, Environment, Secret
 from database.models.functions import FunctionDeployment, FunctionRun
+from database.models.platform_ops import (
+    AlarmEvent,
+    AlarmRule,
+    BackupSchedule,
+    BackupSnapshot,
+    Domain,
+    FirewallRule,
+    StatusIncident,
+    StatusPage,
+    StatusSample,
+)
 from database.models.releases import ApiVersion, Branch, DefinitionRevision, Deployment, Release
 
 __all__ = [
+    "AlarmEvent",
+    "AlarmRule",
     "ApiKey",
+    "BackupSchedule",
+    "BackupSnapshot",
+    "Domain",
+    "FirewallRule",
+    "StatusIncident",
+    "StatusPage",
+    "StatusSample",
     "ApiVersion",
     "AuditEntry",
     "Branch",
