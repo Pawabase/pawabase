@@ -761,10 +761,6 @@ tr.clickable:hover td { background: var(--sunken); }
 .kpi .sub.bad { color: var(--danger); }
 .kpi svg { width: 100%; height: 34px; margin-top: 6px; display: block; }
 
-.statstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
-.statstrip > div { background: var(--surface); padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; }
-.statstrip .v { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; }
-.statstrip .l { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; display: inline-block; }
 .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--danger); } .dot.info { background: var(--info); }
 
@@ -1048,20 +1044,13 @@ html, body { background: var(--canvas); }
 .side-collapsed .nav-group:first-child .nav-title, .side-hover .sidebar:not(:hover):not(:focus-within) .nav-group:first-child .nav-title { display: none; }
 
 /* ═════════ Figures without boxes: one ruled strip, cells divided by lines ═════════ */
-.statstrip, .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; background: var(--surface); border-radius: var(--r-lg); overflow: hidden; margin-bottom: 14px; }
-.statstrip > div { display: grid; gap: 1px; padding: 14px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 -1px -1px 0; }
-.statstrip b { font-size: 20px; font-weight: 750; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-.statstrip span { color: var(--muted); font-size: 12.5px; font-weight: 550; text-transform: capitalize; }
-.statstrip .bad b { color: var(--danger); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; background: var(--surface); border-radius: var(--r-lg); overflow: hidden; margin-bottom: 14px; }
 .kpis .kpi { position: relative; align-items: flex-start; gap: 1px; padding: 14px 18px; border: 0; border-right: 1px solid var(--line); border-radius: 0; background: none; box-shadow: none; text-align: left; cursor: pointer; }
 .kpis .kpi:last-child { border-right: 0; }
 .kpis .kpi:hover { background: var(--sunken); }
 .kpis .kpi .value { font-size: 20px; font-weight: 750; letter-spacing: -0.03em; }
 .kpis .kpi.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--brand); }
 .kpis .kpi svg, .kpis .kpi .spark { display: none; }
-.statstrip { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); }
-.statstrip > div { margin: 0; border: 0; background: var(--surface); }
-@media (max-width: 720px) { .statstrip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* secondary navigation, fuller: rows with a badge or a second line, a search box, an add button */
 .subnav.wide { width: 320px; }
@@ -1090,3 +1079,20 @@ html, body { background: var(--canvas); }
 .subnav-list .subnav-item { height: auto; padding: 7px 10px; }
 .subnav-list .subnav-item .subnav-text small { margin-top: 1px; }
 .subnav-badge { min-width: 42px; text-align: center; }
+
+/* ═════════ Figures as one quiet line, not boxes ═════════ */
+.statstrip { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 0; padding: 0; margin: 0 0 14px; background: none; border-radius: 0; overflow: visible; }
+.statstrip > div { display: inline-flex; align-items: baseline; gap: 7px; padding: 0 18px; margin: 0; border: 0; background: none; border-left: 1px solid var(--line-2); }
+.statstrip > div:first-child { padding-left: 0; border-left: 0; }
+.statstrip .v, .statstrip b { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.statstrip .l, .statstrip span:not(.v) { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 500; text-transform: none; }
+.statstrip .dot { width: 6px; height: 6px; }
+
+/* social providers: a grid of marks */
+.provider-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.provider-tile { display: grid; justify-items: center; gap: 10px; padding: 26px 16px 20px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); color: var(--text); font: inherit; cursor: pointer; text-align: center; }
+.provider-tile:hover { border-color: var(--faint); background: var(--sunken); }
+.provider-icon { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 16px; background: var(--sunken); color: var(--text); }
+.provider-tile:hover .provider-icon { background: var(--surface); }
+.provider-head { display: flex; align-items: center; gap: 14px; }
+.provider-head p { margin: 0; font-size: 13px; }

@@ -7,36 +7,129 @@ import { api, del, envPath, patch, post, put, useApi } from "../../lib/api";
 
 const AUTH = { service: "auth" };
 
-const AUTH_GROUPS = [
-  { title: "Directory", items: [["users", "Users"], ["orgs", "Organizations"], ["roles", "Roles"]] },
-  { title: "Sign-in", items: [["providers", "Social providers"], ["events", "Sign-in activity"]] },
-  { title: "Settings", items: [["config", "Configuration"], ["emails", "Email templates"]] },
+const AUTH_PARTS = [
+  ["users", "Users"],
+  ["orgs", "Organizations"],
+  ["roles", "Roles"],
+  ["providers", "Social providers"],
+  ["oauth", "OAuth servers"],
+  ["events", "Sign-in activity"],
+  ["config", "Configuration"],
+  ["emails", "Email templates"],
 ];
-const AUTH_LABELS = Object.fromEntries(AUTH_GROUPS.flatMap((group) => group.items));
+const AUTH_LABELS = Object.fromEntries(AUTH_PARTS);
 
 export default function Users({ env }) {
   const [tab, setTab] = useState("users");
   const base = `/envs/${env}`;
   const subnav = {
     title: "Users & auth",
-    groups: [
-      ...AUTH_GROUPS.map((group) => ({ title: group.title, items: group.items.map(([key, label]) => ({ key, label })) })),
-      { title: "Access", items: [{ key: "policies", label: "Policies", href: envHref(env, "policies") }] },
-    ],
+    groups: [{ items: [...AUTH_PARTS.map(([key, label]) => ({ key, label })), { key: "policies", label: "Policies", href: envHref(env, "policies") }] }],
     active: tab,
     onSelect: setTab,
   };
   return (
     <Layout title="Users & auth" subnav={subnav}>
-      <PageHead title={AUTH_LABELS[tab]} />
+      <PageHead title={AUTH_LABELS[tab]} description={tab === "providers" ? "Let people sign in with an account they already have. Choose a provider to set it up." : tab === "oauth" ? "Your own OAuth or OpenID Connect servers, for sign-in with an identity provider that is not on the list." : undefined} />
       {tab === "users" && <UserList base={base} />}
       {tab === "roles" && <Roles base={base} />}
       {tab === "orgs" && <Orgs base={base} />}
       {tab === "events" && <Events base={base} />}
       {tab === "config" && <AuthConfig env={env} parts={["general"]} title="Configuration" />}
-      {tab === "providers" && <AuthConfig env={env} parts={["providers"]} title="Social providers" />}
+      {tab === "providers" && <Providers env={env} kind="social" />}
+      {tab === "oauth" && <Providers env={env} kind="custom" />}
       {tab === "emails" && <AuthConfig env={env} parts={["emails"]} title="Email templates" />}
     </Layout>
+  );
+}
+
+const BRAND_ICONS = {
+  github: <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />,
+  google: <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z" />,
+  microsoft: <path d="M1 1h10.5v10.5H1zM12.5 1H23v10.5H12.5zM1 12.5h10.5V23H1zM12.5 12.5H23V23H12.5z" />,
+  discord: <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />,
+};
+
+function BrandIcon({ name, size = 28 }) {
+  return BRAND_ICONS[name] ? <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden>{BRAND_ICONS[name]}</svg> : <Icon name="keys" size={size - 4} />;
+}
+
+/** Sign-in providers for an environment. `social` is a grid of the providers Pawabase ships; `custom` lists your own OAuth servers. */
+function Providers({ env, kind }) {
+  const envState = useApi(envPath(env));
+  const [editing, setEditing] = useState(null);
+  const [run, busy] = useAction();
+  const auth = { ...AUTH_DEFAULTS, ...(envState.data?.auth || {}) };
+  const providers = auth.providers || {};
+  const save = async (next) => {
+    if (await run(() => patch(envPath(env), { auth: { ...auth, providers: next } }), "Saved")) { envState.reload(); setEditing(null); return true; }
+    return false;
+  };
+  const customNames = Object.keys(providers).filter((name) => !KNOWN_PROVIDERS.includes(name));
+  const configured = (name) => Boolean(providers[name]?.client_id);
+  return (
+    <>
+      <Loading state={envState}>
+        {() => kind === "social" ? (
+          <div className="provider-grid">
+            {KNOWN_PROVIDERS.map((name) => (
+              <button key={name} type="button" className="provider-tile" onClick={() => setEditing({ name })}>
+                <span className="provider-icon"><BrandIcon name={name} /></span>
+                <b>{name === "github" ? "GitHub" : name[0].toUpperCase() + name.slice(1)}</b>
+                {providers[name] ? (providers[name].enabled === false ? <Badge>disabled</Badge> : configured(name) ? <Badge tone="green">enabled</Badge> : <Badge tone="yellow">needs credentials</Badge>) : <span className="faint small">Not set up</span>}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <Card flush title="OAuth servers" actions={<Button variant="primary" size="sm" onClick={() => setEditing({ name: "", isNew: true })}><Icon name="plus" size={14} /> Add OAuth server</Button>}>
+            <Table
+              rows={customNames.map((name) => ({ name, ...providers[name] }))}
+              onRowClick={(row) => setEditing({ name: row.name })}
+              empty="No OAuth servers. Add one with its authorize, token and userinfo endpoints."
+              columns={[
+                { label: "Name", render: (row) => <b>{row.name}</b> },
+                { label: "Authorize endpoint", render: (row) => <code>{row.authorize_endpoint || "—"}</code> },
+                { label: "State", render: (row) => (row.enabled === false ? <Badge>disabled</Badge> : <Badge tone="green">enabled</Badge>) },
+              ]}
+            />
+          </Card>
+        )}
+      </Loading>
+      {editing && <ProviderSheet name={editing.name} isNew={editing.isNew} shipped={KNOWN_PROVIDERS.includes(editing.name)} value={providers[editing.name]} busy={busy} taken={Object.keys(providers)} onClose={() => setEditing(null)} onSave={(name, value) => save({ ...providers, [name]: value })} onRemove={(name) => { const next = { ...providers }; delete next[name]; return save(next); }} />}
+    </>
+  );
+}
+
+function ProviderSheet({ name, isNew, shipped, value, busy, taken, onClose, onSave, onRemove }) {
+  const [label, setLabel] = useState(name);
+  const [draft, setDraft] = useState({ client_id: "", client_secret: "", enabled: true, scopes: [], ...(value || {}) });
+  const set = (patchValues) => setDraft((d) => ({ ...d, ...patchValues }));
+  const key = isNew ? label.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-") : name;
+  const nameTaken = isNew && taken.includes(key);
+  const needsEndpoints = !shipped;
+  const complete = key && !nameTaken && draft.client_id && (!needsEndpoints || (draft.authorize_endpoint && draft.token_endpoint && draft.userinfo_endpoint));
+  return (
+    <Modal title={isNew ? "Add OAuth server" : shipped ? `${name === "github" ? "GitHub" : name[0].toUpperCase() + name.slice(1)} sign-in` : name} onClose={onClose} footer={<>
+      {!isNew && value && <Button variant="danger" disabled={busy} onClick={() => confirm(`Remove ${name}?`) && onRemove(name)}>Remove</Button>}
+      <span className="grow" />
+      <Button variant="primary" disabled={busy || !complete} onClick={() => onSave(key, draft)}>Save</Button>
+    </>}>
+      {shipped && <div className="provider-head"><span className="provider-icon"><BrandIcon name={name} /></span><p className="muted">Reference credentials as <code>secret://NAME</code> rather than pasting them here.</p></div>}
+      {isNew && <Field label="Name" hint="Used in the sign-in address, like /auth/v1/authorize/{environment}/name."><input autoFocus value={label} onChange={(e) => setLabel(e.target.value)} placeholder="acme-sso" />{nameTaken && <span className="error-text">That name is taken.</span>}</Field>}
+      <Switch checked={draft.enabled !== false} onChange={(v) => set({ enabled: v })} label="Enabled" hint="Off hides the provider without losing its settings." />
+      <div className="grid two">
+        <Field label="Client ID"><input value={draft.client_id || ""} onChange={(e) => set({ client_id: e.target.value })} /></Field>
+        <Field label="Client secret"><input value={draft.client_secret || ""} onChange={(e) => set({ client_secret: e.target.value })} placeholder="secret://CLIENT_SECRET" /></Field>
+      </div>
+      {needsEndpoints && (
+        <>
+          <Field label="Authorize endpoint"><input value={draft.authorize_endpoint || ""} onChange={(e) => set({ authorize_endpoint: e.target.value })} placeholder="https://idp.example.com/oauth/authorize" /></Field>
+          <Field label="Token endpoint"><input value={draft.token_endpoint || ""} onChange={(e) => set({ token_endpoint: e.target.value })} placeholder="https://idp.example.com/oauth/token" /></Field>
+          <Field label="Userinfo endpoint"><input value={draft.userinfo_endpoint || ""} onChange={(e) => set({ userinfo_endpoint: e.target.value })} placeholder="https://idp.example.com/oauth/userinfo" /></Field>
+        </>
+      )}
+      <Field label="Scopes"><TagInput value={draft.scopes || []} onChange={(v) => set({ scopes: v })} placeholder="openid" /></Field>
+    </Modal>
   );
 }
 
