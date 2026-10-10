@@ -693,15 +693,17 @@ def register(r: Router, akountz: Akountz) -> None:
         summary="Email a pending invitation again with a fresh link",
     )
     async def resend_invitation(ctx: HttpContext, env: str, invitation_id: str, body: AdminResend):
-        row = await Invitation.get_or_none(id=invitation_id, organization__env=env).prefetch_related(
-            "organization"
-        )
+        row = await Invitation.get_or_none(
+            id=invitation_id, organization__env=env
+        ).prefetch_related("organization")
         if row is None or row.accepted_at is not None or row.revoked_at is not None:
             raise HTTPException(status_code=404, detail="no such pending invitation")
         config = await load_config(akountz, env)
         if body.redirect_to and not config.redirect_allowed(body.redirect_to):
             raise HTTPException(status_code=400, detail="redirect_to is not an allowed URL")
-        row = await invites.resend(akountz, config, row, redirect_to=body.redirect_to, actor="admin")
+        row = await invites.resend(
+            akountz, config, row, redirect_to=body.redirect_to, actor="admin"
+        )
         return {"id": row.id, "email": row.email, "expires_at": row.expires_at.isoformat()}
 
     @r.delete(

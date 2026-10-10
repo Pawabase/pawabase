@@ -623,7 +623,9 @@ def register(r: Router, platform: Platform) -> None:
     async def analytics(ctx: HttpContext, env: str):
         await get_environment(env)
         window = _custom_window(ctx.query_params.get("from"), ctx.query_params.get("to"))
-        return await environment_analytics(env, ctx.query_params.get("range", DEFAULT_RANGE), window)
+        return await environment_analytics(
+            env, ctx.query_params.get("range", DEFAULT_RANGE), window
+        )
 
     @r.get("/overview", auth=MANAGE, tags=["observability"], summary="Runtime overview")
     async def installation(ctx: HttpContext):

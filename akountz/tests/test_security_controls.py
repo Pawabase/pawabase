@@ -24,12 +24,17 @@ async def _sign_in(akz, email, password="correct-horse-1"):
 
 
 async def test_sign_ups_can_be_limited_by_email_domain(akz):
-    akz.api.auth = {"allowed_email_domains": ["acme.com"], "blocked_email_domains": ["spam.acme.com"]}
+    akz.api.auth = {
+        "allowed_email_domains": ["acme.com"],
+        "blocked_email_domains": ["spam.acme.com"],
+    }
     assert (await _signup(akz, "ada@example.com")).status_code == 403
     assert (await _signup(akz, "ada@spam.acme.com")).status_code == 403
     assert (await _signup(akz, "ada@acme.com")).status_code == 201
     # An operator can still create anyone.
-    made = await akz.admin.post(f"{BASE}/users", json={"email": "bob@example.com", "password": "correct-horse-1"})
+    made = await akz.admin.post(
+        f"{BASE}/users", json={"email": "bob@example.com", "password": "correct-horse-1"}
+    )
     assert made["email"] == "bob@example.com"
 
 
@@ -65,7 +70,9 @@ async def test_pending_invitations_are_listed_and_can_be_revoked(akz):
     headers = akz.headers(token=owner["access_token"])
     await akz.http.post("/auth/v1/orgs", json={"slug": "acme-inc", "name": "Acme"}, headers=headers)
     sent = await akz.http.post(
-        "/auth/v1/orgs/acme-inc/invitations", json={"email": "bob@example.com", "role": "member"}, headers=headers
+        "/auth/v1/orgs/acme-inc/invitations",
+        json={"email": "bob@example.com", "role": "member"},
+        headers=headers,
     )
     assert sent.status_code == 201
     pending = (await akz.admin.get(f"{BASE}/invitations"))["data"]
@@ -79,16 +86,22 @@ async def test_an_operator_invites_and_resends(akz):
 
     ada = await akz.signup("ada@example.com")
     await akz.http.post(
-        "/auth/v1/orgs", json={"slug": "acme-inc", "name": "Acme"}, headers=akz.headers(token=ada["access_token"])
+        "/auth/v1/orgs",
+        json={"slug": "acme-inc", "name": "Acme"},
+        headers=akz.headers(token=ada["access_token"]),
     )
-    sent = await akz.admin.post(f"{BASE}/orgs/acme-inc/invitations", json={"email": "bob@example.com", "role": "admin"})
+    sent = await akz.admin.post(
+        f"{BASE}/orgs/acme-inc/invitations", json={"email": "bob@example.com", "role": "admin"}
+    )
     assert sent["email"] == "bob@example.com" and sent["role"] == "admin"
     first = akz.api.last_token()
     with pytest.raises(ServiceError) as already:
         await akz.admin.post(f"{BASE}/orgs/acme-inc/invitations", json={"email": "ada@example.com"})
     assert already.value.status == 409
     with pytest.raises(ServiceError) as bad:
-        await akz.admin.post(f"{BASE}/orgs/acme-inc/invitations", json={"email": "bob@example.com", "role": "king"})
+        await akz.admin.post(
+            f"{BASE}/orgs/acme-inc/invitations", json={"email": "bob@example.com", "role": "king"}
+        )
     assert bad.value.status == 422
 
     await akz.admin.post(f"{BASE}/invitations/{sent['id']}/resend", json={})
@@ -98,5 +111,7 @@ async def test_an_operator_invites_and_resends(akz):
     headers = akz.headers(token=bob["access_token"])
     old = await akz.http.post("/auth/v1/invitations/accept", json={"token": first}, headers=headers)
     assert old.status_code == 400
-    new = await akz.http.post("/auth/v1/invitations/accept", json={"token": second}, headers=headers)
+    new = await akz.http.post(
+        "/auth/v1/invitations/accept", json={"token": second}, headers=headers
+    )
     assert new.status_code == 200 and new.json()["role"] == "admin"

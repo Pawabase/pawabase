@@ -192,7 +192,9 @@ def register(r: Router, akountz: Akountz) -> None:
         if not user.check_password(body.password):
             await record_failure(
                 user,
-                *config.lockout(akountz.settings.lockout_threshold, akountz.settings.lockout_minutes),
+                *config.lockout(
+                    akountz.settings.lockout_threshold, akountz.settings.lockout_minutes
+                ),
             )
             await log_event(
                 config.env,
@@ -239,7 +241,9 @@ def register(r: Router, akountz: Akountz) -> None:
         if used is None:
             await record_failure(
                 user,
-                *config.lockout(akountz.settings.lockout_threshold, akountz.settings.lockout_minutes),
+                *config.lockout(
+                    akountz.settings.lockout_threshold, akountz.settings.lockout_minutes
+                ),
             )
             await log_event(
                 config.env,

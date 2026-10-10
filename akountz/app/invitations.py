@@ -10,7 +10,7 @@ from app import emails, links
 from app.accounts import find_by_email, normalise_email
 from app.environment import AuthConfig
 from app.platform import Akountz
-from database.models import Invitation, Membership, Organization, OneTimeToken
+from database.models import Invitation, Membership, OneTimeToken, Organization
 from database.models.orgs import ORG_ROLES
 
 LIFETIME = timedelta(days=7)
