@@ -58,7 +58,7 @@ export default function Users({ env }) {
   const base = `/envs/${env}`;
   const subnav = {
     title: "Users & auth",
-    groups: [{ items: [...AUTH_PARTS.map(([key, label]) => ({ key, label })), { key: "policies", label: "Policies", href: envHref(env, "policies") }] }],
+    groups: [{ items: [...AUTH_PARTS.map(([key, label]) => ({ key, label })), { key: "policies", label: "Policies", href: envHref(env, "policies"), external: true }] }],
     active: tab,
     onSelect: setTab,
   };

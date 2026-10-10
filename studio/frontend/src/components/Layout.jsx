@@ -9,10 +9,21 @@ import { Logo } from "./Logo";
 import { Badge, Button, Field, Loading, Sheet, Status, Table, ToastProvider, useAction, when } from "./ui";
 import { envPath, post, useApi } from "../lib/api";
 
+/** The pages that live under Data, in the order the secondary navigation lists them. */
+export const DATA_PAGES = [["resources", "Resources"], ["schemas", "Schemas"], ["transformers", "Transformers"], ["policies", "Policies"], ["database", "SQL"]];
+
+/** The secondary navigation shared by every Data page. */
+export function dataSubnav(env, active) {
+  return {
+    title: "Data",
+    groups: [{ items: DATA_PAGES.map(([key, label]) => ({ key, label, href: envHref(env, key) })) }],
+    active,
+  };
+}
+
 export const ENV_NAV = [
   { title: "Build", items: [
-    ["overview", "Overview"], ["database", "Database"], ["resources", "Resources"], ["schemas", "Schemas"],
-    ["transformers", "Transformers"], ["policies", "Policies"], ["routes", "Routes"], ["explorer", "API Explorer"], ["functions", "Functions"],
+    ["overview", "Overview"], ["data", "Data", "resources", "database"], ["routes", "Routes"], ["explorer", "API Explorer"], ["functions", "Functions"],
   ] },
   { title: "Automate", items: [
     ["flows", "Flows"], ["subscriptions", "Event subscriptions"], ["schedules", "Schedules"],
@@ -225,7 +236,7 @@ function SubNav({ subnav, backHref }) {
     );
     const active = subnav.active === item.key;
     return item.href ? (
-      <Link key={item.key} href={item.href} className="subnav-item">{body}<Icon name="chevronRight" size={13} className="faint" /></Link>
+      <Link key={item.key} href={item.href} className={`subnav-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>{body}{item.external && <Icon name="chevronRight" size={13} className="faint" />}</Link>
     ) : (
       <button key={item.key} type="button" className={`subnav-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined} title={item.title || item.label} onClick={() => subnav.onSelect(item.key)}>{body}</button>
     );
@@ -353,9 +364,9 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
                 <div key={group.title} className="nav-group">
                   <div className="nav-title">{group.title}</div>
                   <div className="nav-items">
-                    {group.items.map(([key, label]) => (
-                      <Link key={key} href={envHref(env, key)} className={section === key ? "active" : ""} title={label}>
-                        <Icon name={key} /><span className="label">{label}</span>
+                    {group.items.map(([key, label, to, icon]) => (
+                      <Link key={key} href={envHref(env, to || key)} className={section === key || (key === "data" && DATA_PAGES.some(([page]) => page === section)) ? "active" : ""} title={label}>
+                        <Icon name={icon || key} /><span className="label">{label}</span>
                       </Link>
                     ))}
                   </div>
