@@ -5,7 +5,7 @@ import Console from "./Console";
 import NewEnvironment from "./NewEnvironment";
 import StatusLights from "./StatusLights";
 import Hair from "./Hair";
-import ServiceCatalog from "./ServiceCatalog";
+import Home from "./Home";
 import ServicesMenu, { usePins } from "./ServicesMenu";
 import Tour from "./Tour";
 import { SERVICES, remember, serviceOf } from "../lib/services";
@@ -471,7 +471,7 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
           </div>
           {env && !classic && <ServiceBar env={env} section={section} />}
           <div className={`content ${full ? "full" : ""}`}>
-            {env && !classic && section === "overview" && <ServiceCatalog env={env} hrefFor={(key) => envHref(env, key)} />}
+            {env && !classic && section === "overview" && <Home env={env} hrefFor={(key) => envHref(env, key)} />}
             {children}
           </div>
         </main>
