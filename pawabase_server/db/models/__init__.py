@@ -55,6 +55,7 @@ from pawabase_server.db.models.releases import (
     Deployment,
     Release,
 )
+from pawabase_server.db.models.schema_history import SchemaMigration
 from pawabase_server.db.models.users import (
     AuthUser,
     Identity,
@@ -112,6 +113,7 @@ __all__ = [
     "RouteDef",
     "Schedule",
     "SchemaDef",
+    "SchemaMigration",
     "Secret",
     "SessionInfo",
     "StatusIncident",

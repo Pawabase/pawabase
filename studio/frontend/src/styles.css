@@ -1184,3 +1184,11 @@ html, body { background: var(--canvas); }
 .topo-edge.inferred.lit path { stroke-dasharray: 2 4; }
 .topo-legend i.dotted { border-top-style: dotted; border-top-width: 2px; }
 .topo-conn .btn { margin-left: auto; flex: none; }
+
+/* Schema changes waiting to be applied, and the history of changes made to a table. */
+.schema-banner { margin-bottom: 16px; }
+.schema-change { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-sm); cursor: pointer; }
+.schema-change input { margin-top: 3px; }
+.schema-change > .stack { flex: 1; min-width: 0; }
+.schema-sql { font-size: 12px; margin: 0; white-space: pre-wrap; word-break: break-word; }
+.schema-entry { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }

@@ -19,6 +19,7 @@ from pawabase_server.compiler.openapi_scope import add_apikey_security
 from pawabase_server.core.context import PlatformContext
 from pawabase_server.core.schemas import compile_model
 from pawabase_server.data import inspect as db_inspect
+from pawabase_server.data import schema
 from pawabase_server.data.inspect import is_read_only
 from pawabase_server.data.resources import after_write, resource_tag
 from pawabase_server.data.sql import SqlError
@@ -61,13 +62,15 @@ def register(r: Router, platform: Platform) -> None:
         f"{base}/resources/{{name}}/migrate",
         auth=MANAGE,
         tags=["resources"],
-        summary="Create or extend the resource's table",
+        summary="Create the resource's table, or add what the definition gained",
     )
     async def migrate(ctx: HttpContext, env: str, name: str):
         state = await platform.state(env)
         store = await state.store(name)
         try:
-            statements = await store.migrate()
+            statements = await schema.apply_safe(
+                env, store.source, store.spec, actor=actor(ctx), origin="studio"
+            )
         except SqlError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         await audit(

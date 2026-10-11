@@ -150,11 +150,64 @@ def add_column_sql(dialect: str, table: str, spec: Mapping[str, Any]) -> str:
     return f"ALTER TABLE {quote(dialect, table)} ADD COLUMN {column_definition(dialect, {**spec, 'unique': False})}"
 
 
+def index_name(table: str, column: str) -> str:
+    """The name the index on one column gets (and is looked for under)."""
+    return check_identifier(f"ix_{table}_{column}"[:60])
+
+
 def create_index_sql(dialect: str, table: str, column: str, unique: bool = False) -> str:
-    name = check_identifier(f"ix_{table}_{column}"[:60])
+    name = index_name(table, column)
     kind = "UNIQUE INDEX" if unique else "INDEX"
     exists = "" if dialect == "mysql" else "IF NOT EXISTS "
     return f"CREATE {kind} {exists}{quote(dialect, name)} ON {quote(dialect, table)} ({quote(dialect, column)})"
+
+
+def drop_index_sql(dialect: str, table: str, name: str) -> str:
+    if dialect == "mysql":
+        return f"DROP INDEX {quote(dialect, name)} ON {quote(dialect, table)}"
+    return f"DROP INDEX IF EXISTS {quote(dialect, name)}"
+
+
+def rename_column_sql(dialect: str, table: str, old: str, new: str) -> str:
+    return f"ALTER TABLE {quote(dialect, table)} RENAME COLUMN {quote(dialect, old)} TO {quote(dialect, new)}"
+
+
+def rename_table_sql(dialect: str, old: str, new: str) -> str:
+    return f"ALTER TABLE {quote(dialect, old)} RENAME TO {quote(dialect, new)}"
+
+
+def drop_column_sql(dialect: str, table: str, column: str) -> str:
+    return f"ALTER TABLE {quote(dialect, table)} DROP COLUMN {quote(dialect, column)}"
+
+
+def drop_table_sql(dialect: str, table: str) -> str:
+    return f"DROP TABLE IF EXISTS {quote(dialect, table)}"
+
+
+#: What a column or table is renamed to when a migration retires it: kept, out of the way, until it is purged.
+PARKED = re.compile(r"^_pbm_([0-9a-z]{8})(x?)_(.+)$")
+
+
+def is_parked(name: str) -> bool:
+    return name.startswith("_pbm_")
+
+
+_CAST_MYSQL = {
+    "integer": "SIGNED",
+    "boolean": "SIGNED",
+    "number": "DOUBLE",
+    "datetime": "DATETIME(6)",
+    "date": "DATE",
+    "json": "JSON",
+}
+
+
+def cast_type(dialect: str, spec: Mapping[str, Any]) -> str:
+    """The type to ``CAST`` to when copying values into a retyped column."""
+    if dialect != "mysql":
+        return column_type(dialect, spec)
+    kind = "json" if spec.get("type") in JSON_TYPES else spec.get("type", "string")
+    return _CAST_MYSQL.get(kind, "CHAR")
 
 
 # ── value codecs ─────────────────────────────────────────────────────────────
