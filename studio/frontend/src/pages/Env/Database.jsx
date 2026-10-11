@@ -1,6 +1,6 @@
 import { router } from "@inertiajs/react";
 import { useState } from "react";
-import Layout, { dataSubnav } from "../../components/Layout";
+import Layout from "../../components/Layout";
 import SqlBuilder from "../../components/SqlBuilder";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, Loading, PageHead, Table, formatCell, truncate, useAction } from "../../components/ui";
@@ -33,7 +33,7 @@ export default function Database({ env }) {
     if (done && done !== true) { setResult(done); overview.reload(); }
   };
   return (
-    <Layout title="SQL" subnav={dataSubnav(env, "database")}>
+    <Layout title="SQL">
       <PageHead
         title="SQL"
         description="Run queries against the environment's database. Browse a resource's records from Resources. Bring your own database with a database URL in Settings."
