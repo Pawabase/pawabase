@@ -2,6 +2,7 @@ import { router } from "@inertiajs/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { del, get, patch, post, envPath } from "../lib/api";
+import { runHttp } from "../lib/httpcommand";
 
 const SECTIONS = [
   "overview", "database", "resources", "schemas", "transformers", "policies", "routes", "explorer",
@@ -31,6 +32,9 @@ const COMMANDS = [
   ["jobs retry <id> --confirm", "Retry a failed job"], ...SECTIONS.map((section) => [`open ${section}`, `Open ${section.replaceAll("-", " ")}`]),
   ...READ_COMMANDS.map(([name, description]) => [name, description]), ["users [search]", "List application users"],
   ["roles", "List application roles"], ["organizations", "List application organizations"],
+  ["http [METHOD] <path> [--query {…}] [--headers {…}] [--body {…}]", "Call your API: --as anon|user, --expect 200, --save <name>, --confirm for writes"],
+  ["http run <name> | http saved", "Replay or list saved requests"], ["login <email> <password>", "Make http requests as an application user"],
+  ["whoami", "Show who http requests are made as"], ["logout", "Go back to anonymous requests"],
   ["realtime channels", "List active realtime channels"], ["realtime connections", "List realtime connections"], ["realtime activity", "Show realtime activity"],
 ];
 
@@ -135,6 +139,13 @@ export default function Console({ env }) {
     if (trimmed === "help") { append(trimmed, HELP_TEXT); return; }
     if (trimmed === "status") { append(trimmed, { environment: env }); return; }
     if (["hello", "hi", "hey"].includes(trimmed.toLowerCase())) { append(trimmed, "PawaBase Console ready. Type help to see 42 commands."); return; }
+    if (/^(http|login|logout|whoami)(\s|$)/i.test(trimmed)) {
+      try {
+        patchTab(id, () => ({ busy: true }));
+        append(trimmed, await runHttp(trimmed, { env, post }));
+      } catch (error) { append(trimmed, error.message || String(error), true); } finally { patchTab(id, () => ({ busy: false })); }
+      return;
+    }
     const clean = commandLine(trimmed);
     const [first, second, third] = clean.split(/\s+/, 3);
     try {
