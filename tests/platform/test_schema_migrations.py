@@ -154,3 +154,77 @@ async def test_a_change_that_fails_is_undone_and_recorded(books):
     history = (await api.studio.get(f"{BOOKS}/migrations"))["data"]
     assert history[0]["status"] == "failed" and "disk full" in history[0]["error"]
     assert (await rows(api))[0]["title"] == "Dune"
+
+
+async def test_changes_made_outside_pawabase_are_noticed_and_can_be_adopted(books):
+    api = books
+    await api.studio.post(f"{BOOKS}/schema/apply", json={})
+    assert (await schema(api))["external"] == []
+    source = await (await api.platform.state("development")).source()
+
+    await source.execute('ALTER TABLE "books" ADD COLUMN "rating" INTEGER')
+    report = await schema(api)
+    assert report["state"] == "external"
+    assert [(c["kind"], c["column"], c["field_type"]) for c in report["external"]] == [
+        ("added", "rating", "integer")
+    ]
+    assert [f["name"] for f in report["proposal"]] == ["title", "pages", "rating"]
+
+    # A rename is one change, not a drop and an add.
+    await source.execute('ALTER TABLE "books" RENAME COLUMN "pages" TO "page_count"')
+    kinds = {(c["kind"], c["column"]) for c in (await schema(api))["external"]}
+    assert ("renamed", "page_count") in kinds and ("added", "rating") in kinds
+
+    # Follow the table: update the definition (what Studio does), then acknowledge.
+    proposal = (await schema(api))["proposal"]
+    await api.studio.put(BOOKS, json={**definition(), "fields": proposal})
+    await api.studio.post(f"{BOOKS}/schema/acknowledge", json={})
+    report = await schema(api)
+    assert report["external"] == [] and report["state"] == "in_sync"
+    assert [f["name"] for f in report["proposal"] or []] == []
+    history = (await api.studio.get(f"{BOOKS}/migrations"))["data"]
+    assert history[0]["kind"] == "external" and not history[0]["can_roll_back"]
+
+
+async def test_a_table_nobody_defined_can_become_a_resource(api):
+    source = await (await api.platform.state("development")).source()
+    await source.execute(
+        'CREATE TABLE "legacy_orders" ("id" CHAR(26) PRIMARY KEY, "total" REAL, '
+        '"paid" INTEGER, "note" TEXT, "created_at" TEXT, "updated_at" TEXT)'
+    )
+    listed = (await api.studio.get(f"{ENV}/schema/tables"))["data"]
+    table = next(item for item in listed if item["table"] == "legacy_orders")
+    definition_ = table["definition"]
+    assert definition_["primary_key"] == "id" and definition_["id_type"] == "ulid"
+    assert definition_["timestamps"] is True
+    assert [f["name"] for f in definition_["fields_"]] == ["total", "paid", "note"]
+
+    await api.studio.post(
+        f"{ENV}/resources",
+        json={
+            "name": "legacy_orders",
+            "table": "legacy_orders",
+            "primary_key": "id",
+            "id_type": "ulid",
+            "timestamps": True,
+            "fields": definition_["fields_"],
+        },
+    )
+    path = f"{ENV}/resources/legacy_orders"
+    await api.studio.post(f"{path}/schema/acknowledge", json={"note": "Imported from the table"})
+    report = await api.studio.get(f"{path}/schema")
+    assert report["state"] == "in_sync" and report["external"] == []
+    assert all(
+        t["table"] != "legacy_orders"
+        for t in (await api.studio.get(f"{ENV}/schema/tables"))["data"]
+    )
+
+
+async def test_a_table_keyed_by_integers_is_explained_not_imported(api):
+    source = await (await api.platform.state("development")).source()
+    await source.execute(
+        'CREATE TABLE "old_things" ("id" INTEGER PRIMARY KEY AUTOINCREMENT, "name" TEXT)'
+    )
+    listed = (await api.studio.get(f"{ENV}/schema/tables"))["data"]
+    table = next(item for item in listed if item["table"] == "old_things")
+    assert table["definition"] is None and "ULID or a UUID" in table["problem"]

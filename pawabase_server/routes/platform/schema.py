@@ -19,6 +19,11 @@ class ApplyBody(BaseModel):
     confirm: str | None = None
 
 
+class AcknowledgeBody(BaseModel):
+    #: Why the baseline is being taken, for the history (``"Imported from an existing table"``).
+    note: str | None = Field(default=None, max_length=200)
+
+
 class PurgeBody(BaseModel):
     confirm: str = Field(min_length=1)
 
@@ -38,7 +43,7 @@ def register(r: Router, platform: Platform) -> None:
         resources = []
         for name in sorted(state.specs):
             store = await state.store(name)
-            report = await schema.status(source, store.spec)
+            report = await schema.status(env, source, store.spec)
             last = (
                 await SchemaMigration.filter(env=env, resource=name, kind="apply", status="applied")
                 .order_by("-number")
@@ -71,7 +76,7 @@ def register(r: Router, platform: Platform) -> None:
     async def plan(ctx: HttpContext, env: str, name: str):
         state = await platform.state(env)
         store = await state.store(name)
-        return await schema.status(store.source, store.spec)
+        return await schema.status(env, store.source, store.spec)
 
     @r.post(
         f"{base}/resources/{{name}}/schema/apply",
@@ -84,7 +89,7 @@ def register(r: Router, platform: Platform) -> None:
         state = await platform.state(env)
         store = await state.store(name)
         if body.changes is not None:
-            preview = await schema.status(store.source, store.spec)
+            preview = await schema.status(env, store.source, store.spec)
             wanted = set(body.changes)
             risky = [c for c in preview["changes"] if c["id"] in wanted and not c["safe"]]
             if risky and body.confirm != name:
@@ -190,3 +195,50 @@ def register(r: Router, platform: Platform) -> None:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         await audit(ctx, "resource.purged", env=env, target=name, details={"removed": removed})
         return {"removed": removed}
+
+    @r.get(
+        f"{base}/schema/tables",
+        auth=MANAGE,
+        tags=["schema"],
+        summary="Tables in the database that no resource is defined for",
+    )
+    async def tables(ctx: HttpContext, env: str):
+        state = await platform.state(env)
+        source = await state.source()
+        found = await schema.unclaimed_tables(source, list(state.specs.values()))
+        out = []
+        for table in found:
+            try:
+                definition, skipped = schema.definition_from_table(table, source.dialect)
+            except schema.SchemaError as exc:
+                out.append({**table, "definition": None, "problem": str(exc), "skipped": []})
+                continue
+            out.append({**table, "definition": definition, "problem": None, "skipped": skipped})
+        return {"data": out}
+
+    @r.post(
+        f"{base}/resources/{{name}}/schema/acknowledge",
+        auth=MANAGE,
+        tags=["schema"],
+        request_model=AcknowledgeBody,
+        summary="Take the table as it is now as the starting point, and put what changed on the record",
+    )
+    async def acknowledge(ctx: HttpContext, env: str, name: str, body: AcknowledgeBody):
+        state = await platform.state(env)
+        store = await state.store(name)
+        report = await schema.status(env, store.source, store.spec)
+        if not report["exists"]:
+            raise HTTPException(status_code=422, detail="the table does not exist yet")
+        entry = await schema.record_external(
+            env,
+            store.source,
+            store.spec,
+            report["external"],
+            actor=actor(ctx),
+            origin="import" if body.note else "external",
+            summary=body.note,
+        )
+        await audit(
+            ctx, "resource.acknowledged", env=env, target=name, details={"migration": entry.number}
+        )
+        return {"migration": {"id": entry.id, "number": entry.number}}
