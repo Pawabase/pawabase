@@ -1126,3 +1126,8 @@ html, body { background: var(--canvas); }
 .log-message { word-break: break-word; }
 .log-detail { grid-column: 1 / -1; padding: 10px 0 6px; cursor: default; }
 .log-detail .kv { margin: 0 0 10px; }
+
+/* Sections stacked straight inside a page keep a gap between them, whichever component draws them. */
+.content > :where(.card, .form-section, section, .alert, .notice) + :where(.card, .form-section, section, .alert, .notice) { margin-top: 16px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+@media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }

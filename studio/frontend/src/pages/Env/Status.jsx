@@ -49,12 +49,14 @@ export default function Status({ env }) {
           <>
             <Section title="Page" description="Turn it on and the gateway starts serving it. Sampling begins as soon as it is enabled.">
               <Card>
+               <div className="stack lg">
                 <Switch checked={draft.enabled} onChange={(enabled) => set({ enabled })} label="Publish the status page" hint={draft.enabled ? <>Live at <CopyText text={publicUrl} label={publicUrl} /> and <code>{publicUrl}.json</code></> : "Hidden: the address returns 404."} />
-                <div className="grid2" style={{ marginTop: 14 }}>
+                <div className="grid2">
                   <Field label="Title"><input value={draft.title} onChange={(e) => set({ title: e.target.value })} /></Field>
                   <Field label="Support link" optional><input value={draft.contact_url} onChange={(e) => set({ contact_url: e.target.value })} placeholder="https://example.com/support" /></Field>
                 </div>
                 <Field label="Description" optional><input value={draft.description} onChange={(e) => set({ description: e.target.value })} placeholder="How Acme is doing right now" /></Field>
+               </div>
               </Card>
             </Section>
             <Section title="Components" description="What visitors see. Probed components are checked every five minutes; a state comes from the latest checks.">
