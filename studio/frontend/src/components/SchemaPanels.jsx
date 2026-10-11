@@ -23,7 +23,7 @@ const OPS = {
 export function SchemaBadge({ report }) {
   if (!report) return <span className="muted">—</span>;
   const state = STATES[report.state] || STATES.in_sync;
-  const count = report.state === "pending" || report.state === "review" ? ` · ${report.pending}` : report.state === "external" ? ` · ${report.external.length}` : "";
+  const count = report.state === "pending" || report.state === "review" ? ` · ${report.pending}` : report.state === "external" ? ` · ${(report.external || []).length}` : "";
   return <Badge tone={state.tone}><span className="dot" />{state.label}{count}</Badge>;
 }
 
@@ -36,7 +36,7 @@ export function SchemaPanel({ env, name, onChanged, onAdopted }) {
   const [typed, setTyped] = useState("");
   const report = state.data;
   useEffect(() => {
-    if (report) setChosen(new Set(report.changes.filter((c) => c.safe).map((c) => c.id)));
+    if (report) setChosen(new Set((report.changes || []).filter((c) => c.safe).map((c) => c.id)));
   }, [report]);
   const toggle = (id) => setChosen((current) => {
     const next = new Set(current);
@@ -74,14 +74,14 @@ export function SchemaPanel({ env, name, onChanged, onAdopted }) {
     <Loading state={state}>
       {() => report && (
         <div className="stack lg">
-          {report.external.length > 0 && (
+          {(report.external || []).length > 0 && (
             <Card title="Changed outside Pawabase">
               <div className="stack">
                 <p className="muted">
                   The table was changed by something other than Pawabase (the SQL console, a migration tool, another app)
                   since {report.since?.at ? when(report.since.at) : "it was last seen"}. Nothing has been changed here.
                 </p>
-                {report.external.map((change) => (
+                {(report.external || []).map((change) => (
                   <div key={`${change.kind}:${change.column}`} className="row wrap schema-external">
                     <Badge tone={change.kind === "removed" ? "red" : change.kind === "added" ? "green" : "yellow"}>{change.kind}</Badge>
                     <span>{change.detail}</span>
@@ -100,14 +100,14 @@ export function SchemaPanel({ env, name, onChanged, onAdopted }) {
             title="Table and definition"
             actions={<><SchemaBadge report={report} /><Button size="sm" onClick={state.reload}>Refresh</Button></>}
           >
-            {report.changes.length === 0 ? (
+            {(report.changes || []).length === 0 ? (
               <p className="muted">The table <b className="mono">{report.table}</b> matches the definition. Nothing is waiting to be applied.</p>
             ) : (
               <div className="stack">
                 <p className="muted">
                   Saving a resource changes its definition, not the table. These changes are waiting. Nothing runs until you apply them, and each one can be rolled back.
                 </p>
-                {report.changes.map((change) => (
+                {(report.changes || []).map((change) => (
                   <label key={change.id} className="schema-change">
                     <input type="checkbox" checked={chosen?.has(change.id) || false} onChange={() => toggle(change.id)} />
                     <span className="stack sm">
@@ -134,11 +134,11 @@ export function SchemaPanel({ env, name, onChanged, onAdopted }) {
               </div>
             )}
           </Card>
-          {report.retained.length > 0 && (
+          {(report.retained || []).length > 0 && (
             <Card title="Kept for rollbacks">
               <div className="stack">
                 <p className="muted">These columns and tables are hidden from your API and held so a rollback can restore them. Removing them frees the space and makes those rollbacks impossible.</p>
-                {report.retained.map((item) => (
+                {(report.retained || []).map((item) => (
                   <div key={item.name} className="row">
                     <Badge>{item.kind}</Badge><code>{item.original}</code><span className="hint">kept as {item.name}</span>
                   </div>
@@ -153,7 +153,7 @@ export function SchemaPanel({ env, name, onChanged, onAdopted }) {
           {report.exists && (
             <Card title="Columns in the table">
               <div className="row wrap">
-                {report.columns.map((column) => <Badge key={column.name}>{column.name} · {String(column.type).toLowerCase()}</Badge>)}
+                {(report.columns || []).map((column) => <Badge key={column.name}>{column.name} · {String(column.type).toLowerCase()}</Badge>)}
               </div>
             </Card>
           )}
