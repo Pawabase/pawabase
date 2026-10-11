@@ -555,7 +555,7 @@ def diagnose(report: dict[str, Any]) -> list[dict[str, str]]:
         add(
             "critical",
             "queues",
-            f"{backlog['waiting']} jobs are waiting and no worker is running: check the server's logs, and that PAWABASE_INLINE_WORKER is not false.",
+            f"{backlog['waiting']} jobs are waiting and no worker is running: check that the worker process is running (`pawabase-server worker`, or PAWABASE_WORKER_MODE=process on the server) and read its logs.",
         )
     elif backlog["oldest_seconds"] > 1800:
         add(

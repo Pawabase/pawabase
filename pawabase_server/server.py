@@ -5,6 +5,9 @@ itself, for the services that manage it (Studio), which authenticate with servic
 what Studio manages is exactly what the public side serves.
 
 Signals stop both. If either listener ends on its own the other is stopped too, so a container's restart policy sees one process end.
+
+The queue worker and the scheduler are not part of this process. Unless ``worker_mode`` is ``external``, ``serve`` starts them as child
+processes and keeps them running; either way they run in processes of their own, so a slow job never shares the server's event loop.
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ import logging
 import uvicorn
 
 from pawabase_server.app import Server, create_server
+from pawabase_server.automation.supervisor import Supervisor
 from pawabase_server.db.database import prepare
 from pawabase_server.settings import Settings
 
@@ -48,6 +52,19 @@ def listeners(server: Server) -> list[uvicorn.Server]:
     return [public, internal]
 
 
+def planned_children(settings: Settings) -> list[tuple[str, str]]:
+    """The ``(name, command)`` of each child process ``serve`` starts: none when something else runs them, or when they were put
+    in this process on purpose."""
+    if settings.worker_mode != "process":
+        return []
+    children = []
+    if not settings.inline_worker:
+        children.append(("worker", "worker"))
+    if not settings.inline_scheduler:
+        children.append(("scheduler", "scheduler"))
+    return children
+
+
 async def serve(settings: Settings | None = None) -> None:
     settings = settings or Settings()
     if outcome := await prepare(settings):
@@ -66,4 +83,14 @@ async def serve(settings: Settings | None = None) -> None:
             for other in running:
                 other.should_exit = True
 
-    await asyncio.gather(*(run(listener) for listener in running))
+    supervisor = Supervisor()
+    for name, command in planned_children(settings):
+        supervisor.add(name, command)
+    supervisor.start()
+    # Children are stopped by the application's shutdown, not after the listeners return: on a signal uvicorn finishes its shutdown and
+    # then re-raises the signal, which ends this process before anything placed after it would run, and would leave the children behind.
+    server.app.shutdown_handlers.insert(0, supervisor.stop)
+    try:
+        await asyncio.gather(*(run(listener) for listener in running))
+    finally:
+        await supervisor.stop()

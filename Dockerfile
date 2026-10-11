@@ -1,6 +1,7 @@
-# One image, two commands. `serve` is the Pawabase server: one process with identity, the management plane, the data plane, storage,
+# One image, four commands. `serve` is the Pawabase server: one process with identity, the management plane, the data plane, storage,
 # functions, flows, realtime and the public entry point. `studio` is the control plane, a service of its own that manages the server over its
-# internal listener. Compose runs both next to Postgres, Redis and object storage.
+# internal listener. `worker` and `scheduler` are the queue worker and the scheduler, each a process of its own (`serve` also starts and
+# supervises them as children unless PAWABASE_WORKER_MODE=external). Compose runs them as containers next to Postgres, Redis and storage.
 
 # ── Studio's front end ─────────────────────────────────────────────────────
 FROM node:22-slim AS studio-assets

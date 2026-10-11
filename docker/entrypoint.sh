@@ -1,6 +1,6 @@
 #!/bin/sh
-# entrypoint [serve|studio|migrate|check|version]: prepare the container, then hand over. `studio` runs the control plane; everything else is
-# the server.
+# entrypoint [serve|studio|worker|scheduler|migrate|check|version]: prepare the container, then hand over. `studio` runs the control plane;
+# `worker` and `scheduler` run the queue worker and the scheduler as processes of their own; everything else is the server.
 set -e
 
 # PAWABASE_EXTRA_CA_B64: a certificate authority to trust besides the system's, base64-encoded (for a database or storage server that signs

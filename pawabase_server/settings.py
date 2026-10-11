@@ -39,8 +39,11 @@ class Settings(Config):
 
     Functions and jobs
         ``code_path`` is where mounted code (``functions/``, ``policies/``, ``routes.py``) is read from; ``deployments_path`` is where
-        uploaded artifacts live (writable; defaults to ``<code_path>/.deployments``). ``inline_worker`` and ``inline_scheduler`` run the
-        queue worker and the scheduler inside this process, which is how the server runs by default.
+        uploaded artifacts live (writable; defaults to ``<code_path>/.deployments``). The queue worker and the scheduler are
+        processes of their own, never tasks of the server: ``worker_mode`` is ``process`` (the default: ``serve`` starts and supervises
+        them as child processes) or ``external`` (something else runs ``pawabase-server worker`` and ``pawabase-server scheduler``, as the
+        compose files do). ``inline_worker`` and ``inline_scheduler`` put them inside the server process instead; off unless asked for,
+        and meant for tests and throwaway runs.
 
     Edge (the public entry point)
         ``cors_origins``, ``rate_limit``/``rate_window``, ``max_body_bytes``, ``hosts`` (which environment each hostname serves, as
@@ -140,8 +143,12 @@ class Settings(Config):
     sandbox_idle_seconds: int = 300
     #: Comma-separated host names a function's ``http_request`` may reach although they resolve to a private address.
     outbound_allow_hosts: str = ""
-    inline_worker: bool = True
-    inline_scheduler: bool = True
+    inline_worker: bool = False
+    inline_scheduler: bool = False
+    #: ``process``: ``serve`` runs the worker and the scheduler as supervised child processes. ``external``: it starts neither.
+    worker_mode: str = "process"
+    #: Jobs a worker process runs at once.
+    worker_concurrency: int = 4
     queue_prefix: str = "pawabase:queue:"
     request_retention_days: int = 14
     #: How often function and flow run records are written, in seconds. They gather in memory and go to the database in one batch.
@@ -250,6 +257,8 @@ class Settings(Config):
     def validate_for_production(self) -> list[str]:
         """Name every development default still in place; the server refuses to start in production while any exist."""
         problems = []
+        if self.worker_mode not in ("process", "external"):
+            problems.append("PAWABASE_WORKER_MODE must be 'process' or 'external'")
         for field in ("internal_secret", "jwt_master_secret", "master_key"):
             value = getattr(self, field)
             if value.startswith("dev-") or len(value) < 32:

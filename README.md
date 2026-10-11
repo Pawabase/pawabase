@@ -115,9 +115,12 @@ The container applies database migrations on start (Sillo Record migrations). Se
   `PAWABASE_PUBLIC_URL` / `PAWABASE_PUBLIC_GATEWAY_URL` at the public URL.
 - `PAWABASE_APP_ENV=production` (the compose default) makes the server refuse to start while a
   development secret is still in place.
-- One container is the unit. To run more than one, set Redis (events, cache, queues and realtime
-  fan-out then span instances) and run the scheduler in only one of them
-  (`PAWABASE_INLINE_SCHEDULER=false` on the others).
+- The queue worker and the scheduler are processes of their own, never part of the server's event
+  loop. `docker-compose.yml` runs each as a container (`worker`, `scheduler`); a single container
+  (`docker-compose.external.yml`, or plain `pawabase-server serve`) starts and supervises them as
+  child processes. To run more than one server, set Redis (events, cache, queues and realtime
+  fan-out then span instances), set `PAWABASE_WORKER_MODE=external` on the servers, and run
+  `pawabase-server worker` wherever you need capacity and `pawabase-server scheduler` exactly once.
 - Mount your code (`functions/`, `policies/`, `routes.py`) at `/code`. The compose file mounts
   `code/`.
 
