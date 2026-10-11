@@ -96,7 +96,14 @@ export default function Definitions({ env, kind }) {
                 {kind === "webhooks" && <Button onClick={() => act("Test delivery queued", () => post(`${base}/${editing.key}/test`))}><Icon name="play" />Send test</Button>}
                 {kind === "schedules" && <Button onClick={() => act("Schedule fired", () => post(`${base}/${editing.key}/run`))}><Icon name="play" />Run now</Button>}
                 {kind === "inbound-hooks" && <Button onClick={() => act("Hook URL", () => get(`${base}/${editing.key}/url`))}><Icon name="link" />Show URL</Button>}
-                {kind === "resources" && <Button onClick={() => act("Table migrated", () => post(`${base}/${editing.key}/migrate`))}><Icon name="database" />Create / migrate table</Button>}
+                {kind === "resources" && <Button onClick={async () => {
+                  const done = await run(async () => {
+                    const result = await post(`${base}/${editing.key}/migrate`);
+                    schema.reload();
+                    return result;
+                  }, "Table updated. See the History tab for what ran.");
+                  return done;
+                }}><Icon name="database" />Create / update table</Button>}
               </>
             );
           }}
