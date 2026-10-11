@@ -5,6 +5,7 @@ import { download, toCsv } from "../../lib/tabular";
 import { TableView } from "./Database";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, CopyText, EmptyState, Field, Loading, Modal, PageHead, Table, formatCell, useAction } from "../../components/ui";
+import { HistoryPanel, SchemaBadge, SchemaPanel } from "../../components/SchemaPanels";
 import { DefinitionSheet, singular } from "../../components/definitions/DefinitionSheet";
 import { KINDS, editable, keyOf } from "../../lib/kinds";
 import { del, envPath, get, patch, post, put, useApi } from "../../lib/api";
@@ -27,6 +28,9 @@ export default function Definitions({ env, kind }) {
   const meta = KINDS[kind];
   const base = envPath(env, `/${kind}`);
   const list = useApi(base);
+  const schema = useApi(kind === "resources" ? envPath(env, "/schema") : null);
+  const reports = Object.fromEntries((schema.data?.resources || []).map((item) => [item.resource, item]));
+  const waiting = (schema.data?.resources || []).filter((item) => item.state !== "in_sync");
   const [editing, setEditing] = useState(null);
   const [reveal, setReveal] = useState(null);
   const [extra, setExtra] = useState(null);
@@ -40,6 +44,12 @@ export default function Definitions({ env, kind }) {
         description={meta.description}
         actions={<Button variant="primary" onClick={create}><Icon name="plus" />New {singular(kind).toLowerCase()}</Button>}
       />
+      {kind === "resources" && waiting.length > 0 && (
+        <div className="alert warn schema-banner">
+          <b>{waiting.length} {waiting.length === 1 ? "resource has" : "resources have"} changes that are not applied to the database.</b>{" "}
+          {waiting.map((item) => item.resource).join(", ")}. Open a resource and review its Schema tab.
+        </div>
+      )}
       <Card flush>
         <Loading state={list}>
           {(data) => data.data.length === 0 ? (
@@ -57,6 +67,7 @@ export default function Definitions({ env, kind }) {
               onRowClick={(row) => setEditing({ isNew: false, key: keyOf(kind, row), body: editable(row) })}
               columns={[
                 ...meta.columns.map((c) => ({ label: c.replace(/_/g, " "), key: c, render: RENDER[c] })),
+                ...(kind === "resources" ? [{ label: "Schema", render: (row) => <SchemaBadge report={reports[row.name]} /> }] : []),
                 ...(kind === "resources" ? [{ label: "", render: (row) => <Button size="sm" onClick={(event) => { event.stopPropagation(); setBrowse(row); }}>Records</Button> }] : []),
               ]}
             />
@@ -73,6 +84,7 @@ export default function Definitions({ env, kind }) {
           onDelete={() => del(`${base}/${editing.key}`)}
           onClose={(result) => {
             setEditing(null);
+            schema.reload();
             if (result === undefined) return;
             list.reload();
             if (result && (result.secret || result.key)) setReveal(result);
@@ -90,6 +102,8 @@ export default function Definitions({ env, kind }) {
           }}
           extraTabs={kind === "resources" && !editing.isNew ? {
             records: { label: "Records", render: () => <Records base={envPath(env, `/resources/${editing.key}/records`)} fields={editing.body.fields || []} /> },
+            schema: { label: reports[editing.key] && reports[editing.key].state !== "in_sync" ? "Schema •" : "Schema", render: () => <SchemaPanel env={env} name={editing.key} onChanged={schema.reload} /> },
+            history: { label: "History", render: () => <HistoryPanel env={env} name={editing.key} onChanged={schema.reload} /> },
           } : {}}
         />
       )}
