@@ -19,11 +19,11 @@ from pawabase_server.data import inspect as db_inspect
 from pawabase_server.data.source import DataSource
 from pawabase_server.data.sql import (
     PARKED,
-    check_identifier,
     TIMESTAMP_FIELDS,
     SqlError,
     add_column_sql,
     cast_type,
+    check_identifier,
     column_type,
     create_index_sql,
     create_table_sql,
