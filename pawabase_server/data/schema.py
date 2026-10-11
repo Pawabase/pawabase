@@ -19,6 +19,7 @@ from pawabase_server.data import inspect as db_inspect
 from pawabase_server.data.source import DataSource
 from pawabase_server.data.sql import (
     PARKED,
+    check_identifier,
     TIMESTAMP_FIELDS,
     SqlError,
     add_column_sql,
@@ -302,6 +303,236 @@ def plan(dialect: str, spec: ResourceSpec, seen: Observed, migration_id: str) ->
     return changes
 
 
+# ── changes made outside Pawabase ────────────────────────────────────────────
+
+_FIELD_TYPES = {
+    "bool": "boolean",
+    "json": "json",
+    "uuid": "uuid",
+    "timestamp": "datetime",
+    "date": "date",
+    "real": "number",
+    "integer": "integer",
+}
+
+#: Tables Pawabase or its framework own; they are never offered as resources.
+INTERNAL_TABLE_PREFIXES = ("pb_", "akz_", "perm_", "_pbm_", "sqlite_", "aerich", "tortoise")
+
+
+def field_type_for(declared: str, dialect: str = "sqlite", existing: str | None = None) -> str:
+    """The definition's field type for a database column type. Keeps ``existing`` when it already fits."""
+    kind = family(declared)
+    if existing and family(column_type(dialect, {"type": existing})) == kind:
+        return existing
+    if kind == "text":
+        return "text" if "text" in str(declared).lower() and dialect != "sqlite" else "string"
+    return _FIELD_TYPES.get(kind, "string")
+
+
+def snapshot_of(columns: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {"name": c["name"], "type": c["type"]} for c in columns if not c["name"].startswith("_pbm_")
+    ]
+
+
+async def last_snapshot(env: str, resource: str) -> SchemaMigration | None:
+    """The newest record of what the table looked like when Pawabase last saw it."""
+    rows = await SchemaMigration.filter(env=env, resource=resource).order_by("-number").all()
+    return next((row for row in rows if row.columns and row.status != "failed"), None)
+
+
+def external_changes(
+    before: list[dict[str, Any]], live: list[dict[str, Any]], spec: ResourceSpec, dialect: str
+) -> list[dict[str, Any]]:
+    """What changed in the table since ``before``, which Pawabase did not do."""
+    old = {c["name"]: c["type"] for c in before if c["name"] != spec.primary_key}
+    new = {c["name"]: c["type"] for c in snapshot_of(live) if c["name"] != spec.primary_key}
+    added = {n: t for n, t in new.items() if n not in old}
+    removed = {n: t for n, t in old.items() if n not in new}
+    out: list[dict[str, Any]] = []
+    order_old = [c["name"] for c in before if c["name"] != spec.primary_key]
+    order_new = [c["name"] for c in snapshot_of(live) if c["name"] != spec.primary_key]
+    for name in list(removed):
+        same = [a for a, t in added.items() if family(t) == family(removed[name])]
+        peers = [r for r, t in removed.items() if family(t) == family(removed[name])]
+        # A rename keeps its place among the columns; failing that, it is the only candidate of its kind.
+        place = order_old.index(name)
+        mates = [a for a in same if order_new.index(a) == place] or (same if len(same) == 1 else [])
+        if len(mates) == 1 and len(peers) == 1:
+            out.append(
+                {
+                    "kind": "renamed",
+                    "column": mates[0],
+                    "from": name,
+                    "type": added[mates[0]],
+                    "field_type": field_type_for(added[mates[0]], dialect),
+                    "detail": f"{name} was renamed to {mates[0]}",
+                }
+            )
+            del added[mates[0]]
+            del removed[name]
+    for name, kind in added.items():
+        out.append(
+            {
+                "kind": "added",
+                "column": name,
+                "type": kind,
+                "field_type": field_type_for(kind, dialect),
+                "in_definition": name in spec.field_map,
+                "detail": f"Column {name} ({kind.lower()}) was added",
+            }
+        )
+    for name in removed:
+        out.append(
+            {
+                "kind": "removed",
+                "column": name,
+                "type": removed[name],
+                "in_definition": name in spec.field_map,
+                "detail": f"Column {name} was removed",
+            }
+        )
+    for name, kind in new.items():
+        if name in old and family(old[name]) != family(kind):
+            out.append(
+                {
+                    "kind": "retyped",
+                    "column": name,
+                    "from_type": old[name],
+                    "type": kind,
+                    "field_type": field_type_for(
+                        kind, dialect, (spec.field_map.get(name) or {}).get("type")
+                    ),
+                    "detail": f"Column {name} changed from {old[name].lower()} to {kind.lower()}",
+                }
+            )
+    return out
+
+
+def propose_fields(spec: ResourceSpec, changes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The definition's fields once they follow the table."""
+    fields = [dict(f) for f in spec.fields]
+    reserved = {spec.primary_key, *TIMESTAMP_FIELDS}
+    for change in changes:
+        name = change["column"]
+        if name in reserved:
+            continue
+        index = next((i for i, f in enumerate(fields) if f["name"] == name), None)
+        if change["kind"] == "added" and index is None:
+            fields.append({"name": name, "type": change["field_type"]})
+        elif change["kind"] == "removed" and index is not None:
+            del fields[index]
+        elif change["kind"] == "retyped" and index is not None:
+            fields[index]["type"] = change["field_type"]
+        elif change["kind"] == "renamed":
+            old = next((i for i, f in enumerate(fields) if f["name"] == change["from"]), None)
+            if old is not None and index is None:
+                fields[old]["name"] = name
+            elif old is None and index is None:
+                fields.append({"name": name, "type": change["field_type"]})
+    return fields
+
+
+async def record_external(
+    env: str,
+    source: DataSource,
+    spec: ResourceSpec,
+    changes: list[dict[str, Any]],
+    *,
+    actor: str | None,
+    origin: str = "external",
+    summary: str | None = None,
+) -> SchemaMigration:
+    """Put what Pawabase now sees on the record, so the next look starts from here."""
+    seen = await observe(source, spec)
+    return await SchemaMigration.create(
+        env=env,
+        resource=spec.name,
+        table_name=spec.table,
+        number=await _next_number(env, spec.name),
+        kind="external",
+        status="applied",
+        source=origin,
+        summary=(summary or "Changed outside Pawabase: " + "; ".join(c["detail"] for c in changes))[
+            :300
+        ],
+        changes=changes,
+        columns=snapshot_of(seen.columns),
+        actor=actor,
+    )
+
+
+async def unclaimed_tables(source: DataSource, specs: list[ResourceSpec]) -> list[dict[str, Any]]:
+    """Tables in the database no resource is defined for, with the fields they would become."""
+    claimed = {spec.table for spec in specs}
+    out = []
+    for table in await db_inspect.list_tables(source):
+        if table in claimed or table.startswith(INTERNAL_TABLE_PREFIXES):
+            continue
+        try:
+            check_identifier(table)
+        except SqlError:
+            continue
+        columns = await db_inspect.list_columns(source, table)
+        out.append(
+            {
+                "table": table,
+                "primary_key": next((c["name"] for c in columns if c["primary_key"]), None),
+                "columns": [
+                    {
+                        "name": c["name"],
+                        "type": c["type"],
+                        "field_type": field_type_for(c["type"], source.dialect),
+                        "primary_key": c["primary_key"],
+                        "nullable": c["nullable"],
+                    }
+                    for c in columns
+                ],
+            }
+        )
+    return out
+
+
+def definition_from_table(table: dict[str, Any], dialect: str) -> tuple[dict[str, Any], list[str]]:
+    """A resource's table, primary key, id type, timestamps and fields, read from an existing table."""
+    key = table["primary_key"]
+    if not key:
+        raise SchemaError(
+            f"{table['table']} has no primary key, so records could not be told apart"
+        )
+    pk_column = next(c for c in table["columns"] if c["name"] == key)
+    kind = family(pk_column["type"])
+    if kind == "uuid":
+        id_type = "uuid"
+    elif kind == "text" and "26" in str(pk_column["type"]):
+        id_type = "ulid"
+    else:
+        raise SchemaError(
+            f"{table['table']} is keyed by {str(pk_column['type']).lower()}; resources are keyed by a ULID or a UUID"
+        )
+    names = {c["name"] for c in table["columns"]}
+    timestamps = set(TIMESTAMP_FIELDS) <= names
+    fields: list[dict[str, Any]] = []
+    skipped: list[str] = []
+    for column in table["columns"]:
+        name = column["name"]
+        if name == key or (timestamps and name in TIMESTAMP_FIELDS):
+            continue
+        try:
+            check_identifier(name)
+        except SqlError:
+            skipped.append(name)
+            continue
+        fields.append({"name": name, "type": field_type_for(column["type"], dialect)})
+    return {
+        "table": table["table"],
+        "primary_key": key,
+        "id_type": id_type,
+        "timestamps": timestamps,
+        "fields_": fields,
+    }, skipped
+
+
 # ── reading ──────────────────────────────────────────────────────────────────
 
 
@@ -310,13 +541,25 @@ def _summary(changes: list[Change]) -> str:
     return text if len(text) <= 300 else text[:297] + "…"
 
 
-async def status(source: DataSource, spec: ResourceSpec) -> dict[str, Any]:
+async def status(env: str, source: DataSource, spec: ResourceSpec) -> dict[str, Any]:
     """Whether the table matches the definition, and what would change."""
     seen = await observe(source, spec)
     changes = plan(source.dialect, spec, seen, new_ulid())
     safe = [change for change in changes if change.safe]
+    external: list[dict[str, Any]] = []
+    since = None
+    if seen.exists:
+        snapshot = await last_snapshot(env, spec.name)
+        if snapshot is not None:
+            external = external_changes(snapshot.columns, seen.columns, spec, source.dialect)
+            since = {
+                "number": snapshot.number,
+                "at": snapshot.created_at.isoformat() if snapshot.created_at else None,
+            }
     if not seen.exists:
         state = "no_table"
+    elif external:
+        state = "external"
     elif safe:
         state = "pending"
     elif changes:
@@ -329,6 +572,9 @@ async def status(source: DataSource, spec: ResourceSpec) -> dict[str, Any]:
         "state": state,
         "exists": seen.exists,
         "changes": [change.view() for change in changes],
+        "external": external,
+        "since": since,
+        "proposal": propose_fields(spec, external) if external else None,
         "pending": len(changes),
         "destructive": len([change for change in changes if not change.safe]),
         "retained": seen.parked,
@@ -352,7 +598,9 @@ async def history(
     out = []
     for row in rows:
         reason = None
-        if row.kind != "apply" or row.status != "applied":
+        if row.kind == "external":
+            reason = "it was made outside Pawabase, so there is nothing to undo it with"
+        elif row.kind != "apply" or row.status != "applied":
             reason = {"rolled_back": "already rolled back", "failed": "did not apply"}.get(
                 row.status, "a rollback cannot be rolled back; apply the change again instead"
             )
@@ -483,11 +731,7 @@ async def apply(
         down=[down for down in reversed(downs) if down],
         needs=[name for change in chosen for name in change.needs]
         + ([spec.table] if any(change.op == "create_table" for change in chosen) else []),
-        columns=[
-            {"name": c["name"], "type": c["type"]}
-            for c in after.columns
-            if not c["name"].startswith("_pbm_")
-        ],
+        columns=snapshot_of(after.columns),
         actor=actor,
     )
 
@@ -518,11 +762,13 @@ async def roll_back(
             "Check the table before trying again."
         )
     number = await _next_number(env, spec.name)
+    after = await observe(source, spec)
     entry = await SchemaMigration.create(
         env=env,
         resource=spec.name,
         table_name=spec.table,
         number=number,
+        columns=snapshot_of(after.columns),
         kind="rollback",
         status="applied",
         source="rollback",
