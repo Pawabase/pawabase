@@ -28,6 +28,7 @@ from pawabase_server.data.sql import (
     create_table_sql,
     decode_value,
     encode_value,
+    is_parked,
     now_value,
 )
 
@@ -226,7 +227,9 @@ class ResourceStore:
 
     def _decode(self, row: Mapping[str, Any]) -> dict[str, Any]:
         return {
-            name: decode_value(self.spec.field_map.get(name), value) for name, value in row.items()
+            name: decode_value(self.spec.field_map.get(name), value)
+            for name, value in row.items()
+            if not is_parked(name)
         }
 
     async def list(

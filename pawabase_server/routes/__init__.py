@@ -38,6 +38,7 @@ def register_routes(
         operations,
         releases,
         runtime,
+        schema,
         status,
     )
 
@@ -54,6 +55,7 @@ def register_routes(
         insights,
         networking,
         runtime,
+        schema,
         status,
     ):
         module.register(management, platform)

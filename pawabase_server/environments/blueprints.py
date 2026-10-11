@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, Field, ValidationError
 from sillo.exceptions import HTTPException
 
+from pawabase_server.data import schema
 from pawabase_server.data.store import SqlError
 from pawabase_server.db.models import Environment, Resource, WebhookEndpoint
 from pawabase_server.environments.state import bump
@@ -297,7 +298,9 @@ async def apply(
         for resource in blueprint.definitions.get("resources", []):
             try:
                 store = await state.store(resource["name"])
-                await store.migrate()
+                await schema.apply_safe(
+                    environment.name, store.source, store.spec, actor=None, origin="blueprint"
+                )
             except SqlError as exc:
                 raise BlueprintError(f"resources.{resource['name']}", f"migrate: {exc}") from exc
 
