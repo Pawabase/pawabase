@@ -42,16 +42,26 @@ export const ENV_NAV = [
   ] },
 ];
 
-/** The tabs across the top of a page, for the pages of a service that has several. */
-function ServiceTabs({ env, section }) {
+/** The service a page belongs to, and its pages: one bar under the top bar, the same on every page of the service. */
+function ServiceBar({ env, section }) {
   const service = serviceOf(section);
-  if (!service || service.pages.length < 2) return null;
+  if (!service) return null;
   return (
-    <nav className="group-tabs" aria-label={service.label}>
-      {service.pages.map(([key, label]) => (
-        <Link key={key} href={envHref(env, key)} className={key === section ? "active" : ""} aria-current={key === section ? "page" : undefined}>{label}</Link>
-      ))}
-    </nav>
+    <div className="service-bar">
+      <div className="service-bar-inner">
+        <Link href={envHref(env, service.pages[0][0])} className="service-bar-name">
+          <Hair name={service.icon} size={20} />
+          <span>{service.label}</span>
+        </Link>
+        {service.pages.length > 1 && (
+          <nav className="service-bar-tabs" aria-label={service.label}>
+            {service.pages.map(([key, label]) => (
+              <Link key={key} href={envHref(env, key)} className={key === section ? "active" : ""} aria-current={key === section ? "page" : undefined}>{label}</Link>
+            ))}
+          </nav>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -459,9 +469,9 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
               </button>
             </div>
           </div>
+          {env && !classic && <ServiceBar env={env} section={section} />}
           <div className={`content ${full ? "full" : ""}`}>
-            {env && !classic && section === "overview" && <ServiceCatalog hrefFor={(key) => envHref(env, key)} />}
-            {env && !classic && <ServiceTabs env={env} section={section} />}
+            {env && !classic && section === "overview" && <ServiceCatalog env={env} hrefFor={(key) => envHref(env, key)} />}
             {children}
           </div>
         </main>

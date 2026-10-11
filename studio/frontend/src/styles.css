@@ -1353,3 +1353,48 @@ html, body { background: var(--canvas); }
 .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); border-top: 1px solid var(--line-2); }
 .service-cell-eyebrow { font: 600 10.5px var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
 .catalog-head { margin-bottom: 20px; }
+
+/* ── Console, second pass ───────────────────────────────────────────────────────────────────────────────────────────── */
+.shell.console { --bar: 56px; }
+.service-bar { position: sticky; top: 0; z-index: 15; background: var(--surface); border-bottom: 1px solid var(--line); }
+.service-bar-inner { display: flex; align-items: stretch; gap: 28px; max-width: 1320px; margin-inline: auto; padding: 0 32px; min-height: 52px; }
+.service-bar-name { display: inline-flex; align-items: center; gap: 10px; color: var(--text); font: 650 15px var(--sans); letter-spacing: -0.01em; text-decoration: none; padding-right: 28px; border-right: 1px solid var(--line); }
+.service-bar-tabs { display: flex; gap: 6px; align-items: stretch; overflow-x: auto; scrollbar-width: none; }
+.service-bar-tabs a { position: relative; display: inline-flex; align-items: center; padding: 0 12px; color: var(--muted); font: 550 13.5px var(--sans); text-decoration: none; white-space: nowrap; transition: color .12s; }
+.service-bar-tabs a:hover { color: var(--text); }
+.service-bar-tabs a.active { color: var(--text); }
+.service-bar-tabs a.active::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px; background: var(--text); border-radius: 2px; }
+.shell.console .content { padding-top: 28px; }
+.shell.console .page-head { margin-bottom: 22px; }
+.shell.console .page-head h1 { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; }
+.shell.console .page-head p { font-size: 13.5px; }
+
+.catalog-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
+.catalog-hero .eyebrow { font: 600 11px var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+.catalog-hero h1 { margin: 4px 0 6px; font-size: 30px; font-weight: 650; letter-spacing: -0.03em; }
+.catalog-hero p { margin: 0; max-width: 62ch; color: var(--muted); font-size: 14px; line-height: 1.55; }
+.hero-link { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface); color: var(--text); font: 600 13px var(--sans); cursor: pointer; flex-shrink: 0; }
+.hero-link:hover { background: var(--sunken); }
+.quick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.quick-label { width: 74px; font: 600 11px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.quick-action { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); color: var(--text); font: 550 13px var(--sans); text-decoration: none; transition: border-color .12s, background .12s; }
+.quick-action:hover { border-color: var(--text); }
+.quick-action.quiet { border-color: var(--line); color: var(--muted); }
+.quick-action.quiet:hover { color: var(--text); border-color: var(--line-2); background: var(--sunken); }
+.catalog-grid { margin-top: 22px; }
+.service-cell { padding: 20px 22px 18px; }
+.service-cell-head .hair { color: var(--text); }
+.service-pages a { font-size: 12.5px; }
+.catalog { margin-bottom: 40px; padding-bottom: 32px; border-bottom: 1px solid var(--line); }
+.top-actions { gap: 4px; }
+.shell.console .top-actions .btn { height: 34px; }
+.shell.console :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+@media (max-width: 760px) {
+  .service-bar-inner { padding-inline: 16px; gap: 14px; }
+  .service-bar-name { padding-right: 14px; }
+  .service-bar-name span { display: none; }
+  .catalog-hero { flex-direction: column; align-items: flex-start; }
+  .quick-label { width: 100%; }
+  .shell.console .content { padding-inline: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { .services-panel { animation: none; } }
