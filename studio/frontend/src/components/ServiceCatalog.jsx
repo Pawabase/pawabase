@@ -1,34 +1,32 @@
 import { Link } from "@inertiajs/react";
-import { Icon } from "./icons";
+import Hair from "./Hair";
 import { CATEGORIES, SERVICES } from "../lib/services";
 
-/** The home of an environment: every service as a card, grouped the way a cloud console does. */
+const LABEL = Object.fromEntries(CATEGORIES.map((category) => [category.id, category.label]));
+
+/** The home of an environment: every service on one hairline grid. */
 export default function ServiceCatalog({ hrefFor }) {
   return (
     <section className="catalog" aria-label="Services">
-      <div className="catalog-head">
+      <header className="catalog-head">
         <h2>Services</h2>
-        <p>Everything in this environment, as independent parts that share one account, one set of access rules and one event stream.</p>
+        <p>Independent parts that share one account, one set of access rules and one stream of events.</p>
+      </header>
+      <div className="catalog-grid">
+        {SERVICES.map((service) => (
+          <article key={service.key} className="service-cell">
+            <span className="service-cell-eyebrow">{LABEL[service.category]}</span>
+            <Link href={hrefFor(service.pages[0][0])} className="service-cell-head">
+              <Hair name={service.icon} size={26} />
+              <b>{service.label}</b>
+            </Link>
+            <p>{service.description}</p>
+            <nav className="service-pages" aria-label={`${service.label} pages`}>
+              {service.pages.map(([key, label]) => <Link key={key} href={hrefFor(key)}>{label}</Link>)}
+            </nav>
+          </article>
+        ))}
       </div>
-      {CATEGORIES.map((category) => (
-        <div key={category.id} className="catalog-category">
-          <div className="catalog-category-head"><b>{category.label}</b><span>{category.blurb}</span></div>
-          <div className="catalog-grid">
-            {SERVICES.filter((service) => service.category === category.id).map((service) => (
-              <div key={service.key} className="service-card">
-                <Link href={hrefFor(service.pages[0][0])} className="service-card-head">
-                  <span className="service-icon"><Icon name={service.icon} size={20} /></span>
-                  <b>{service.label}</b>
-                </Link>
-                <p>{service.description}</p>
-                <div className="service-pages">
-                  {service.pages.map(([key, label]) => <Link key={key} href={hrefFor(key)}>{label}</Link>)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
     </section>
   );
 }

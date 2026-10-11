@@ -4,6 +4,7 @@ import CommandSearch from "./CommandSearch";
 import Console from "./Console";
 import NewEnvironment from "./NewEnvironment";
 import StatusLights from "./StatusLights";
+import Hair from "./Hair";
 import ServiceCatalog from "./ServiceCatalog";
 import ServicesMenu, { usePins } from "./ServicesMenu";
 import Tour from "./Tour";
@@ -447,14 +448,14 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
             </div>
             <div className="top-actions">
               {env && !classic && pins.map((key) => SERVICES.find((item) => item.key === key)).filter(Boolean).map((item) => (
-                <Link key={item.key} href={envHref(env, item.pages[0][0])} className={`pin-link ${service?.key === item.key ? "active" : ""}`}><Icon name={item.icon} size={15} />{item.label}</Link>
+                <Link key={item.key} href={envHref(env, item.pages[0][0])} className={`pin-link ${service?.key === item.key ? "active" : ""}`}><Hair name={item.icon} size={16} />{item.label}</Link>
               ))}
-              {env && <Button size="sm" data-tour="history" onClick={() => setHistoryOpen(true)} title="Checkout, create, merge, and review branches"><Icon name="gitBranch" size={15} /> History</Button>}
+              {env && <Button size="sm" data-tour="history" onClick={() => setHistoryOpen(true)} title="Checkout, create, merge, and review branches">{classic ? <Icon name="gitBranch" size={15} /> : <Hair name="branch" size={16} />} History</Button>}
               <StatusLights />
               <span data-tour="search" className="tour-wrap"><CommandSearch /></span>
-              <button type="button" className="icon-btn" onClick={() => setLayout(classic ? "console" : "classic")} aria-label={classic ? "Switch to the console layout" : "Switch to the classic sidebar layout"} title={classic ? "Console layout (no sidebar)" : "Classic layout (sidebar)"}><Icon name={classic ? "layers" : "panelLeft"} /></button>
+              <button type="button" className="icon-btn" onClick={() => setLayout(classic ? "console" : "classic")} aria-label={classic ? "Switch to the console layout" : "Switch to the classic sidebar layout"} title={classic ? "Console layout (no sidebar)" : "Classic layout (sidebar)"}>{classic ? <Hair name="services" size={19} /> : <Hair name="panel" size={19} />}</button>
               <button type="button" data-tour="theme" className="icon-btn" onClick={toggleTheme} aria-label={dark ? "Switch to light" : "Switch to dark"}>
-                <Icon name={dark ? "sun" : "moon"} />
+                {classic ? <Icon name={dark ? "sun" : "moon"} /> : <Hair name={dark ? "sun" : "moon"} size={19} />}
               </button>
             </div>
           </div>
