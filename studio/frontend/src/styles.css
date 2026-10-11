@@ -1403,7 +1403,8 @@ html, body { background: var(--canvas); }
    Console theme. Neutral surfaces, one accent, hairline borders, small even radii, a tight type scale. Every colour,
    radius and size below is a token, so the whole console changes from here.
    ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
-.shell.console {
+/* the palette, for every page and both layouts */
+:root {
   --frame: #ffffff; --canvas: #ffffff; --surface: #ffffff; --sunken: #f6f6f8;
   --line: #ebebef; --line-2: #dcdce3;
   --ink: #111114; --on-ink: #ffffff; --text: #111114; --muted: #666672; --faint: #9999a5;
@@ -1411,11 +1412,10 @@ html, body { background: var(--canvas); }
   --r-xl: 16px; --r-lg: 12px; --r-md: 10px; --r-sm: 8px;
   --shadow-pop: 0 12px 40px rgba(17, 17, 20, 0.12), 0 0 0 1px rgba(17, 17, 20, 0.05);
   --bar: 52px;
-  background: var(--canvas);
-  color: var(--text);
-  font-size: 13.5px;
+  color-scheme: light;
 }
-:root[data-theme="dark"] .shell.console {
+.shell { background: var(--canvas); color: var(--text); font-size: 13.5px; }
+:root[data-theme="dark"] {
   --frame: #0b0b0e; --canvas: #0b0b0e; --surface: #101014; --sunken: #16161b;
   --line: #1f1f26; --line-2: #2b2b34;
   --ink: #f5f5f7; --on-ink: #0b0b0e; --text: #f0f0f3; --muted: #9a9aa6; --faint: #686873;
@@ -1423,7 +1423,7 @@ html, body { background: var(--canvas); }
   --shadow-pop: 0 16px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .shell.console {
+  :root:not([data-theme="light"]) {
     --frame: #0b0b0e; --canvas: #0b0b0e; --surface: #101014; --sunken: #16161b;
     --line: #1f1f26; --line-2: #2b2b34;
     --ink: #f5f5f7; --on-ink: #0b0b0e; --text: #f0f0f3; --muted: #9a9aa6; --faint: #686873;
@@ -1431,54 +1431,54 @@ html, body { background: var(--canvas); }
     --shadow-pop: 0 16px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
   }
 }
-.shell.console, .shell.console .frame, .shell.console .main, .shell.console .main-col { background: var(--canvas); }
-.shell.console h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
-.shell.console h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
-.shell.console h3 { font-size: 13.5px; font-weight: 600; }
+.shell, .shell .frame, .shell .main, .shell .main-col { background: var(--canvas); }
+.shell h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.shell h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.shell h3 { font-size: 13.5px; font-weight: 600; }
 
 /* top bar */
-.shell.console .topbar { height: 52px; padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--line); }
-.shell.console .crumbs a, .shell.console .crumbs .here { padding: 4px 8px; border-radius: 8px; font-size: 13px; }
-.shell.console .crumb-btn { border-radius: 8px; font-size: 13px; }
-.shell.console .icon-btn { width: 32px; height: 32px; border-radius: 8px; }
-.shell.console .cmd-field { height: 32px; width: 220px; border-radius: 8px; background: var(--sunken); border: 1px solid var(--line); font-size: 13px; padding: 0 6px 0 10px; }
-.shell.console .cmd.open .cmd-field, .shell.console .cmd-field:focus-within { width: 300px; background: var(--surface); border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-ring); }
-.shell.console .cmd-field kbd { background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; font-size: 10.5px; }
-.shell.console .cmd-results { border-radius: 12px; box-shadow: var(--shadow-pop); border: 1px solid var(--line-2); }
-.shell.console .cmd-icon { border-radius: 7px; }
+.shell .topbar { height: 52px; padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.shell .crumbs a, .shell .crumbs .here { padding: 4px 8px; border-radius: 8px; font-size: 13px; }
+.shell .crumb-btn { border-radius: 8px; font-size: 13px; }
+.shell .icon-btn { width: 32px; height: 32px; border-radius: 8px; }
+.shell .cmd-field { height: 32px; width: 220px; border-radius: 8px; background: var(--sunken); border: 1px solid var(--line); font-size: 13px; padding: 0 6px 0 10px; }
+.shell .cmd.open .cmd-field, .shell .cmd-field:focus-within { width: 300px; background: var(--surface); border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-ring); }
+.shell .cmd-field kbd { background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; font-size: 10.5px; }
+.shell .cmd-results { border-radius: 12px; box-shadow: var(--shadow-pop); border: 1px solid var(--line-2); }
+.shell .cmd-icon { border-radius: 7px; }
 .services-btn { height: 32px; border-radius: 8px; padding: 0 10px; font-size: 13px; }
 
 /* buttons, fields, badges */
-.shell.console .btn { height: 32px; padding: 0 12px; border-radius: 8px; font-size: 13px; font-weight: 550; letter-spacing: -0.005em; box-shadow: none; }
-.shell.console .btn.sm { height: 28px; padding: 0 10px; font-size: 12.5px; }
-.shell.console .btn:hover { background: var(--sunken); border-color: var(--line-2); }
-.shell.console .btn.primary { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
-.shell.console .btn.primary:hover { background: var(--ink); filter: none; opacity: .88; }
-.shell.console .btn.danger { background: transparent; border-color: var(--line-2); color: var(--danger); }
-.shell.console .btn.ghost { border-color: transparent; }
-.shell.console input, .shell.console select, .shell.console textarea { border-radius: 8px; padding: 7px 11px; font-size: 13.5px; border-color: var(--line-2); }
-.shell.console input:focus, .shell.console select:focus, .shell.console textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-ring); }
-.shell.console .badge { padding: 1px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 550; }
-.shell.console .alert { border-radius: 10px; padding: 10px 14px; border: 1px solid transparent; }
-.shell.console .alert.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 22%, transparent); }
-.shell.console .alert.error { border-color: color-mix(in srgb, var(--danger) 22%, transparent); }
-.shell.console .alert.ok { border-color: color-mix(in srgb, var(--ok) 22%, transparent); }
-.shell.console .alert.info { border-color: color-mix(in srgb, var(--info) 22%, transparent); }
+.shell .btn { height: 32px; padding: 0 12px; border-radius: 8px; font-size: 13px; font-weight: 550; letter-spacing: -0.005em; box-shadow: none; }
+.shell .btn.sm { height: 28px; padding: 0 10px; font-size: 12.5px; }
+.shell .btn:hover { background: var(--sunken); border-color: var(--line-2); }
+.shell .btn.primary { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+.shell .btn.primary:hover { background: var(--ink); filter: none; opacity: .88; }
+.shell .btn.danger { background: transparent; border-color: var(--line-2); color: var(--danger); }
+.shell .btn.ghost { border-color: transparent; }
+.shell input, .shell select, .shell textarea { border-radius: 8px; padding: 7px 11px; font-size: 13.5px; border-color: var(--line-2); }
+.shell input:focus, .shell select:focus, .shell textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-ring); }
+.shell .badge { padding: 1px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 550; }
+.shell .alert { border-radius: 10px; padding: 10px 14px; border: 1px solid transparent; }
+.shell .alert.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 22%, transparent); }
+.shell .alert.error { border-color: color-mix(in srgb, var(--danger) 22%, transparent); }
+.shell .alert.ok { border-color: color-mix(in srgb, var(--ok) 22%, transparent); }
+.shell .alert.info { border-color: color-mix(in srgb, var(--info) 22%, transparent); }
 
 /* content */
-.shell.console .content { padding: 28px 32px 64px; }
-.shell.console .page-head { margin-bottom: 20px; align-items: flex-end; }
-.shell.console .page-head h1 { font-size: 20px; }
-.shell.console .page-head p { font-size: 13.5px; color: var(--muted); margin-top: 4px; }
-.shell.console .card { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: none; }
-.shell.console .card-head { padding: 14px 18px; }
-.shell.console .card-head h2 { font-size: 14px; }
-.shell.console .table-wrap { border-radius: 0; }
-.shell.console th { font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted); padding: 10px 16px; background: var(--sunken); border-bottom: 1px solid var(--line); }
-.shell.console td { padding: 12px 16px; border-bottom: 1px solid var(--line); }
-.shell.console tbody tr:last-child td { border-bottom: 0; }
-.shell.console tbody tr:hover { background: var(--sunken); }
-.shell.console .eyebrow { letter-spacing: .08em; }
+.shell .content { padding: 28px 32px 64px; }
+.shell .page-head { margin-bottom: 20px; align-items: flex-end; }
+.shell .page-head h1 { font-size: 20px; }
+.shell .page-head p { font-size: 13.5px; color: var(--muted); margin-top: 4px; }
+.shell .card { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: none; }
+.shell .card-head { padding: 14px 18px; }
+.shell .card-head h2 { font-size: 14px; }
+.shell .table-wrap { border-radius: 0; }
+.shell th { font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted); padding: 10px 16px; background: var(--sunken); border-bottom: 1px solid var(--line); }
+.shell td { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.shell tbody tr:last-child td { border-bottom: 0; }
+.shell tbody tr:hover { background: var(--sunken); }
+.shell .eyebrow { letter-spacing: .08em; }
 
 /* service bar and home */
 .service-bar { background: var(--surface); border-bottom: 1px solid var(--line); }
@@ -1504,7 +1504,7 @@ html, body { background: var(--canvas); }
 .service-row:hover { background: var(--sunken); }
 .service-row.current { background: var(--brand-soft); }
 
-.shell.console th { text-transform: capitalize; }
+.shell th { text-transform: capitalize; }
 .service-cell-head.as-button { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; text-align: left; }
 .service-pages button { background: none; border: 0; padding: 0; font: 550 12.5px var(--sans); color: var(--muted); cursor: pointer; border-bottom: 1px solid transparent; }
 .service-pages button:hover { color: var(--brand-strong); border-bottom-color: var(--brand-strong); }
@@ -1514,11 +1514,11 @@ html, body { background: var(--canvas); }
 .service-cell { box-shadow: 1px 0 0 var(--line), 0 1px 0 var(--line); }
 
 /* tabs inside panels: hairline, like the service bar */
-.shell.console .tabs { background: none; padding: 0; gap: 18px; border-radius: 0; border-bottom: 0; margin-bottom: 0; }
-.shell.console .tabs button { padding: 10px 0; border-radius: 0; font-size: 13px; font-weight: 550; border-bottom: 2px solid transparent; margin-bottom: -1px; }
-.shell.console .tabs button.active { background: none; box-shadow: none; color: var(--text); border-bottom-color: var(--brand); }
-.shell.console .sheet-tabs { padding: 0 24px; border-bottom: 1px solid var(--line); }
-.shell.console .sheet-tabs .tabs { margin-bottom: 0; }
+.shell .tabs { background: none; padding: 0; gap: 18px; border-radius: 0; border-bottom: 0; margin-bottom: 0; }
+.shell .tabs button { padding: 10px 0; border-radius: 0; font-size: 13px; font-weight: 550; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.shell .tabs button.active { background: none; box-shadow: none; color: var(--text); border-bottom-color: var(--brand); }
+.shell .sheet-tabs { padding: 0 24px; border-bottom: 1px solid var(--line); }
+.shell .sheet-tabs .tabs { margin-bottom: 0; }
 
 /* field-type chips: a letter in a hairline box, not a coloured tile */
-.shell.console .field-type-dot { background: none !important; border: 1px solid var(--line-2); color: var(--muted); border-radius: 6px; font-size: 10.5px; font-weight: 600; }
+.shell .field-type-dot { background: none !important; border: 1px solid var(--line-2); color: var(--muted); border-radius: 6px; font-size: 10.5px; font-weight: 600; }
