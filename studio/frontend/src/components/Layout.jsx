@@ -38,6 +38,38 @@ export const ENV_NAV = [
   ] },
 ];
 
+/**
+ * What the sidebar shows: eight areas, each holding the pages that used to be separate sidebar items. A page keeps its own URL; the
+ * area's tabs (across the top of the page) move between them. ENV_NAV above still lists every page, for search.
+ */
+export const NAV_GROUPS = [
+  { key: "overview", label: "Overview", icon: "overview", sections: [["overview", "Overview"]] },
+  { key: "data", label: "Data model", icon: "database", sections: [["resources", "Collections"], ["topology", "Relations"], ["schemas", "Schemas"], ["transformers", "Transformers"], ["database", "SQL"]] },
+  { key: "files", label: "Files", icon: "storage", sections: [["storage", "Storage"]] },
+  { key: "access", label: "Users & access", icon: "users", sections: [["users", "Users"], ["policies", "Policies"]] },
+  { key: "automation", label: "Automation", icon: "flows", sections: [["flows", "Flows"], ["subscriptions", "Event triggers"], ["schedules", "Schedules"], ["webhooks", "Webhooks out"], ["inbound-hooks", "Webhooks in"], ["events", "Events & runs"]] },
+  { key: "api", label: "Functions & API", icon: "functions", sections: [["functions", "Functions"], ["routes", "Routes"], ["explorer", "API Explorer"]] },
+  { key: "monitoring", label: "Monitoring", icon: "observability", sections: [["observability", "Observability"], ["jobs", "Jobs & queues"], ["realtime", "Realtime"], ["usage", "Usage & limits"], ["status", "Status page"]] },
+  { key: "settings", label: "Settings", icon: "settings", sections: [["settings", "General"], ["keys", "API keys"], ["secrets", "Secrets"], ["mail", "Mail"], ["networking", "Networking"], ["backups", "Backups"]] },
+];
+
+export function groupOf(section) {
+  return NAV_GROUPS.find((group) => group.sections.some(([key]) => key === section));
+}
+
+/** The tabs across the top of a page, for the pages that share an area with others. */
+function GroupTabs({ env, section }) {
+  const group = groupOf(section);
+  if (!group || group.sections.length < 2) return null;
+  return (
+    <nav className="group-tabs" aria-label={group.label}>
+      {group.sections.map(([key, label]) => (
+        <Link key={key} data-tour={`sub-${key}`} href={envHref(env, key)} className={key === section ? "active" : ""} aria-current={key === section ? "page" : undefined}>{label}</Link>
+      ))}
+    </nav>
+  );
+}
+
 // The pastel each section wears on its sheet headers and empty states.
 export const SECTION_TONES = {
   resources: "lavender", schemas: "sky", transformers: "butter", policies: "mint", routes: "peach",
@@ -365,18 +397,15 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
           <Link href="/" className="brand" title="Pawabase Studio"><Logo sub="Studio" /></Link>
           <nav className="nav">
             {env ? (
-              ENV_NAV.map((group) => (
-                <div key={group.title} className="nav-group">
-                  <div className="nav-title">{group.title}</div>
-                  <div className="nav-items">
-                    {group.items.map(([key, label, to, icon]) => (
-                      <Link key={key} data-tour={`nav-${key}`} href={envHref(env, to || key)} className={section === key || (key === "data" && DATA_PAGES.some(([page]) => page === section)) ? "active" : ""} title={label}>
-                        <Icon name={icon || key} /><span className="label">{label}</span>
-                      </Link>
-                    ))}
-                  </div>
+              <div className="nav-group">
+                <div className="nav-items">
+                  {NAV_GROUPS.map((group) => (
+                    <Link key={group.key} data-tour={`nav-${group.key}`} href={envHref(env, group.sections[0][0])} className={groupOf(section)?.key === group.key ? "active" : ""} title={group.label}>
+                      <Icon name={group.icon} /><span className="label">{group.label}</span>
+                    </Link>
+                  ))}
                 </div>
-              ))
+              </div>
             ) : (
               <>
                 <div className="nav-title">{name}</div>
@@ -413,7 +442,10 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
               </button>
             </div>
           </div>
-          <div className={`content ${full ? "full" : ""}`}>{children}</div>
+          <div className={`content ${full ? "full" : ""}`}>
+            {env && <GroupTabs env={env} section={section} />}
+            {children}
+          </div>
         </main>
         <Console env={env} />
         </div>
