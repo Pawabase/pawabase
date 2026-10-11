@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import Layout, { SECTION_TONES } from "../../components/Layout";
+import Layout, { DATA_PAGES, SECTION_TONES, dataSubnav } from "../../components/Layout";
 import ImportWizard from "../../components/ImportWizard";
 import { download, toCsv } from "../../lib/tabular";
 import { TableView } from "./Database";
@@ -55,7 +55,7 @@ export default function Definitions({ env, kind }) {
   }, [list.data, kind]);
   const create = () => setEditing({ isNew: true, body: meta.blank || meta.template });
   return (
-    <Layout title={meta.title}>
+    <Layout title={meta.title} subnav={DATA_PAGES.some(([page]) => page === kind) ? dataSubnav(env, kind) : undefined}>
       {browse ? <RecordsView env={env} resource={browse} onBack={() => setBrowse(null)} onEdit={() => { setEditing({ isNew: false, key: keyOf(kind, browse), body: editable(browse) }); }} /> : <>
       <PageHead
         title={meta.title}

@@ -105,6 +105,20 @@ function useTheme() {
   return [dark, () => setTheme(dark ? "light" : "dark")];
 }
 
+const LAYOUT_KEY = "pawabase.layout";
+
+/** ``console`` (services in the top bar, no sidebar) or ``classic`` (the sidebar). Remembered on this device. */
+function useLayoutMode() {
+  const [mode, setMode] = useState(() => {
+    try { return localStorage.getItem(LAYOUT_KEY) === "classic" ? "classic" : "console"; } catch { return "console"; }
+  });
+  const choose = (next) => {
+    setMode(next);
+    try { localStorage.setItem(LAYOUT_KEY, next); } catch { /* lasts for this page only */ }
+  };
+  return [mode, choose];
+}
+
 function branchKey(env) {
   return `pawabase.branch.${env}`;
 }
@@ -358,7 +372,11 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
   const [dark, toggleTheme] = useTheme();
   const [navOpen, setNavOpen] = useState(false);
   const [pins, setPins] = usePins();
+  const [layout, setLayout] = useLayoutMode();
+  const classic = layout === "classic";
   const service = serviceOf(section);
+  // In the console layout the Data pages' own list is replaced by the service's tabs.
+  const activeSubnav = classic ? subnav : subnav?.title === "Data" ? null : subnav;
   useEffect(() => remember(service?.key), [service?.key]);
   const [sidebar, setSidebar] = useSidebarMode();
   const [envMenu, setEnvMenu] = useState(false);
@@ -377,36 +395,72 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
   return (
     <ToastProvider>
       <Head title={title} />
-      <div className={`shell console ${subnav ? "has-sub" : ""}`}>
+      <div className={`shell ${classic ? `side-${subnav && sidebar === "expanded" ? "hover" : sidebar}` : "console"} ${activeSubnav ? "has-sub" : ""} ${navOpen ? "nav-open" : ""}`}>
        <div className="frame">
-        {subnav && <SubNav subnav={subnav} backHref={env ? envHref(env, "overview") : "/"} />}
+        {classic && (
+        <div className="side-slot">
+          <aside className="sidebar">
+            <Link href="/" className="brand" title="Pawabase Studio"><Logo sub="Studio" /></Link>
+            <nav className="nav">
+              {env ? (
+                ENV_NAV.map((group) => (
+                  <div key={group.title} className="nav-group">
+                    <div className="nav-title">{group.title}</div>
+                    <div className="nav-items">
+                      {group.items.map(([key, label, to, icon]) => (
+                        <Link key={key} data-tour={`nav-${key}`} href={envHref(env, to || key)} className={section === key || (key === "data" && DATA_PAGES.some(([page]) => page === section)) ? "active" : ""} title={label}>
+                          <Icon name={icon || key} /><span className="label">{label}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <>
+                  <div className="nav-title">{name}</div>
+                  {(envs || []).map((e, i) => (
+                    <Link key={e.name} href={envHref(e.name, "overview")}>
+                      <span className={`avatar pastel ${envTone(e.name, i)}`} style={{ width: 18, height: 18, borderRadius: 6, fontSize: 10 }}>{e.name.slice(0, 1).toUpperCase()}</span>
+                      <span className="label">{e.name}</span>
+                    </Link>
+                  ))}
+                </>
+              )}
+            </nav>
+            <SidebarControl mode={sidebar} onChange={setSidebar} />
+          </aside>
+          </div>
+        )}
+        {activeSubnav && <SubNav subnav={activeSubnav} backHref={env ? envHref(env, "overview") : "/"} />}
         {navOpen && <div className="sheet-overlay" style={{ zIndex: 39 }} onClick={() => setNavOpen(false)} />}
         <div className="main-col">
         <main className="main">
           <div className="topbar">
             <div className="row" style={{ minWidth: 0 }}>
-              <Link href={env ? envHref(env, "overview") : "/"} className="top-brand" title="Pawabase Studio"><LogoMark size={30} /></Link>
-              {env && <ServicesMenu hrefFor={(key) => envHref(env, key)} current={service?.key} pins={pins} onPins={setPins} />}
+              {classic && <button type="button" className="icon-btn menu-btn" onClick={() => setNavOpen(true)} aria-label="Open navigation"><Icon name="menu" /></button>}
+              {!classic && <Link href={env ? envHref(env, "overview") : "/"} className="top-brand" title="Pawabase Studio"><LogoMark size={30} /></Link>}
+              {env && !classic && <ServicesMenu hrefFor={(key) => envHref(env, key)} current={service?.key} pins={pins} onPins={setPins} />}
               <div className="crumbs">
                 <EnvMenu name={name} env={env} envs={envs} section={section} open={envMenu} setOpen={setEnvMenu} onHistory={() => setHistoryOpen(true)} onCreate={() => setNewEnv(true)} />
                 {crumbs.map((c, i) => <span key={i} className="row" style={{ gap: 4 }}><span className="sep">/</span><span className="here">{c}</span></span>)}
               </div>
             </div>
             <div className="top-actions">
-              {env && pins.map((key) => SERVICES.find((item) => item.key === key)).filter(Boolean).map((item) => (
+              {env && !classic && pins.map((key) => SERVICES.find((item) => item.key === key)).filter(Boolean).map((item) => (
                 <Link key={item.key} href={envHref(env, item.pages[0][0])} className={`pin-link ${service?.key === item.key ? "active" : ""}`}><Icon name={item.icon} size={15} />{item.label}</Link>
               ))}
               {env && <Button size="sm" data-tour="history" onClick={() => setHistoryOpen(true)} title="Checkout, create, merge, and review branches"><Icon name="gitBranch" size={15} /> History</Button>}
               <StatusLights />
               <span data-tour="search" className="tour-wrap"><CommandSearch /></span>
+              <button type="button" className="icon-btn" onClick={() => setLayout(classic ? "console" : "classic")} aria-label={classic ? "Switch to the console layout" : "Switch to the classic sidebar layout"} title={classic ? "Console layout (no sidebar)" : "Classic layout (sidebar)"}><Icon name={classic ? "layers" : "panelLeft"} /></button>
               <button type="button" data-tour="theme" className="icon-btn" onClick={toggleTheme} aria-label={dark ? "Switch to light" : "Switch to dark"}>
                 <Icon name={dark ? "sun" : "moon"} />
               </button>
             </div>
           </div>
           <div className={`content ${full ? "full" : ""}`}>
-            {env && section === "overview" && <ServiceCatalog hrefFor={(key) => envHref(env, key)} />}
-            {env && <ServiceTabs env={env} section={section} />}
+            {env && !classic && section === "overview" && <ServiceCatalog hrefFor={(key) => envHref(env, key)} />}
+            {env && !classic && <ServiceTabs env={env} section={section} />}
             {children}
           </div>
         </main>

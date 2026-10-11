@@ -1,6 +1,6 @@
 import { Link } from "@inertiajs/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import Layout, { envHref } from "../../components/Layout";
+import Layout, { dataSubnav, envHref } from "../../components/Layout";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, EmptyState, Loading, PageHead, useAction } from "../../components/ui";
 import { CARD, buildGraph, layout, neighbours, route } from "../../lib/topology";
@@ -160,7 +160,7 @@ export default function Topology({ env }) {
   const empty = graph && graph.nodes.size === 0;
 
   return (
-    <Layout title="Topology">
+    <Layout title="Topology" subnav={dataSubnav(env, "topology")}>
       <PageHead
         title="Topology"
         description="How your data fits together: resources as tables, the relations between them, and the schemas they use. Point at one to see what it touches."
