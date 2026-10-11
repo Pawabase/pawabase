@@ -26,7 +26,7 @@ export function PageHead({ title, description, actions }) {
         <h1>{title}</h1>
         {description && <p>{description}</p>}
       </div>
-      <div className="row">{actions}</div>
+      <div className="row" data-tour="page-actions">{actions}</div>
     </div>
   );
 }

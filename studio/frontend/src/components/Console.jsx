@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { del, get, patch, post, envPath } from "../lib/api";
 import { runHttp } from "../lib/httpcommand";
+import { startTour } from "../lib/tour";
 
 const SECTIONS = [
   "overview", "database", "resources", "schemas", "transformers", "policies", "routes", "explorer",
@@ -23,7 +24,7 @@ const READ_COMMANDS = [
 
 const COMMANDS = [
   ["help", "Show every command and example"], ["clear", "Clear console output"], ["close", "Close the console"],
-  ["status", "Show the current environment"], ["blocks", "List available Flow blocks"],
+  ["status", "Show the current environment"], ["tour", "Take the guided tour of Studio"], ["blocks", "List available Flow blocks"],
   ["flows", "List flows"], ["flows run <name> [json] --confirm", "Run a Flow now"], ["flows runs [name]", "List recent Flow runs"],
   ["data list <resource> [limit]", "List resource records"], ["data get <resource> <id>", "Read one record"],
   ["data create <resource> <json> --confirm", "Create a record"], ["data update <resource> <id> <json> --confirm", "Update a record"],
@@ -138,6 +139,7 @@ export default function Console({ env }) {
     if (trimmed === "clear") { patchTab(id, () => ({ lines: [] })); return; }
     if (trimmed === "close") { setOpen(false); return; }
     if (trimmed === "help") { append(trimmed, HELP_TEXT); return; }
+    if (trimmed === "tour") { setOpen(false); startTour(); return; }
     if (trimmed === "status") { append(trimmed, { environment: env }); return; }
     if (["hello", "hi", "hey"].includes(trimmed.toLowerCase())) { append(trimmed, "PawaBase Console ready. Type help to see 42 commands."); return; }
     if (/^(http|login|logout|whoami)(\s|$)/i.test(trimmed)) {
@@ -274,7 +276,7 @@ export default function Console({ env }) {
         </section>
       )}
       <div className="dockbar">
-        <button type="button" className="dock-btn" aria-expanded={open} onClick={() => setOpen((value) => !value)} title="Terminal (⌘/Ctrl J)">
+        <button type="button" data-tour="terminal" className="dock-btn" aria-expanded={open} onClick={() => setOpen((value) => !value)} title="Terminal (⌘/Ctrl J)">
           <Icon name="terminal" size={15} />
           <span>Terminal</span>
           <kbd>⌘J</kbd>
