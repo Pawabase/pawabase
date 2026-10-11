@@ -27,6 +27,9 @@ BRIDGE: dict[str, str] = {
     "gateway": "/internal/v1/gateway/",
 }
 
+#: The public data-plane prefixes the explorer and the terminal's ``http`` command may call, beyond ``/rest``. Never ``/platform``,
+#: ``/admin`` or ``/internal``: those are management, and this request carries no operator.
+PUBLIC_PREFIXES = ("/functions/v1/", "/flows/v1/", "/auth/v1/", "/storage/v1/", "/health/v1", "/docs/v1/", "/hooks/v1/")
 ENV_NAME = re.compile(r"[a-z][a-z0-9_-]{0,62}")
 API_VERSION = re.compile(r"v[1-9][0-9]*")
 EXPLORER_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
@@ -109,15 +112,32 @@ def register(app: SilloApp, deps: Deps) -> None:
             return JSONResponse({"detail": "invalid API version"}, status_code=400)
         if method not in EXPLORER_METHODS:
             return JSONResponse({"detail": "unsupported method"}, status_code=400)
-        expected_prefix = f"/rest/{version}"
-        if requested_path == expected_prefix:
-            requested_path = "/"
-        elif requested_path.startswith(expected_prefix + "/"):
-            requested_path = requested_path[len(expected_prefix) :]
-        if not requested_path.startswith("/"):
-            requested_path = "/" + requested_path
-        if ".." in requested_path.split("/") or requested_path.startswith("/rest/"):
-            return JSONResponse({"detail": "invalid endpoint path"}, status_code=400)
+        endpoint = str(body.get("endpoint") or "")
+        if endpoint:
+            # A full public path, for anything beyond resources: functions, flows, sign-in, files, health.
+            clean = endpoint.split("?", 1)[0]
+            segments = clean.split("/")[1:]
+            if (
+                not clean.startswith("/")
+                or "\\" in clean
+                or any(segment in ("", ".", "..") for segment in segments[:-1])
+                or segments[-1:] == [".."]
+                or any(ord(c) < 0x20 for c in clean)
+                or not (clean.startswith("/rest/v") or clean.startswith(PUBLIC_PREFIXES))
+            ):
+                return JSONResponse({"detail": "that is not a public endpoint path"}, status_code=400)
+            target_path = endpoint
+        else:
+            expected_prefix = f"/rest/{version}"
+            if requested_path == expected_prefix:
+                requested_path = "/"
+            elif requested_path.startswith(expected_prefix + "/"):
+                requested_path = requested_path[len(expected_prefix) :]
+            if not requested_path.startswith("/"):
+                requested_path = "/" + requested_path
+            if ".." in requested_path.split("/") or requested_path.startswith("/rest/"):
+                return JSONResponse({"detail": "invalid endpoint path"}, status_code=400)
+            target_path = expected_prefix + requested_path
 
         supplied = body.get("headers") if isinstance(body.get("headers"), dict) else {}
         forwarded = {
@@ -136,7 +156,7 @@ def register(app: SilloApp, deps: Deps) -> None:
         try:
             result = await core.request_raw(
                 method,
-                expected_prefix + requested_path,
+                target_path,
                 json=payload,
                 params=query,
                 context=PlatformContext(env=env, role="anon", key_id="studio-explorer"),
@@ -160,6 +180,7 @@ def register(app: SilloApp, deps: Deps) -> None:
                     if key.lower() in VISIBLE_HEADERS
                 },
                 "body": result.get("body"),
+                "size": len(json.dumps(result.get("body"), default=str)) if result.get("body") is not None else 0,
             }
         )
 
