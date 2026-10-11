@@ -91,8 +91,14 @@ def create_app(
     *,
     platform: Platform | None = None,
     realtime: Realtime | None = None,
+    role: str = "server",
 ) -> SilloApp:
-    """Build the application: every route the server has, behind the platform's authentication and telemetry."""
+    """Build the application: every route the server has, behind the platform's authentication and telemetry.
+
+    ``role`` is what this process is for. ``server`` (the default) serves and keeps its housekeeping; ``worker`` and ``scheduler`` are the
+    same application used headlessly by those processes: they start the platform (database, queue, events) and nothing that only a
+    server needs, such as realtime or request metrics.
+    """
     settings = settings or Settings()
     platform = platform or Platform(settings)
     realtime = realtime or Realtime(settings, platform=platform)
@@ -122,6 +128,8 @@ def create_app(
     @app.on_startup
     async def start() -> None:
         await platform.start()
+        if role != "server":
+            return
         await ensure_default_environment()
         await platform.audit_configuration()
         rollup.start()
@@ -131,7 +139,8 @@ def create_app(
                 housekeeping(realtime, settings.sweep_interval), name="realtime-housekeeping"
             )
         )
-        # The worker and the scheduler are tasks of this process: nothing separate to deploy, and no second image to keep in step.
+        # Queued work is done by processes of their own (see ``worker_mode``). These two switches put it in this process instead, which
+        # is for tests and throwaway runs: a slow job then shares the server's event loop.
         if settings.inline_worker:
             from pawabase_server.automation.event_processor import EventProcessor
             from pawabase_server.automation.worker import start_inline_worker
@@ -150,7 +159,8 @@ def create_app(
             task.cancel()
             with contextlib.suppress(BaseException):
                 await task
-        await rollup.stop()
+        if role == "server":
+            await rollup.stop()
         worker = app.state.get("inline_worker")
         if worker is not None:
             worker.stop()
@@ -160,7 +170,8 @@ def create_app(
         scheduler = app.state.get("inline_scheduler")
         if scheduler is not None:
             await scheduler.stop()
-        await realtime.stop()
+        if role == "server":
+            await realtime.stop()
         await platform.stop()
 
     # Shutdown handlers run in the order they were added, and the database installable added its own when the service was created.

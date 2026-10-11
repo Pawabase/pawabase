@@ -1,7 +1,10 @@
 """The ``pawabase-server`` command.
 
 =========  ==============================================================================
-serve      run the server (the default)
+serve      run the server (the default); it also starts the worker and the scheduler as child processes unless
+           PAWABASE_WORKER_MODE=external
+worker     run the queue worker, as a process of its own
+scheduler  run the scheduler, as a process of its own
 migrate    apply pending database migrations; ``migrate make NAME`` writes a new one
 check      validate the configuration and exit non-zero when something is wrong
 version    print the version
@@ -40,6 +43,21 @@ def main(argv: list[str] | None = None) -> int:
         asyncio.run(migrate(args))
         return 0
 
+    if command in ("worker", "scheduler"):
+        import logging
+
+        from pawabase_server.automation.runner import run
+
+        settings = Settings()
+        logging.basicConfig(
+            level=settings.log_level.upper(), format="%(levelname)s %(name)s: %(message)s"
+        )
+        try:
+            asyncio.run(run(command, settings))
+        except KeyboardInterrupt:
+            pass
+        return 0
+
     if command == "serve":
         import logging
 
@@ -56,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     print(
-        f"usage: pawabase-server [serve|migrate|check|version] (got {command!r})", file=sys.stderr
+        f"usage: pawabase-server [serve|worker|scheduler|migrate|check|version] (got {command!r})",
+        file=sys.stderr,
     )
     return 64
