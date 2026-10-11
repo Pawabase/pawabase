@@ -1,55 +1,76 @@
-# Pawabase, self-hosted.
+# Pawabase, self-hosted: the server and Studio, next to Postgres, Redis and object storage.
 #
 #   cp .env.example .env      # then set the secrets
 #   docker compose up -d
 #
-# Clients use the gateway (:8080). Studio (:8090) opens straight into this
-# backend with no sign-in, so it is published on localhost only: reach it over
-# an SSH tunnel, or put your own authenticating proxy in front of it before
-# exposing it. Everything else stays on the internal network. For development
-# (live reload, no rebuilds) use docker-compose.dev.yml instead.
-
-x-pawabase: &pawabase
-  build: .
-  image: ${PAWABASE_IMAGE:-pawabase:local}
-  restart: unless-stopped
-  env_file: .env
-  environment: &env
-    PAWABASE_APP_ENV: ${PAWABASE_APP_ENV:-production}
-    PAWABASE_REDIS_URL: redis://redis:6379/0
-    PAWABASE_API_URL: http://api:8001
-    PAWABASE_AKOUNTZ_URL: http://akountz:8002
-    PAWABASE_ANGULA_URL: http://angula:8003
-    PAWABASE_GATEWAY_URL: http://gateway:8080
-    PAWABASE_STUDIO_URL: http://studio:8090
-    PAWABASE_PROJECT_NAME: ${PAWABASE_PROJECT_NAME:-Pawabase}
-
-x-api-env: &api-env
-  <<: *env
-  PAWABASE_DATABASE_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase
-  PAWABASE_DEFAULT_DATA_URL: ${PAWABASE_DEFAULT_DATA_URL:-postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase}
-  PAWABASE_STORAGE_ROOT: /data/objects
-  # Private hosts functions may call (comma-separated), e.g. an internal deployment manager. Empty keeps every private address refused.
-  PAWABASE_OUTBOUND_ALLOW_HOSTS: ${PAWABASE_OUTBOUND_ALLOW_HOSTS:-}
-  # File storage: the bundled MinIO unless .env points these at your own S3-compatible
-  # service (AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces, Wasabi, ...).
-  PAWABASE_STORAGE_ENDPOINT: ${PAWABASE_STORAGE_ENDPOINT:-http://minio:9000}
-  PAWABASE_STORAGE_PUBLIC_ENDPOINT: ${PAWABASE_STORAGE_PUBLIC_ENDPOINT:-${PAWABASE_STORAGE_ENDPOINT:-http://localhost:${PAWABASE_MINIO_PORT:-9000}}}
-  PAWABASE_STORAGE_BUCKET: ${PAWABASE_STORAGE_BUCKET:-pawabase}
-  PAWABASE_STORAGE_REGION: ${PAWABASE_STORAGE_REGION:-us-east-1}
-  PAWABASE_STORAGE_ACCESS_KEY: ${PAWABASE_STORAGE_ACCESS_KEY:-${MINIO_ROOT_USER:-pawabase}}
-  PAWABASE_STORAGE_SECRET_KEY: ${PAWABASE_STORAGE_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-}}
-  PAWABASE_STORAGE_PATH_STYLE: ${PAWABASE_STORAGE_PATH_STYLE:-true}
-  PAWABASE_CODE_PATH: /code
-  # `pawabase deploy` uploads land here: /code is a read-only mount, /data is the volume the api, worker and scheduler share.
-  PAWABASE_DEPLOYMENTS_PATH: /data/deployments
-  PAWABASE_INLINE_WORKER: "false"
-  PAWABASE_INLINE_SCHEDULER: "false"
-  # A deployment's functions/requirements.txt is installed when it is deployed, so a function needing a library never means rebuilding
-  # the image. Set to false to refuse deployments that ask for packages.
-  PAWABASE_FUNCTION_INSTALL: ${PAWABASE_FUNCTION_INSTALL:-true}
+# Clients use the public entry point (:8080). Studio (:8090) is a separate service that manages the server over its internal listener
+# (:8001, never published). It opens straight into this backend with no sign-in, so it is published on localhost only: reach it over an SSH
+# tunnel, or set PAWABASE_STUDIO_USERNAME/PASSWORD, or put your own authenticating proxy in front of it before exposing it. Postgres, Redis
+# and MinIO stay on the internal network.
+#
+# For development (live reload, no rebuilds) use docker-compose.dev.yml. For a host that already runs Postgres, use
+# docker-compose.external.yml, which is only the server.
 
 services:
+  pawabase:
+    build: .
+    image: ${PAWABASE_IMAGE:-pawabase:local}
+    init: true
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PAWABASE_APP_ENV: ${PAWABASE_APP_ENV:-production}
+      PAWABASE_DATABASE_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase
+      PAWABASE_DEFAULT_DATA_URL: ${PAWABASE_DEFAULT_DATA_URL:-postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase}
+      PAWABASE_REDIS_URL: redis://redis:6379/0
+      PAWABASE_PROJECT_NAME: ${PAWABASE_PROJECT_NAME:-Pawabase}
+      # Private hosts functions may call (comma-separated). Empty keeps every private address refused.
+      PAWABASE_OUTBOUND_ALLOW_HOSTS: ${PAWABASE_OUTBOUND_ALLOW_HOSTS:-}
+      # File storage: the bundled MinIO unless .env points these at your own S3-compatible service (AWS S3, Cloudflare R2, Backblaze B2,
+      # DigitalOcean Spaces, Wasabi, ...).
+      PAWABASE_STORAGE_ENDPOINT: ${PAWABASE_STORAGE_ENDPOINT:-http://minio:9000}
+      PAWABASE_STORAGE_PUBLIC_ENDPOINT: ${PAWABASE_STORAGE_PUBLIC_ENDPOINT:-${PAWABASE_STORAGE_ENDPOINT:-http://localhost:${PAWABASE_MINIO_PORT:-9000}}}
+      PAWABASE_STORAGE_BUCKET: ${PAWABASE_STORAGE_BUCKET:-pawabase}
+      PAWABASE_STORAGE_REGION: ${PAWABASE_STORAGE_REGION:-us-east-1}
+      PAWABASE_STORAGE_ACCESS_KEY: ${PAWABASE_STORAGE_ACCESS_KEY:-${MINIO_ROOT_USER:-pawabase}}
+      PAWABASE_STORAGE_SECRET_KEY: ${PAWABASE_STORAGE_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-}}
+      PAWABASE_STORAGE_PATH_STYLE: ${PAWABASE_STORAGE_PATH_STYLE:-true}
+      # A deployment's functions/requirements.txt is installed when it is deployed, so a function needing a library never means
+      # rebuilding the image. Set to false to refuse deployments that ask for packages.
+      PAWABASE_FUNCTION_INSTALL: ${PAWABASE_FUNCTION_INSTALL:-true}
+    ports:
+      - "${PAWABASE_GATEWAY_PORT:-8080}:8080"
+    volumes:
+      - data:/data
+      - ./code:/code:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy, required: false }
+
+  # The control plane: a service of its own, managing the server over its internal listener (never published) with service tokens.
+  # It has no sign-in unless PAWABASE_STUDIO_USERNAME/PASSWORD or PAWABASE_STUDIO_ACCESS_SECRET is set, so it is published on localhost only.
+  studio:
+    image: ${PAWABASE_IMAGE:-pawabase:local}
+    command: ["studio"]
+    init: true
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PAWABASE_APP_ENV: ${PAWABASE_APP_ENV:-production}
+      PAWABASE_SERVER_URL: http://pawabase:8001
+      PAWABASE_PROJECT_NAME: ${PAWABASE_PROJECT_NAME:-Pawabase}
+    ports:
+      - "127.0.0.1:${PAWABASE_STUDIO_PORT:-8090}:8090"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      pawabase: { condition: service_healthy }
+
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -59,7 +80,6 @@ services:
       POSTGRES_DB: pawabase
     volumes:
       - postgres:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/10-databases.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pawabase -d pawabase"]
       interval: 5s
@@ -77,11 +97,9 @@ services:
       timeout: 3s
       retries: 20
 
-  # Object storage. Pawabase creates its bucket on first start, so there is nothing to set
-  # up. The image is built from MinIO's final community source release because its public
-  # registry image was withdrawn. Using your own S3-compatible service instead? Set
-  # PAWABASE_STORAGE_* in .env and run
-  # `docker compose up -d --scale minio=0`.
+  # Object storage. Pawabase creates its bucket on first start, so there is nothing to set up. The image is built from MinIO's final
+  # community source release because its public registry image was withdrawn. Using your own S3-compatible service instead? Set
+  # PAWABASE_STORAGE_* in .env and run `docker compose up -d --scale minio=0`.
   minio:
     build:
       context: .
@@ -103,88 +121,8 @@ services:
       timeout: 5s
       retries: 20
 
-  api:
-    <<: *pawabase
-    command: ["api"]
-    environment: *api-env
-    volumes: [api-data:/data, ./code:/code:ro]
-    depends_on:
-      postgres: { condition: service_healthy }
-      redis: { condition: service_healthy }
-      minio: { condition: service_healthy, required: false }
-    healthcheck: &health
-      test: ["CMD", "python", "-c", "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % os.environ.get('PORT', '8001'), timeout=3)"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 20s
-
-  worker:
-    <<: *pawabase
-    command: ["worker"]
-    environment: *api-env
-    volumes: [api-data:/data, ./code:/code:ro]
-    depends_on:
-      api: { condition: service_healthy }
-
-  scheduler:
-    <<: *pawabase
-    command: ["scheduler"]
-    environment: *api-env
-    volumes: [api-data:/data, ./code:/code:ro]
-    depends_on:
-      api: { condition: service_healthy }
-
-  akountz:
-    <<: *pawabase
-    command: ["akountz"]
-    environment:
-      <<: *env
-      PORT: "8002"
-      PAWABASE_DATABASE_URL: postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/akountz
-    depends_on:
-      postgres: { condition: service_healthy }
-      redis: { condition: service_healthy }
-      api: { condition: service_healthy }
-    healthcheck: *health
-
-  angula:
-    <<: *pawabase
-    command: ["angula"]
-    environment:
-      <<: *env
-      PORT: "8003"
-    depends_on:
-      redis: { condition: service_healthy }
-    healthcheck: *health
-
-  gateway:
-    <<: *pawabase
-    command: ["gateway"]
-    environment:
-      <<: *env
-      PORT: "8080"
-    ports: ["${PAWABASE_GATEWAY_PORT:-8080}:8080"]
-    depends_on:
-      api: { condition: service_healthy }
-      akountz: { condition: service_healthy }
-      angula: { condition: service_healthy }
-    healthcheck: *health
-
-  studio:
-    <<: *pawabase
-    command: ["studio"]
-    environment:
-      <<: *env
-      PORT: "8090"
-    ports: ["127.0.0.1:${PAWABASE_STUDIO_PORT:-8090}:8090"]
-    depends_on:
-      api: { condition: service_healthy }
-      akountz: { condition: service_healthy }
-    healthcheck: *health
-
 volumes:
+  data:
   postgres:
   redis:
   minio:
-  api-data:

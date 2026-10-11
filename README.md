@@ -11,8 +11,8 @@ and no project to create first.
 
 - **Resources**: tables exposed as REST with filtering, sorting, relations and OpenAPI docs.
 - **Policies**: JSON conditions, with equality checks pushed down to SQL.
-- **Auth**: Akountz handles your application's users: accounts, sessions, OAuth, TOTP MFA, the organizations they create, roles and permissions.
-- **Realtime**: Angula channels with broadcast, presence and history.
+- **Auth**: your application's users: accounts, sessions, OAuth, TOTP MFA, the organizations they create, roles and permissions.
+- **Realtime**: channels with broadcast, presence and history.
 - **Flows**: a visual workflow editor with 58 blocks.
 - **Code**: Python functions and custom routes.
 - **Automation**: events, queues, jobs and the scheduler, plus webhooks in and out.
@@ -24,21 +24,22 @@ scheduler, cache, storage, mail, security, OpenAPI, Inertia and Wire. Pawabase i
 built on top of them, and adds code only where Sillo stops. The gaps found along the way are
 listed in [`docs/sillo-gaps.md`](docs/sillo-gaps.md).
 
-## Services
+## Two services
+
+Pawabase is **two processes**:
 
 | Service | Port | What it does |
 |---|---|---|
-| Gateway | 8080 (public) | The only public entry point. It resolves API keys, signs the platform context, applies CORS and rate limits, and proxies HTTP and WebSockets. |
-| Studio | 8090 (public) | The control plane: Sillo, sillo-inertia and React. |
-| API | 8001 | Environments, resources, routes, flows, functions, events, storage, keys, secrets and docs. |
-| Worker | — | Queue workers: flows, functions, event processing, webhooks and mail. |
-| Scheduler | — | Cron and interval schedules. Run exactly one. |
-| Akountz | 8002 | Identity. |
-| Angula | 8003 | Realtime. |
+| **Server** (`pawabase_server`) | **8080** public, 8001 internal | One process: identity, the management plane, the data plane, storage, functions, flows, events, realtime, the queue worker and the scheduler, against one database. Port 8080 is the API your clients use, behind the edge (API keys, firewall, CORS, rate limits, quotas). Port 8001 is the same application without the edge, for the services that manage it; it is never published. |
+| **Studio** (`studio`) | **8090** | The control plane: Sillo, sillo-inertia and React. It manages the server over port 8001 with short-lived service tokens, and has no sign-in unless you configure one, so it listens on localhost by default. |
 
-The services share one image and a small shared library (`pawabase_core/`), but run as separate
-processes that talk over HTTP with audience-bound service tokens. See
+Inside the server the parts call each other as Python, not over a network. See
 [`ARCHITECTURE.md`](ARCHITECTURE.md) for the design and how each capability maps onto Sillo.
+
+```sh
+python -m pawabase_server            # serve (the default); also `migrate`, `check`, `version`
+python -m studio                     # Studio
+```
 
 ## Develop with Docker
 
@@ -46,11 +47,11 @@ processes that talk over HTTP with audience-bound service tokens. See
 docker compose -f docker-compose.dev.yml up
 ```
 
-Runs every service plus Postgres and Redis, with the repository bind-mounted into the
-containers. Edit Python in any service or `pawabase_core/` and only that service restarts;
-edit Studio's front end and Vite hot-reloads the browser. No `.env` needed. Studio is on
-<http://localhost:8090> (it opens straight into the backend), the gateway on `:8080`.
-Rebuild (`up --build`) only when a `pyproject.toml` or `uv.lock` changes.
+Runs the server and Studio plus Postgres, Redis and MinIO, with the repository bind-mounted into
+the containers. Edit Python and the server restarts in a second; edit Studio's front end and Vite
+hot-reloads the browser. No `.env` needed. Studio is on <http://localhost:8090> (it opens
+straight into the backend), the public API on `:8080`. Rebuild (`up --build`) only when
+`pyproject.toml` or `uv.lock` changes.
 
 ## Run it with Docker (production)
 
@@ -84,10 +85,10 @@ Cloud. Name the backend with `PAWABASE_PROJECT_NAME`.
 Optional `.env` limits default to `0` (disabled): daily/monthly requests,
 active WebSockets, upload bytes, users per environment, environments, and API
 keys per environment. Request quotas use Redis-backed token leases, so normal
-gateway requests do not query Redis or the database; tune the bounded lease
+requests do not query Redis or the database; tune the bounded lease
 size with `PAWABASE_REQUEST_QUOTA_RESERVATION`.
 
-Clients call the gateway:
+Clients call the public entry point:
 
 ```sh
 curl http://localhost:8080/rest/v1/todos -H "apikey: <publishable key>"
@@ -95,7 +96,7 @@ curl -X POST http://localhost:8080/auth/v1/signup -H "apikey: <publishable key>"
   -H "content-type: application/json" -d '{"email":"ada@example.com","password":"Str0ng!pass"}'
 ```
 
-The bundled Postgres holds the platform's own data, Akountz, and default resource tables.
+The bundled Postgres holds the platform's own data, your application's users, and default resource tables.
 Default resource tables are namespaced by environment; configure
 `database_url` in Studio → Settings → Infrastructure when an environment should use its own
 database. Redis carries the queue, events, cache and rate limits. The
@@ -105,16 +106,18 @@ from MinIO's final community source release, rather than its withdrawn public re
 S3-compatible service instead, or configure storage per environment in Studio. Reference
 credentials as `secret://NAME` so they are stored encrypted.
 
-Containers apply database migrations on start (Sillo Record migrations). Set
-`PAWABASE_MIGRATE=false` to run them yourself with `docker compose run --rm api migrate`.
+The container applies database migrations on start (Sillo Record migrations). Set
+`PAWABASE_MIGRATE=false` to run them yourself with `docker compose run --rm pawabase migrate`.
 
 ### In production
 
-- Put TLS in front of the gateway and Studio. Set `PAWABASE_COOKIE_SECURE=true` and point
-  `PAWABASE_PUBLIC_URL` / `PAWABASE_PUBLIC_GATEWAY_URL` at the public gateway URL.
-- `PAWABASE_APP_ENV=production` (the compose default) makes every service refuse to start while
-  a development secret is still in place.
-- Scale `api`, `worker`, `akountz`, `angula` and `gateway` horizontally. Keep one `scheduler`.
+- Put TLS in front of the public port and Studio. Never publish port 8001. Set `PAWABASE_COOKIE_SECURE=true` and point
+  `PAWABASE_PUBLIC_URL` / `PAWABASE_PUBLIC_GATEWAY_URL` at the public URL.
+- `PAWABASE_APP_ENV=production` (the compose default) makes the server refuse to start while a
+  development secret is still in place.
+- One container is the unit. To run more than one, set Redis (events, cache, queues and realtime
+  fan-out then span instances) and run the scheduler in only one of them
+  (`PAWABASE_INLINE_SCHEDULER=false` on the others).
 - Mount your code (`functions/`, `policies/`, `routes.py`) at `/code`. The compose file mounts
   `code/`.
 
@@ -123,8 +126,8 @@ Containers apply database migrations on start (Sillo Record migrations). Set
 Requires [uv](https://docs.astral.sh/uv/) and Node 20+.
 
 ```sh
-uv sync --all-packages
-scripts/dev.sh                  # every service on SQLite, Studio on :8090
+uv sync
+scripts/dev.sh                  # the server and Studio on SQLite: API on :8080, Studio on :8090
 STUDIO_VITE=1 scripts/dev.sh    # …with Studio's front end from `npm run dev`
 ```
 
@@ -133,8 +136,7 @@ Open Studio on <http://localhost:8090>: it starts in the `development` environme
 Tests and lint:
 
 ```sh
-uv run pytest -q                                   # pawabase_core
-for s in api akountz angula gateway studio; do (cd $s && uv run pytest -q tests); done
+uv run pytest -q tests
 uv run ruff check . && uv run ruff format --check .
 ```
 
@@ -145,13 +147,13 @@ variables, never through the API. `PAWABASE_<KEY>` applies to every environment 
 `<ENV>_<KEY>` overrides it for one (`PRODUCTION_STORAGE_BUCKET`, `STAGING_MAX_USERS`).
 See `.env.example` for the keys. Studio's Settings page shows what is in effect and where
 each value came from; `GET /platform/v1/capacity` reports what a deployment is using, and
-`docker-compose.external.yml` runs one container against your own Postgres, Redis and S3, and `docker-compose.cloud.yml` is the same container as Pawabase Cloud deploys it (databases and storage on a shared data plane, TLS to the database trusted through `PAWABASE_EXTRA_CA_B64`).
+`docker-compose.external.yml` runs the one container against your own Postgres, Redis and S3 (TLS to a database that signs with its own certificate is trusted through `PAWABASE_EXTRA_CA_B64`).
 
 **Upgrading.** Stored `infra.database_url` and `infra.storage` still work and are reported
-as deprecated; `python -m app.export_config` prints them as variables. **Mail is the one
+as deprecated; `python -m pawabase_server.environments.export_config` prints them as variables. **Mail is the one
 break:** `infra.mail` is now ignored, so set `PAWABASE_MAIL_*` (or `<ENV>_MAIL_*`) before
 upgrading or mail is only logged. Secrets are now bound to their environment; existing
-ciphertext still opens, and `python -m app.reseal` rebinds it.
+ciphertext still opens, and `python -m pawabase_server.environments.reseal` rebinds it.
 
 ## Function isolation
 
@@ -181,19 +183,49 @@ This is isolation from crashes, hangs and memory, not yet a sandbox for hostile 
 ## Repository layout
 
 ```
-pawabase_core/        code shared by the services (not a package): policies, flow engine and blocks, schemas, service auth
-api/                 Pawabase API, worker and scheduler
-akountz/             identity
-angula/              realtime
-gateway/             public gateway
-studio/              control plane (Python server + frontend/)
-tests/               pawabase_core tests (each service has its own tests/)
-code/                project code mounted into the API (empty; `.deployments` is git-ignored)
-docker/              entrypoints, dev image, Postgres init
-docker-compose.yml       production stack (one built image)
-docker-compose.dev.yml   development stack (live reload)
-docs/                design notes, Sillo gaps
+pawabase_server/   the server: one package
+  app.py server.py cli.py settings.py platform.py   the assembly, listeners, command, settings, the long-lived services
+  core/            reusable foundation: ids, tokens, crypto, context, auth, errors, telemetry, clients, ...
+  db/              database connection and commands, fields, models/, migrations/ (one chain)
+  identity/        accounts, sessions, MFA, OAuth, roles, invitations, recovery links, identity backup
+  environments/    an environment's definitions, settings, releases, blueprints, config export
+  functions/       function deployments, execution, runtime, sandbox/
+  compiler/        resources and routes compiled into Sillo routes; the data plane's dispatch
+  data/            SQL across SQLite, PostgreSQL and MySQL; resource changes
+  automation/      queue worker, scheduler, event processing, webhooks, jobs/
+  observability/   analytics, metrics, logs, alarms, system health, status page
+  backup/          environment backups and saved snapshots
+  edge/            the public entry point: screening, keys, policy, admission, routing, quotas, limits, hostnames
+  realtime/        channels, presence, fan-out, and the socket protocol
+  flows/ policies/ the flow engine and blocks, the policy engine
+  infra/           mail, outbound HTTP, object storage drivers
+  routes/          HTTP routes: platform, data, identity, realtime, public
+studio/            the control plane: its own service (Python server + frontend/)
+tests/             one suite: foundation, platform, identity, realtime, edge, studio, server
+code/              project code mounted into the server (empty; `.deployments` is git-ignored)
+docker/            entrypoint, dev image, MinIO image
+docker-compose.yml           the full stack: server, Studio, Postgres, Redis, MinIO
+docker-compose.external.yml  the server and Studio, against infrastructure you run
+docker-compose.dev.yml       development (live reload)
+docs/              design notes, Sillo gaps
 ```
+
+## Upgrading from the multi-service layout
+
+Earlier versions ran the API, Akountz, Angula and the gateway as separate containers, with
+identity in a second database. The server is one process with one database now (Studio is still
+its own service):
+
+- Run the new image against the **platform** database. `migrate` applies one new migration
+  (`0014_identity`) that creates the identity tables beside the platform ones.
+- Identity data lived in the separate `akountz` database. Copy its tables (`akz_*`, `permissions`,
+  `perm_*`, `user_permissions`, `jwt_tokens`, `token_blacklist`) into the platform database before
+  first use; the names and columns are unchanged. `PAWABASE_AKOUNTZ_DATABASE_URL` is no longer read.
+- `PAWABASE_API_URL`, `PAWABASE_AKOUNTZ_URL`, `PAWABASE_ANGULA_URL`, `PAWABASE_GATEWAY_URL` and
+  `PAWABASE_STUDIO_URL` are gone, as are `PAWABASE_PROCESSES` and `PAWABASE_STUDIO=off`. Studio
+  finds the server through `PAWABASE_SERVER_URL`. `docker-compose.hosted.yml` and
+  `docker-compose.cloud.yml` are replaced by `docker-compose.yml` and
+  `docker-compose.external.yml`.
 
 ## License
 

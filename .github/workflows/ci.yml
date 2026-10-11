@@ -16,29 +16,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
-      - run: uv sync --all-packages --frozen
+      - run: uv sync --frozen
       - run: uv run ruff check .
       - run: uv run ruff format --check .
 
   test:
     runs-on: ubuntu-latest
-    # A suite that finishes in about a minute. Without a limit, one that never exits holds the
-    # runner for GitHub's six-hour default (it did, when a leaked thread kept pytest alive).
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        package: [., api, akountz, angula, gateway, studio]
+    # A suite that finishes in a few minutes. Without a limit, one that never exits holds the runner for GitHub's six-hour default.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
-      - run: uv sync --all-packages --frozen
+      - run: uv sync --frozen
       - name: pytest
-        working-directory: ${{ matrix.package }}
         env:
           SILLO_ENV_FILE: ""
-        # `faulthandler_timeout` prints every thread's stack if a single test stalls, so a hang
-        # explains itself in the log instead of just timing out.
+        # `faulthandler_timeout` prints every thread's stack if a single test stalls, so a hang explains itself in the log instead of just
+        # timing out.
         run: uv run pytest -q -o faulthandler_timeout=240 tests
 
   studio:
@@ -59,8 +53,8 @@ jobs:
 
   compose:
     timeout-minutes: 30
-    # Builds the image and brings up the whole stack on Postgres and Redis,
-    # then checks the gateway, Studio sign-in and a request through a key.
+    # Builds the image and brings up the whole stack on Postgres and Redis, then checks the public entry point, Studio and a request
+    # through a key.
     runs-on: ubuntu-latest
     needs: [test, studio]
     steps:

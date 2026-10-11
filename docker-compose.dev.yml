@@ -1,64 +1,89 @@
-# Pawabase, for development.
+# Pawabase, for development: the server and Studio, with live reload.
 #
 #   docker compose -f docker-compose.dev.yml up
 #
-# The repository is bind-mounted into every container, so:
-#   - Python changes (any service, or pawabase_core/) restart just that service;
-#   - Studio's front end runs on Vite with hot module reloading, no build.
-# Nothing to rebuild unless a pyproject.toml or uv.lock changes
-# (`docker compose -f docker-compose.dev.yml up --build`).
+# The repository is bind-mounted into the containers, so a Python change restarts the server (or Studio) in a second, with no rebuild
+# (rebuild with `up --build` only when pyproject.toml or uv.lock changes). Studio's front end runs on Vite with hot module reloading:
+# `npm run dev` in studio/frontend, and set PAWABASE_VITE_DEV=true.
 #
 # Needs no .env: every secret has a development default. Create one to override.
-# Studio: http://localhost:8090 (no sign-in: it manages this one backend)
-# Gateway: http://localhost:8080
-
-x-pawabase: &pawabase
-  build:
-    context: .
-    dockerfile: docker/dev.Dockerfile
-  image: pawabase:dev
-  env_file:
-    - path: .env
-      required: false
-  volumes:
-    - .:/app
-  environment: &env
-    PAWABASE_RELOAD: "true"
-    WATCHFILES_FORCE_POLLING: ${WATCHFILES_FORCE_POLLING:-true}
-    PAWABASE_APP_ENV: local
-    PAWABASE_INTERNAL_SECRET: ${PAWABASE_INTERNAL_SECRET:-dev-internal-secret-change-me-please}
-    PAWABASE_JWT_MASTER_SECRET: ${PAWABASE_JWT_MASTER_SECRET:-dev-jwt-master-secret-change-me-please}
-    PAWABASE_MASTER_KEY: ${PAWABASE_MASTER_KEY:-dev-master-key-change-me-please-0000}
-    PAWABASE_PUBLIC_URL: http://localhost:8080
-    PAWABASE_PUBLIC_GATEWAY_URL: http://localhost:8080
-    PAWABASE_REDIS_URL: redis://redis:6379/0
-    PAWABASE_API_URL: http://api:8001
-    PAWABASE_AKOUNTZ_URL: http://akountz:8002
-    PAWABASE_ANGULA_URL: http://angula:8003
-    PAWABASE_GATEWAY_URL: http://gateway:8080
-    PAWABASE_STUDIO_URL: http://studio:8090
-    PAWABASE_PROJECT_NAME: ${PAWABASE_PROJECT_NAME:-Pawabase}
-
-x-api-env: &api-env
-  <<: *env
-  PAWABASE_DATABASE_URL: postgres://pawabase:pawabase@postgres:5432/pawabase
-  PAWABASE_DEFAULT_DATA_URL: sqlite:///data/envs/{env}.db
-  PAWABASE_STORAGE_ROOT: /data/objects
-  # Private hosts functions may call (comma-separated), e.g. a deployment manager running on this machine. Empty keeps every private address refused.
-  PAWABASE_OUTBOUND_ALLOW_HOSTS: ${PAWABASE_OUTBOUND_ALLOW_HOSTS:-}
-  # File storage: the bundled MinIO unless .env points these at your own S3-compatible service.
-  PAWABASE_STORAGE_ENDPOINT: ${PAWABASE_STORAGE_ENDPOINT:-http://minio:9000}
-  PAWABASE_STORAGE_PUBLIC_ENDPOINT: ${PAWABASE_STORAGE_PUBLIC_ENDPOINT:-${PAWABASE_STORAGE_ENDPOINT:-http://localhost:9000}}
-  PAWABASE_STORAGE_BUCKET: ${PAWABASE_STORAGE_BUCKET:-pawabase}
-  PAWABASE_STORAGE_REGION: ${PAWABASE_STORAGE_REGION:-us-east-1}
-  PAWABASE_STORAGE_ACCESS_KEY: ${PAWABASE_STORAGE_ACCESS_KEY:-pawabase}
-  PAWABASE_STORAGE_SECRET_KEY: ${PAWABASE_STORAGE_SECRET_KEY:-pawabase-dev-minio}
-  PAWABASE_STORAGE_PATH_STYLE: ${PAWABASE_STORAGE_PATH_STYLE:-true}
-  PAWABASE_CODE_PATH: /app/code
-  PAWABASE_INLINE_WORKER: "false"
-  PAWABASE_INLINE_SCHEDULER: "false"
+# Studio: http://localhost:8090 (no sign-in: it manages this one backend)    Public API: http://localhost:8080
 
 services:
+  pawabase:
+    build:
+      context: .
+      dockerfile: docker/dev.Dockerfile
+    image: pawabase:dev
+    init: true
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      WATCHFILES_FORCE_POLLING: ${WATCHFILES_FORCE_POLLING:-true}
+      PAWABASE_APP_ENV: local
+      PAWABASE_HOST: 0.0.0.0
+      PAWABASE_INTERNAL_HOST: 0.0.0.0
+      PAWABASE_INTERNAL_SECRET: ${PAWABASE_INTERNAL_SECRET:-dev-internal-secret-change-me-please}
+      PAWABASE_JWT_MASTER_SECRET: ${PAWABASE_JWT_MASTER_SECRET:-dev-jwt-master-secret-change-me-please}
+      PAWABASE_MASTER_KEY: ${PAWABASE_MASTER_KEY:-dev-master-key-change-me-please-0000}
+      PAWABASE_PUBLIC_URL: http://localhost:8080
+      PAWABASE_PUBLIC_GATEWAY_URL: http://localhost:8080
+      PAWABASE_DATABASE_URL: postgres://pawabase:pawabase@postgres:5432/pawabase
+      PAWABASE_DEFAULT_DATA_URL: sqlite:///data/envs/{env}.db
+      PAWABASE_REDIS_URL: redis://redis:6379/0
+      PAWABASE_STORAGE_ROOT: /data/objects
+      PAWABASE_CODE_PATH: /app/code
+      PAWABASE_PROJECT_NAME: ${PAWABASE_PROJECT_NAME:-Pawabase}
+      PAWABASE_OUTBOUND_ALLOW_HOSTS: ${PAWABASE_OUTBOUND_ALLOW_HOSTS:-}
+      # File storage: the bundled MinIO unless .env points these at your own S3-compatible service.
+      PAWABASE_STORAGE_ENDPOINT: ${PAWABASE_STORAGE_ENDPOINT:-http://minio:9000}
+      PAWABASE_STORAGE_PUBLIC_ENDPOINT: ${PAWABASE_STORAGE_PUBLIC_ENDPOINT:-${PAWABASE_STORAGE_ENDPOINT:-http://localhost:9000}}
+      PAWABASE_STORAGE_BUCKET: ${PAWABASE_STORAGE_BUCKET:-pawabase}
+      PAWABASE_STORAGE_ACCESS_KEY: ${PAWABASE_STORAGE_ACCESS_KEY:-pawabase}
+      PAWABASE_STORAGE_SECRET_KEY: ${PAWABASE_STORAGE_SECRET_KEY:-pawabase-dev-minio}
+      PAWABASE_STORAGE_PATH_STYLE: ${PAWABASE_STORAGE_PATH_STYLE:-true}
+    volumes:
+      - .:/app
+      - data:/data
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy, required: false }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  studio:
+    build:
+      context: .
+      dockerfile: docker/dev.Dockerfile
+    image: pawabase:dev
+    command: ["watchfiles", "--filter", "python", "python -m studio", "/app/studio", "/app/pawabase_server"]
+    init: true
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      WATCHFILES_FORCE_POLLING: ${WATCHFILES_FORCE_POLLING:-true}
+      PAWABASE_APP_ENV: local
+      PAWABASE_STUDIO_HOST: 0.0.0.0
+      PAWABASE_SERVER_URL: http://pawabase:8001
+      PAWABASE_INTERNAL_SECRET: ${PAWABASE_INTERNAL_SECRET:-dev-internal-secret-change-me-please}
+      PAWABASE_PUBLIC_GATEWAY_URL: http://localhost:8080
+      PAWABASE_PROJECT_NAME: ${PAWABASE_PROJECT_NAME:-Pawabase}
+    volumes:
+      - .:/app
+    ports:
+      - "8090:8090"
+    depends_on:
+      pawabase: { condition: service_healthy }
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -66,9 +91,7 @@ services:
       POSTGRES_PASSWORD: pawabase
       POSTGRES_DB: pawabase
     ports: ["5432:5432"]
-    volumes:
-      - postgres:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/10-databases.sql:ro
+    volumes: [postgres:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pawabase -d pawabase"]
       interval: 5s
@@ -101,112 +124,7 @@ services:
       timeout: 5s
       retries: 20
 
-  api:
-    <<: *pawabase
-    command: ["api"]
-    environment: *api-env
-    volumes:
-      - .:/app
-      - api-data:/data
-    ports: ["8001:8001"]
-    depends_on:
-      postgres: { condition: service_healthy }
-      redis: { condition: service_healthy }
-      minio: { condition: service_healthy, required: false }
-    healthcheck: &health
-      test: ["CMD", "python", "-c", "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % os.environ.get('PORT', '8001'), timeout=3)"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 20s
-
-  worker:
-    <<: *pawabase
-    command: ["worker"]
-    environment: *api-env
-    volumes:
-      - .:/app
-      - api-data:/data
-    depends_on:
-      api: { condition: service_healthy }
-
-  scheduler:
-    <<: *pawabase
-    command: ["scheduler"]
-    environment: *api-env
-    volumes:
-      - .:/app
-      - api-data:/data
-    depends_on:
-      api: { condition: service_healthy }
-
-  akountz:
-    <<: *pawabase
-    command: ["akountz"]
-    environment:
-      <<: *env
-      PORT: "8002"
-      PAWABASE_DATABASE_URL: postgres://pawabase:pawabase@postgres:5432/akountz
-    ports: ["8002:8002"]
-    depends_on:
-      postgres: { condition: service_healthy }
-      redis: { condition: service_healthy }
-      api: { condition: service_healthy }
-    healthcheck: *health
-
-  angula:
-    <<: *pawabase
-    command: ["angula"]
-    environment:
-      <<: *env
-      PORT: "8003"
-    ports: ["8003:8003"]
-    depends_on:
-      redis: { condition: service_healthy }
-    healthcheck: *health
-
-  gateway:
-    <<: *pawabase
-    command: ["gateway"]
-    environment:
-      <<: *env
-      PORT: "8080"
-    ports: ["${PAWABASE_GATEWAY_PORT:-8080}:8080"]
-    depends_on:
-      api: { condition: service_healthy }
-      akountz: { condition: service_healthy }
-      angula: { condition: service_healthy }
-    healthcheck: *health
-
-  studio:
-    <<: *pawabase
-    command: ["studio"]
-    environment:
-      <<: *env
-      PORT: "8090"
-      PAWABASE_VITE_DEV: "true"
-      PAWABASE_VITE_DEV_SERVER: http://localhost:5173
-    ports: ["127.0.0.1:${PAWABASE_STUDIO_PORT:-8090}:8090"]
-    depends_on:
-      api: { condition: service_healthy }
-      akountz: { condition: service_healthy }
-    healthcheck: *health
-
-  # Studio's front end on Vite. The browser loads scripts straight from here,
-  # so edits to studio/frontend/src hot-reload without touching a container.
-  vite:
-    image: node:22-slim
-    working_dir: /app/studio/frontend
-    command: sh -c "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0"
-    environment:
-      CHOKIDAR_USEPOLLING: "true"
-    ports: ["5173:5173"]
-    volumes:
-      - ./studio/frontend:/app/studio/frontend
-      - vite-modules:/app/studio/frontend/node_modules
-
 volumes:
+  data:
   postgres:
   minio:
-  api-data:
-  vite-modules:
