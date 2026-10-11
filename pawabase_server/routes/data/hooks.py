@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -12,7 +13,11 @@ from sillo.exceptions import HTTPException
 from sillo.openapi import Atlas
 from sillo.openapi.ui import DocsContext
 
-from pawabase_server.automation.webhooks import verify_plain_hmac, verify_signature
+from pawabase_server.automation.webhooks import (
+    verify_plain_hmac,
+    verify_signature,
+    verify_timestamped_hmac,
+)
 from pawabase_server.compiler.build import REST_PREFIX
 from pawabase_server.compiler.openapi_scope import add_apikey_security
 from pawabase_server.core.context import SCOPE_KEY
@@ -43,6 +48,12 @@ def register(app: Any, platform: Platform) -> None:
                 valid = bool(provided) and verify_plain_hmac(
                     secret, body, provided, algorithm="sha512"
                 )
+            elif hook.verification == "hmac-sha256-ts":
+                # The timestamp header sits beside the signature header: x-bachs-signature, x-bachs-timestamp.
+                stamp = ctx.headers.get(
+                    re.sub(r"signature(-v\d+)?$", "timestamp", hook.signature_header.lower()), ""
+                )
+                valid = bool(provided) and verify_timestamped_hmac(secret, body, provided, stamp)
             elif hook.verification == "pawabase":
                 valid = bool(provided) and verify_signature(secret, body, provided)
             else:

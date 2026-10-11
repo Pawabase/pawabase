@@ -65,6 +65,37 @@ def verify_plain_hmac(
     return hmac.compare_digest(expected, signature.strip())
 
 
+TIMESTAMP_TOLERANCE = 300
+
+
+def verify_timestamped_hmac(
+    secret: str,
+    body: bytes,
+    signature: str,
+    timestamp: str,
+    *,
+    now: float | None = None,
+) -> bool:
+    """Check an HMAC-SHA256 of ``"<timestamp>.<body>"``, refusing a timestamp more than five minutes from now.
+
+    ``signature`` is either a bare hex digest (the timestamp then comes from ``timestamp``) or the ``t=<timestamp>,v1=<hex>[,v1=<hex>]``
+    form, which may carry several digests while a signing secret is being rotated; any one matching is enough.
+    """
+    digests = [signature.strip()]
+    if "t=" in signature and "v1=" in signature:
+        pairs = [part.strip().split("=", 1) for part in signature.split(",") if "=" in part]
+        timestamp = next((v for k, v in pairs if k == "t"), timestamp)
+        digests = [v for k, v in pairs if k == "v1"]
+    try:
+        stamped = int(timestamp)
+    except (TypeError, ValueError):
+        return False
+    if abs((now if now is not None else time.time()) - stamped) > TIMESTAMP_TOLERANCE:
+        return False
+    expected = hmac.new(secret.encode(), f"{stamped}.".encode() + body, hashlib.sha256).hexdigest()
+    return any(hmac.compare_digest(expected, digest) for digest in digests)
+
+
 def endpoint_matches(events: list[str], name: str) -> bool:
     import fnmatch
 
