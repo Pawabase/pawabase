@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Smoke-test a running Pawabase: Studio opens without sign-in, an environment
-# created through Studio, and data written and read through the gateway with
+# created through Studio, and data written and read through the public entry point with
 # its key.
 #
 #   scripts/smoke.sh [gateway url] [studio url]
@@ -18,7 +18,7 @@ studio() {  # studio METHOD PATH [JSON]
     -H "content-type: application/json" -H "X-XSRF-TOKEN: $(xsrf)" ${3:+-d "$3"}
 }
 
-echo "gateway status"
+echo "public status"
 curl -sS -f "$GATEWAY/v1/status" | json 'd["ok"]' | grep -q True
 
 echo "studio opens without sign-in"
@@ -32,13 +32,13 @@ studio POST "/studio/api/platform/envs/$ENV/resources" \
   '{"name": "notes", "fields": [{"name": "text", "type": "string", "required": true}], "operations": {"list": {"enabled": true, "policy": "public"}, "create": {"enabled": true, "policy": "public"}}}' >/dev/null
 studio POST "/studio/api/platform/envs/$ENV/resources/notes/migrate" >/dev/null
 
-echo "data through the gateway"
+echo "data through the public entry point"
 curl -sS -f -X POST "$GATEWAY/rest/v1/notes" -H "apikey: $KEY" -H "content-type: application/json" -d '{"text": "hello"}' >/dev/null
 curl -sS -f "$GATEWAY/rest/v1/notes" -H "apikey: $KEY" | json 'd["data"][0]["text"]' | grep -q hello
 code=$(curl -sS -o /dev/null -w '%{http_code}' "$GATEWAY/rest/v1/notes")
 [ "$code" = 401 ] || { echo "a request without a key answered $code"; exit 1; }
 
-echo "sign-up through the gateway"
+echo "sign-up through the public entry point"
 curl -sS -f -X POST "$GATEWAY/auth/v1/signup" -H "apikey: $KEY" -H "content-type: application/json" \
   -d '{"email": "smoke@example.com", "password": "Sm0ke!pass"}' | json 'd.get("access_token") or d.get("user")' >/dev/null
 

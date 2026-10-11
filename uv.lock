@@ -6,16 +6,6 @@ resolution-markers = [
     "python_full_version < '3.14'",
 ]
 
-[manifest]
-members = [
-    "pawabase-akountz",
-    "pawabase-angula",
-    "pawabase-api",
-    "pawabase-gateway",
-    "pawabase-platform",
-    "pawabase-studio",
-]
-
 [[package]]
 name = "aiosqlite"
 version = "0.22.1"
@@ -779,86 +769,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "pawabase-akountz"
-version = "0.1.0"
-source = { virtual = "akountz" }
-dependencies = [
-    { name = "asyncpg" },
-    { name = "httpx" },
-    { name = "pyotp" },
-    { name = "sillo-framework", extra = ["all"] },
-    { name = "sillo-oauth" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "asyncpg", specifier = ">=0.29" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "pyotp", specifier = ">=2.9" },
-    { name = "sillo-framework", extras = ["all"], specifier = ">=1.0.0" },
-    { name = "sillo-oauth", specifier = ">=1.0.0" },
-]
-
-[[package]]
-name = "pawabase-angula"
-version = "0.1.0"
-source = { virtual = "angula" }
-dependencies = [
-    { name = "httpx" },
-    { name = "sillo-framework", extra = ["cache", "crypto", "events", "jwt", "mail", "record", "test"] },
-    { name = "sillo-wire" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "sillo-framework", extras = ["cache", "crypto", "events", "jwt", "mail", "record", "test"], specifier = ">=1.0.0" },
-    { name = "sillo-wire", specifier = ">=1.0.0" },
-]
-
-[[package]]
-name = "pawabase-api"
-version = "0.1.0"
-source = { virtual = "api" }
-dependencies = [
-    { name = "asyncpg" },
-    { name = "httpx" },
-    { name = "sillo-framework", extra = ["all", "storage-s3"] },
-    { name = "sillo-oauth" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "asyncpg", specifier = ">=0.29" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "sillo-framework", extras = ["all", "storage-s3"], specifier = ">=1.0.0" },
-    { name = "sillo-oauth", specifier = ">=1.0.0" },
-]
-
-[[package]]
-name = "pawabase-gateway"
-version = "0.1.0"
-source = { virtual = "gateway" }
-dependencies = [
-    { name = "httpx" },
-    { name = "sillo-framework", extra = ["cache", "crypto", "events", "jwt", "mail", "record", "test"] },
-    { name = "websockets" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "sillo-framework", extras = ["cache", "crypto", "events", "jwt", "mail", "record", "test"], specifier = ">=1.0.0" },
-    { name = "websockets", specifier = ">=12" },
-]
-
-[[package]]
-name = "pawabase-platform"
-version = "0.1.0"
+name = "pawabase-server"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
+    { name = "asyncpg" },
     { name = "httpx" },
     { name = "pawabase" },
+    { name = "pyotp" },
+    { name = "sillo-framework", extra = ["all", "storage-s3"] },
+    { name = "sillo-inertia" },
+    { name = "sillo-oauth" },
+    { name = "sillo-wire" },
+    { name = "websockets" },
 ]
 
 [package.dev-dependencies]
@@ -871,8 +794,15 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "asyncpg", specifier = ">=0.29" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "pawabase", git = "https://github.com/Pawabase/pawabase-python" },
+    { name = "pyotp", specifier = ">=2.9" },
+    { name = "sillo-framework", extras = ["all", "storage-s3"], specifier = ">=1.0.0" },
+    { name = "sillo-inertia", specifier = ">=1.0.0" },
+    { name = "sillo-oauth", specifier = ">=1.0.0" },
+    { name = "sillo-wire", specifier = ">=1.0.0" },
+    { name = "websockets", specifier = ">=12" },
 ]
 
 [package.metadata.requires-dev]
@@ -881,25 +811,6 @@ dev = [
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-asyncio", specifier = ">=0.25" },
     { name = "ruff", specifier = ">=0.6" },
-]
-
-[[package]]
-name = "pawabase-studio"
-version = "0.1.0"
-source = { virtual = "studio" }
-dependencies = [
-    { name = "httpx" },
-    { name = "sillo-framework", extra = ["cache", "crypto", "events", "jwt", "mail", "record", "test"] },
-    { name = "sillo-inertia" },
-    { name = "websockets" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "sillo-framework", extras = ["cache", "crypto", "events", "jwt", "mail", "record", "test"], specifier = ">=1.0.0" },
-    { name = "sillo-inertia", specifier = ">=1.0.0" },
-    { name = "websockets", specifier = ">=12" },
 ]
 
 [[package]]
@@ -1215,28 +1126,10 @@ all = [
     { name = "scrypt" },
     { name = "tortoise-orm" },
 ]
-cache = [
-    { name = "redis" },
-]
-crypto = [
-    { name = "cryptography" },
-]
-events = [
-    { name = "redis" },
-]
-jwt = [
-    { name = "pyjwt" },
-]
-mail = [
-    { name = "jinja2" },
-]
 record = [
     { name = "tortoise-orm" },
 ]
 storage-s3 = [
-    { name = "httpx" },
-]
-test = [
     { name = "httpx" },
 ]
 

@@ -6,48 +6,83 @@ credentials). Pawabase provides the platform around it: identity, policies, reso
 APIs, realtime pub/sub, storage, events, queues, jobs, scheduling, caching, functions, flows,
 webhooks, secrets, documentation and observability, all operated from Studio.
 
-This document explains how the platform is divided and how each capability maps onto Sillo.
 The one rule behind every decision is **Sillo first**: if Sillo (or a first-party Sillo package)
 ships the primitive, Pawabase uses it and adds the product around it.
 
+The second rule is **one server, and Studio beside it**. Everything the backend does is one Python
+package, `pawabase_server`, running as one process with one database: no internal services and no
+network between its parts. Studio, the control plane, is its own service (the top-level `studio`
+package, its own container) and manages the server over HTTP, as any other client of the management
+API would.
+
 ---
 
-## 1. Services
+## 1. Two services
 
 ```
-                        ┌────────────────────────────┐
-  clients (web, mobile, │        API Gateway          │  :8080  public entry point
-  servers, Studio UI) ──▶  routing · key resolution   │
-                        │  signed context · CORS · RL │
-                        └──┬─────────┬─────────┬──────┘
-                           │         │         │
-          ┌────────────────▼──┐ ┌────▼──────┐ ┌▼──────────────┐
-          │   Pawabase API    │ │  Akountz  │ │    Angula     │
-          │ resources·routes │ │ identity  │ │ realtime      │
-          │ routes·flows·jobs │ │ OAuth·MFA │ │ pub/sub       │
-          │ storage·events…   │ │ orgs·RBAC │ │ presence      │
-          └──┬──────┬─────────┘ └───────────┘ └───────────────┘
-             │      │  same image, separate processes
-     ┌───────▼─┐ ┌──▼────────┐                 ┌───────────────┐
-     │ worker  │ │ scheduler │                 │    Studio     │ :8090 control plane
-     └─────────┘ └───────────┘                 │ Sillo+Inertia │ (talks to services
-                                               └───────────────┘  with service tokens)
+        clients (web, mobile,                you, in a browser
+        servers, SDKs, the CLI)                      │
+                  │                                  │
+          :8080 public                         :8090 Studio
+     ┌────────────▼───────────┐             ┌────────▼────────┐
+     │  edge                  │             │  studio          │
+     │  routes · API keys ·   │             │  Sillo + Inertia │
+     │  firewall · CORS ·     │             │  no sign-in      │
+     │  rate limits · quotas  │             │  unless set      │
+     └────────────┬───────────┘             └────────┬────────┘
+                  │ signed context                   │ service token, HTTP
+                  │ (in-process)                     │
+     ┌────────────▼──────────────────────────────────▼──────┐
+     │  pawabase_server: one Sillo app, one Platform object   │   :8001 internal
+     │  identity · management plane · data plane · storage ·  │   (not published)
+     │  functions · flows · events · realtime                 │
+     │  + queue worker and scheduler, as tasks of this process │
+     └────────────────────────────┬──────────────────────────┘
+                                  │
+                   Postgres · Redis (optional) · S3-compatible storage
 ```
 
-| Service | Directory | Owns |
+| Service | Where | What it is |
 |---|---|---|
-| **Gateway** | `gateway` | Public routing, API-key resolution, signed platform context, CORS, rate limiting, request ids, WebSocket proxying. No business logic. |
-| **Pawabase API** | `api` | Environments, the runtime-configuration authority, Resources and the data plane, custom routes, schemas, transformers, policies, functions, flows, events, webhooks, queues, jobs, scheduler, cache, storage, secrets, API keys, mail, Atlas docs. |
-| **Worker** | `api` (`python -m app.worker`) | Runs Sillo `QueueWorker`s: flows, functions, webhook delivery, mail, event processing. |
-| **Scheduler** | `api` (`python -m app.scheduler`) | Runs Sillo's `SchedulerManager`, loading schedules from the database. |
-| **Akountz** | `akountz` | Identity: users, passwords, tokens, sessions, verification, reset, magic links, OAuth/OIDC, MFA (TOTP), recovery codes, your application's organizations, teams and invitations, roles, permissions, login history. |
-| **Angula** | `angula` | Realtime: channels, topics, publish/subscribe, presence, channel authorization, inspection. |
-| **Studio** | `studio` | The control plane UI (Sillo + `sillo-inertia` + React). |
-| **Kit** | `pawabase_core/` | Shared code, not a service or an installable package: policy engine, flow engine and blocks, schema compiler, transformers, service authentication, context propagation, telemetry and service bootstrap. |
+| **Server** | `pawabase_server` (`python -m pawabase_server`) | The application (`pawabase_server.app.create_app`) and its public entry point (`create_public`: the application behind the edge). It serves the public listener on `:8080` and, from the same process, the application itself on an internal listener, `:8001`. |
+| **Studio** | `studio` (`python -m studio`) | The control plane. It reaches the server over the internal listener with short-lived service tokens, holds no credential of its own, and is published on its own port. |
 
-The worker and scheduler run the API image as separate processes because they have separate
-scaling and failure characteristics (Sillo's docs say not to run the scheduler in every web
-process). They are not separate services, since they own no separate domain.
+The two ship in one image with two commands (`serve`, `studio`) and run as two containers.
+
+### Why the internal listener exists
+
+Studio has no sign-in of its own by default (it manages the one backend it runs beside), so it
+must never be reachable through the public entry point. The edge enforces that by construction: it
+answers only the paths in `pawabase_server.edge.routing`, and `/internal`, `/admin` and Studio's
+own paths are never among them. The internal listener is the same application without the edge, for
+services that authenticate with service tokens; it is never published, only reachable on the
+private network, and every route that matters there requires a service token.
+
+### Layout
+
+The package is organised by what a module is for, not by which part of the product it came from.
+
+| Folder | What lives there |
+|---|---|
+| *(root)* | `app` (assembly), `server` (listeners), `cli`, `settings`, `platform` (the long-lived services) |
+| `core/` | reusable foundation: `ids`, `crypto`, `tokens`, `context`, `principal`, `auth`, `errors`, `failures`, `envvars`, `dburl`, `ratelimit`, `buckets`, `firewall`, `money`, `templating`, `telemetry`, `events`, `clients`, `asgi`, `service`, ... |
+| `db/` | `database` (connection and commands), `fields`, `models/` (every table), `migrations/` (one chain) |
+| `identity/` | `accounts` (the shared service and user accounts), `sessions`, `mfa`, `oauth`, `rbac`, `invitations`, `links`, `emails`, `environment` (auth settings), `backup` |
+| `environments/` | `state`, `env_settings`, `configuration`, `blueprints`, `releases`, `reseal`, `export_config` |
+| `functions/` | `registry`, `deployments`, `deployment_mirror`, `execution`, `runtime`, `runtime_rpc`, `record_buffer`, `sandbox/` |
+| `compiler/` | resources and routes compiled into Sillo routes; `dispatch` hands `/rest/<version>` to a released app |
+| `data/` | SQL across SQLite, PostgreSQL and MySQL; what happens after a record changes |
+| `automation/` | `worker`, `scheduler`, `event_processor`, `webhooks`, `jobs/` |
+| `observability/` | `analytics`, `insights`, `metrics`, `request_metrics`, `route_stats`, `system_health`, `alarms`, `capacity`, `status` |
+| `backup/` | `backups`, `snapshots` |
+| `edge/` | `pipeline` (the ASGI middleware), `routing`, `key_resolver`, `policy`, `admission`, `quotas`, `limits`, `networking`, `clientip`, `headers` |
+| `realtime/` | channels, publication, presence, fan-out; `protocol/` is what clients may send |
+| `flows/`, `policies/` | the flow engine and its blocks; the policy engine |
+| `infra/` | `mail`, `outbound`, `storage/` (Sillo storage and an S3-compatible driver) |
+| `routes/` | HTTP routes: `platform`, `data`, `identity`, `realtime`, `public` |
+
+The public Kit and CLI (`pawabase`) live in Pawabase/pawabase-python and are a dependency, which is
+why the package is not called `pawabase`.
 
 ---
 
@@ -55,19 +90,20 @@ process). They are not separate services, since they own no separate domain.
 
 ### 2.1 Public surface
 
-The gateway presents one origin. Internal topology never leaks into client code:
+One origin. Nothing about the inside leaks into client code:
 
-| Public path | Upstream |
+| Public path | Served by |
 |---|---|
-| `/auth/v1/*` | Akountz |
-| `/rest/v1/*` | API data plane (resources, custom routes, extension routes) |
-| `/storage/v1/*` | API storage |
-| `/functions/v1/*` | API function invocation |
-| `/flows/v1/*` | API flow invocation (HTTP-triggered flows) |
-| `/hooks/v1/*` | API inbound webhooks |
-| `/realtime/v1/*` | Angula (HTTP and WebSocket) |
-| `/docs/v1/*` | API: Atlas documentation for an environment |
-| `/platform/v1/*` | API management plane (Studio, CLI, automation) |
+| `/auth/v1/*` | identity (`routes/identity`) |
+| `/rest/v1/*` | the data plane: resources, custom routes, extension routes |
+| `/storage/v1/*` | storage |
+| `/functions/v1/*` | function invocation |
+| `/flows/v1/*` | flow invocation (HTTP-triggered flows) |
+| `/hooks/v1/*` | inbound webhooks |
+| `/realtime/v1/*` | realtime (HTTP and WebSocket) |
+| `/docs/v1/*` | Atlas documentation for an environment |
+| `/platform/v1/*` | the management plane (CLI, automation; Studio uses it over the internal listener) |
+| `/`, `/health`, `/status`, `/v1/status` | the edge itself |
 
 ### 2.2 Credentials
 
@@ -75,29 +111,37 @@ The gateway presents one origin. Internal topology never leaks into client code:
   role, subject to policies) and `secret` (`sk_…`, server-side, the `service` role). A key belongs to one
   **environment**, carries optional scopes and expiry, and is revocable. Keys are
   generated and hashed with Sillo's `sillo.auth.apikey.generate_api_key` / `hash_api_key`.
-* **User access tokens.** These are issued by Akountz to your application's users. Each environment
+* **User access tokens.** Issued by identity to your application's users. Each environment
   has its own signing key, derived from the platform master secret (`HMAC(master, "<env>")`), so
   tokens from one environment can never be accepted by another.
-* **Studio** needs no credential of its own: it calls the other services with short-lived service
-  tokens. The CLI and automation use a scoped secret API key.
+* **Studio** needs no credential of its own beyond the shared internal secret: it calls the server
+  with short-lived service tokens. The CLI and automation use a scoped secret API key.
 
-### 2.3 Context propagation
+### 2.3 Context
 
-The gateway resolves `apikey` against the API (the result is cached with Sillo's cache) and forwards
-the request with an **`X-Pawabase-Context`** header: a short-lived JWT signed with the internal
-secret, carrying `{env, key_id, role, scopes}`. Internal services trust only this
-signed header, never a raw key, and verify it with the kit's `ContextBackend`, a Sillo
+The edge resolves the `apikey` (cached with Sillo's cache, single-flight, tolerant of a brief
+database failure) and hands the request to the application with an **`X-Pawabase-Context`**
+header: a short-lived JWT signed with the internal secret, carrying `{env, key_id, role, scopes}`.
+The edge first strips anything a client sent under `X-Pawabase-*`, so the application trusts only
+this signed header, never a raw key, and verifies it with `ContextBackend`, a Sillo
 `AuthenticationBackend`.
 
-User tokens travel untouched in `Authorization: Bearer …`. Any service validates them statelessly
-with the kit's `UserBackend`, another Sillo `AuthenticationBackend`, using the environment's
-derived key.
+User tokens travel untouched in `Authorization: Bearer …` and are validated statelessly with
+`UserBackend` using the environment's derived key. Studio's calls to the server use
+**service tokens** validated by `ServiceBackend`.
 
-Service-to-service calls (Studio → API/Akountz/Angula, API → Angula/Akountz) use short-lived
-**service tokens** validated by the kit's `ServiceBackend`.
+Every request carries Sillo's request id (`RequestIdMiddleware`), minted at the edge, so one
+request can be followed through telemetry in Studio.
 
-Every hop carries Sillo's request id (`RequestIdMiddleware`), so one request can be followed
-across services in Studio.
+### 2.4 What happens in-process
+
+Parts of the server call each other as Python, not HTTP: identity reads an environment's auth
+settings, sends mail and publishes events through `Platform`; realtime reads channel rules and
+forwards publications to flows through it; the management plane reads and writes roles and
+identity backups through `rbac` and `identity_backup`; the edge looks keys up through
+`key_resolver`. Studio is the exception on purpose: it is a client of the management API, in
+the same process (`ServiceClient(app=...)`, an ASGI transport with no socket), so what it can
+do is exactly what the API allows.
 
 ---
 
@@ -148,8 +192,8 @@ Pawabase adds code only where Sillo has no primitive:
 * **TOTP**: Sillo has no one-time-password primitive, so `pyotp` is used.
 * **Job tracking and a database-backed failed-job repository**: implementations of Sillo's
   `FailedJobRepository` interface and Sillo job middleware, so Studio can show queue history.
-* **Gateway proxying** uses `httpx` streaming directly. Sillo's `HTTPClient` returns parsed
-  bodies, while a proxy has to pass raw streamed bytes and headers through.
+* **The edge** is ASGI middleware (screening, key policy, admission, signed context), because it
+  has to decide before the application sees a byte and must treat HTTP and WebSocket alike.
 
 ---
 
@@ -163,11 +207,11 @@ code. Core does not know it exists, so a runtime can later be provisioned and ma
 without Core changing.
 
 Studio has no sign-in for the same reason: it manages the runtime it is deployed with. It acts on the
-API, Akountz and Angula with service tokens, never as a person, and the Docker install publishes it on
+application with service tokens, never as a person, and the Docker install publishes it on
 localhost only. Put an authenticating proxy in front of it, or tunnel to it, before exposing it. The
 management API is reached by Studio, or by the CLI with a scoped secret API key.
 
-What is *not* removed is **application Auth**: Akountz still serves the users of the application you
+What is *not* removed is **application Auth**: identity still serves the users of the application you
 build (sign-up, sessions, OAuth, MFA, roles) and the organizations and teams *those* users create.
 Those belong to the application; they are unrelated to administering Pawabase.
 
@@ -206,7 +250,7 @@ A **Resource** is an application entity plus its behaviour: fields, relationship
 operations are exposed, per-operation policies, request and response schemas, a transformer,
 cache TTL, rate limit, event publication, realtime publication and documentation.
 
-On change, the API **compiles** an environment into a `SilloApp`:
+On change, the platform **compiles** an environment into a `SilloApp`:
 
 * each exposed operation (`list`, `get`, `create`, `update`, `delete`) becomes a Sillo route whose
   `request_model` and `response_model` are generated from the Resource's fields;
@@ -243,23 +287,23 @@ functions, logging, metrics, responses and errors.
 
 ## 7. Events
 
-Any service publishes domain events (`user.created`, `order.paid`, `file.uploaded`,
+Any part of the server publishes domain events (`user.created`, `order.paid`, `file.uploaded`,
 `job.completed`, …) through the kit's `EventBus`, which wraps Sillo's `EventEmitter`:
 
-* `persistent` (Redis list, at-least-once) carries platform events to the API's event processor;
+* `persistent` (Redis list, at-least-once) carries platform events to the event processor;
 * `memory` is used in tests and single-process development.
 
 The event processor records every event (origin service, payload, consumers, outcomes) for
 inspection, then fans out to subscriptions: flows, functions, jobs, outbound webhooks and
 realtime publication.
 
-## 8. Realtime (Angula)
+## 8. Realtime
 
 Realtime means application pub/sub. Clients connect to `/realtime/v1/socket` with an API key and
 optionally a user token, then `subscribe`, `unsubscribe`, `publish`, `presence` and `history` on
 channels. Channels are `sillo-wire` rooms. Channel access is decided by Pawabase policies
 matched by channel pattern (`chat:*`, `user:{auth.user_id}`). Servers publish over HTTP. Multiple
-Angula instances share traffic through Sillo's Redis `EventEmitter`.
+Server instances share traffic through Sillo's Redis `EventEmitter`.
 
 **Resource subscriptions** are one use of this: a Resource with realtime enabled publishes
 `resource:<name>` channel messages on create, update and delete.
@@ -268,10 +312,9 @@ Angula instances share traffic through Sillo's Redis `EventEmitter`.
 
 ## 9. Observability
 
-Every service installs the kit's `Telemetry` installable. It records each request (request id,
+The server installs a `Telemetry` installable. It records each request (request id,
 route, status, duration, environment, identity, credential role, cache outcome, events
-emitted, jobs dispatched, error) and exposes it on an internal endpoint. Studio merges these
-records across services, alongside subsystem statistics: cache hit rates, queue depths and
+emitted, jobs dispatched, error) and exposes it on an internal endpoint that Studio reads, alongside subsystem statistics: cache hit rates, queue depths and
 in-flight jobs, failed jobs, scheduler runs, event deliveries, webhook deliveries, realtime
 connections and presence.
 
