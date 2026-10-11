@@ -39,7 +39,29 @@ export function buildGraph(resources = [], schemas = []) {
       }
     }
   }
+  // Many resources are connected only by naming: `customer_id` on orders, with a `customers` resource beside it. Declared relations are
+  // what the API acts on, so these are drawn as guesses (dotted), and can be declared from the detail panel.
+  const names = [...nodes.values()].filter((n) => n.kind === "resource");
+  for (const node of names) {
+    for (const field of node.fields) {
+      const match = /^(.+?)_?id$/i.exec(field.name || "");
+      if (!match || field.name === "id" || field.type === "ref" || ["array", "object", "json", "boolean"].includes(field.type)) continue;
+      const stem = match[1].toLowerCase();
+      const target = names.find((other) => other.id !== node.id && [other.name, singular(other.name), other.spec.table || ""].some((c) => c && c.toLowerCase() === stem));
+      if (!target) continue;
+      link({ kind: "relation", from: node.id, to: target.id, field: field.name, name: match[1], many: false, inferred: true });
+    }
+  }
   return { nodes, edges, dangling };
+}
+
+/** categories -> category, orders -> order, boxes -> box. Enough to read a field name; not a language library. */
+export function singular(word) {
+  const w = String(word);
+  if (/ies$/i.test(w)) return `${w.slice(0, -3)}y`;
+  if (/(ses|xes|zes|ches|shes)$/i.test(w)) return w.slice(0, -2);
+  if (/s$/i.test(w) && !/ss$/i.test(w)) return w.slice(0, -1);
+  return w;
 }
 
 export function cardHeight(node) {

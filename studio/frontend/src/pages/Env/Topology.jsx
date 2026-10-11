@@ -2,9 +2,10 @@ import { Link } from "@inertiajs/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Layout, { dataSubnav, envHref } from "../../components/Layout";
 import { Icon } from "../../components/icons";
-import { Badge, Button, Card, EmptyState, Loading, PageHead } from "../../components/ui";
+import { Badge, Button, Card, EmptyState, Loading, PageHead, useAction } from "../../components/ui";
 import { CARD, buildGraph, layout, neighbours, route } from "../../lib/topology";
-import { envPath, useApi } from "../../lib/api";
+import { editable } from "../../lib/kinds";
+import { envPath, put, useApi } from "../../lib/api";
 
 const OPERATIONS = ["list", "get", "create", "update", "delete"];
 const clip = (text, n) => (text.length > n ? `${text.slice(0, n - 1)}…` : text);
@@ -47,7 +48,7 @@ function NodeCard({ node, box, keys, state, onEnter, onLeave, onSelect }) {
   );
 }
 
-function Detail({ node, graph, env, onClose }) {
+function Detail({ node, graph, env, onClose, onDeclare, busy }) {
   const spec = node.spec;
   const incoming = graph.edges.filter((e) => e.to === node.id);
   const outgoing = graph.edges.filter((e) => e.from === node.id);
@@ -82,7 +83,11 @@ function Detail({ node, graph, env, onClose }) {
         <h4>Connections</h4>
         {incoming.length + outgoing.length === 0 && <p className="muted small">Nothing connects to this yet.</p>}
         {outgoing.map((e) => (
-          <div key={e.id} className="topo-conn"><Icon name="chevronRight" size={13} /><span>{e.kind === "schema" ? "uses schema" : "belongs to"} <b>{name(e.to)}</b> through <code>{e.field}</code></span></div>
+          <div key={e.id} className="topo-conn">
+            <Icon name="chevronRight" size={13} />
+            <span>{e.inferred ? "looks like it belongs to" : e.kind === "schema" ? "uses schema" : "belongs to"} <b>{name(e.to)}</b> through <code>{e.field}</code></span>
+            {e.inferred && <Button size="sm" disabled={busy} onClick={() => onDeclare(e)}>Declare</Button>}
+          </div>
         ))}
         {incoming.map((e) => (
           <div key={e.id} className="topo-conn"><Icon name="chevronRight" size={13} className="rotate-180" /><span><b>{name(e.from)}</b> {e.kind === "schema" ? "uses it in" : "points here with"} <code>{e.field}</code></span></div>
@@ -114,6 +119,7 @@ export default function Topology({ env }) {
   const [zoom, setZoom] = useState(1);
   const [query, setQuery] = useState("");
   const frame = useRef(null);
+  const [run, busy] = useAction();
 
   const ready = resources.data && schemas.data;
   const graph = useMemo(() => (ready ? buildGraph(resources.data.data || [], schemas.data.data || []) : null), [ready, resources.data, schemas.data]);
@@ -141,6 +147,15 @@ export default function Topology({ env }) {
     if (!grid || !frame.current) return;
     setZoom(Math.min(1.2, Math.max(0.4, (frame.current.clientWidth - 8) / grid.width)));
   };
+  // Turn a guessed connection into a declared relation on the resource that holds the key.
+  const declare = async (edge) => {
+    const node = graph.nodes.get(edge.from);
+    const target = graph.nodes.get(edge.to);
+    const body = editable(node.spec);
+    body.relations = [...(body.relations || []), { name: edge.name, resource: target.name, field: edge.field, type: "belongs_to" }];
+    if (await run(() => put(envPath(env, `/resources/${node.name}`), body), `${node.name}.${edge.field} now belongs to ${target.name}`)) resources.reload();
+  };
+  const guessed = graph ? graph.edges.filter((e) => e.inferred).length : 0;
   const chosen = selected && graph?.nodes.get(selected);
   const empty = graph && graph.nodes.size === 0;
 
@@ -182,7 +197,7 @@ export default function Topology({ env }) {
                     if (!path) return null;
                     const lit = near?.edgeIds.has(edge.id);
                     return (
-                      <g key={edge.id} className={`topo-edge ${edge.kind} ${lit ? "lit" : near ? "dim" : ""}`}>
+                      <g key={edge.id} className={`topo-edge ${edge.kind} ${edge.inferred ? "inferred" : ""} ${lit ? "lit" : near ? "dim" : ""}`}>
                         <path d={path.d} {...(edge.kind === "schema" ? { markerEnd: "url(#topo-arrow)" } : { markerStart: "url(#topo-arrow)" })} />
                         {lit && <text x={path.x} y={path.y - 6} textAnchor="middle">{edge.field}</text>}
                       </g>
@@ -204,13 +219,20 @@ export default function Topology({ env }) {
               <div className="topo-legend">
                 <span><i className="solid" />Arrow points at the resource a field refers to</span>
                 <span><i className="dashed" />Uses a schema</span>
+                {guessed > 0 && <span><i className="dotted" />Guessed from a field name: select a resource to declare it</span>}
                 <span>{[...graph.nodes.values()].filter((n) => n.kind === "resource").length} resources · {graph.edges.length} connections</span>
               </div>
             </Card>
-            {chosen && <Detail node={chosen} graph={graph} env={env} onClose={() => setSelected(null)} />}
+            {chosen && <Detail node={chosen} graph={graph} env={env} onClose={() => setSelected(null)} onDeclare={declare} busy={busy} />}
           </div>
         )}
       </Loading>
+      {graph && !empty && graph.edges.length === 0 && (
+        <div className="alert info" style={{ marginTop: 12 }}>
+          No connections yet. Connect resources by adding a <code>relations</code> entry to the resource that holds the key, for example
+          {" "}<code>{`{"name": "customer", "resource": "customers", "field": "customer_id"}`}</code> on orders.
+        </div>
+      )}
       {graph?.dangling.length > 0 && (
         <div className="alert warn" style={{ marginTop: 12 }}>
           {graph.dangling.map((d) => `${d.from}.${d.relation} points at "${d.to}", which does not exist`).join(" · ")}
