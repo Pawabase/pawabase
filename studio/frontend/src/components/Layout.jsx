@@ -10,7 +10,7 @@ import { Badge, Button, Field, Loading, Sheet, Status, Table, ToastProvider, use
 import { envPath, post, useApi } from "../lib/api";
 
 /** The pages that live under Data, in the order the secondary navigation lists them. */
-export const DATA_PAGES = [["resources", "Resources"], ["schemas", "Schemas"], ["transformers", "Transformers"], ["database", "SQL"]];
+export const DATA_PAGES = [["resources", "Resources"], ["topology", "Topology"], ["schemas", "Schemas"], ["transformers", "Transformers"], ["database", "SQL"]];
 
 /** The secondary navigation shared by every Data page. */
 export function dataSubnav(env, active) {
