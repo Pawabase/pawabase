@@ -78,40 +78,97 @@ export function normalizeEndpoint(path) {
   return { endpoint: out, query: query ? parseMap(query, "the query string") : {} };
 }
 
-/** @returns {{method, endpoint, query, headers, body, as, expect, raw, verbose, save, confirm}} */
+const ITEM_KEY = "[A-Za-z0-9_.\\-\\[\\]]+";
+
+/** An httpie-style item after the path: `title=hi` (body field), `done:=true` (JSON value), `q==x` (query), `X-Trace:1` (header). */
+function parseItem(word) {
+  let m = word.match(new RegExp(`^(${ITEM_KEY}):=(.*)$`, "s"));
+  if (m) { try { return ["body", m[1], JSON.parse(m[2])]; } catch (error) { throw new Error(`${m[1]}:= is not valid JSON: ${error.message}`); } }
+  m = word.match(new RegExp(`^(${ITEM_KEY})==(.*)$`, "s"));
+  if (m) return ["query", m[1], m[2]];
+  m = word.match(new RegExp(`^(${ITEM_KEY})=(.*)$`, "s"));
+  if (m) return ["body", m[1], m[2]];
+  m = word.match(/^([A-Za-z][A-Za-z0-9-]*):(.*)$/s);
+  if (m) return ["header", m[1], m[2].trim()];
+  throw new Error(`"${word}" is not a request item. Use key=value, key:=json, key==query or Header:value.`);
+}
+
+/**
+ * Parse `http` the way curl or httpie is typed:
+ *   http get /todos limit==5
+ *   http post /todos title="Buy milk" done:=false
+ *   http -X PATCH /todos/1 -H "x-trace: 1" -d '{"done":true}'
+ * Method words and flags work in any order; with a body and no method the request is a POST.
+ * @returns {{method, endpoint, query, headers, body, as, expect, raw, verbose, save, confirm}}
+ */
 export function parseHttp(line) {
   const tokens = tokenize(line.replace(/^\s*http\s*/i, ""));
   const flags = {};
   const words = [];
+  const headers = {};
+  let data;
+  let method = "";
   for (let i = 0; i < tokens.length; i += 1) {
     const token = tokens[i];
+    const next = (name) => { const value = tokens[++i]; if (value === undefined) throw new Error(`${name} needs a value.`); return value; };
     if (token === "-v") { flags.verbose = true; continue; }
+    if (token === "-X") { method = next("-X").toUpperCase(); continue; }
+    if (token === "-H") { Object.assign(headers, parseHeader(next("-H"))); continue; }
+    if (token === "-d") { data = next("-d"); continue; }
     if (!token.startsWith("--")) { words.push(token); continue; }
     const [rawName, inline] = token.slice(2).split(/=(.*)/s, 2);
     const name = rawName.toLowerCase();
     if (SWITCHES.has(name)) { flags[name === "v" ? "verbose" : name] = true; continue; }
-    if (!VALUE_FLAGS.has(name)) throw new Error(`Unknown option --${name}. Options: --query --headers --body --as --expect --save --raw --verbose --confirm`);
-    const value = inline ?? tokens[++i];
-    if (value === undefined) throw new Error(`--${name} needs a value.`);
-    flags[name] = value;
+    const alias = { header: "-H", data: "-d", method: "-X", json: "-d" }[name];
+    if (alias) {
+      const value = inline ?? next(`--${name}`);
+      if (alias === "-H") Object.assign(headers, parseHeader(value));
+      else if (alias === "-d") data = value;
+      else method = value.toUpperCase();
+      continue;
+    }
+    if (!VALUE_FLAGS.has(name)) throw new Error(`Unknown option --${name}. Options: --query --headers --body --as --expect --save --raw --verbose --confirm, or curl's -X -H -d`);
+    flags[name] = inline ?? next(`--${name}`);
   }
-  let method = "GET";
-  if (words.length && METHODS.includes(words[0].toUpperCase())) method = words.shift().toUpperCase();
-  if (words.length !== 1) throw new Error("Usage: http [METHOD] <path> [--query {…}] [--headers {…}] [--body {…}] [--as anon|user|user:<token>] [--expect <status>] [--save <name>] [--confirm]");
-  const { endpoint, query: inPath } = normalizeEndpoint(words[0]);
+  if (words.length && METHODS.includes(words[0].toUpperCase())) { if (!method) method = words[0].toUpperCase(); words.shift(); }
+  if (!words.length) throw new Error("Usage: http [get|post|put|patch|delete] <path> [key=value …] [-H 'Name: value'] [-d '{json}'] [--query {…}] [--as anon|user] [--expect 200] [--save name] [--confirm]");
+  const { endpoint, query: inPath } = normalizeEndpoint(words.shift());
+  const query = { ...inPath };
+  const fields = {};
+  for (const word of words) {
+    const [kind, key, value] = parseItem(word);
+    if (kind === "query") query[key] = value;
+    else if (kind === "header") headers[key] = value;
+    else fields[key] = value;
+  }
   let body;
-  if (flags.body !== undefined) {
-    if (SAFE.has(method)) throw new Error(`${method} has no body. Use POST, PUT, PATCH or DELETE.`);
-    try { body = JSON.parse(flags.body); } catch (error) { throw new Error(`--body is not valid JSON: ${error.message}`); }
+  const raw = data ?? flags.body;
+  if (raw !== undefined) {
+    try { body = JSON.parse(raw); } catch (error) { throw new Error(`The body is not valid JSON: ${error.message}`); }
   }
+  if (Object.keys(fields).length) {
+    if (body !== undefined && (typeof body !== "object" || Array.isArray(body))) throw new Error("key=value items need an object body.");
+    body = { ...(body || {}), ...fields };
+  }
+  if (!method) method = body !== undefined ? "POST" : "GET";
+  if (!METHODS.includes(method)) throw new Error(`Unknown method ${method}. Use ${METHODS.join(", ")}.`);
+  if (SAFE.has(method) && body !== undefined) throw new Error("GET has no body. Use post, put, patch or delete.");
   const expect = flags.expect === undefined ? undefined : Number(flags.expect);
   if (flags.expect !== undefined && !(expect >= 100 && expect <= 599)) throw new Error("--expect takes a status code, such as 200.");
   return {
     method, endpoint, body, expect,
-    query: { ...inPath, ...parseMap(flags.query, "--query") },
-    headers: parseMap(flags.headers, "--headers"),
+    query: { ...query, ...parseMap(flags.query, "--query") },
+    headers: { ...parseMap(flags.headers, "--headers"), ...headers },
     as: flags.as || "", raw: !!flags.raw, verbose: !!flags.verbose, save: flags.save || "", confirm: !!flags.confirm,
   };
+}
+
+/** `Name: value` (curl's -H) or a JSON object. */
+function parseHeader(text) {
+  if (text.trim().startsWith("{")) return parseMap(text, "-H");
+  const at = text.indexOf(":");
+  if (at < 1) throw new Error(`Header "${text}" should look like Name: value.`);
+  return { [text.slice(0, at).trim()]: text.slice(at + 1).trim() };
 }
 
 const human = (bytes) => (bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`);
