@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Layout, { DATA_PAGES, SECTION_TONES, dataSubnav } from "../../components/Layout";
 import ImportWizard from "../../components/ImportWizard";
 import { download, toCsv } from "../../lib/tabular";
 import { TableView } from "./Database";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, CopyText, EmptyState, Field, Loading, Modal, PageHead, Table, formatCell, useAction } from "../../components/ui";
-import { HistoryPanel, SchemaBadge, SchemaPanel } from "../../components/SchemaPanels";
+import { HistoryPanel, ImportTable, SchemaBadge, SchemaPanel } from "../../components/SchemaPanels";
 import { DefinitionSheet, singular } from "../../components/definitions/DefinitionSheet";
 import { KINDS, editable, keyOf } from "../../lib/kinds";
 import { del, envPath, get, patch, post, put, useApi } from "../../lib/api";
@@ -35,6 +35,24 @@ export default function Definitions({ env, kind }) {
   const [reveal, setReveal] = useState(null);
   const [extra, setExtra] = useState(null);
   const [browse, setBrowse] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [openTab, setOpenTab] = useState("form");
+  // Arriving with ?resource=<name>&tab=schema (or ?import=1) opens that resource, or the import list: links from the SQL page.
+  const arrived = useRef(false);
+  useEffect(() => {
+    if (arrived.current || kind !== "resources" || !list.data) return;
+    const params = new URLSearchParams(window.location.search);
+    const name = params.get("resource");
+    if (params.get("import")) setImporting(true);
+    else if (name) {
+      const row = list.data.data.find((item) => item.name === name);
+      if (row) {
+        setOpenTab(params.get("tab") || "form");
+        setEditing({ isNew: false, key: keyOf(kind, row), body: editable(row) });
+      }
+    }
+    arrived.current = true;
+  }, [list.data, kind]);
   const create = () => setEditing({ isNew: true, body: meta.blank || meta.template });
   return (
     <Layout title={meta.title} subnav={DATA_PAGES.some(([page]) => page === kind) ? dataSubnav(env, kind) : undefined}>
@@ -42,7 +60,10 @@ export default function Definitions({ env, kind }) {
       <PageHead
         title={meta.title}
         description={meta.description}
-        actions={<Button variant="primary" onClick={create}><Icon name="plus" />New {singular(kind).toLowerCase()}</Button>}
+        actions={<>
+          {kind === "resources" && <Button onClick={() => setImporting(true)}><Icon name="database" />Import table</Button>}
+          <Button variant="primary" onClick={create}><Icon name="plus" />New {singular(kind).toLowerCase()}</Button>
+        </>}
       />
       {kind === "resources" && waiting.length > 0 && (
         <div className="alert warn schema-banner">
@@ -80,10 +101,12 @@ export default function Definitions({ env, kind }) {
           kind={kind}
           env={env}
           editing={editing}
+          initialTab={openTab}
           onSave={(body) => (editing.isNew ? post(base, body) : put(`${base}/${editing.key}`, body))}
           onDelete={() => del(`${base}/${editing.key}`)}
           onClose={(result) => {
             setEditing(null);
+            setOpenTab("form");
             schema.reload();
             if (result === undefined) return;
             list.reload();
@@ -109,11 +132,12 @@ export default function Definitions({ env, kind }) {
           }}
           extraTabs={kind === "resources" && !editing.isNew ? {
             records: { label: "Records", render: () => <Records base={envPath(env, `/resources/${editing.key}/records`)} fields={editing.body.fields || []} /> },
-            schema: { label: reports[editing.key] && reports[editing.key].state !== "in_sync" ? "Schema •" : "Schema", render: () => <SchemaPanel env={env} name={editing.key} onChanged={schema.reload} /> },
+            schema: { label: reports[editing.key] && reports[editing.key].state !== "in_sync" ? "Schema •" : "Schema", render: () => <SchemaPanel env={env} name={editing.key} onChanged={schema.reload} onAdopted={() => { setEditing(null); list.reload(); }} /> },
             history: { label: "History", render: () => <HistoryPanel env={env} name={editing.key} onChanged={schema.reload} /> },
           } : {}}
         />
       )}
+      {importing && <ImportTable env={env} base={base} onClose={() => setImporting(false)} onDone={() => { list.reload(); schema.reload(); }} />}
       {extra && (
         <Modal title={extra.title} onClose={() => setExtra(null)} footer={<Button variant="primary" onClick={() => setExtra(null)}>Done</Button>}>
           {extra.value?.url ? <CopyText text={extra.value.url} /> : <pre className="code-block">{JSON.stringify(extra.value, null, 2)}</pre>}

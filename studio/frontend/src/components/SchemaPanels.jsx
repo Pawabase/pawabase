@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { Badge, Button, Card, Field, Loading, Modal, useAction, when } from "./ui";
-import { envPath, post, useApi } from "../lib/api";
+import { editable } from "../lib/kinds";
+import { envPath, get, post, put, useApi } from "../lib/api";
 
 const STATES = {
   in_sync: { label: "In sync", tone: "green" },
+  external: { label: "Changed outside", tone: "yellow" },
   pending: { label: "Not applied", tone: "yellow" },
   review: { label: "Needs review", tone: "yellow" },
   no_table: { label: "No table yet", tone: "yellow" },
@@ -21,12 +23,12 @@ const OPS = {
 export function SchemaBadge({ report }) {
   if (!report) return <span className="muted">—</span>;
   const state = STATES[report.state] || STATES.in_sync;
-  const count = report.state === "pending" || report.state === "review" ? ` · ${report.pending}` : "";
+  const count = report.state === "pending" || report.state === "review" ? ` · ${report.pending}` : report.state === "external" ? ` · ${(report.external || []).length}` : "";
   return <Badge tone={state.tone}><span className="dot" />{state.label}{count}</Badge>;
 }
 
 /** The changes waiting to be applied to a resource's table, with the SQL that would run, and what is being kept for rollbacks. */
-export function SchemaPanel({ env, name, onChanged }) {
+export function SchemaPanel({ env, name, onChanged, onAdopted }) {
   const path = envPath(env, `/resources/${name}/schema`);
   const state = useApi(path);
   const [run, busy] = useAction();
@@ -34,7 +36,7 @@ export function SchemaPanel({ env, name, onChanged }) {
   const [typed, setTyped] = useState("");
   const report = state.data;
   useEffect(() => {
-    if (report) setChosen(new Set(report.changes.filter((c) => c.safe).map((c) => c.id)));
+    if (report) setChosen(new Set((report.changes || []).filter((c) => c.safe).map((c) => c.id)));
   }, [report]);
   const toggle = (id) => setChosen((current) => {
     const next = new Set(current);
@@ -52,6 +54,18 @@ export function SchemaPanel({ env, name, onChanged }) {
     );
     if (result) { setTyped(""); refresh(); }
   };
+  const acknowledge = async () => {
+    const result = await run(() => post(`${path}/acknowledge`, {}), "Recorded");
+    if (result) refresh();
+  };
+  const adopt = async () => {
+    const result = await run(async () => {
+      const row = await get(envPath(env, `/resources/${name}`));
+      await put(envPath(env, `/resources/${name}`), { ...editable(row), fields: report.proposal });
+      return post(`${path}/acknowledge`, {});
+    }, "The definition now follows the table");
+    if (result) { refresh(); onAdopted?.(); }
+  };
   const purge = async () => {
     const result = await run(() => post(`${path}/purge`, { confirm: typed }), "Removed for good");
     if (result) { setTyped(""); refresh(); }
@@ -60,18 +74,40 @@ export function SchemaPanel({ env, name, onChanged }) {
     <Loading state={state}>
       {() => report && (
         <div className="stack lg">
+          {(report.external || []).length > 0 && (
+            <Card title="Changed outside Pawabase">
+              <div className="stack">
+                <p className="muted">
+                  The table was changed by something other than Pawabase (the SQL console, a migration tool, another app)
+                  since {report.since?.at ? when(report.since.at) : "it was last seen"}. Nothing has been changed here.
+                </p>
+                {(report.external || []).map((change) => (
+                  <div key={`${change.kind}:${change.column}`} className="row wrap schema-external">
+                    <Badge tone={change.kind === "removed" ? "red" : change.kind === "added" ? "green" : "yellow"}>{change.kind}</Badge>
+                    <span>{change.detail}</span>
+                    {change.in_definition && change.kind === "added" && <span className="hint">already in the definition</span>}
+                  </div>
+                ))}
+                <div className="row wrap">
+                  <Button variant="primary" disabled={busy} onClick={adopt}>Update the definition to match</Button>
+                  <Button disabled={busy} onClick={acknowledge}>Keep the definition</Button>
+                </div>
+                <span className="hint">Updating changes only field names and types. Access rules, validation and relations stay as they are.</span>
+              </div>
+            </Card>
+          )}
           <Card
             title="Table and definition"
             actions={<><SchemaBadge report={report} /><Button size="sm" onClick={state.reload}>Refresh</Button></>}
           >
-            {report.changes.length === 0 ? (
+            {(report.changes || []).length === 0 ? (
               <p className="muted">The table <b className="mono">{report.table}</b> matches the definition. Nothing is waiting to be applied.</p>
             ) : (
               <div className="stack">
                 <p className="muted">
                   Saving a resource changes its definition, not the table. These changes are waiting. Nothing runs until you apply them, and each one can be rolled back.
                 </p>
-                {report.changes.map((change) => (
+                {(report.changes || []).map((change) => (
                   <label key={change.id} className="schema-change">
                     <input type="checkbox" checked={chosen?.has(change.id) || false} onChange={() => toggle(change.id)} />
                     <span className="stack sm">
@@ -98,11 +134,11 @@ export function SchemaPanel({ env, name, onChanged }) {
               </div>
             )}
           </Card>
-          {report.retained.length > 0 && (
+          {(report.retained || []).length > 0 && (
             <Card title="Kept for rollbacks">
               <div className="stack">
                 <p className="muted">These columns and tables are hidden from your API and held so a rollback can restore them. Removing them frees the space and makes those rollbacks impossible.</p>
-                {report.retained.map((item) => (
+                {(report.retained || []).map((item) => (
                   <div key={item.name} className="row">
                     <Badge>{item.kind}</Badge><code>{item.original}</code><span className="hint">kept as {item.name}</span>
                   </div>
@@ -117,7 +153,7 @@ export function SchemaPanel({ env, name, onChanged }) {
           {report.exists && (
             <Card title="Columns in the table">
               <div className="row wrap">
-                {report.columns.map((column) => <Badge key={column.name}>{column.name} · {String(column.type).toLowerCase()}</Badge>)}
+                {(report.columns || []).map((column) => <Badge key={column.name}>{column.name} · {String(column.type).toLowerCase()}</Badge>)}
               </div>
             </Card>
           )}
@@ -139,8 +175,8 @@ export function HistoryPanel({ env, name, onChanged }) {
     const result = await run(() => post(`${path}/${id}/rollback`), "Rolled back");
     if (result) { setConfirming(null); state.reload(); onChanged?.(); }
   };
-  const label = (row) => (row.kind === "rollback" ? "Rollback" : row.status === "rolled_back" ? "Rolled back" : row.status === "failed" ? "Failed" : "Applied");
-  const tone = (row) => (row.status === "failed" ? "red" : row.kind === "rollback" || row.status === "rolled_back" ? "yellow" : "green");
+  const label = (row) => (row.kind === "external" ? "Outside change" : row.kind === "rollback" ? "Rollback" : row.status === "rolled_back" ? "Rolled back" : row.status === "failed" ? "Failed" : "Applied");
+  const tone = (row) => (row.status === "failed" ? "red" : row.kind === "external" || row.kind === "rollback" || row.status === "rolled_back" ? "yellow" : "green");
   return (
     <Loading state={state} empty="No changes yet. Applying the definition to the table starts the history.">
       {(data) => (
@@ -157,10 +193,13 @@ export function HistoryPanel({ env, name, onChanged }) {
                   {row.can_roll_back
                     ? <Button size="sm" disabled={busy} onClick={() => setConfirming(row)}>Roll back</Button>
                     : <span className="hint">{row.status === "applied" && row.kind === "apply" ? row.cannot_roll_back : ""}</span>}
-                  <Button size="sm" onClick={() => setOpen(open === row.id ? null : row.id)}>{open === row.id ? "Hide SQL" : "SQL"}</Button>
+                  {row.up.length > 0 && <Button size="sm" onClick={() => setOpen(open === row.id ? null : row.id)}>{open === row.id ? "Hide SQL" : "SQL"}</Button>}
                 </div>
               </div>
               <div className="hint">{when(row.created_at)}{row.actor ? ` · ${row.actor}` : ""} · from {row.source}</div>
+              {row.kind === "external" && row.changes.length > 0 && (
+                <div className="stack sm">{row.changes.map((change) => <span key={`${change.kind}:${change.column}`} className="hint">{change.detail}</span>)}</div>
+              )}
               {row.error && <div className="alert error">{row.error}</div>}
               {open === row.id && (
                 <div className="stack sm">
@@ -186,5 +225,56 @@ export function HistoryPanel({ env, name, onChanged }) {
         </div>
       )}
     </Loading>
+  );
+}
+
+/** Tables that exist in the database but have no resource: pick one to define a resource from it. */
+export function ImportTable({ env, base, onClose, onDone }) {
+  const state = useApi(envPath(env, "/schema/tables"));
+  const [run, busy] = useAction();
+  const [names, setNames] = useState({});
+  const bring = async (table) => {
+    const definition = table.definition;
+    const name = (names[table.table] || table.table).trim();
+    const result = await run(async () => {
+      await post(base, {
+        name,
+        table: table.table,
+        primary_key: definition.primary_key,
+        id_type: definition.id_type,
+        timestamps: definition.timestamps,
+        fields: definition.fields_,
+        operations: {},
+      });
+      return post(envPath(env, `/resources/${name}/schema/acknowledge`), { note: `Imported from the existing table ${table.table}` });
+    }, `${name} is now a resource`);
+    if (result) onDone();
+  };
+  return (
+    <Modal title="Import a table" onClose={onClose} footer={<Button variant="primary" onClick={onClose}>Done</Button>}>
+      <div className="stack">
+        <p className="muted">Tables in this environment's database that no resource uses. Importing defines a resource from the table's columns. It starts with no API access: you choose who can read and write it.</p>
+        <Loading state={state} empty="Every table already has a resource.">
+          {(data) => data.data.length === 0 ? <p className="muted">Every table already has a resource.</p> : data.data.map((table) => (
+            <div key={table.table} className="card schema-entry">
+              <div className="spread">
+                <b className="mono">{table.table}</b>
+                {table.definition && (
+                  <div className="row">
+                    <input value={names[table.table] ?? table.table} onChange={(event) => setNames({ ...names, [table.table]: event.target.value })} style={{ width: 160 }} aria-label="Resource name" />
+                    <Button size="sm" variant="primary" disabled={busy} onClick={() => bring(table)}>Import</Button>
+                  </div>
+                )}
+              </div>
+              <div className="row wrap">
+                {table.columns.map((column) => <Badge key={column.name}>{column.name} · {column.field_type}</Badge>)}
+              </div>
+              {table.problem && <div className="alert warn">{table.problem}</div>}
+              {table.skipped.length > 0 && <span className="hint">Left out (not usable as field names): {table.skipped.join(", ")}</span>}
+            </div>
+          ))}
+        </Loading>
+      </div>
+    </Modal>
   );
 }

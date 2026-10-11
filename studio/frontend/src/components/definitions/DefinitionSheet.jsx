@@ -14,12 +14,12 @@ export function singular(kind) {
   return title.endsWith("s") ? title.slice(0, -1) : title;
 }
 
-export function DefinitionSheet({ kind, env, editing, onClose, onSave, onDelete, actions, extraTabs = {}, subtitle }) {
+export function DefinitionSheet({ kind, env, editing, onClose, onSave, onDelete, actions, extraTabs = {}, subtitle, initialTab = "form" }) {
   const meta = KINDS[kind];
   const Form = FORMS[kind];
   const refs = useRefs(env);
   const [body, setBody] = useState(editing.body);
-  const [tab, setTab] = useState("form");
+  const [tab, setTab] = useState(extraTabs[initialTab] ? initialTab : "form");
   const [formKey, setFormKey] = useState(0);
   const [run, busy] = useAction();
   const patch = (changes) => setBody((b) => ({ ...b, ...changes }));

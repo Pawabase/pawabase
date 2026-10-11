@@ -18,8 +18,8 @@ from sillo.exceptions import HTTPException
 from pawabase_server.compiler.openapi_scope import add_apikey_security
 from pawabase_server.core.context import PlatformContext
 from pawabase_server.core.schemas import compile_model
+from pawabase_server.data import ddl, schema
 from pawabase_server.data import inspect as db_inspect
-from pawabase_server.data import schema
 from pawabase_server.data.inspect import is_read_only
 from pawabase_server.data.resources import after_write, resource_tag
 from pawabase_server.data.sql import SqlError
@@ -410,6 +410,15 @@ def register(r: Router, platform: Platform) -> None:
         if not read_only:
             await audit(ctx, "database.write", env=env, details={"sql": body.sql[:2000]})
             await platform.cache_invalidate(state, [f"resource:{name}" for name in state.specs])
+            warnings = await ddl.advise(env, source, state.specs, body.sql)
+            if warnings:
+                result["warnings"] = warnings
+                await audit(
+                    ctx,
+                    "database.structure_changed",
+                    env=env,
+                    details={"sql": body.sql[:500], "warnings": [w["title"] for w in warnings]},
+                )
         return result
 
 

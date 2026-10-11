@@ -1,8 +1,9 @@
+import { router } from "@inertiajs/react";
 import { useState } from "react";
 import Layout, { dataSubnav } from "../../components/Layout";
 import SqlBuilder from "../../components/SqlBuilder";
 import { Icon } from "../../components/icons";
-import { Button, Card, Loading, PageHead, Table, formatCell, truncate, useAction } from "../../components/ui";
+import { Badge, Button, Card, Loading, PageHead, Table, formatCell, truncate, useAction } from "../../components/ui";
 import { envPath, get, post, useApi } from "../../lib/api";
 
 /** The SQL page of Data: run queries against the environment's database, with a builder for people who would rather click. */
@@ -47,7 +48,7 @@ export default function Database({ env }) {
         </div>
       )}
       <Loading state={overview}>
-        {(data) => <SqlConsole base={base} tables={data.tables || []} dialect={data.dialect} />}
+        {(data) => <SqlConsole env={env} base={base} tables={data.tables || []} dialect={data.dialect} />}
       </Loading>
     </Layout>
   );
@@ -104,7 +105,7 @@ export function TableView({ base, table }) {
   );
 }
 
-function SqlConsole({ base, tables, dialect }) {
+function SqlConsole({ env, base, tables, dialect }) {
   const [sql, setSql] = useState("SELECT 1 AS ok");
   const [builder, setBuilder] = useState(true);
   const [allowWrite, setAllowWrite] = useState(false);
@@ -141,6 +142,23 @@ function SqlConsole({ base, tables, dialect }) {
         />
         <p className="hint" style={{ margin: "8px 0 0" }}>⌘ or Ctrl + Enter runs the query. {dialect ? `Dialect: ${dialect}.` : ""}</p>
       </Card>
+      {result?.warnings?.map((warning, index) => (
+        <div key={index} className={`alert ${warning.level === "error" ? "error" : warning.level === "info" ? "info" : "warn"} sql-warning`}>
+          <div className="spread">
+            <b>{warning.title}</b>
+            <Badge tone={warning.level === "error" ? "red" : warning.level === "info" ? "" : "yellow"}>{warning.level === "error" ? "Needs fixing" : warning.level === "info" ? "Good to know" : "Action needed"}</Badge>
+          </div>
+          <p>{warning.message}</p>
+          <ol>{warning.steps.map((step) => <li key={step}>{step}</li>)}</ol>
+          {warning.action && (
+            <Button size="sm" onClick={() => router.visit(
+              warning.action.type === "import"
+                ? `/envs/${env}/resources?import=1`
+                : `/envs/${env}/resources?resource=${encodeURIComponent(warning.action.resource)}&tab=schema`,
+            )}>{warning.action.label}</Button>
+          )}
+        </div>
+      ))}
       {result && (
         <Card flush title="Result" actions={result.rows ? <span className="muted small">{result.rows.length} row{result.rows.length === 1 ? "" : "s"}</span> : undefined}>
           {result.affected !== undefined ? (
