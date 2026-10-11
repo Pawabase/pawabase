@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
-from html import escape
 from typing import Any
 
 import httpx
-from sillo import HttpContext, SilloApp, html
-from sillo.exceptions import HTTPException
+from sillo import SilloApp
 from sillo.security import CorsConfig, CORSMiddleware
 
 from app.config import GatewaySettings
@@ -16,11 +13,12 @@ from app.domains import DomainSync
 from app.keys import KeyResolver
 from app.proxy import GatewayProxy
 from app.quotas import RequestQuota
-from app.status import StatusProber, fetch, render
+from app.routes import internal, landing, status
+from app.status import StatusProber
 from pawabase_core.clients import ServiceClient
-from pawabase_core.service import SERVICE_ONLY, create_service
+from pawabase_core.service import create_service
 
-SERVICES = ("api", "akountz", "angula")
+SERVICES = status.SERVICES
 
 
 def create_app(
@@ -48,7 +46,9 @@ def create_app(
 
         cache = RedisCache(url=settings.redis_url, namespace="gateway")
         rate_backend = RedisBackend(url=settings.redis_url)
-    resolver = KeyResolver(api, cache=cache, ttl=settings.key_cache_ttl)
+    resolver = KeyResolver(
+        api, cache=cache, ttl=settings.key_cache_ttl, stale_ttl=settings.key_stale_ttl
+    )
     ws_bases = {
         name: url.replace("http://", "ws://").replace("https://", "wss://")
         for name, url in urls.items()
@@ -96,66 +96,9 @@ def create_app(
     app.state["status_prober"] = prober
     app.state["request_quota"] = quota
 
-    @app.get("/", exclude_from_schema=True)
-    async def landing(ctx: HttpContext):
-        """A page for people who open the address in a browser: the API itself lives under /auth/v1, /rest/v1, /functions/v1 and the other prefixes."""
-        name = escape(settings.project_name)
-        return html(
-            f"""<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{name}</title>
-<style>:root{{color-scheme:light dark}}body{{margin:0;min-height:100vh;display:grid;place-items:center;font:15px/1.6 system-ui,sans-serif}}
-main{{max-width:30rem;padding:2rem;text-align:center}}h1{{margin:.5rem 0}}p{{color:gray}}code{{background:rgba(127,127,127,.15);padding:.1rem .4rem;border-radius:6px}}
-.dot{{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;background:#2e8a5e;margin-right:.4rem}}</style></head>
-<body><main><h1>{name}</h1><p><span class="dot"></span>This project's API is running.</p>
-<p>Send requests with your project's API key in the <code>apikey</code> header, for example <code>/auth/v1/signup</code>, <code>/rest/v1/…</code> or <code>/functions/v1/…</code>.</p>
-<p><a href="/v1/status">Service status</a></p></main></body></html>"""
-        )
-
-    async def status_data(env: str | None) -> dict[str, Any]:
-        data = await fetch(api, env)
-        if data is None:
-            raise HTTPException(status_code=404, detail="no public status page")
-        return data
-
-    @app.get("/status", exclude_from_schema=True)
-    async def status_default_page(ctx: HttpContext):
-        return html(render(await status_data(None)))
-
-    @app.get("/status/{env}", exclude_from_schema=True)
-    async def status_page(ctx: HttpContext, env: str):
-        """The page, or its data as JSON when the name ends in ``.json``."""
-        if env.endswith(".json"):
-            return await status_data(env.removesuffix(".json"))
-        return html(render(await status_data(env)))
-
-    @app.get("/v1/status", summary="Health of every Pawabase service", tags=["gateway"])
-    async def status(ctx: HttpContext):
-        async def check(name: str) -> tuple[str, dict[str, Any]]:
-            try:
-                response = await clients[name].get("/health", timeout=3)
-                return name, {"ok": response.status_code == 200}
-            except Exception as exc:
-                return name, {"ok": False, "error": type(exc).__name__}
-
-        results = dict(await asyncio.gather(*(check(name) for name in SERVICES)))
-        return {"ok": all(r["ok"] for r in results.values()), "services": results}
-
-    @app.get("/internal/v1/gateway/stats", auth=SERVICE_ONLY, exclude_from_schema=True)
-    async def stats(ctx: HttpContext):
-        return {**proxy.stats, "key_lookups": resolver.lookups}
-
-    @app.get("/internal/v1/gateway/usage", auth=SERVICE_ONLY, exclude_from_schema=True)
-    async def usage(ctx: HttpContext):
-        return {
-            **await quota.usage(),
-            "environments": await proxy.env_limits.usage(),
-            "connections": {
-                "active": settings.max_active_connections - proxy.connections._value
-                if proxy.connections is not None
-                else 0,
-                "limit": settings.max_active_connections,
-            },
-        }
+    landing.register(app, settings)
+    status.register(app, api, clients)
+    internal.register(app, settings, proxy, resolver, quota)
 
     @app.on_startup
     async def begin_probing() -> None:
@@ -166,10 +109,7 @@ main{{max-width:30rem;padding:2rem;text-align:center}}h1{{margin:.5rem 0}}p{{col
     async def close() -> None:
         await prober.stop()
         await domains.stop()
-        for client in clients.values():
-            await client.aclose()
+        await proxy.close()
         await api.close()
-        await quota.close()
-        await proxy.env_limits.close()
 
     return app

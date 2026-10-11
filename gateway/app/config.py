@@ -35,3 +35,19 @@ class GatewaySettings(PlatformSettings):
     max_body_bytes: int = 100 * 1024 * 1024
     upstream_timeout: float = 60.0
     hosts: str = ""
+    #: Who may vouch for a client's address through ``X-Forwarded-For``: ``private`` (the default) trusts a proxy on a private or loopback
+    #: address, ``*`` trusts any peer, empty trusts none, and a comma-separated list of CIDR ranges trusts exactly those. A peer that is not
+    #: trusted cannot choose the address it is rate limited, allow-listed or logged under.
+    trusted_proxies: str = "private"
+    #: Extra attempts at an idempotent request when the upstream could not be reached at all (no byte was sent to it).
+    upstream_retries: int = 1
+    #: Consecutive upstream failures before its circuit opens, and seconds it stays open before one probe is let through.
+    breaker_failures: int = 5
+    breaker_cooldown: float = 10.0
+    #: Seconds a resolved key may still be used when the API cannot be reached to re-check it.
+    key_stale_ttl: int = 60
+    ws_max_message_bytes: int = 1024 * 1024
+    ws_open_timeout: float = 10.0
+    ws_ping_interval: float = 25.0
+    #: Methods the gateway forwards; anything else is answered 405 without touching an upstream.
+    allowed_methods: str = "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS"

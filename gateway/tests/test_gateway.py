@@ -1,3 +1,4 @@
+from app.proxy import policy
 from pawabase_core.context import CONTEXT_HEADER
 from pawabase_core.tokens import verify_context_token
 
@@ -90,20 +91,12 @@ async def test_key_ip_and_route_restrictions(gateway):
     assert denied.status_code == 403
     assert denied.json()["error"] == "route_not_allowed"
 
-    from app.proxy import GatewayProxy
-
     assert (
-        GatewayProxy._key_allowed(
-            {"client": ("10.2.3.4", 1234), "method": "GET", "path": "/rest/v1/orders"},
-            {"allowed_ips": ["10.0.0.0/8"]},
-        )
+        policy.check_key("GET", "/rest/v1/orders", "10.2.3.4", {"allowed_ips": ["10.0.0.0/8"]})
         is None
     )
     assert (
-        GatewayProxy._key_allowed(
-            {"client": ("192.168.1.1", 1234), "method": "GET", "path": "/rest/v1/orders"},
-            {"allowed_ips": ["10.0.0.0/8"]},
-        )
+        policy.check_key("GET", "/rest/v1/orders", "192.168.1.1", {"allowed_ips": ["10.0.0.0/8"]})
         == "ip_not_allowed"
     )
 
@@ -144,13 +137,14 @@ async def test_the_root_is_a_landing_page_not_a_404(gateway):
 
 
 def test_environment_gate():
-    from app.proxy import GatewayProxy
     from pawabase_core.context import PlatformContext
 
-    gate = GatewayProxy._environment_gate
+    def gate(address, context, info):
+        return policy.environment_gate(address, context, info)
+
     anon = PlatformContext(env="main", role="anon")
     service = PlatformContext(env="main", role="service")
-    scope = {"client": ("10.2.3.4", 1234)}
+    scope = "10.2.3.4"
 
     assert gate(scope, anon, {}) is None
 
@@ -163,7 +157,7 @@ def test_environment_gate():
 
     allow = {"ip_allowlist": ["10.0.0.0/8"]}
     assert gate(scope, service, allow) is None
-    assert gate({"client": ("192.168.1.1", 1)}, service, allow)[0] == "ip_not_allowed"
-    assert gate({"client": None}, service, allow)[0] == "ip_not_allowed"
+    assert gate("192.168.1.1", service, allow)[0] == "ip_not_allowed"
+    assert gate("unknown", service, allow)[0] == "ip_not_allowed"
     # Browsers on publishable keys are not held to the secret-key allowlist.
-    assert gate({"client": ("192.168.1.1", 1)}, anon, allow) is None
+    assert gate("192.168.1.1", anon, allow) is None

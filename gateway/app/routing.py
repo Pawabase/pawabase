@@ -51,6 +51,25 @@ ROUTES: tuple[Upstream, ...] = (
 BLOCKED_PREFIXES = ("/internal/", "/admin/")
 
 
+def is_clean_path(path: str) -> bool:
+    """Whether *path* is safe to forward as it stands.
+
+    The route table matches on the path's prefix, but an upstream may *resolve* the path before using it, so ``/rest/../internal/v1/x``
+    would be routed as ``/rest/`` and then reach ``/internal/``. Dot segments, empty segments, backslashes and control characters are
+    therefore refused outright instead of being normalised: no legitimate client sends them.
+    """
+    if (
+        not path.startswith("/")
+        or "\\" in path
+        or any(ord(c) < 0x20 or ord(c) == 0x7F for c in path)
+    ):
+        return False
+    segments = path.split("/")[1:]
+    if segments and segments[-1] == "":
+        segments = segments[:-1]  # one trailing slash is ordinary
+    return not any(segment in ("", ".", "..") for segment in segments)
+
+
 def route_for(path: str) -> Upstream | None:
     if path.startswith(BLOCKED_PREFIXES):
         return None
