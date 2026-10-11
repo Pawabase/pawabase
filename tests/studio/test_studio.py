@@ -191,3 +191,23 @@ def test_mail_is_a_service_page_and_the_mail_templates_page_is_gone():
 
     assert SECTIONS["mail"] == "Env/Mail"
     assert "mail-templates" not in SECTIONS and "mail-templates" not in DEFINITION_KINDS
+
+
+async def test_the_explorer_can_call_any_public_endpoint_and_nothing_else(studio):
+    async def call(endpoint, **extra):
+        return await studio.http.post(
+            "/studio/api/explorer/request",
+            content=json.dumps({"env": "main", "method": "GET", "endpoint": endpoint, **extra}),
+            headers={**await studio.csrf(), "content-type": "application/json"},
+        )
+
+    for allowed in ("/functions/v1/ping", "/health/v1", "/auth/v1/user", "/flows/v1/nightly", "/rest/v1/todos"):
+        response = await call(allowed)
+        assert response.status_code == 200, allowed
+        assert studio.api.raw_call["path"] == allowed
+        assert studio.api.raw_call["context"].role == "anon"
+    # The body carries a size, for the terminal's one-line summary.
+    assert "size" in (await call("/health/v1")).json()
+
+    for refused in ("/platform/v1/envs", "/admin/v1/users", "/internal/v1/keys/resolve", "/rest/../platform/v1/x", "/functions//v1/x", "health", "/functions/v1/..", "/rest/v1/a\\b"):
+        assert (await call(refused)).status_code == 400, refused
