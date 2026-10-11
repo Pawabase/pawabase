@@ -43,6 +43,22 @@ if TYPE_CHECKING:
     from pawabase_server.platform import Platform
 
 
+def data_schema_name(env_name: str) -> str:
+    """The Postgres schema an environment's resource tables live in on the shared default database."""
+    return f"pb_{hashlib.sha256(env_name.encode()).hexdigest()[:12]}"
+
+
+def default_data_url(template: str, env_name: str) -> str:
+    """The platform default data URL for one environment: the template filled in, with its own schema on Postgres."""
+    # ``{project}`` from an older configuration names nothing now: drop it, with its separator.
+    template = template.replace("{project}__", "").replace("{project}", "")
+    url = template.replace("{env}", env_name)
+    if url.startswith(("postgres://", "postgresql://")) and "schema=" not in url:
+        # One shared Postgres database, one schema per environment (see ``data_schema_name``).
+        url += ("&" if "?" in url else "?") + f"schema={data_schema_name(env_name)}"
+    return url
+
+
 @dataclass
 class EnvironmentState:
     """Everything defined for one environment, at one version."""
@@ -106,15 +122,7 @@ class EnvironmentState:
                 f"set {envvars.prefix_for(self.env_name)}_DATA_URL instead",
             )
             return self.platform.resolve_value(self, configured)
-        # ``{project}`` from an older configuration names nothing now: drop it, with its separator.
-        template = self.platform.settings.default_data_url.replace("{project}__", "").replace(
-            "{project}", ""
-        )
-        url = template.replace("{env}", self.env_name)
-        if url.startswith(("postgres://", "postgresql://")) and "schema=" not in url:
-            # One shared Postgres database, one schema per environment (see ``data_schema``).
-            url += ("&" if "?" in url else "?") + f"schema={self.data_schema()}"
-        return url
+        return default_data_url(self.platform.settings.default_data_url, self.env_name)
 
     def database_source(self) -> str:
         """Where the data database comes from: ``environment`` (a variable), ``stored`` (deprecated ``infra``) or ``default``."""
@@ -124,8 +132,7 @@ class EnvironmentState:
 
     def data_schema(self) -> str:
         """The Postgres schema holding this environment's resource tables in the shared default database."""
-        scope = hashlib.sha256(self.env_name.encode()).hexdigest()[:12]
-        return f"pb_{scope}"
+        return data_schema_name(self.env_name)
 
     def database_table(self, table: str) -> str:
         """The physical table name: the resource's own.

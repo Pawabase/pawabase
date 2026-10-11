@@ -7,6 +7,7 @@ worker     run the queue worker, as a process of its own
 scheduler  run the scheduler, as a process of its own
 migrate    apply pending database migrations; ``migrate make NAME`` writes a new one
 check      validate the configuration and exit non-zero when something is wrong
+copy-data  copy every environment's resource data from another database (e.g. SQLite files) into the configured one
 version    print the version
 =========  ==============================================================================
 """
@@ -43,6 +44,11 @@ def main(argv: list[str] | None = None) -> int:
         asyncio.run(migrate(args))
         return 0
 
+    if command == "copy-data":
+        from pawabase_server.data.copy_cli import run as copy_data
+
+        return asyncio.run(copy_data(args, Settings()))
+
     if command in ("worker", "scheduler"):
         import logging
 
@@ -74,7 +80,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     print(
-        f"usage: pawabase-server [serve|worker|scheduler|migrate|check|version] (got {command!r})",
+        f"usage: pawabase-server [serve|worker|scheduler|migrate|copy-data|check|version] (got {command!r})",
         file=sys.stderr,
     )
     return 64
