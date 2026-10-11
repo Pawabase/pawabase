@@ -4,6 +4,8 @@ import CommandSearch from "./CommandSearch";
 import Console from "./Console";
 import NewEnvironment from "./NewEnvironment";
 import StatusLights from "./StatusLights";
+import Tour from "./Tour";
+import { readTour, startTour } from "../lib/tour";
 import { Icon } from "./icons";
 import { Logo } from "./Logo";
 import { Badge, Button, Field, Loading, Sheet, Status, Table, ToastProvider, useAction, when } from "./ui";
@@ -236,7 +238,7 @@ function SubNav({ subnav, backHref }) {
     );
     const active = subnav.active === item.key;
     return item.href ? (
-      <Link key={item.key} href={item.href} className={`subnav-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>{body}{item.external && <Icon name="chevronRight" size={13} className="faint" />}</Link>
+      <Link key={item.key} data-tour={`sub-${item.key}`} href={item.href} className={`subnav-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>{body}{item.external && <Icon name="chevronRight" size={13} className="faint" />}</Link>
     ) : (
       <button key={item.key} type="button" className={`subnav-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined} title={item.title || item.label} onClick={() => subnav.onSelect(item.key)}>{body}</button>
     );
@@ -275,16 +277,19 @@ function EnvMenu({ name, env, envs, section, open, setOpen, onHistory, onCreate 
   useDismiss(open, () => setOpen(false), ref);
   const index = Math.max(0, (envs || []).findIndex((e) => e.name === env));
   const go = (href) => { setOpen(false); router.visit(href); };
+  const seen = readTour();
+  const resume = seen.status === "paused" && seen.step > 0;
   const actions = [
     ["audit", "Audit log", "Who changed what, across the project", () => go("/audit")],
     ...(env ? [
+      ["sparkle", resume ? "Resume the tour" : "Take the tour", resume ? `Pick up at step ${seen.step + 1} of 30` : "A guided walk through Studio, in 30 short steps", () => { setOpen(false); startTour(resume ? { step: seen.step } : {}); }],
       ["settings", "Environment settings", `Configuration for ${env}`, () => go(envHref(env, "settings"))],
       ["gitBranch", "Branches and history", "Checkout, merge and releases", () => { setOpen(false); onHistory(); }],
     ] : []),
   ];
   return (
     <div className="envmenu-wrap" ref={ref}>
-      <button type="button" className="crumb-btn" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button type="button" data-tour="env-menu" className="crumb-btn" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
         <span className={`avatar pastel ${envTone(env || "", index)}`}>{name.slice(0, 1).toUpperCase()}</span>
         <span>{name}</span>
         {env && <><span className="sep">/</span><span className="here">{env}</span></>}
@@ -365,7 +370,7 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
                   <div className="nav-title">{group.title}</div>
                   <div className="nav-items">
                     {group.items.map(([key, label, to, icon]) => (
-                      <Link key={key} href={envHref(env, to || key)} className={section === key || (key === "data" && DATA_PAGES.some(([page]) => page === section)) ? "active" : ""} title={label}>
+                      <Link key={key} data-tour={`nav-${key}`} href={envHref(env, to || key)} className={section === key || (key === "data" && DATA_PAGES.some(([page]) => page === section)) ? "active" : ""} title={label}>
                         <Icon name={icon || key} /><span className="label">{label}</span>
                       </Link>
                     ))}
@@ -400,10 +405,10 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
               </div>
             </div>
             <div className="top-actions">
-              {env && <Button size="sm" onClick={() => setHistoryOpen(true)} title="Checkout, create, merge, and review branches"><Icon name="gitBranch" size={15} /> History</Button>}
+              {env && <Button size="sm" data-tour="history" onClick={() => setHistoryOpen(true)} title="Checkout, create, merge, and review branches"><Icon name="gitBranch" size={15} /> History</Button>}
               <StatusLights />
-              <CommandSearch />
-              <button type="button" className="icon-btn" onClick={toggleTheme} aria-label={dark ? "Switch to light" : "Switch to dark"}>
+              <span data-tour="search" className="tour-wrap"><CommandSearch /></span>
+              <button type="button" data-tour="theme" className="icon-btn" onClick={toggleTheme} aria-label={dark ? "Switch to light" : "Switch to dark"}>
                 <Icon name={dark ? "sun" : "moon"} />
               </button>
             </div>
@@ -414,6 +419,7 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
         </div>
        </div>
         {newEnv && <NewEnvironment envs={envs || []} onClose={() => setNewEnv(false)} onDone={(created) => router.visit(envHref(created, "overview"))} />}
+        <Tour env={env} section={section} />
         {historyOpen && env && <BranchHistory runtime={runtime || { name }} env={env} url={url} onClose={closeHistory} />}
       </div>
     </ToastProvider>

@@ -1196,3 +1196,43 @@ html, body { background: var(--canvas); }
 .sql-warning p { margin: 0; }
 .sql-warning ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
 .sql-warning .btn { align-self: flex-start; }
+
+/* The guided tour: a veil with a lit window around one part of Studio, and a card that follows it. */
+.tour-wrap { display: inline-flex; }
+.tour { position: fixed; inset: 0; z-index: 200; pointer-events: none; }
+.tour-veil { position: fixed; background: rgba(20, 16, 36, 0.58); backdrop-filter: blur(1.5px); pointer-events: auto; transition: left .38s cubic-bezier(.2,.8,.2,1), top .38s cubic-bezier(.2,.8,.2,1), width .38s cubic-bezier(.2,.8,.2,1), height .38s cubic-bezier(.2,.8,.2,1); }
+.tour-ring { position: fixed; border-radius: 16px; pointer-events: none; box-shadow: 0 0 0 2px var(--brand), 0 0 0 6px var(--brand-ring), 0 0 40px rgba(109, 91, 208, 0.45); transition: left .38s cubic-bezier(.2,.8,.2,1), top .38s cubic-bezier(.2,.8,.2,1), width .38s cubic-bezier(.2,.8,.2,1), height .38s cubic-bezier(.2,.8,.2,1); animation: tour-glow 2.2s ease-in-out infinite; }
+@keyframes tour-glow { 0%, 100% { box-shadow: 0 0 0 2px var(--brand), 0 0 0 6px var(--brand-ring), 0 0 32px rgba(109, 91, 208, 0.35); } 50% { box-shadow: 0 0 0 2px var(--brand), 0 0 0 11px rgba(109, 91, 208, 0.16), 0 0 48px rgba(109, 91, 208, 0.55); } }
+.tour-card { position: fixed; pointer-events: auto; background: var(--surface); color: var(--text); border-radius: var(--r-lg); padding: 18px 20px 16px; box-shadow: var(--shadow-pop); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; transition: left .38s cubic-bezier(.2,.8,.2,1), top .38s cubic-bezier(.2,.8,.2,1); animation: tour-in .32s cubic-bezier(.2,.8,.2,1); }
+.tour-card.centered { padding: 24px 26px 20px; }
+.tour-card.centered h2 { font-size: 22px; }
+@keyframes tour-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+.tour-card h2 { margin: 0; font-size: 17px; letter-spacing: -0.01em; }
+.tour-card p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+.tour-progress { display: flex; gap: 4px; margin: -4px 0 4px; }
+.tour-seg { height: 4px; border-radius: 4px; background: var(--sunken); overflow: hidden; min-width: 6px; }
+.tour-seg i { display: block; height: 100%; background: var(--brand); border-radius: 4px; transition: width .4s ease; }
+.tour-meta { display: flex; align-items: center; gap: 8px; }
+.tour-badge { width: 30px; height: 30px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; }
+.tour-chapter { font-size: 11.5px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.tour-count { margin-left: auto; font: 600 12px var(--mono); color: var(--faint); }
+.tour-hint { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--brand-strong); background: var(--brand-soft); border-radius: var(--r-sm); padding: 8px 10px; }
+.tour-hint .faint { font-weight: 450; color: var(--muted); }
+.tour-pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); animation: tour-ping 1.4s ease-out infinite; flex-shrink: 0; }
+@keyframes tour-ping { 0% { box-shadow: 0 0 0 0 var(--brand-ring); } 100% { box-shadow: 0 0 0 9px transparent; } }
+.tour-chapters { display: flex; flex-direction: column; gap: 6px; }
+.tour-chip { border: 0; border-radius: 999px; padding: 6px 12px; font: 600 12.5px var(--sans); cursor: pointer; color: var(--pastel-ink); transition: transform .15s ease; }
+.tour-chip:hover { transform: translateY(-1px); }
+.tour-actions { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.tour-skip { background: none; border: 0; color: var(--muted); font: 600 12.5px var(--sans); cursor: pointer; padding: 6px 4px; }
+.tour-skip:hover { color: var(--text); }
+.tour-keys { font-size: 11.5px; color: var(--faint); display: flex; align-items: center; gap: 4px; }
+.tour-keys kbd { font: 600 11px var(--mono); background: var(--sunken); border-radius: 6px; padding: 2px 6px; color: var(--muted); }
+.tour-confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .tour-veil, .tour-ring, .tour-card, .tour-seg i { transition: none; animation: none; }
+  .tour-pulse { animation: none; }
+}
+@media (max-width: 640px) {
+  .tour-card { left: 12px !important; right: 12px; width: auto !important; }
+}
