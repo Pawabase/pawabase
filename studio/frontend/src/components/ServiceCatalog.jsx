@@ -5,6 +5,8 @@ import { CATEGORIES, SERVICES, readRecent } from "../lib/services";
 
 const LABEL = Object.fromEntries(CATEGORIES.map((category) => [category.id, category.label]));
 
+const openTerminal = () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "j", ctrlKey: true, bubbles: true }));
+
 const QUICK = [
   ["data", "Create a collection", "resources"],
   ["access", "Invite someone", "users"],
@@ -57,6 +59,18 @@ export default function ServiceCatalog({ env, hrefFor }) {
             </nav>
           </article>
         ))}
+        <article className="service-cell">
+          <span className="service-cell-eyebrow">Tools</span>
+          <button type="button" className="service-cell-head as-button" onClick={openTerminal}>
+            <Hair name="terminal" size={24} />
+            <b>Terminal</b>
+          </button>
+          <p>Run commands against this environment, or test an endpoint with <code>http get /health</code>.</p>
+          <nav className="service-pages" aria-label="Terminal shortcuts">
+            <button type="button" onClick={openTerminal}>Open <kbd>⌘J</kbd></button>
+            <button type="button" onClick={() => startTour()}>Guided tour</button>
+          </nav>
+        </article>
       </div>
     </section>
   );
