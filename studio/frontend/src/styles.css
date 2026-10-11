@@ -1192,3 +1192,7 @@ html, body { background: var(--canvas); }
 .schema-change > .stack { flex: 1; min-width: 0; }
 .schema-sql { font-size: 12px; margin: 0; white-space: pre-wrap; word-break: break-word; }
 .schema-entry { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.sql-warning { display: flex; flex-direction: column; gap: 8px; }
+.sql-warning p { margin: 0; }
+.sql-warning ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.sql-warning .btn { align-self: flex-start; }
