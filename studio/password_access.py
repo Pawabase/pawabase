@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
+from studio import login_page
+
 COOKIE = "pb_studio_local"
 LOGIN = "/login"
 LOGOUT = "/logout"
@@ -34,6 +36,52 @@ def _pawabase_logo() -> str:
 
 
 PAWABASE_LOGO = _pawabase_logo()
+
+#: Failed sign-ins one address may make within the window before further attempts are refused until it passes.
+MAX_FAILURES = 5
+FAILURE_WINDOW = 600
+MAX_TRACKED = 2000
+MAX_FORM_BYTES = 8 * 1024
+
+
+class FailureLog:
+    """Counts failed sign-ins per client address, in a table that cannot grow without bound.
+
+    Per process and in memory on purpose: it only has to slow down someone guessing at a single self-hosted installation, and a
+    restart forgetting the count is no loss.
+    """
+
+    def __init__(
+        self, *, limit: int = MAX_FAILURES, window: float = FAILURE_WINDOW, clock=time.monotonic
+    ) -> None:
+        self.limit = limit
+        self.window = window
+        self._clock = clock
+        self._failures: dict[str, list[float]] = {}
+
+    def _recent(self, key: str) -> list[float]:
+        cutoff = self._clock() - self.window
+        recent = [at for at in self._failures.get(key, ()) if at > cutoff]
+        if recent:
+            self._failures[key] = recent
+        else:
+            self._failures.pop(key, None)
+        return recent
+
+    def blocked_for(self, key: str) -> int:
+        """Seconds until *key* may try again; 0 when it may try now."""
+        recent = self._recent(key)
+        if len(recent) < self.limit:
+            return 0
+        return max(1, int(recent[0] + self.window - self._clock()) + 1)
+
+    def record(self, key: str) -> None:
+        if key not in self._failures and len(self._failures) >= MAX_TRACKED:
+            del self._failures[next(iter(self._failures))]
+        self._failures.setdefault(key, []).append(self._clock())
+
+    def clear(self, key: str) -> None:
+        self._failures.pop(key, None)
 
 
 class StudioPasswordGate:
@@ -55,6 +103,7 @@ class StudioPasswordGate:
         self.username = username
         self.password = password
         self.secure = secure_cookie
+        self.failures = FailureLog()
         self._secret = hmac.new(
             session_secret.encode(),
             f"studio-local:{username}:{password}".encode(),
@@ -103,7 +152,7 @@ class StudioPasswordGate:
             return
         if scope["type"] == "http" and path == LOGIN:
             if scope.get("method") == "POST":
-                await self._login(receive, send)
+                await self._login(scope, receive, send)
             else:
                 await self._html(send, 200, self._form())
             return
@@ -118,18 +167,42 @@ class StudioPasswordGate:
             return
         await self._redirect(send, LOGIN)
 
-    async def _login(self, receive, send) -> None:
+    async def _login(self, scope, receive, send) -> None:
         chunks: list[bytes] = []
+        total = 0
         while True:
             message = await receive()
-            chunks.append(message.get("body", b""))
+            body = message.get("body", b"")
+            total += len(body)
+            if total > MAX_FORM_BYTES:
+                await self._html(send, 413, self._form(error="That request was too large."))
+                return
+            chunks.append(body)
             if not message.get("more_body"):
                 break
         fields = parse_qs(b"".join(chunks).decode("utf-8", "replace"), keep_blank_values=True)
-        if self._matches(fields.get("username", [""])[0], fields.get("password", [""])[0]):
+        username = fields.get("username", [""])[0]
+        client = scope.get("client")
+        address = client[0] if client else "unknown"
+        wait = self.failures.blocked_for(address)
+        if wait:
+            await self._html(
+                send,
+                429,
+                self._form(
+                    error="Too many failed sign-in attempts.", username=username, retry_after=wait
+                ),
+                extra=[(b"retry-after", str(wait).encode())],
+            )
+            return
+        if self._matches(username, fields.get("password", [""])[0]):
+            self.failures.clear(address)
             await self._redirect(send, "/", cookie=self._session_cookie())
             return
-        await self._html(send, 401, self._form(error="Invalid username or password."))
+        self.failures.record(address)
+        await self._html(
+            send, 401, self._form(error="Invalid username or password.", username=username)
+        )
 
     def _cookie(self, value: str, *, clear: bool = False) -> bytes:
         parts = [f"{COOKIE}={value}", "Path=/", "HttpOnly", "SameSite=Lax"]
@@ -139,9 +212,10 @@ class StudioPasswordGate:
         return "; ".join(parts).encode()
 
     @staticmethod
-    def _form(*, error: str = "") -> bytes:
-        notice = f'<div class="alert" role="alert">{error}</div>' if error else ""
-        return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in · Pawabase Studio</title><style>:root{{color-scheme:light dark}}*{{box-sizing:border-box}}body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#f8f7fb;color:#28242f;font:15px/1.5 system-ui,sans-serif}}main{{width:min(100% - 32px,430px);padding:32px;border:1px solid #e2ddea;border-radius:16px;background:#fff}}.brand{{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800}}.brand img{{width:34px;height:34px}}.studio{{font-weight:500;color:#847d91}}h1{{font-size:27px;letter-spacing:-.04em;margin:28px 0 4px}}.sub{{margin:0 0 22px;color:#716a7c}}label{{display:block;margin:13px 0 6px;font-weight:650}}input,button{{width:100%;border-radius:9px;font:inherit}}input{{padding:11px 12px;border:1px solid #cdc6d8;outline:none}}input:focus{{border-color:#8b5cf6;outline:3px solid #ede9fe;outline-offset:1px}}button{{margin-top:20px;padding:12px;border:0;background:#7654d9;color:white;font-weight:750;cursor:pointer}}button:hover{{background:#6543c6}}.alert{{margin:14px 0;padding:10px 12px;border-radius:9px;background:#fee4e2;color:#b42318;font-size:13px}}@media(prefers-color-scheme:dark){{body{{background:#17151e;color:#f1eef7}}main{{background:#211e2a;border-color:#393343}}input{{background:#17151e;color:#f1eef7;border-color:#4b4457}}.sub{{color:#aaa3b6}}.studio{{color:#aaa3b6}}}}</style></head><body><main><div class="brand"><img src="{PAWABASE_LOGO}" alt="Pawabase"><span>pawabase</span><span class="studio">Studio</span></div><h1>Welcome back</h1><p class="sub">Sign in to manage this self-hosted runtime.</p>{notice}<form method="post" action="/login"><label for="username">Username</label><input id="username" name="username" autocomplete="username" required autofocus><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required><button type="submit">Sign in to Studio</button></form></main></body></html>""".encode()
+    def _form(*, error: str = "", username: str = "", retry_after: int = 0) -> bytes:
+        return login_page.render(
+            logo=PAWABASE_LOGO, error=error, username=username, retry_after=retry_after
+        )
 
     async def _redirect(
         self, send, location: str, *, cookie: str = "", clear: bool = False
@@ -153,7 +227,9 @@ class StudioPasswordGate:
         await send({"type": "http.response.body", "body": b""})
 
     @staticmethod
-    async def _html(send, status: int, body: bytes) -> None:
+    async def _html(
+        send, status: int, body: bytes, extra: list[tuple[bytes, bytes]] | None = None
+    ) -> None:
         await send(
             {
                 "type": "http.response.start",
@@ -162,6 +238,10 @@ class StudioPasswordGate:
                     (b"content-type", b"text/html; charset=utf-8"),
                     (b"content-length", str(len(body)).encode()),
                     (b"cache-control", b"no-store"),
+                    (b"x-content-type-options", b"nosniff"),
+                    (b"x-frame-options", b"DENY"),
+                    (b"referrer-policy", b"same-origin"),
+                    *(extra or []),
                 ],
             }
         )
