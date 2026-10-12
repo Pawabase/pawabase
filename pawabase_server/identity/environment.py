@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from pawabase_server.identity import directory
+
 if TYPE_CHECKING:
     from pawabase_server.identity.accounts import Accounts
 
@@ -44,6 +46,8 @@ class AuthConfig:
     branding: dict[str, Any] = field(default_factory=dict)
     #: What sign-up asks and which identifiers sign in (see ``identity/signup_form.py``).
     signup_form: dict[str, Any] = field(default_factory=dict)
+    #: The directory's policy sections: passwords, recovery, devices, api_keys, claims (see ``identity/directory.py``).
+    directory: dict[str, Any] = field(default_factory=dict)
     #: Character classes a password must contain: ``upper``, ``lower``, ``digit``, ``symbol``.
     password_rules: dict[str, bool] = field(default_factory=dict)
 
@@ -58,6 +62,10 @@ class AuthConfig:
             public_url=payload.get("public_url", ""),
             **values,
         )
+
+    def policy(self, section: str) -> dict[str, Any]:
+        """One directory section with its defaults filled in."""
+        return directory.section(self.directory, section)
 
     def lockout(self, default_threshold: int, default_minutes: int) -> tuple[int, int]:
         """The failed-attempt threshold and lock length, with the installation's defaults filled in."""
@@ -88,10 +96,15 @@ class AuthConfig:
         )
 
     def enabled_providers(self) -> list[str]:
+        def usable(conf: dict[str, Any]) -> bool:
+            if conf.get("type") == "saml":
+                return bool(conf.get("idp_sso_url") and conf.get("idp_cert"))
+            return bool(conf.get("client_id"))
+
         return sorted(
             name
             for name, conf in self.providers.items()
-            if conf.get("enabled", True) and conf.get("client_id")
+            if conf.get("enabled", True) and usable(conf)
         )
 
 

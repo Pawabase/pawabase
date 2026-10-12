@@ -25,15 +25,10 @@ from pawabase_server.db.models import (
     Organization,
     SessionInfo,
 )
-from pawabase_server.identity import rbac
+from pawabase_server.identity import devices, rbac, signup_form
 from pawabase_server.identity.accounts import Accounts, user_view
+from pawabase_server.identity.clientinfo import client_info
 from pawabase_server.identity.environment import AuthConfig
-
-
-def client_info(ctx: Any) -> tuple[str | None, str | None]:
-    forwarded = ctx.headers.get("x-forwarded-for")
-    ip = forwarded.split(",")[0].strip() if forwarded else (ctx.client.host if ctx.client else None)
-    return ip, (ctx.headers.get("user-agent") or "")[:500]
 
 
 async def log_event(
@@ -85,6 +80,15 @@ async def require_membership(config: AuthConfig, user: AuthUser, slug: str | Non
     return slug
 
 
+def _claims(config: AuthConfig, user: AuthUser) -> dict[str, Any] | None:
+    """The profile attributes that ride in the access token: all of them, or only those the directory lists."""
+    metadata = user.user_metadata or {}
+    if config.policy("claims")["mode"] == "listed":
+        listed = set(signup_form.resolved(config.signup_form)["claims"])
+        metadata = {k: v for k, v in metadata.items() if k in listed}
+    return metadata or None
+
+
 async def _access_token(
     accounts: Accounts,
     config: AuthConfig,
@@ -109,7 +113,7 @@ async def _access_token(
         org=org,
         org_role=org_role,
         aal=aal,
-        extra=user.user_metadata or None,
+        extra=_claims(config, user),
         app=user.app_metadata or None,
     )
 
@@ -159,6 +163,7 @@ async def start_session(
     ctx: Any = None,
     aal: str = "aal1",
     org: str | None = None,
+    device_key: str | None = None,
 ) -> dict[str, Any]:
     org = await require_membership(config, user, org)
     pair = await user.issue_token_pair(
@@ -192,7 +197,11 @@ async def start_session(
         {"user_id": str(user.id), "method": method},
         actor=str(user.id),
     )
-    return await _response(accounts, config, user, pair, aal, org)
+    device, is_new = await devices.record(accounts, config, user, ctx, key=device_key)
+    response = await _response(accounts, config, user, pair, aal, org)
+    if device is not None:
+        response["device"] = {"id": str(device.id), "new": is_new and device.sign_ins == 1}
+    return response
 
 
 async def refresh_session(

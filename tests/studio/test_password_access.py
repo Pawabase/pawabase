@@ -75,7 +75,9 @@ async def test_a_failed_sign_in_keeps_the_username_and_escapes_it(protected_stud
     hostile = '"><script>alert(1)</script>'
     from urllib.parse import quote
 
-    response = await protected_studio.post("/login", content=f"username={quote(hostile)}&password=nope")
+    response = await protected_studio.post(
+        "/login", content=f"username={quote(hostile)}&password=nope"
+    )
     assert response.status_code == 401
     assert "<script>alert(1)</script>" not in response.text
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in response.text
@@ -84,8 +86,12 @@ async def test_a_failed_sign_in_keeps_the_username_and_escapes_it(protected_stud
 
 async def test_repeated_failures_are_slowed_and_a_success_resets_the_count(protected_studio):
     for _ in range(5):
-        assert (await protected_studio.post("/login", content="username=operator&password=wrong")).status_code == 401
-    blocked = await protected_studio.post("/login", content="username=operator&password=correct-horse")
+        assert (
+            await protected_studio.post("/login", content="username=operator&password=wrong")
+        ).status_code == 401
+    blocked = await protected_studio.post(
+        "/login", content="username=operator&password=correct-horse"
+    )
     assert blocked.status_code == 429 and int(blocked.headers["retry-after"]) > 0
     assert "Too many failed sign-in attempts." in blocked.text and "Try again in" in blocked.text
 
@@ -110,5 +116,8 @@ async def test_the_form_refuses_an_oversized_body_and_sets_defensive_headers(pro
     big = await protected_studio.post("/login", content="username=" + "x" * 20000)
     assert big.status_code == 413
     page = await protected_studio.get("/login")
-    assert page.headers["x-frame-options"] == "DENY" and page.headers["x-content-type-options"] == "nosniff"
+    assert (
+        page.headers["x-frame-options"] == "DENY"
+        and page.headers["x-content-type-options"] == "nosniff"
+    )
     assert page.headers["cache-control"] == "no-store"

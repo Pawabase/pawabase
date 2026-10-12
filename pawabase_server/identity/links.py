@@ -28,7 +28,15 @@ LIFETIMES = {
     "email_change": 24 * 3600,
     "link": 600,
     "code": 120,
+    "saml": 600,
 }
+
+
+def lifetime(config: AuthConfig, purpose: str) -> int:
+    """How long a link of this kind works. Recovery links follow the directory's setting."""
+    if purpose == "recovery":
+        return config.policy("recovery")["link_minutes"] * 60
+    return LIFETIMES[purpose]
 
 
 async def issue(
@@ -40,7 +48,6 @@ async def issue(
     email: str | None = None,
     data: dict[str, Any] | None = None,
 ) -> str:
-    lifetime = LIFETIMES[purpose]
     row = await OneTimeToken.create(
         id=new_ulid(),
         env=config.env,
@@ -48,7 +55,7 @@ async def issue(
         user=user,
         email=email or (user.email if user else None),
         data=data or {},
-        expires_at=datetime.now(UTC) + timedelta(seconds=lifetime),
+        expires_at=datetime.now(UTC) + timedelta(seconds=lifetime(config, purpose)),
     )
     return accounts.serializer(config.env, purpose).dumps({"id": row.id})
 
@@ -59,7 +66,9 @@ async def consume(
     """Verify and use up a token. Every failure is the same 400."""
     invalid = HTTPException(status_code=400, detail="the link is invalid or has expired")
     try:
-        payload = accounts.serializer(config.env, purpose).loads(token, max_age=LIFETIMES[purpose])
+        payload = accounts.serializer(config.env, purpose).loads(
+            token, max_age=lifetime(config, purpose)
+        )
     except (BadSignature, ValueError, TypeError) as exc:
         raise invalid from exc
     row = (

@@ -324,6 +324,8 @@ def render(
     password_min: int = 8,
     password_rules: dict[str, bool] | None = None,
     form: Any = None,
+    remember_days: int = 0,
+    discover: bool = False,
     notice: tuple[str, str, str, str] | None = None,
 ) -> str:
     """One hosted page as HTML. ``base`` is the path the page posts to (``/auth/v1/hosted/<env>``).
@@ -516,6 +518,8 @@ const base = {json.dumps(base)};
 const carried = {json.dumps(pairs)};
 const preview = {json.dumps(preview)};
 const page = {json.dumps(page)};
+const REMEMBER = {int(remember_days)};
+const DISCOVER = {json.dumps(bool(discover))};
 const form = document.getElementById('form');
 const note = document.getElementById('note');
 let mfa = null;
@@ -528,7 +532,7 @@ async function post(path, body) {{
 }}
 function finish(title, text) {{ if (form) form.remove(); const m = document.getElementById('magic'); if (m) m.remove(); const pr = document.querySelector('.progress'); if (pr) pr.remove(); const h = document.querySelector('h1'); if (h && title) h.textContent = title; const s = document.querySelector('p.sub'); if (s) s.remove(); say(text); }}
 function done(j) {{
-  if (j.mfa_required) {{ mfa = j.mfa_token; form.innerHTML = '<div class="fld"><label class="lab" for="code">Verification code</label><input id="code" name="code" class="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" required autofocus></div><button class="primary" type="submit"><span>Verify</span></button>'; say('Enter the 6-digit code from your authenticator app, or a recovery code.'); return; }}
+  if (j.mfa_required) {{ mfa = j.mfa_token; form.innerHTML = '<div class="fld"><label class="lab" for="code">Verification code</label><input id="code" name="code" class="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" required autofocus></div>' + (REMEMBER ? '<div class="fld"><label class="check"><input type="checkbox" name="remember_device"><span>Don’t ask again on this device for ' + REMEMBER + ' days</span></label></div>' : '') + '<button class="primary" type="submit"><span>Verify</span></button>'; say('Enter the 6-digit code from your authenticator app, or a recovery code.'); return; }}
   if (j.redirect) {{ say('Signed in. Taking you back…'); location.href = j.redirect; return; }}
   if (j.verify) return finish('Check your email', 'We sent a link to confirm your address. Open it, then sign in.');
   if (j.sent) return finish('Check your email', j.message || 'If the address has an account, a message is on its way.');
@@ -566,6 +570,19 @@ const nextButton = document.getElementById('next'); if (nextButton) nextButton.a
 const backButton = document.getElementById('back'); if (backButton) backButton.addEventListener('click', () => show(1));
 if (form) form.addEventListener('submit', async (event) => {{
   event.preventDefault();
+  if (!preview) {{
+    if (DISCOVER && page === 'login' && !mfa) {{
+      const typed = form.querySelector('input[name=email]').value.trim();
+      if (typed.includes('@')) {{
+        try {{
+          const q = new URLSearchParams({{ email: typed, ...Object.fromEntries(Object.entries(carried).filter(([k, v]) => v && k !== 'token')) }});
+          const r = await fetch(base + '/discover/provider?' + q);
+          const j = await r.json();
+          if (j.redirect) {{ say('Taking you to your company sign-in…'); location.href = j.redirect; return; }}
+        }} catch (e) {{}}
+      }}
+    }}
+  }}
   if (steps.length && !steps[0].hidden) {{ advance(); return; }}
   if (!form.reportValidity()) return;
   if (preview) {{ say('This is a preview. Nothing is sent.'); return; }}
@@ -578,7 +595,7 @@ if (form) form.addEventListener('submit', async (event) => {{
   const button = form.querySelector('button.primary[type=submit]'); button.disabled = true; button.classList.add('busy');
   say('');
   try {{
-    if (mfa) done(await post('/signin', {{ mfa_token: mfa, code: data.code }}));
+    if (mfa) done(await post('/signin', {{ mfa_token: mfa, code: data.code, remember_device: !!data.remember_device }}));
     else {{
       if (page === 'login') {{ try {{ if (data.remember) localStorage.setItem({env_key}, data.email); else localStorage.removeItem({env_key}); }} catch (e) {{}} }}
       done(await post('/{post_path}', data));

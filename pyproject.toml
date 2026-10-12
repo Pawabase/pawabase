@@ -16,6 +16,10 @@ dependencies = [
     "websockets>=12",
 ]
 
+[project.optional-dependencies]
+# SAML 2.0 sign-in (the XML signature check). OpenID Connect needs nothing extra.
+saml = ["signxml>=4.0"]
+
 [project.scripts]
 pawabase-server = "pawabase_server.cli:main"
 

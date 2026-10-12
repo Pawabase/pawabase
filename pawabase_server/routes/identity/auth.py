@@ -15,18 +15,19 @@ from pawabase_server.core.context import require_context
 from pawabase_server.core.principal import Principal
 from pawabase_server.core.ratelimit import rate_limit_middleware
 from pawabase_server.db.models import AuthUser
+from pawabase_server.identity import devices, links, mfa, signup_form, user_keys
 from pawabase_server.identity import emails as auth_emails
-from pawabase_server.identity import links, mfa, signup_form
 from pawabase_server.identity.accounts import (
     Accounts,
-    check_password_policy,
     create_account,
     find_by_email,
     find_by_identifier,
     get_user,
     is_locked,
     normalise_email,
+    password_expired,
     record_failure,
+    set_password,
     user_view,
 )
 from pawabase_server.identity.environment import AuthConfig, load_config
@@ -56,6 +57,7 @@ class TokenRequest(BaseModel):
     password: str | None = None
     refresh_token: str | None = None
     mfa_token: str | None = None
+    remember_device: bool = False
     code: str | None = None
     #: An organization slug the tokens should be issued for. On refresh, switches
     #: the session's organization (``null`` leaves it); omit to keep it.
@@ -125,7 +127,15 @@ async def authenticate_password(
         raise HTTPException(status_code=403, detail="this account is disabled")
     if config.require_email_verification and user.email_verified_at is None:
         raise HTTPException(status_code=403, detail="confirm your email address first")
-    if user.mfa_enabled and config.mfa_enabled:
+    if password_expired(config, user):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": "your password has expired; use “Forgot password” to choose a new one",
+                "code": "password_expired",
+            },
+        )
+    if user.mfa_enabled and config.mfa_enabled and not await devices.is_trusted(config, user, ctx):
         await require_membership(config, user, org)
         challenge = await links.issue(
             accounts, config, "mfa", user=user, data={"method": "password", "org": org}
@@ -289,6 +299,8 @@ def register(r: Router, accounts: Accounts) -> None:
             accounts, config, user, method=method, ctx=ctx, aal="aal2", org=org or body.org
         )
         session["mfa_method"] = used
+        if body.remember_device and await devices.trust(config, user, ctx):
+            session["device_trusted_days"] = config.policy("devices")["remember_days"]
         return session
 
     @r.post(
@@ -311,7 +323,7 @@ def register(r: Router, accounts: Accounts) -> None:
         user = row.user
         if user is None or user.is_disabled:
             raise HTTPException(status_code=400, detail="the account is not available")
-        return await start_session(
+        session = await start_session(
             accounts,
             config,
             user,
@@ -319,7 +331,11 @@ def register(r: Router, accounts: Accounts) -> None:
             ctx=ctx,
             aal=data.get("aal", "aal1"),
             org=data.get("org"),
+            device_key=data.get("device"),
         )
+        if data.get("trust"):
+            await devices.trust(config, user, ctx, key=data.get("device"))
+        return session
 
     @r.post(
         "/logout",
@@ -359,7 +375,13 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.patch("/user", request_model=UserUpdate, summary="Update the signed-in user")
     async def update_me(ctx: HttpContext, body: UserUpdate):
-        user, _ = await signed_in_user(ctx)
+        user, principal = await signed_in_user(ctx)
+        if (body.password is not None or body.email is not None) and str(
+            principal.claims.get("sid", "")
+        ).startswith(user_keys.SESSION_PREFIX):
+            raise HTTPException(
+                status_code=403, detail="an API key cannot change a password or email"
+            )
         config = await load_config(accounts, user.env)
         changed: list[str] = []
         if body.name is not None:
@@ -369,13 +391,26 @@ def register(r: Router, accounts: Accounts) -> None:
             user.avatar_url = body.avatar_url
             changed.append("avatar_url")
         if body.data is not None:
-            user.user_metadata = {**(user.user_metadata or {}), **body.data}
+            existing = user.user_metadata or {}
+            collected = signup_form.collect(
+                config.signup_form, body.data, config.branding.get("signup_fields"), partial=True
+            )
+            problems = list(collected.problems)
+            locked = set(signup_form.resolved(config.signup_form)["locked"])
+            for key in locked & set(body.data):
+                if existing.get(key) not in (None, "") and existing.get(key) != body.data[key]:
+                    problems.append(f"{key} can only be changed by an administrator")
+            if problems:
+                raise HTTPException(
+                    status_code=422,
+                    detail={"message": "the profile is not valid", "problems": problems},
+                )
+            user.user_metadata = {**existing, **body.data, **collected.metadata}
             changed.append("user_metadata")
         if body.password is not None:
             if user.has_usable_password() and not user.check_password(body.current_password or ""):
                 raise HTTPException(status_code=400, detail="current_password is wrong")
-            check_password_policy(config, body.password)
-            user.set_password(body.password)
+            await set_password(config, user, body.password)
             changed.append("password")
         await user.save()
         if body.email is not None:

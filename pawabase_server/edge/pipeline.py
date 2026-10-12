@@ -40,6 +40,8 @@ from pawabase_server.edge.networking import normalise_host, parse_hosts
 from pawabase_server.edge.quotas import RequestQuota
 from pawabase_server.edge.request import Request, plausible_key
 from pawabase_server.edge.routing import Upstream, is_clean_path, is_open, route_for
+from pawabase_server.edge.user_keys import UserKeyGate
+from pawabase_server.identity import user_keys
 from pawabase_server.settings import Settings
 
 logger = logging.getLogger("pawabase.edge")
@@ -103,6 +105,7 @@ class Edge:
         self.settings = settings
         self.resolver = resolver
         self.stats = new_stats()
+        self.user_keys = UserKeyGate(settings.jwt_master_secret)
         self.latency = Latency()
         self.trusted = TrustedProxies(settings.trusted_proxies)
         self.allowed_methods = frozenset(
@@ -229,6 +232,30 @@ class Edge:
             )
         return context, info, None
 
+    async def _user_key(self, request: Request, context: Any) -> Refusal | None:
+        """Swap a person's API key (``Authorization: Bearer pbu_…``) for the user access token it stands for."""
+        value = request.headers.get("authorization") or ""
+        if context is None or value[:7].lower() != "bearer ":
+            return None
+        raw = value[7:].strip()
+        if not user_keys.looks_like_key(raw):
+            return None
+        try:
+            token = await self.user_keys.token_for(raw, env=context.env, ip=request.client_ip)
+        except user_keys.KeyRefused as exc:
+            self.stats["rejected_keys"] += 1
+            return Refusal(401, "invalid_api_key", str(exc), ws_code=WS_UNAUTHORIZED)
+        except Exception:
+            logger.warning("user key lookup failed", exc_info=True)
+            return Refusal(
+                503,
+                "key_service_unavailable",
+                KEY_MESSAGES["key_service_unavailable"],
+                ws_code=1011,
+            )
+        request.headers["authorization"] = f"Bearer {token}"
+        return None
+
     def _screen(self, request: Request) -> Refusal | None:
         if request.method not in self.allowed_methods and request.scope["type"] == "http":
             return Refusal(
@@ -276,6 +303,9 @@ class Edge:
                 await respond(send, refusal, request_id)
                 return
         if (refusal := await self.admission.admit_request(scope, receive, context)) is not None:
+            await respond(send, refusal, request_id)
+            return
+        if (refusal := await self._user_key(request, context)) is not None:
             await respond(send, refusal, request_id)
             return
         limit = self.settings.max_body_bytes
@@ -344,6 +374,9 @@ class Edge:
             is not None
         ):
             self.stats["refused"] += 1
+            await close_websocket(send, refusal)
+            return
+        if (refusal := await self._user_key(request, context)) is not None:
             await close_websocket(send, refusal)
             return
         try:

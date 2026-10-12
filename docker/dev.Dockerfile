@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project \
-    && uv pip install --python /opt/venv/bin/python watchfiles
+    && uv pip install --python /opt/venv/bin/python watchfiles signxml
 EXPOSE 8080 8001 8090
 # Restart the server whenever Python changes on the bind-mounted source. (Studio overrides the command in docker-compose.dev.yml.)
 CMD ["watchfiles", "--filter", "python", "python -m pawabase_server serve", "/app/pawabase_server"]

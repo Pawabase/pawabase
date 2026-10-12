@@ -55,6 +55,8 @@ DEFAULT_FORM: dict[str, Any] = {
     "sign_in_with": ["email"],
     "attributes": {},
     "custom": [],
+    "locked": [],
+    "claims": [],
     "steps": "auto",
 }
 
@@ -104,6 +106,8 @@ def clean_custom(raw: Any, problems: list[str]) -> list[dict[str, Any]]:
             "type": kind,
             "required": bool(item.get("required")),
         }
+        if item.get("ask") is False:
+            entry["ask"] = False  # kept on the person's profile, not asked at sign-up
         for extra in ("placeholder", "help"):
             if item.get(extra):
                 entry[extra] = str(item[extra])[:160]
@@ -161,6 +165,13 @@ def clean(raw: Any, *, strict: bool = False) -> dict[str, Any]:
             problems.append("attributes must be an object")
     if "custom" in source:
         out["custom"] = clean_custom(source["custom"], problems)
+    for listed in ("locked", "claims"):
+        if listed in source:
+            value = source[listed]
+            if isinstance(value, list) and all(isinstance(k, str) and len(k) <= 64 for k in value):
+                out[listed] = sorted(set(value))[:100]
+            else:
+                problems.append(f"{listed} must be a list of attribute keys")
     if "steps" in source:
         if source["steps"] in ("auto", "single", "two"):
             out["steps"] = source["steps"]
@@ -183,7 +194,7 @@ def sign_in_with(raw: Any) -> list[str]:
     return resolved(raw)["sign_in_with"]
 
 
-def fields(raw: Any, legacy: Any = None) -> list[dict[str, Any]]:
+def fields(raw: Any, legacy: Any = None, *, hidden: bool = False) -> list[dict[str, Any]]:
     """Every question sign-up asks, in page order, each ``{key, label, type, required, store, group, …}``.
 
     ``legacy`` is the older list of questions that lived with the branding; it is read as part of this form.
@@ -210,7 +221,8 @@ def fields(raw: Any, legacy: Any = None) -> list[dict[str, Any]]:
                 entry["help"] = "Letters, numbers, dots, dashes and underscores."
             out.append(entry)
     for item in custom:
-        out.append({**item, "store": "meta", "group": "profile"})
+        if hidden or item.get("ask", True):
+            out.append({**item, "store": "meta", "group": "profile"})
     return out
 
 
@@ -230,11 +242,19 @@ def normalise_phone(value: str) -> str:
     return ("+" if value.strip().startswith("+") else "") + digits
 
 
-def collect(raw: Any, answers: dict[str, Any], legacy: Any = None) -> Collected:
-    """Check ``answers`` against the form. Keys the form does not ask for are ignored, never stored."""
+def collect(
+    raw: Any, answers: dict[str, Any], legacy: Any = None, *, partial: bool = False
+) -> Collected:
+    """Check ``answers`` against the form. Keys the form does not ask for are ignored, never stored.
+
+    ``partial`` is for an update to a profile that already exists: only the keys present are checked, and nothing is *required*.
+    """
     result = Collected()
-    for item in fields(raw, legacy):
+    for item in fields(raw, legacy, hidden=partial):
         key, kind, label = item["key"], item["type"], item["label"]
+        if partial and key not in answers:
+            continue
+        item = {**item, "required": item["required"] and not partial}
         value: Any = answers.get(key)
         if kind == "checkbox":
             value = value is True or value in ("true", "on", "1", 1)

@@ -46,6 +46,8 @@ class AuthUser(PermissionMixin, UlidJWTUserMixin, UlidUserMixin, UserBaseModel):
     failed_logins = fields.IntField(default=0)
     locked_until = fields.DatetimeField(null=True)
     mfa_enabled = fields.BooleanField(default=False)
+    #: When the password was last set, for the directory's password-age rule. Null: never recorded (treated as not expired).
+    password_changed_at = fields.DatetimeField(null=True)
     last_sign_in_ip = fields.CharField(max_length=64, null=True)
 
     class Meta:
@@ -173,3 +175,73 @@ class LoginEvent(Model):
     class Meta:
         table = "akz_login_events"
         ordering = ["-id"]
+
+
+class PasswordHistory(Model):
+    """The hashes of a user's previous passwords, so the directory can refuse reusing the last few."""
+
+    id = ulid_pk()
+    user = fields.ForeignKeyField(
+        "models.AuthUser", related_name="password_history", on_delete=fields.CASCADE
+    )
+    env = fields.CharField(max_length=63)
+    password_hash = fields.CharField(max_length=256)
+
+    class Meta:
+        table = "akz_password_history"
+        ordering = ["-id"]
+
+
+class Device(Model):
+    """A browser or app a person has signed in from.
+
+    ``key`` is the device id the client keeps (a cookie on the hosted pages, or the ``x-device-id`` header), or a fingerprint of the
+    user agent when the client sent none. ``trusted_until`` is set when the person asked to be remembered: until then, a second factor
+    is not asked for on this device.
+    """
+
+    id = ulid_pk()
+    user = fields.ForeignKeyField(
+        "models.AuthUser", related_name="devices", on_delete=fields.CASCADE
+    )
+    env = fields.CharField(max_length=63, db_index=True)
+    key = fields.CharField(max_length=64, db_index=True)
+    label = fields.CharField(max_length=120, default="")
+    user_agent = fields.CharField(max_length=512, null=True)
+    first_ip = fields.CharField(max_length=64, null=True)
+    last_ip = fields.CharField(max_length=64, null=True)
+    last_seen_at = fields.DatetimeField(null=True)
+    sign_ins = fields.IntField(default=1)
+    trusted_until = fields.DatetimeField(null=True)
+    revoked_at = fields.DatetimeField(null=True)
+
+    class Meta:
+        table = "akz_devices"
+        unique_together = (("user", "key"),)
+
+
+class UserApiKey(Model):
+    """A key a person creates to call the API as themselves, without signing in.
+
+    Only a SHA-256 hash is kept; the plaintext is shown once. A key acts with the person's own roles and permissions, narrowed to
+    ``scopes`` when it has any, and stops working when the person is disabled or deleted.
+    """
+
+    id = ulid_pk()
+    user = fields.ForeignKeyField(
+        "models.AuthUser", related_name="api_keys", on_delete=fields.CASCADE
+    )
+    env = fields.CharField(max_length=63, db_index=True)
+    name = fields.CharField(max_length=120)
+    prefix = fields.CharField(max_length=24)
+    key_hash = fields.CharField(max_length=128, unique=True, db_index=True)
+    scopes = AnyJSONField(default=list)
+    org = fields.CharField(max_length=63, null=True)
+    expires_at = fields.DatetimeField(null=True)
+    last_used_at = fields.DatetimeField(null=True)
+    last_ip = fields.CharField(max_length=64, null=True)
+    use_count = fields.IntField(default=0)
+    revoked_at = fields.DatetimeField(null=True)
+
+    class Meta:
+        table = "akz_user_api_keys"

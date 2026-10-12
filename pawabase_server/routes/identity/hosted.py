@@ -18,8 +18,8 @@ from sillo import HttpContext, Router, html
 from sillo.exceptions import HTTPException
 
 from pawabase_server.core.ratelimit import rate_limit_middleware
+from pawabase_server.identity import devices, federation, hosted, links, signup_form
 from pawabase_server.identity import emails as auth_emails
-from pawabase_server.identity import hosted, links, signup_form
 from pawabase_server.identity.accounts import (
     Accounts,
     create_account,
@@ -44,6 +44,7 @@ class SignIn(Hosted):
     email: str | None = Field(default=None, max_length=320)
     password: str | None = Field(default=None, max_length=1024)
     mfa_token: str | None = None
+    remember_device: bool = False
     code: str | None = Field(default=None, max_length=64)
 
 
@@ -144,9 +145,25 @@ def register(r: Router, accounts: Accounts) -> None:
             preview=preview,
             password_min=config.password_min_length,
             password_rules=config.password_rules,
+            remember_days=config.policy("devices")["remember_days"],
+            discover=any(
+                c.get("domains")
+                for n, c in config.providers.items()
+                if n in config.enabled_providers()
+            ),
             form=config.signup_form if form is None else form,
         )
-        return html(body, headers=headers(nonce, framed=preview))
+        response = html(body, headers=headers(nonce, framed=preview))
+        if not preview and not devices.identify(ctx)[1]:
+            response.set_cookie(
+                devices.COOKIE,
+                devices.new_id(),
+                max_age=400 * 24 * 3600,
+                httponly=True,
+                samesite="lax",
+                secure=ctx.url.scheme == "https",
+            )
+        return response
 
     @r.get("/hosted/{env}/preview/{page}", exclude_from_schema=True)
     async def preview(ctx: HttpContext, env: str, page: str):
@@ -177,6 +194,21 @@ def register(r: Router, accounts: Accounts) -> None:
             form = None
         return build(page, config, ctx, branding=decoded, preview=True, form=form)
 
+    @r.get("/hosted/{env}/discover/provider", exclude_from_schema=True)
+    async def discover_provider(ctx: HttpContext, env: str):
+        """Which company sign-in an email address belongs to, so the page can send the person straight there."""
+        config = await config_of(env)
+        name = federation.domain_provider(config, ctx.query_params.get("email", ""))
+        if name is None:
+            return {"provider": None}
+        carried = {
+            k: v
+            for k, v in ctx.query_params.items()
+            if k in ("redirect_to", "state", "code_challenge") and v
+        }
+        query = f"?{urlencode(carried)}" if carried else ""
+        return {"provider": name, "redirect": f"/auth/v1/authorize/{env}/{name}{query}"}
+
     @r.get("/hosted/{env}/{page}", exclude_from_schema=True)
     async def serve(ctx: HttpContext, env: str, page: str):
         if page not in hosted.PAGES:
@@ -192,6 +224,8 @@ def register(r: Router, accounts: Accounts) -> None:
         method: str,
         aal: str = "aal1",
         org: str | None = None,
+        ctx: HttpContext | None = None,
+        trust: bool = False,
     ):
         """The sign-in succeeded: hand the page a code to take back to the app, or say so when there is nowhere to go."""
         if body.redirect_to and not config.redirect_allowed(body.redirect_to):
@@ -204,7 +238,14 @@ def register(r: Router, accounts: Accounts) -> None:
             config,
             "code",
             user=user,
-            data={"method": method, "aal": aal, "org": org, "challenge": body.code_challenge},
+            data={
+                "method": method,
+                "aal": aal,
+                "org": org,
+                "challenge": body.code_challenge,
+                "device": devices.identify(ctx)[0] if ctx is not None else None,
+                "trust": trust,
+            },
         )
         query = {"code": code}
         if body.state:
@@ -221,13 +262,22 @@ def register(r: Router, accounts: Accounts) -> None:
             user, method, org, _ = await verify_second_factor(
                 accounts, config, body.mfa_token, body.code, ctx
             )
-            return await finish(config, user, body, method=method, aal="aal2", org=org)
+            return await finish(
+                config,
+                user,
+                body,
+                method=method,
+                aal="aal2",
+                org=org,
+                ctx=ctx,
+                trust=body.remember_device,
+            )
         user, challenge = await authenticate_password(
             accounts, config, body.email, body.password, None, ctx
         )
         if challenge is not None:
             return challenge
-        return await finish(config, user, body, method="password")
+        return await finish(config, user, body, method="password", ctx=ctx)
 
     @r.post(
         "/hosted/{env}/signup", request_model=SignUp, middleware=limits, exclude_from_schema=True
@@ -274,13 +324,15 @@ def register(r: Router, accounts: Accounts) -> None:
                 link=links.link(config, "verify", token, body.redirect_to),
             )
             return {"verify": True}
-        return await finish(config, user, body, method="password")
+        return await finish(config, user, body, method="password", ctx=ctx)
 
     @r.post(
         "/hosted/{env}/forgot", request_model=Email, middleware=limits, exclude_from_schema=True
     )
     async def forgot(ctx: HttpContext, env: str, body: Email):
         config = await config_of(env)
+        if not config.policy("recovery")["enabled"]:
+            raise HTTPException(status_code=403, detail="password recovery is turned off")
         if body.redirect_to and not config.redirect_allowed(body.redirect_to):
             raise HTTPException(status_code=400, detail="redirect_to is not an allowed URL")
         user = await find_by_email(config.env, normalise_email(body.email))

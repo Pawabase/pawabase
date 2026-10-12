@@ -33,9 +33,9 @@ from pawabase_server.identity import invitations as invites
 from pawabase_server.identity import mfa, rbac
 from pawabase_server.identity.accounts import (
     Accounts,
-    check_password_policy,
     create_account,
     get_user,
+    set_password,
     user_view,
 )
 from pawabase_server.identity.environment import load_config
@@ -217,8 +217,7 @@ def register(r: Router, accounts: Accounts) -> None:
         if body.app_metadata is not None:
             user.app_metadata = body.app_metadata
         if body.password:
-            check_password_policy(config, body.password)
-            user.set_password(body.password)
+            await set_password(config, user, body.password)
         if body.unlock:
             user.failed_logins, user.locked_until = 0, None
         if body.disabled is not None:

@@ -32,6 +32,7 @@ SECTIONS: dict[str, str] = {
     "functions": "Env/Functions",
     "storage": "Env/Storage",
     "users": "Env/Users",
+    "directory": "Env/Directory",
     "mail": "Env/Mail",
     "status": "Env/Status",
     "networking": "Env/Networking",

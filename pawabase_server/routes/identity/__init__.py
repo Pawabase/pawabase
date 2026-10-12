@@ -8,7 +8,15 @@ from pawabase_server.identity.accounts import Accounts
 
 
 def register_routes(app: SilloApp, accounts: Accounts) -> None:
-    from pawabase_server.routes.identity import admin, auth, hosted, orgs, recovery, security
+    from pawabase_server.routes.identity import (
+        admin,
+        auth,
+        directory,
+        hosted,
+        orgs,
+        recovery,
+        security,
+    )
 
     public = Router(prefix="/auth/v1")
     auth.register(public, accounts)
@@ -17,8 +25,10 @@ def register_routes(app: SilloApp, accounts: Accounts) -> None:
     security.register(public, accounts)
     hosted.register(public, accounts)
     orgs.register(public, accounts)
+    directory.register(public, accounts)
     app.mount_router(public)
 
     administration = Router(prefix="/admin/v1")
     admin.register(administration, accounts)
+    directory.register_admin(administration, accounts)
     app.mount_router(administration)

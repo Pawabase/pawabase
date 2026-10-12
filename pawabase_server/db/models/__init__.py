@@ -58,12 +58,15 @@ from pawabase_server.db.models.releases import (
 from pawabase_server.db.models.schema_history import SchemaMigration
 from pawabase_server.db.models.users import (
     AuthUser,
+    Device,
     Identity,
     LoginEvent,
     MfaFactor,
     OneTimeToken,
+    PasswordHistory,
     RecoveryCode,
     SessionInfo,
+    UserApiKey,
 )
 
 __all__ = [
@@ -72,6 +75,7 @@ __all__ = [
     "ApiKey",
     "ApiVersion",
     "AuditEntry",
+    "Device",
     "AuthUser",
     "BackupSchedule",
     "BackupSnapshot",
@@ -106,6 +110,7 @@ __all__ = [
     "Organization",
     "Permission",
     "PolicyDef",
+    "PasswordHistory",
     "RecoveryCode",
     "Release",
     "RequestLog",
@@ -116,6 +121,7 @@ __all__ = [
     "SchemaMigration",
     "Secret",
     "SessionInfo",
+    "UserApiKey",
     "StatusIncident",
     "StatusPage",
     "StatusSample",

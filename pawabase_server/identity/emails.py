@@ -34,6 +34,14 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "subject": "You are invited to {organization} on {project}",
         "text": "You have been invited to join {organization} as {role}.\n\nAccept the invitation here:\n\n{link}",
     },
+    "password_changed": {
+        "subject": "Your {project} password was changed",
+        "text": "The password for {email} on {project} was just changed.\n\nIf this was you, there is nothing to do. If it was not, reset your password now and contact support.",
+    },
+    "new_device": {
+        "subject": "New sign-in to {project}",
+        "text": "Your {project} account ({email}) was just signed in to from a new device:\n\n{device}\n\nIf this was you, there is nothing to do. If it was not, change your password and sign out everywhere.",
+    },
     "email_change": {
         "subject": "Confirm your new email for {project}",
         "text": "Confirm that this is your new email address for {project}:\n\n{link}",

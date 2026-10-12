@@ -29,6 +29,8 @@ ROUTES: tuple[Upstream, ...] = (
     Upstream("/auth/v1/authorize/", "auth", "none"),
     Upstream("/auth/v1/callback/", "auth", "none"),
     Upstream("/auth/v1/links/", "auth", "none"),
+    # A SAML identity provider posts the person back here, with no key; the environment is in the path.
+    Upstream("/auth/v1/saml/", "auth", "none"),
     # The hosted sign-in pages are browser navigations too.
     Upstream("/auth/v1/hosted/", "auth", "none"),
     Upstream("/auth/v1/", "auth"),

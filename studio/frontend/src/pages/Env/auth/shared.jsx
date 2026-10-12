@@ -26,6 +26,7 @@ export const AUTH_DEFAULTS = {
   max_sessions: 0,
   signup_form: { sign_in_with: ["email"], attributes: {}, custom: [], steps: "auto" },
   password_rules: {},
+  directory: {},
 };
 
 /** The environment's auth settings with a draft on top: change some fields, then save the whole block. */
@@ -77,4 +78,19 @@ export const initials = (text) => (text || "?").replace(/@.*/, "").split(/[\s._-
 
 export function Avatar({ text, size = 32 }) {
   return <span className="user-avatar" style={{ width: size, height: size, fontSize: Math.round(size * 0.38) }}>{initials(text)}</span>;
+}
+
+export const DIRECTORY_DEFAULTS = {
+  passwords: { max_length: 128, min_unique: 0, history: 0, max_age_days: 0, forbid_personal: false, breach_check: false },
+  recovery: { enabled: true, link_minutes: 60, revoke_sessions: true, notify_change: true },
+  devices: { track: true, notify_new: false, remember_days: 0, max_per_user: 0 },
+  api_keys: { enabled: false, max_per_user: 10, max_days: 365, scoped: true },
+  claims: { mode: "all" },
+};
+
+/** One directory policy section, and a setter that changes some of its fields. */
+export function useSection(config, name) {
+  const current = { ...DIRECTORY_DEFAULTS[name], ...((config.value.directory || {})[name] || {}) };
+  const set = (values) => config.set({ directory: { ...(config.value.directory || {}), [name]: { ...current, ...values } } });
+  return [current, set];
 }

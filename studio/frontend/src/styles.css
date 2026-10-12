@@ -1426,3 +1426,8 @@ html, body { background: linear-gradient(135deg, #fde8f1 0%, #ece3f8 42%, #d7d5f
 .attr-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .attr-row:last-child { border-bottom: 0; }
 .attr-row.fixed span:first-child { color: var(--muted); }
+.attr-name { flex: 1; }
+.overview-row { width: 100%; background: none; border: 0; border-bottom: 1px solid var(--line); text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.overview-row:hover { background: var(--soft, rgba(0,0,0,.03)); }
+.stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+.stat-number { font-size: 30px; font-weight: 700; letter-spacing: -.02em; margin-top: 6px; }

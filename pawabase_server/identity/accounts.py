@@ -6,22 +6,24 @@ mail and events all come from the platform it is given, so identity runs in the 
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import httpx
 from sillo.cache import base as cache_base
 from sillo.exceptions import HTTPException
-from sillo.hashing import validate_password
+from sillo.hashing import validate_password, verify_password
 from sillo.helpers.signing import URLSafeTimedSerializer
 
 from pawabase_server.core import envvars
 from pawabase_server.core.context import PlatformContext
 from pawabase_server.core.ids import is_ulid
 from pawabase_server.core.tokens import derive_env_secret
-from pawabase_server.db.models import AuthUser, Identity, Membership
+from pawabase_server.db.models import AuthUser, Identity, Membership, PasswordHistory
 from pawabase_server.identity import signup_form
 from pawabase_server.identity.environment import AuthConfig
 
@@ -37,18 +39,26 @@ def normalise_email(email: str) -> str:
     return email
 
 
-def check_password_policy(config: AuthConfig, password: str) -> None:
-    """Sillo's password validator for the strict policy, a length rule otherwise."""
+def check_password_policy(
+    config: AuthConfig,
+    password: str,
+    *,
+    email: str = "",
+    username: str = "",
+    name: str = "",
+) -> None:
+    """Sillo's password validator for the strict policy, a length rule otherwise, then the directory's own rules."""
+    rules = config.password_rules or {}
+    policy = config.policy("passwords")
+    value = password or ""
     if config.password_policy == "strict":
-        problems = validate_password(password, min_length=config.password_min_length)
+        problems = validate_password(value, min_length=config.password_min_length)
     else:
         problems = (
             [f"Password must be at least {config.password_min_length} characters."]
-            if len(password or "") < config.password_min_length
+            if len(value) < config.password_min_length
             else []
         )
-    rules = config.password_rules or {}
-    value = password or ""
     for rule, found, text in (
         ("upper", re.search(r"[A-Z]", value), "an uppercase letter"),
         ("lower", re.search(r"[a-z]", value), "a lowercase letter"),
@@ -57,13 +67,95 @@ def check_password_policy(config: AuthConfig, password: str) -> None:
     ):
         if rules.get(rule) and not found:
             problems.append(f"Password must contain {text}.")
-    if len(value) > 1024:
-        problems.append("Password is too long.")
+    if policy["min_unique"] and len(set(value)) < policy["min_unique"]:
+        problems.append(f"Password must use at least {policy['min_unique']} different characters.")
+    if len(value) > policy["max_length"]:
+        problems.append(f"Password must be at most {policy['max_length']} characters.")
+    if policy["forbid_personal"]:
+        lowered = value.lower()
+        for part in (email.split("@", 1)[0], username, *name.split()):
+            if len(part) >= 3 and part.lower() in lowered:
+                problems.append("Password must not contain your name, username or email.")
+                break
     if problems:
         raise HTTPException(
             status_code=422,
             detail={"message": "the password does not meet the policy", "problems": problems},
         )
+
+
+#: Tests substitute an ``httpx`` transport for the breached-password service here.
+BREACH_TRANSPORT: Any = None
+
+
+async def is_breached(password: str) -> bool:
+    """Whether the password appears in known breaches (haveibeenpwned's range API: only five characters of a hash leave the server).
+
+    Unreachable means "not known to be breached": a password change is never blocked by someone else's outage.
+    """
+    digest = hashlib.sha1(password.encode(), usedforsecurity=False).hexdigest().upper()  # noqa: S324
+    try:
+        async with httpx.AsyncClient(timeout=3, transport=BREACH_TRANSPORT) as client:
+            reply = await client.get(
+                f"https://api.pwnedpasswords.com/range/{digest[:5]}",
+                headers={"add-padding": "true"},
+            )
+        reply.raise_for_status()
+    except httpx.HTTPError:
+        return False
+    for line in reply.text.splitlines():
+        suffix, _, count = line.partition(":")
+        if suffix.strip() == digest[5:] and count.strip() not in ("", "0"):
+            return True
+    return False
+
+
+async def set_password(config: AuthConfig, user: AuthUser, password: str) -> None:
+    """Give *user* a new password under the directory's rules, and remember the old one.
+
+    Raises 422 when the password breaks a rule. The caller saves the user (``password`` and ``password_changed_at`` changed).
+    """
+    check_password_policy(
+        config, password, email=user.email, username=user.username, name=user.name or ""
+    )
+    policy = config.policy("passwords")
+    keep = policy["history"]
+    if keep:
+        recent = [user.password] if user.has_usable_password() else []
+        recent += [
+            row.password_hash
+            for row in await PasswordHistory.filter(user=user).order_by("-id").limit(keep)
+        ]
+        if any(verify_password(password, old) for old in recent[: keep + 1]):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "the password does not meet the policy",
+                    "problems": [f"You cannot reuse your last {keep} passwords."],
+                },
+            )
+    if policy["breach_check"] and await is_breached(password):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "the password does not meet the policy",
+                "problems": ["That password has appeared in a data breach. Choose another."],
+            },
+        )
+    if keep and user.has_usable_password():
+        await PasswordHistory.create(user=user, env=config.env, password_hash=user.password)
+        stale = await PasswordHistory.filter(user=user).order_by("-id").offset(keep)
+        if stale:
+            await PasswordHistory.filter(id__in=[row.id for row in stale]).delete()
+    user.set_password(password)
+    user.password_changed_at = datetime.now(UTC)
+
+
+def password_expired(config: AuthConfig, user: AuthUser) -> bool:
+    """Whether the directory's password-age rule says this person must choose a new password before signing in."""
+    days = config.policy("passwords")["max_age_days"]
+    changed = user.password_changed_at or user.created_at
+    return bool(days and changed and changed + timedelta(days=days) < datetime.now(UTC))
 
 
 async def find_by_email(env: str, email: str) -> AuthUser | None:
@@ -142,8 +234,17 @@ async def create_account(
         password="",
     )
     if password:
-        check_password_policy(config, password)
+        check_password_policy(config, password, email=email, username=user.username, name=name)
+        if config.policy("passwords")["breach_check"] and await is_breached(password):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "the password does not meet the policy",
+                    "problems": ["That password has appeared in a data breach. Choose another."],
+                },
+            )
         user.set_password(password)
+        user.password_changed_at = datetime.now(UTC)
     else:
         user.set_unusable_password()
     await user.save()

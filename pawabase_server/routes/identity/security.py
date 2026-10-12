@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
+from typing import Any
 from urllib.parse import urlencode
 
 from pydantic import BaseModel, Field
-from sillo import HttpContext, Router, no_content, redirect
+from sillo import HttpContext, Router, html, no_content, redirect
 from sillo.exceptions import HTTPException
 from sillo_oauth import OAuthError, authorize_url, exchange
 
 from pawabase_server.core.ratelimit import rate_limit_middleware
 from pawabase_server.db.models import AuthUser, Identity, LoginEvent
-from pawabase_server.identity import mfa, oauth
+from pawabase_server.identity import federation, links, mfa, oauth
 from pawabase_server.identity.accounts import Accounts, create_account, find_by_email
-from pawabase_server.identity.environment import load_config
+from pawabase_server.identity.environment import AuthConfig, load_config
 from pawabase_server.identity.sessions import (
     elevate,
     list_sessions,
@@ -54,43 +56,32 @@ def register(r: Router, accounts: Accounts) -> None:
             if link_token
             else {"redirect_to": redirect_to}
         )
+        settings = config.providers.get(provider) or {}
+        if federation.kind_of(settings) == "saml" and provider in config.enabled_providers():
+            return await start_saml(ctx, config, provider, redirect_to, link_token)
+        try:
+            await federation.prepare(config, provider)
+        except federation.FederationError as exc:
+            return _error_redirect(redirect_to, exc.code)
         provider_obj = oauth.build_provider(accounts, config, provider)
-        import json
-
         authorize = authorize_url(provider_obj, return_to=json.dumps(state))
         secure = (config.public_url or accounts.settings.public_url).startswith("https://")
         return redirect(authorize.url).set_cookie(**authorize.cookie_kwargs(secure=secure))
 
-    @r.get(
-        "/callback/{env}/{provider}",
-        summary="Finish a social sign-in",
-        tags=["oauth"],
-        exclude_from_schema=True,
-    )
-    async def callback(ctx: HttpContext, env: str, provider: str):
-        import json
-
-        config = await load_config(accounts, env)
-        provider_obj = oauth.build_provider(accounts, config, provider)
-        try:
-            profile = await exchange(provider_obj, ctx)
-        except OAuthError as exc:
-            await log_event(
-                env,
-                "sign_in",
-                method=f"oauth:{provider}",
-                success=False,
-                reason=exc.code,
-                ctx=ctx,
-            )
-            return _error_redirect(config.site_url or None, exc.code)
-        try:
-            state = json.loads(profile.return_to or "{}")
-        except ValueError:
-            state = {}
+    async def finish_federated(
+        ctx: HttpContext,
+        config: AuthConfig,
+        provider: str,
+        profile: Any,
+        state: dict[str, Any],
+    ):
+        """A provider vouched for a person: find or create them, link the identity, and start a session or an MFA challenge."""
+        env = config.env
         target = state.get("redirect_to")
         if target and not config.redirect_allowed(target):
             target = None
+        if not federation.allowed_domain(config.providers.get(provider) or {}, profile.email):
+            return _error_redirect(target or config.site_url or None, "email_domain_not_allowed")
 
         identity = (
             await Identity.filter(env=env, provider=provider, subject=profile.subject)
@@ -99,8 +90,6 @@ def register(r: Router, accounts: Accounts) -> None:
         )
         user: AuthUser | None = identity.user if identity else None
         if state.get("link"):
-            from pawabase_server.identity import links
-
             row = await links.consume(accounts, config, "link", state["link"])
             if identity is not None and identity.user_id != row.user_id:
                 return _error_redirect(target, "identity_already_linked")
@@ -135,6 +124,10 @@ def register(r: Router, accounts: Accounts) -> None:
             created = True
         if user.is_disabled:
             return _error_redirect(target, "account_disabled")
+        mapped = getattr(profile, "metadata", None)
+        if mapped:
+            user.user_metadata = {**(user.user_metadata or {}), **mapped}
+            await user.save(update_fields=["user_metadata"])
         now = datetime.now(UTC)
         if identity is None:
             await Identity.create(
@@ -171,8 +164,6 @@ def register(r: Router, accounts: Accounts) -> None:
                 else {"linked": provider}
             )
         if user.mfa_enabled and config.mfa_enabled:
-            from pawabase_server.identity import links
-
             challenge = await links.issue(
                 accounts, config, "mfa", user=user, data={"method": f"oauth:{provider}"}
             )
@@ -188,14 +179,120 @@ def register(r: Router, accounts: Accounts) -> None:
             return redirect(f"{target}#{urlencode(payload)}")
         return payload
 
+    @r.get(
+        "/callback/{env}/{provider}",
+        summary="Finish a social sign-in",
+        tags=["oauth"],
+        exclude_from_schema=True,
+    )
+    async def callback(ctx: HttpContext, env: str, provider: str):
+        config = await load_config(accounts, env)
+        try:
+            await federation.prepare(config, provider)
+        except federation.FederationError as exc:
+            return _error_redirect(config.site_url or None, exc.code)
+        provider_obj = oauth.build_provider(accounts, config, provider)
+        try:
+            profile = await exchange(provider_obj, ctx)
+        except OAuthError as exc:
+            await log_event(
+                env,
+                "sign_in",
+                method=f"oauth:{provider}",
+                success=False,
+                reason=exc.code,
+                ctx=ctx,
+            )
+            return _error_redirect(config.site_url or None, exc.code)
+        try:
+            state = json.loads(profile.return_to or "{}")
+        except ValueError:
+            state = {}
+        return await finish_federated(ctx, config, provider, profile, state)
+
+    # ── SAML 2.0 ─────────────────────────────────────────────────────────
+
+    def public_base(config: AuthConfig) -> str:
+        return (config.public_url or accounts.settings.public_url).rstrip("/")
+
+    async def start_saml(
+        ctx: HttpContext,
+        config: AuthConfig,
+        provider: str,
+        redirect_to: str | None,
+        link_token: str | None,
+    ):
+        settings = config.providers[provider]
+        entity = federation.sp_entity_id(public_base(config), config.env, provider)
+        acs = federation.acs_url(public_base(config), config.env, provider)
+        try:
+            xml, request_id = federation.authn_request(settings, entity=entity, acs=acs)
+        except KeyError:
+            return _error_redirect(redirect_to, "provider_misconfigured")
+        ticket = await links.issue(
+            accounts,
+            config,
+            "saml",
+            data={"request_id": request_id, "redirect_to": redirect_to, "link": link_token},
+        )
+        return redirect(federation.redirect_url(settings["idp_sso_url"], xml, ticket))
+
+    @r.get(
+        "/saml/{env}/{provider}/metadata",
+        summary="SAML service provider metadata",
+        tags=["saml"],
+    )
+    async def saml_metadata(ctx: HttpContext, env: str, provider: str):
+        config = await load_config(accounts, env)
+        if federation.kind_of(config.providers.get(provider) or {}) != "saml":
+            raise HTTPException(status_code=404, detail="no such SAML connection")
+        return html(
+            federation.metadata_xml(public_base(config), env, provider),
+            headers={"content-type": "application/samlmetadata+xml"},
+        )
+
+    @r.post(
+        "/saml/{env}/{provider}/acs",
+        summary="SAML assertion consumer service",
+        tags=["saml"],
+        exclude_from_schema=True,
+    )
+    async def saml_acs(ctx: HttpContext, env: str, provider: str):
+        config = await load_config(accounts, env)
+        settings = config.providers.get(provider) or {}
+        if federation.kind_of(settings) != "saml" or provider not in config.enabled_providers():
+            raise HTTPException(status_code=404, detail="no such SAML connection")
+        form = await ctx.form
+        encoded, relay = str(form.get("SAMLResponse") or ""), str(form.get("RelayState") or "")
+        try:
+            row = await links.consume(accounts, config, "saml", relay)
+        except HTTPException:
+            return _error_redirect(config.site_url or None, "saml_state")
+        data = row.data or {}
+        target = data.get("redirect_to")
+        try:
+            profile = federation.parse_response(
+                encoded,
+                settings,
+                entity=federation.sp_entity_id(public_base(config), env, provider),
+                acs=federation.acs_url(public_base(config), env, provider),
+                request_id=data.get("request_id", ""),
+            )
+        except federation.FederationError as exc:
+            await log_event(
+                env, "sign_in", method=f"saml:{provider}", success=False, reason=exc.code, ctx=ctx
+            )
+            return _error_redirect(target or config.site_url or None, exc.code)
+        return await finish_federated(
+            ctx, config, provider, profile, {"redirect_to": target, "link": data.get("link")}
+        )
+
     @r.post(
         "/identities/link",
         summary="Get a URL that links a provider to this account",
         tags=["oauth"],
     )
     async def link_identity(ctx: HttpContext):
-        from pawabase_server.identity import links
-
         user, _ = await signed_in_user(ctx)
         config = await load_config(accounts, user.env)
         provider = ctx.query_params.get("provider", "")

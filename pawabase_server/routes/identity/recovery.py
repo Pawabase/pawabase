@@ -21,10 +21,10 @@ from pawabase_server.identity import emails as auth_emails
 from pawabase_server.identity import hosted, links
 from pawabase_server.identity.accounts import (
     Accounts,
-    check_password_policy,
     create_account,
     find_by_email,
     normalise_email,
+    set_password,
 )
 from pawabase_server.identity.environment import AuthConfig, load_config
 from pawabase_server.identity.sessions import log_event, revoke_all, start_session
@@ -89,14 +89,19 @@ async def complete(
         if password is None:
             await links.consume(accounts, config, "recovery", token, peek=True)
             return {"valid": True}
-        check_password_policy(config, password)
-        row = await links.consume(accounts, config, "recovery", token)
+        row = await links.consume(accounts, config, "recovery", token, peek=True)
         user = row.user
-        user.set_password(password)
+        await set_password(config, user, password)
+        await links.consume(accounts, config, "recovery", token)
         user.failed_logins = 0
         user.locked_until = None
-        await user.save(update_fields=["password", "failed_logins", "locked_until"])
-        await revoke_all(user)
+        await user.save(
+            update_fields=["password", "password_changed_at", "failed_logins", "locked_until"]
+        )
+        if config.policy("recovery")["revoke_sessions"]:
+            await revoke_all(user)
+        if config.policy("recovery")["notify_change"]:
+            await auth_emails.send(accounts, config, "password_changed", user.email)
         await log_event(config.env, "password_reset", user=user, method="recovery", ctx=ctx)
         await accounts.emit(
             config.env,
@@ -163,6 +168,8 @@ def register(r: Router, accounts: Accounts) -> None:
     )
     async def recover(ctx: HttpContext, body: EmailRequest):
         config = await config_for(accounts, ctx)
+        if not config.policy("recovery")["enabled"]:
+            raise HTTPException(status_code=403, detail="password recovery is turned off")
         if body.redirect_to and not config.redirect_allowed(body.redirect_to):
             raise HTTPException(status_code=400, detail="redirect_to is not an allowed URL")
         user = await find_by_email(config.env, normalise_email(body.email))

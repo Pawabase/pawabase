@@ -146,3 +146,36 @@ def test_environment_gate():
     assert gate("unknown", service, allow)[0] == "ip_not_allowed"
     # Browsers on publishable keys are not held to the secret-key allowlist.
     assert gate("192.168.1.1", anon, allow) is None
+
+
+async def test_a_users_api_key_becomes_their_access_token(gateway):
+    from pawabase_server.identity import user_keys
+
+    asked = []
+
+    async def token_for(raw, *, env, ip):
+        asked.append((raw, env))
+        if raw.endswith("revoked-key-000000"):
+            raise user_keys.KeyRefused("invalid API key")
+        return "minted.user.token"
+
+    gateway.edge.user_keys.token_for = token_for
+    good = await gateway.http.get(
+        "/rest/v1/orders",
+        headers={"apikey": "pk_anon", "authorization": "Bearer pbu_0123456789abcdefghij"},
+    )
+    assert good.status_code == 200
+    assert good.json()["headers"]["authorization"] == "Bearer minted.user.token"
+    assert asked == [("pbu_0123456789abcdefghij", "main")]
+
+    refused = await gateway.http.get(
+        "/rest/v1/orders",
+        headers={"apikey": "pk_anon", "authorization": "Bearer pbu_revoked-key-000000"},
+    )
+    assert refused.status_code == 401 and refused.json()["error"] == "invalid_api_key"
+
+    # An ordinary bearer token is left alone.
+    jwt = await gateway.http.get(
+        "/rest/v1/orders", headers={"apikey": "pk_anon", "authorization": "Bearer abc.def.ghi"}
+    )
+    assert jwt.json()["headers"]["authorization"] == "Bearer abc.def.ghi"
