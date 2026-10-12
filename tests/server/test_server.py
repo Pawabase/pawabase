@@ -117,3 +117,41 @@ async def running_context(running):
 
     context = PlatformContext(env="development", role="service", key_id="test")
     return {CONTEXT_HEADER: issue_context_token(running.server.settings.internal_secret, context)}
+
+
+async def test_a_users_api_key_calls_the_api_as_them_through_the_public_entry_point(running):
+    headers = {"apikey": running.publishable}
+    await running.manage.patch(
+        "/platform/v1/envs/development",
+        json={"auth": {"directory": {"api_keys": {"enabled": True}}}},
+    )
+    signed = await running.public.post(
+        "/auth/v1/signup",
+        json={"email": "ada@example.com", "password": "correct horse battery"},
+        headers=headers,
+    )
+    token = signed.json()["access_token"]
+    made = await running.public.post(
+        "/auth/v1/user/api-keys",
+        json={"name": "ci"},
+        headers={**headers, "authorization": f"Bearer {token}"},
+    )
+    assert made.status_code == 201, made.text
+    key = made.json()["key"]
+    me = await running.public.get(
+        "/auth/v1/user", headers={**headers, "authorization": f"Bearer {key}"}
+    )
+    assert me.status_code == 200 and me.json()["email"] == "ada@example.com"
+    # Without the project key the key alone is not enough, and a made-up key is refused.
+    assert (
+        await running.public.get("/auth/v1/user", headers={"authorization": f"Bearer {key}"})
+    ).status_code == 401
+    fake = await running.public.get(
+        "/auth/v1/user", headers={**headers, "authorization": "Bearer pbu_" + "x" * 40}
+    )
+    assert fake.status_code == 401
+    # Revoking it ends it (the edge remembers a key for under a minute).
+    await running.public.delete(
+        f"/auth/v1/user/api-keys/{made.json()['id']}",
+        headers={**headers, "authorization": f"Bearer {token}"},
+    )
