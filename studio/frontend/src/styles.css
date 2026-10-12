@@ -1665,3 +1665,52 @@ html, body { background: var(--canvas); }
   .docs-list { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
   .docs-kicker { display: none; }
 }
+
+/* ── Dashboard: plain cards, no hero ──────────────────────────────────────────────────────────────────────────────── */
+.dash { margin-bottom: 40px; }
+.dash-title { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.dash-title h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.dash-env { display: inline-flex; align-items: center; gap: 7px; font: 550 12.5px var(--sans); color: var(--muted); }
+.dash-env i { width: 7px; height: 7px; border-radius: 50%; background: #2e8a5e; }
+.text-btn { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: 550 13px var(--sans); cursor: pointer; }
+.text-btn:hover { background: var(--sunken); color: var(--text); }
+.text-btn kbd { font: 600 10.5px var(--mono); border: 1px solid var(--line-2); border-radius: 4px; padding: 0 5px; color: var(--faint); }
+.dash-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; }
+.span-4 { grid-column: span 4; }
+.span-8 { grid-column: span 8; }
+.dash .panel { padding: 16px 18px; }
+.dash .panel-head { margin-bottom: 8px; }
+.fact-list { margin: 0; display: block; }
+.fact-list > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.fact-list > div:last-child { border-bottom: 0; }
+.fact-list dt { color: var(--muted); }
+.fact-list dd { margin: 0; display: flex; align-items: center; gap: 10px; min-width: 0; font-variant-numeric: tabular-nums; font-weight: 550; }
+.fact-list code { font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon-text { border: 0; background: none; color: var(--brand-strong); font: 550 12px var(--sans); cursor: pointer; padding: 0; }
+.todo { list-style: none; margin: 0; padding: 0; }
+.todo li a { display: flex; align-items: center; gap: 12px; padding: 8px 0; color: var(--text); text-decoration: none; font-size: 13.5px; border-bottom: 1px solid var(--line); }
+.todo li:last-child a { border-bottom: 0; }
+.todo li.done a { color: var(--muted); }
+.todo li.done span:nth-child(2) { text-decoration: line-through; text-decoration-color: var(--line-2); }
+.todo .check { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--line-2); display: inline-flex; align-items: center; justify-content: center; color: var(--on-ink); flex-shrink: 0; }
+.todo li.done .check { background: var(--brand); border-color: var(--brand); }
+.todo .go-icon, .service-list .go-icon { margin-left: auto; color: var(--faint); transform: rotate(-90deg); }
+.todo li a:hover .go-icon, .service-list a:hover .go-icon { color: var(--text); }
+.service-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; }
+.service-list a { display: flex; align-items: center; gap: 14px; padding: 12px 4px; border-bottom: 1px solid var(--line); color: var(--text); text-decoration: none; }
+.service-list a:hover { background: var(--sunken); border-radius: 8px; }
+.service-list b { display: block; font-size: 13.5px; font-weight: 600; }
+.service-list small { display: block; margin-top: 1px; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.service-list .count { font: 550 12px var(--sans); color: var(--muted); white-space: nowrap; }
+.service-list .hair { color: var(--text); }
+.acc { list-style: none; margin: 0; padding: 0; }
+.acc li { border-bottom: 1px solid var(--line); }
+.acc li:last-child { border-bottom: 0; }
+.acc-head { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: none; border: 0; padding: 10px 0; color: var(--text); font: 550 13.5px var(--sans); text-align: left; cursor: pointer; }
+.acc-head .hair { color: var(--faint); transition: transform .15s; }
+.acc li.open .acc-head .hair { transform: rotate(180deg); }
+.acc-body { padding: 0 0 14px; }
+.acc-body p { margin: 0 0 10px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.acc-body .docs-code pre { font-size: 12px; padding: 12px 14px; }
+.acc-body .docs-more { margin-top: 10px; }
+@media (max-width: 1100px) { .span-4, .span-8 { grid-column: span 12; } .service-list { grid-template-columns: 1fr; } }

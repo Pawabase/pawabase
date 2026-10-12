@@ -1,63 +1,16 @@
-import { Link, router } from "@inertiajs/react";
+import { Link, usePage } from "@inertiajs/react";
 import { useState } from "react";
 import Hair from "./Hair";
-import { CATEGORIES, SERVICES, readRecent } from "../lib/services";
+import { SERVICES } from "../lib/services";
 import { startTour } from "../lib/tour";
 import { envPath, useApi } from "../lib/api";
 import { when } from "./ui";
 
-const LABEL = Object.fromEntries(CATEGORIES.map((category) => [category.id, category.label]));
 const DISMISS = "pawabase.start.dismissed";
 
 const openTerminal = () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "j", ctrlKey: true, bubbles: true }));
 const rows = (state) => state.data?.data ?? (Array.isArray(state.data) ? state.data : null);
-const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const copy = (text) => { try { navigator.clipboard?.writeText(text); } catch { /* visible to select */ } };
-
-// ── the picture: Pawabase as a stack you build on ─────────────────────────────────────────────────────────────────────
-const U = 25;
-const OX = 270;
-const OY = 150;
-const iso = (x, y, z) => [OX + (x - y) * U * 0.866, OY + (x + y) * U * 0.5 - z * U];
-const pts = (list) => list.map(([x, y, z]) => iso(x, y, z).map((n) => n.toFixed(1)).join(",")).join(" ");
-
-function Block({ x, y, z, w, d, h, label, page, tone = "a", onGo, caption }) {
-  const top = pts([[x, y, z + h], [x + w, y, z + h], [x + w, y + d, z + h], [x, y + d, z + h]]);
-  const left = pts([[x, y + d, z + h], [x + w, y + d, z + h], [x + w, y + d, z], [x, y + d, z]]);
-  const right = pts([[x + w, y, z + h], [x + w, y + d, z + h], [x + w, y + d, z], [x + w, y, z]]);
-  const [cx, cy] = iso(x + w / 2, y + d / 2, z + h);
-  return (
-    <g className={`iso iso-${tone}`} onClick={() => page && onGo(page)} role={page ? "link" : undefined} tabIndex={page ? 0 : undefined} onKeyDown={(event) => event.key === "Enter" && page && onGo(page)}>
-      <polygon className="iso-left" points={left} />
-      <polygon className="iso-right" points={right} />
-      <polygon className="iso-top" points={top} />
-      {label && <text x={cx} y={cy + 4} textAnchor="middle" className="iso-label">{label}</text>}
-      {caption && <title>{caption}</title>}
-    </g>
-  );
-}
-
-function Stack({ onGo }) {
-  const [ex, ey] = iso(-0.4, 8.4, 5);
-  return (
-    <svg viewBox="0 0 540 400" className="stack-art" role="img" aria-label="Pawabase as layers: data at the bottom, services above it, events across them, automation on top">
-      <ellipse cx={OX} cy={OY + 195} rx="235" ry="40" className="stack-shadow" />
-      <Block x={0} y={0} z={0} w={8} d={8} h={0.7} tone="base" label="" page="resources" onGo={onGo} caption="Data: collections on real tables" />
-      <Block x={0.5} y={2.8} z={0.7} w={2.2} d={2.4} h={1.4} label="Files" page="storage" onGo={onGo} caption="Files" />
-      <Block x={2.9} y={2.8} z={0.7} w={2.2} d={2.4} h={1.4} label="Functions" page="functions" onGo={onGo} caption="Functions & API" />
-      <Block x={5.3} y={2.8} z={0.7} w={2.2} d={2.4} h={1.4} label="Users" page="users" onGo={onGo} caption="Users & access" />
-      <g className="iso-events" onClick={() => onGo("events")} role="link" tabIndex={0} onKeyDown={(event) => event.key === "Enter" && onGo("events")}>
-        <polygon points={pts([[-0.4, -0.4, 5], [8.4, -0.4, 5], [8.4, 8.4, 5], [-0.4, 8.4, 5]])} />
-        <text x={ex + 6} y={ey + 20} textAnchor="start">Events · one stream</text>
-        <title>Events: every change is one stream</title>
-      </g>
-      <path className="stack-link" d={[0.5, 2.9, 5.3].map((x) => `M${iso(x + 1.1, 4, 2.1).join(",")} L${iso(x + 1.1, 4, 5).join(",")}`).join(" ")} />
-      <Block x={0.5} y={2.8} z={5.05} w={2.2} d={2.4} h={1.2} label="Flows" page="flows" tone="hot" onGo={onGo} caption="Flows" />
-      <Block x={2.9} y={2.8} z={5.05} w={2.2} d={2.4} h={1.2} label="Queue" page="jobs" tone="hot" onGo={onGo} caption="Queue & events" />
-      <Block x={5.3} y={2.8} z={5.05} w={2.2} d={2.4} h={1.2} label="Realtime" page="realtime" tone="hot" onGo={onGo} caption="Realtime" />
-    </svg>
-  );
-}
 
 // ── mini docs ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 const DOCS = [
@@ -99,37 +52,39 @@ const DOCS = [
   },
 ];
 
-function MiniDocs({ hrefFor }) {
-  const [active, setActive] = useState(DOCS[0].key);
-  const doc = DOCS.find((item) => item.key === active);
+function DocsList({ hrefFor }) {
+  const [open, setOpen] = useState(DOCS[0].key);
   return (
-    <section className="docs" aria-label="Learn">
-      <aside className="docs-list" role="tablist" aria-label="Topics">
-        <span className="docs-kicker">Learn the model</span>
-        {DOCS.map((item) => (
-          <button key={item.key} type="button" role="tab" aria-selected={active === item.key} className={active === item.key ? "on" : ""} onClick={() => setActive(item.key)}>{item.label}</button>
-        ))}
-      </aside>
-      <article className="docs-body" role="tabpanel">
-        <h3>{doc.title}</h3>
-        <p>{doc.body}</p>
-        <div className="docs-code">
-          <pre><code>{doc.code}</code></pre>
-          <button type="button" onClick={() => copy(doc.code)}>Copy</button>
-        </div>
-        <div className="docs-more">
-          <span>Open in Studio</span>
-          {doc.more.map(([label, page]) => <Link key={page} href={hrefFor(page)}>{label}</Link>)}
-          <button type="button" className="docs-term" onClick={openTerminal}>Terminal <kbd>⌘J</kbd></button>
-        </div>
-      </article>
-    </section>
+    <ul className="acc">
+      {DOCS.map((doc) => (
+        <li key={doc.key} className={open === doc.key ? "open" : ""}>
+          <button type="button" className="acc-head" aria-expanded={open === doc.key} onClick={() => setOpen(open === doc.key ? "" : doc.key)}>
+            <span>{doc.title}</span>
+            <Hair name="chevron" size={15} />
+          </button>
+          {open === doc.key && (
+            <div className="acc-body">
+              <p>{doc.body}</p>
+              <div className="docs-code">
+                <pre><code>{doc.code}</code></pre>
+                <button type="button" onClick={() => copy(doc.code)}>Copy</button>
+              </div>
+              <div className="docs-more">
+                {doc.more.map(([label, page]) => <Link key={page} href={hrefFor(page)}>{label}</Link>)}
+              </div>
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
 
-/** The home of an environment: a picture of the product, the next thing to do, a short course, and every service. */
+/** The dashboard of an environment: what it is, what to set up, what changed, and every service, in plain cards. */
 export default function Home({ env, hrefFor }) {
+  const { gateway_url: gatewayUrl } = usePage().props;
   const [dismissed, setDismissed] = useState(() => { try { return localStorage.getItem(DISMISS) === "1"; } catch { return false; } });
+  const [copied, setCopied] = useState(false);
   const analytics = useApi(envPath(env, "/analytics"), { params: { range: "24h" } });
   const resources = useApi(envPath(env, "/resources"));
   const flows = useApi(envPath(env, "/flows"));
@@ -142,110 +97,100 @@ export default function Home({ env, hrefFor }) {
   const n = { collections: rows(resources)?.length ?? null, flows: rows(flows)?.length ?? null, functions: rows(functions)?.length ?? null, keys: rows(keys)?.length ?? null };
   const applied = (schema.data?.resources || []).some((item) => item.state === "in_sync" && item.exists);
   const steps = [
-    { label: "Create a collection", hint: "Describe your data once; get an API for it.", done: (n.collections || 0) > 0, page: "resources" },
-    { label: "Apply it to the database", hint: "Review the SQL, then create the table.", done: applied, page: "resources" },
-    { label: "Create an API key", hint: "A publishable key for apps, a secret key for servers.", done: (n.keys || 0) > 0, page: "keys" },
-    { label: "Make a request", hint: "Try http get /health in the terminal.", done: (requests || 0) > 0, page: "explorer" },
-    { label: "Build a flow", hint: "Automate something when a record changes.", done: (n.flows || 0) > 0, page: "flows" },
-    { label: "Deploy a function", hint: "Write Python that runs next to your data.", done: (n.functions || 0) > 0, page: "functions" },
+    { label: "Create a collection", done: (n.collections || 0) > 0, page: "resources" },
+    { label: "Apply it to the database", done: applied, page: "resources" },
+    { label: "Create an API key", done: (n.keys || 0) > 0, page: "keys" },
+    { label: "Make a request", done: (requests || 0) > 0, page: "explorer" },
+    { label: "Build a flow", done: (n.flows || 0) > 0, page: "flows" },
+    { label: "Deploy a function", done: (n.functions || 0) > 0, page: "functions" },
   ];
   const finished = steps.filter((step) => step.done).length;
-  const next = steps.find((step) => !step.done);
   const events = (rows(audit) || audit.data?.entries || []).filter((entry) => !entry.env || entry.env === env);
-  const last = events[0];
-  const recent = readRecent().map((key) => SERVICES.find((service) => service.key === key)).filter(Boolean);
-  const meta = {
-    data: n.collections != null ? plural(n.collections, "collection") : null,
-    functions: n.functions != null ? plural(n.functions, "function") : null,
-    automation: n.flows != null ? plural(n.flows, "flow") : null,
-    secrets: n.keys != null ? plural(n.keys, "key") : null,
+  const counts = {
+    data: n.collections, functions: n.functions, automation: n.flows, secrets: n.keys,
   };
-  const go = (page) => router.visit(hrefFor(page));
-  const facts = [
-    n.collections != null && plural(n.collections, "collection"),
-    n.functions != null && plural(n.functions, "function"),
-    n.flows != null && plural(n.flows, "flow"),
-    last && `last change ${when(last.created_at)}`,
-  ].filter(Boolean);
+  const unit = { data: "collection", functions: "function", automation: "flow", secrets: "key" };
 
   return (
-    <section className="home" aria-label="Home">
-      <header className="stage">
-        <div className="stage-copy">
-          <span className="stage-env"><i />{env}</span>
-          <h1>Bring your infrastructure.<br /><em>Build your backend.</em></h1>
-          <p>Define your data once. Pawabase gives it an API, access rules, sign-in, files, realtime and background work, on the database and storage you already run.</p>
-          <div className="stage-actions">
-            <Link href={hrefFor("resources")} className="cta primary">{(n.collections || 0) > 0 ? "Open your collections" : "Create your first collection"}</Link>
-            <button type="button" className="cta" onClick={openTerminal}><Hair name="terminal" size={16} /> Open the terminal</button>
-            <button type="button" className="cta ghost" onClick={() => startTour()}>Take the tour</button>
-          </div>
-          {facts.length > 0 && <div className="stage-facts">{facts.map((fact) => <span key={fact}>{fact}</span>)}</div>}
-        </div>
-        <div className="stage-art"><Stack onGo={go} /></div>
+    <section className="dash" aria-label="Dashboard">
+      <header className="dash-title">
+        <h1>{env}</h1>
+        <span className="dash-env"><i />environment</span>
+        <span className="grow" />
+        <button type="button" className="text-btn" onClick={() => startTour()}><Hair name="events" size={16} /> Take the tour</button>
+        <button type="button" className="text-btn" onClick={openTerminal}><Hair name="terminal" size={16} /> Terminal <kbd>⌘J</kbd></button>
       </header>
 
-      <div className="home-cols">
+      <div className="dash-grid">
+        <section className="panel span-4">
+          <div className="panel-head"><h2>This environment</h2></div>
+          <dl className="fact-list">
+            <div><dt>API endpoint</dt><dd><code>{gatewayUrl || "—"}</code>{gatewayUrl && <button type="button" className="icon-text" onClick={() => { copy(gatewayUrl); setCopied(true); setTimeout(() => setCopied(false), 1400); }}>{copied ? "Copied" : "Copy"}</button>}</dd></div>
+            <div><dt>Collections</dt><dd>{n.collections ?? "—"}</dd></div>
+            <div><dt>Functions</dt><dd>{n.functions ?? "—"}</dd></div>
+            <div><dt>Flows</dt><dd>{n.flows ?? "—"}</dd></div>
+            <div><dt>API keys</dt><dd>{n.keys ?? "—"}</dd></div>
+            <div><dt>Requests, 24h</dt><dd>{requests != null ? Number(requests).toLocaleString() : "—"}</dd></div>
+          </dl>
+        </section>
+
         {!(dismissed && finished === steps.length) && (
-          <section className="panel">
-            <div className="panel-head"><h2>Get started</h2><span className="progress-text">{finished} of {steps.length}</span></div>
-            <div className="progress"><i style={{ width: `${(finished / steps.length) * 100}%` }} /></div>
-            <ol className="checklist">
+          <section className="panel span-4">
+            <div className="panel-head"><h2>Set up</h2><span className="progress-text">{finished} of {steps.length}</span></div>
+            <ol className="todo">
               {steps.map((step) => (
-                <li key={step.label} className={step.done ? "done" : step === next ? "next" : ""}>
-                  <span className="check" aria-hidden>{step.done ? <Hair name="check" size={14} /> : null}</span>
-                  <span className="grow"><b>{step.label}</b>{!step.done && <small>{step.hint}</small>}</span>
-                  {!step.done && <Link href={hrefFor(step.page)} className={step === next ? "go primary" : "go"}>{step === next ? "Start" : "Open"}</Link>}
+                <li key={step.label} className={step.done ? "done" : ""}>
+                  <Link href={hrefFor(step.page)}>
+                    <span className="check" aria-hidden>{step.done ? <Hair name="check" size={13} /> : null}</span>
+                    <span>{step.label}</span>
+                    {!step.done && <Hair name="chevron" size={14} className="go-icon" />}
+                  </Link>
                 </li>
               ))}
             </ol>
-            {finished === steps.length && <button type="button" className="panel-foot" onClick={() => { setDismissed(true); try { localStorage.setItem(DISMISS, "1"); } catch { /* shown again */ } }}>All done. Hide this</button>}
+            {finished === steps.length && <button type="button" className="panel-foot" onClick={() => { setDismissed(true); try { localStorage.setItem(DISMISS, "1"); } catch { /* shown again */ } }}>Hide this</button>}
           </section>
         )}
-        <section className="panel">
-          <div className="panel-head"><h2>Recent changes</h2><Link href="/audit" className="panel-link">Audit log</Link></div>
+
+        <section className="panel span-4">
+          <div className="panel-head"><h2>Recent changes</h2><Link href="/audit" className="panel-link">All</Link></div>
           {events.length === 0 ? (
-            <p className="panel-empty">Nothing has changed yet. Changes made in Studio, the API and the CLI appear here, with who made them.</p>
+            <p className="panel-empty">Nothing yet. Changes made in Studio, the API and the CLI appear here.</p>
           ) : (
             <ul className="feed">
               {events.slice(0, 6).map((entry, index) => (
                 <li key={entry.id || index}>
-                  <span className="feed-dot" />
-                  <span className="grow"><b>{entry.action}</b>{entry.target ? <small> · {entry.target}</small> : null}</span>
+                  <span className="grow"><b>{entry.action}</b>{entry.target ? <small> {entry.target}</small> : null}</span>
                   <span className="feed-when">{when(entry.created_at)}</span>
                 </li>
               ))}
             </ul>
           )}
         </section>
-      </div>
 
-      <MiniDocs hrefFor={hrefFor} />
+        <section className="panel span-8">
+          <div className="panel-head"><h2>Services</h2><span className="panel-sub">{SERVICES.length}</span></div>
+          <ul className="service-list">
+            {SERVICES.map((service) => (
+              <li key={service.key}>
+                <Link href={hrefFor(service.pages[0][0])}>
+                  <Hair name={service.icon} size={22} />
+                  <span className="grow">
+                    <b>{service.label}</b>
+                    <small>{service.pages.map(([, label]) => label).join(" · ")}</small>
+                  </span>
+                  {counts[service.key] != null && <span className="count">{counts[service.key]} {unit[service.key]}{counts[service.key] === 1 ? "" : "s"}</span>}
+                  <Hair name="chevron" size={14} className="go-icon" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
 
-      <div className="home-row-head">
-        <h2>Services</h2>
-        {recent.length > 0 && (
-          <div className="row wrap">
-            <span className="quick-label">Recent</span>
-            {recent.map((service) => <Link key={service.key} href={hrefFor(service.pages[0][0])} className="quick-action quiet"><Hair name={service.icon} size={16} />{service.label}</Link>)}
-          </div>
-        )}
-      </div>
-      <div className="catalog-grid">
-        {SERVICES.map((service) => (
-          <article key={service.key} className="service-cell">
-            <span className="service-cell-eyebrow">{LABEL[service.category]}</span>
-            <Link href={hrefFor(service.pages[0][0])} className="service-cell-head">
-              <Hair name={service.icon} size={24} />
-              <b>{service.label}</b>
-              {meta[service.key] && <em className="count">{meta[service.key]}</em>}
-            </Link>
-            <p>{service.description}</p>
-            <nav className="service-pages" aria-label={`${service.label} pages`}>
-              {service.pages.map(([key, label]) => <Link key={key} href={hrefFor(key)}>{label}</Link>)}
-            </nav>
-          </article>
-        ))}
+        <section className="panel span-4">
+          <div className="panel-head"><h2>Learn</h2><span className="panel-sub">Two minutes each</span></div>
+          <DocsList hrefFor={hrefFor} />
+        </section>
       </div>
     </section>
   );
