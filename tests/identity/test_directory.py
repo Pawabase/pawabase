@@ -1,3 +1,5 @@
+import re
+
 import httpx
 import pyotp
 import pytest
@@ -8,6 +10,7 @@ from pawabase_server.identity import user_keys
 from pawabase_server.identity.environment import AuthConfig
 
 PASSWORD = "correct-horse-1"
+APP = "https://app.test"
 
 
 def password_change(akz, token, new, current=PASSWORD):
@@ -454,3 +457,214 @@ async def test_a_saml_identity_provider_signs_people_in(akz):
         "/auth/v1/saml/development/acme/acs", data={"SAMLResponse": outsider, "RelayState": relay}
     )
     assert "email_domain_not_allowed" in refused.headers["location"]
+
+
+async def test_legal_documents_are_linked_required_and_recorded(akz):
+    akz.api.auth = {
+        "site_url": APP,
+        "legal": {
+            "version": "2026-10-01",
+            "documents": [
+                {
+                    "key": "terms",
+                    "label": "Terms of Service",
+                    "url": "https://acme.test/t",
+                    "required": True,
+                },
+                {
+                    "key": "dpa",
+                    "label": "Data Processing",
+                    "url": "https://acme.test/dpa",
+                    "required": True,
+                },
+                {"key": "cookies", "label": "Cookie Policy", "url": "https://acme.test/c"},
+            ],
+        },
+    }
+    page = (await akz.http.get("/auth/v1/hosted/development/signup")).text
+    assert "Terms of Service</a>" in page and "I agree to the" in page and "Data Processing" in page
+    assert "Cookie Policy" in page  # footer link, not a checkbox item
+    assert page.count('name="accepted_terms"') == 1
+
+    body = {"email": "ada@example.com", "password": "correct-horse-1", "redirect_to": APP}
+    refused = await akz.http.post("/auth/v1/hosted/development/signup", json=body)
+    assert refused.status_code == 422 and "accept the terms" in refused.text
+    api = await akz.http.post("/auth/v1/signup", json=body, headers=akz.headers())
+    assert api.status_code == 422
+    ok = await akz.http.post(
+        "/auth/v1/signup", json={**body, "accepted_terms": True}, headers=akz.headers()
+    )
+    assert ok.status_code == 201
+    users = await akz.admin.get("/admin/v1/envs/development/users")
+    consent = users["data"][0]["app_metadata"]["consent"]
+    assert consent["version"] == "2026-10-01"
+    assert {d["key"] for d in consent["documents"]} == {"terms", "dpa"}
+
+
+async def test_legal_settings_are_validated():
+    from pawabase_server.identity import legal
+
+    with pytest.raises(ValueError):
+        legal.clean(
+            {"documents": [{"key": "t", "label": "T", "url": "javascript:alert(1)"}]}, strict=True
+        )
+    with pytest.raises(ValueError):
+        legal.clean(
+            {"documents": [{"key": "Bad Key", "label": "T", "url": "https://x.test"}]}, strict=True
+        )
+
+
+async def totp_for(akz, secret_holder):
+    return pyotp.TOTP(secret_holder["secret"]).now()
+
+
+async def test_emailed_codes_and_backup_codes_are_strategies_of_their_own(akz):
+    akz.api.auth = {"directory": {"mfa": {"email": True, "backup_code_count": 5}}}
+    token = (await akz.signup())["access_token"]
+    headers = akz.headers(token=token)
+    status = (await akz.http.get("/auth/v1/mfa", headers=headers)).json()
+    assert status["methods"] == ["totp", "email"] and status["factors"] == []
+
+    started = await akz.http.post("/auth/v1/mfa/email/enroll", headers=headers)
+    assert started.status_code == 200 and started.json()["sent_to"].endswith("@example.com")
+    code = re.search(r"code is (\d{6})", akz.api.mail[-1]["text"]).group(1)
+    wrong = await akz.http.post(
+        "/auth/v1/mfa/totp/verify", json={"code": "000000"}, headers=headers
+    )
+    assert wrong.status_code == 400
+    done = await akz.http.post("/auth/v1/mfa/totp/verify", json={"code": code}, headers=headers)
+    assert done.status_code == 200 and len(done.json()["recovery_codes"]) == 5
+    backup = done.json()["recovery_codes"][0]
+
+    # Sign-in: an email-only person is sent a code at once, and may use it or a backup code.
+    mails = len(akz.api.mail)
+    challenge = (
+        await akz.http.post(
+            "/auth/v1/token",
+            json={"email": "ada@example.com", "password": PASSWORD},
+            headers=akz.headers(),
+        )
+    ).json()
+    assert challenge["mfa_required"] and challenge["factors"] == ["email", "recovery_code"]
+    assert len(akz.api.mail) == mails + 1
+    emailed = re.search(r"code is (\d{6})", akz.api.mail[-1]["text"]).group(1)
+    ok = await akz.http.post(
+        "/auth/v1/token",
+        json={"grant_type": "mfa", "mfa_token": challenge["mfa_token"], "code": emailed},
+        headers=akz.headers(),
+    )
+    assert ok.status_code == 200 and ok.json()["mfa_method"] == "email"
+    # The same emailed code works once.
+    again = (
+        await akz.http.post(
+            "/auth/v1/token",
+            json={"email": "ada@example.com", "password": PASSWORD},
+            headers=akz.headers(),
+        )
+    ).json()
+    reused = await akz.http.post(
+        "/auth/v1/token",
+        json={"grant_type": "mfa", "mfa_token": again["mfa_token"], "code": emailed},
+        headers=akz.headers(),
+    )
+    assert reused.status_code == 400
+    by_backup = await akz.http.post(
+        "/auth/v1/token",
+        json={"grant_type": "mfa", "mfa_token": again["mfa_token"], "code": backup},
+        headers=akz.headers(),
+    )
+    assert by_backup.status_code == 200 and by_backup.json()["mfa_method"] == "recovery_code"
+
+
+async def test_a_directory_can_require_a_second_factor(akz):
+    akz.api.auth = {"site_url": APP, "directory": {"mfa": {"require": "all"}}}
+    refused = await akz.http.post(
+        "/auth/v1/signup",
+        json={"email": "ada@example.com", "password": PASSWORD},
+        headers=akz.headers(),
+    )
+    assert refused.status_code == 403
+    detail = refused.json()
+    assert detail["code"] == "mfa_setup_required" and detail["methods"] == ["totp"]
+
+    started = (
+        await akz.http.post(
+            "/auth/v1/mfa/setup/start",
+            json={"mfa_token": detail["mfa_token"], "method": "totp"},
+            headers=akz.headers(),
+        )
+    ).json()
+    bad = await akz.http.post(
+        "/auth/v1/mfa/setup/complete",
+        json={"mfa_token": detail["mfa_token"], "code": "000000"},
+        headers=akz.headers(),
+    )
+    assert bad.status_code == 400
+    done = await akz.http.post(
+        "/auth/v1/mfa/setup/complete",
+        json={"mfa_token": detail["mfa_token"], "code": pyotp.TOTP(started["secret"]).now()},
+        headers=akz.headers(),
+    )
+    assert done.status_code == 200, done.text
+    session = done.json()
+    claims = verify_user_token(
+        session["access_token"], akz.settings.jwt_master_secret, env="development"
+    )
+    assert claims["aal"] == "aal2" and len(session["recovery_codes"]) == 10
+    # The setup token is spent.
+    again = await akz.http.post(
+        "/auth/v1/mfa/setup/complete",
+        json={"mfa_token": detail["mfa_token"], "code": "123456"},
+        headers=akz.headers(),
+    )
+    assert again.status_code == 400
+    # From now on this person is challenged like anyone enrolled.
+    later = (
+        await akz.http.post(
+            "/auth/v1/token",
+            json={"email": "ada@example.com", "password": PASSWORD},
+            headers=akz.headers(),
+        )
+    ).json()
+    assert later["mfa_required"]
+
+
+async def test_the_hosted_page_walks_a_person_through_required_setup(akz):
+    akz.api.auth = {"site_url": APP, "directory": {"mfa": {"require": "all", "email": True}}}
+    body = {"email": "ada@example.com", "password": PASSWORD, "redirect_to": APP}
+    signup = (await akz.http.post("/auth/v1/hosted/development/signup", json=body)).json()
+    assert signup["mfa_setup_required"] and signup["methods"] == ["totp", "email"]
+    token = signup["mfa_token"]
+    started = (
+        await akz.http.post(
+            "/auth/v1/hosted/development/mfa/start", json={"mfa_token": token, "method": "email"}
+        )
+    ).json()
+    assert started["method"] == "email"
+    code = re.search(r"code is (\d{6})", akz.api.mail[-1]["text"]).group(1)
+    done = (
+        await akz.http.post(
+            "/auth/v1/hosted/development/mfa/finish", json={"mfa_token": token, "code": code}
+        )
+    ).json()
+    assert done["redirect"].startswith(APP) and len(done["recovery_codes"]) == 10
+
+
+async def test_who_must_enrol_follows_the_policy_and_its_grace_period(akz):
+    from pawabase_server.db.models import AuthUser
+    from pawabase_server.identity import mfa
+
+    await akz.signup()
+    user = await AuthUser.get(email="ada@example.com")
+
+    def config(**policy):
+        return AuthConfig.from_api("development", {"auth": {"directory": {"mfa": policy}}})
+
+    assert not await mfa.setup_required(config(), user)
+    assert await mfa.setup_required(config(require="all"), user)
+    assert not await mfa.setup_required(config(require="all", grace_days=7), user)
+    assert not await mfa.setup_required(config(require="admins"), user)
+    user.is_staff = True
+    assert await mfa.setup_required(config(require="admins"), user)
+    # Requiring a factor that cannot be enrolled would lock everyone out, so it is not required.
+    assert not await mfa.setup_required(config(require="all", totp=False, email=False), user)

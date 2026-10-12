@@ -46,6 +46,8 @@ class AuthConfig:
     branding: dict[str, Any] = field(default_factory=dict)
     #: What sign-up asks and which identifiers sign in (see ``identity/signup_form.py``).
     signup_form: dict[str, Any] = field(default_factory=dict)
+    #: Legal documents shown and accepted at sign-up (see ``identity/legal.py``).
+    legal: dict[str, Any] = field(default_factory=dict)
     #: The directory's policy sections: passwords, recovery, devices, api_keys, claims (see ``identity/directory.py``).
     directory: dict[str, Any] = field(default_factory=dict)
     #: Character classes a password must contain: ``upper``, ``lower``, ``digit``, ``symbol``.

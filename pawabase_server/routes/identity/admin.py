@@ -22,6 +22,7 @@ from pawabase_server.db.models import (
     Identity,
     LoginEvent,
     Membership,
+    MfaFactor,
     Organization,
     SessionInfo,
     Team,
@@ -145,7 +146,20 @@ def register(r: Router, accounts: Accounts) -> None:
             query = query.filter(mfa_enabled=False)
         total = await query.count()
         rows = await query.order_by("-id").offset(offset).limit(limit)
-        return {"data": [await user_view(u, admin=True) for u in rows], "total": total}
+        kinds: dict[str, list[str]] = {}
+        for owner, kind in (
+            await MfaFactor.filter(user_id__in=[u.id for u in rows])
+            .exclude(confirmed_at=None)
+            .values_list("user_id", "kind")
+        ):
+            kinds.setdefault(str(owner), []).append(kind)
+        return {
+            "data": [
+                {**await user_view(u, admin=True), "mfa_factors": kinds.get(str(u.id), [])}
+                for u in rows
+            ],
+            "total": total,
+        }
 
     @r.delete(
         f"{base}",

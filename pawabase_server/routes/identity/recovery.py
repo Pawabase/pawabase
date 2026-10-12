@@ -18,7 +18,7 @@ from sillo.exceptions import HTTPException
 
 from pawabase_server.core.ratelimit import rate_limit_middleware
 from pawabase_server.identity import emails as auth_emails
-from pawabase_server.identity import hosted, links
+from pawabase_server.identity import hosted, links, mfa
 from pawabase_server.identity.accounts import (
     Accounts,
     create_account,
@@ -80,10 +80,9 @@ async def complete(
         if user.email_verified_at is None:
             await user.mark_email_verified()
         if user.mfa_enabled and config.mfa_enabled:
-            challenge = await links.issue(
-                accounts, config, "mfa", user=user, data={"method": "magic_link"}
+            return await mfa.challenge_payload(
+                accounts, config, user, data={"method": "magic_link"}
             )
-            return {"mfa_required": True, "mfa_token": challenge}
         return await start_session(accounts, config, user, method="magic_link", ctx=ctx)
     if kind == "recovery":
         if password is None:

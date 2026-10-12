@@ -171,9 +171,7 @@ export default function Screens({ env, base }) {
         ))}
         {screen.terms && (
           <>
-            <Field label="Terms of service address" optional><input value={branding.terms_url} onChange={(e) => set({ terms_url: e.target.value })} placeholder="https://acme.com/terms" /></Field>
-            <Field label="Privacy policy address" optional><input value={branding.privacy_url} onChange={(e) => set({ privacy_url: e.target.value })} placeholder="https://acme.com/privacy" /></Field>
-            <p className="hint" style={{ margin: 0 }}>Which details this screen asks for is set under Attributes.</p>
+            <p className="hint" style={{ margin: 0 }}>Which details this screen asks for is set under Attributes, and the terms and privacy links under Legal.</p>
           </>
         )}
         {!(screen.words || []).length && !screen.terms && <p className="hint" style={{ margin: 0 }}>The words on this screen are fixed. Change how it looks under Brand, or with custom styles below.</p>}

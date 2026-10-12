@@ -138,6 +138,7 @@ def register_admin(r: Router, accounts: Accounts) -> None:
             password_rules=config.password_rules,
             form=config.signup_form if body.form is None else body.form,
             remember_days=config.policy("devices")["remember_days"],
+            legal=config.legal,
         )
         return {"page": body.page, "html": document, "live": body.page in hosted.PAGES}
 

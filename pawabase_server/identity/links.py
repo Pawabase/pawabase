@@ -29,6 +29,7 @@ LIFETIMES = {
     "link": 600,
     "code": 120,
     "saml": 600,
+    "mfa_setup": 900,
 }
 
 

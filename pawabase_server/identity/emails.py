@@ -34,6 +34,10 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "subject": "You are invited to {organization} on {project}",
         "text": "You have been invited to join {organization} as {role}.\n\nAccept the invitation here:\n\n{link}",
     },
+    "mfa_code": {
+        "subject": "Your {project} verification code",
+        "text": "Your {project} verification code is {code}.\n\nIt works once and expires in {minutes} minutes. If you did not just try to sign in, change your password.",
+    },
     "password_changed": {
         "subject": "Your {project} password was changed",
         "text": "The password for {email} on {project} was just changed.\n\nIf this was you, there is nothing to do. If it was not, reset your password now and contact support.",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlencode
 
 from pydantic import BaseModel, Field
@@ -24,11 +24,26 @@ from pawabase_server.identity.sessions import (
     revoke_session,
     start_session,
 )
-from pawabase_server.routes.identity.auth import signed_in_user
+from pawabase_server.routes.identity.auth import config_for, signed_in_user
 
 
 class CodeBody(BaseModel):
     code: str = Field(min_length=6, max_length=32)
+
+
+class SetupStart(BaseModel):
+    mfa_token: str = Field(min_length=1, max_length=2048)
+    method: Literal["totp", "email"]
+
+
+class SetupFinish(BaseModel):
+    mfa_token: str = Field(min_length=1, max_length=2048)
+    code: str = Field(min_length=6, max_length=32)
+    org: str | None = Field(default=None, max_length=63)
+
+
+class ChallengeBody(BaseModel):
+    mfa_token: str = Field(min_length=1, max_length=2048)
 
 
 def _error_redirect(target: str | None, code: str) -> object:
@@ -164,17 +179,25 @@ def register(r: Router, accounts: Accounts) -> None:
                 else {"linked": provider}
             )
         if user.mfa_enabled and config.mfa_enabled:
-            challenge = await links.issue(
-                accounts, config, "mfa", user=user, data={"method": f"oauth:{provider}"}
+            challenge = await mfa.challenge_payload(
+                accounts, config, user, data={"method": f"oauth:{provider}"}
             )
-            payload = {"mfa_required": "true", "mfa_token": challenge}
+            payload = {"mfa_required": "true", "mfa_token": challenge["mfa_token"]}
         else:
-            session = await start_session(
-                accounts, config, user, method=f"oauth:{provider}", ctx=ctx
-            )
-            payload = {
-                k: session[k] for k in ("access_token", "refresh_token", "expires_in", "token_type")
-            }
+            try:
+                session = await start_session(
+                    accounts, config, user, method=f"oauth:{provider}", ctx=ctx
+                )
+            except HTTPException as refused:
+                detail = refused.detail
+                if not (isinstance(detail, dict) and detail.get("code") == "mfa_setup_required"):
+                    raise
+                payload = {"mfa_setup_required": "true", "mfa_token": detail["mfa_token"]}
+            else:
+                payload = {
+                    k: session[k]
+                    for k in ("access_token", "refresh_token", "expires_in", "token_type")
+                }
         if target:
             return redirect(f"{target}#{urlencode(payload)}")
         return payload
@@ -331,6 +354,75 @@ def register(r: Router, accounts: Accounts) -> None:
 
     # ── MFA ──────────────────────────────────────────────────────────────
 
+    def backup_count(config: AuthConfig) -> int:
+        policy = config.policy("mfa")
+        return policy["backup_code_count"] if policy["backup_codes"] else 0
+
+    @r.post(
+        "/mfa/setup/start",
+        request_model=SetupStart,
+        middleware=mfa_limits,
+        summary="Start the second-factor setup a sign-in is waiting on",
+        tags=["mfa"],
+    )
+    async def setup_start(ctx: HttpContext, body: SetupStart):
+        config = await config_for(accounts, ctx)
+        _, started = await mfa.setup_begin(accounts, config, body.mfa_token, body.method)
+        return started
+
+    @r.post(
+        "/mfa/setup/complete",
+        request_model=SetupFinish,
+        middleware=mfa_limits,
+        summary="Finish that setup with its first code and receive the session",
+        tags=["mfa"],
+    )
+    async def setup_complete(ctx: HttpContext, body: SetupFinish):
+        config = await config_for(accounts, ctx)
+        user, data, codes = await mfa.setup_finish(accounts, config, body.mfa_token, body.code)
+        await log_event(config.env, "mfa_enrolled", user=user, method="setup", ctx=ctx)
+        session = await start_session(
+            accounts,
+            config,
+            user,
+            method=data.get("method", "password"),
+            ctx=ctx,
+            aal="aal2",
+            org=data.get("org") or body.org,
+        )
+        return {**session, "recovery_codes": codes}
+
+    @r.post(
+        "/mfa/challenge",
+        request_model=ChallengeBody,
+        middleware=mfa_limits,
+        summary="Email a sign-in code for a pending second-factor challenge",
+        tags=["mfa"],
+    )
+    async def send_challenge(ctx: HttpContext, body: ChallengeBody):
+        config = await config_for(accounts, ctx)
+        row = await links.consume(accounts, config, "mfa", body.mfa_token, peek=True)
+        user = row.user
+        if user is None or "email" not in await mfa.kinds(user):
+            raise HTTPException(
+                status_code=400, detail="email codes are not set up for this account"
+            )
+        await mfa.send_email_code(accounts, config, user)
+        return {"sent": True}
+
+    @r.post(
+        "/mfa/email/enroll",
+        summary="Start enrolling emailed codes",
+        tags=["mfa"],
+        middleware=mfa_limits,
+    )
+    async def enroll_email(ctx: HttpContext):
+        user, _ = await signed_in_user(ctx)
+        config = await load_config(accounts, user.env)
+        if not config.mfa_enabled or "email" not in mfa.methods_offered(config):
+            raise HTTPException(status_code=403, detail="emailed codes are not available")
+        return await mfa.begin(accounts, config, user, "email")
+
     @r.post("/mfa/totp/enroll", summary="Start enrolling an authenticator app", tags=["mfa"])
     async def enroll(ctx: HttpContext):
         user, _ = await signed_in_user(ctx)
@@ -348,7 +440,8 @@ def register(r: Router, accounts: Accounts) -> None:
     )
     async def confirm(ctx: HttpContext, body: CodeBody):
         user, principal = await signed_in_user(ctx)
-        codes = await mfa.confirm(accounts, user, body.code)
+        config = await load_config(accounts, user.env)
+        codes = await mfa.confirm(accounts, user, body.code, backup_codes=backup_count(config))
         if codes is None:
             raise HTTPException(status_code=400, detail="the code is not valid")
         if principal.claims.get("sid"):
@@ -393,16 +486,28 @@ def register(r: Router, accounts: Accounts) -> None:
     )
     async def new_codes(ctx: HttpContext, body: CodeBody):
         user, _ = await signed_in_user(ctx)
-        if not user.mfa_enabled or await mfa.verify(accounts, user, body.code) != "totp":
-            raise HTTPException(status_code=400, detail="a current authenticator code is required")
-        return {"recovery_codes": await mfa.regenerate_recovery_codes(user)}
+        config = await load_config(accounts, user.env)
+        if not user.mfa_enabled or await mfa.verify(accounts, user, body.code) not in (
+            "totp",
+            "email",
+        ):
+            raise HTTPException(status_code=400, detail="a current code is required")
+        return {
+            "recovery_codes": await mfa.regenerate_recovery_codes(
+                user, backup_count(config) or mfa.RECOVERY_CODE_COUNT
+            )
+        }
 
     @r.get("/mfa", summary="MFA status", tags=["mfa"])
     async def status(ctx: HttpContext):
         user, principal = await signed_in_user(ctx)
+        config = await load_config(accounts, user.env)
         return {
             "enabled": user.mfa_enabled,
             "aal": principal.claims.get("aal"),
+            "factors": await mfa.kinds(user),
+            "methods": mfa.methods_offered(config),
+            "required": config.policy("mfa")["require"] != "off",
             "recovery_codes_remaining": await mfa.remaining_recovery_codes(user),
         }
 

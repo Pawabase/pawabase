@@ -42,6 +42,15 @@ SCHEMA: dict[str, dict[str, tuple[str, Any, Any, Any]]] = {
         "max_days": ("int", 365, 0, 3650),
         "scoped": ("bool", True, None, None),
     },
+    "mfa": {
+        "totp": ("bool", True, None, None),
+        "email": ("bool", False, None, None),
+        "backup_codes": ("bool", True, None, None),
+        "backup_code_count": ("int", 10, 4, 20),
+        "email_code_minutes": ("int", 10, 5, 60),
+        "require": ("choice", "off", ("off", "all", "admins"), None),
+        "grace_days": ("int", 0, 0, 90),
+    },
     "claims": {
         "mode": ("choice", "all", ("all", "listed"), None),
     },

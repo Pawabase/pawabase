@@ -27,6 +27,7 @@ export const AUTH_DEFAULTS = {
   signup_form: { sign_in_with: ["email"], attributes: {}, custom: [], steps: "auto" },
   password_rules: {},
   directory: {},
+  legal: {},
 };
 
 /** The environment's auth settings with a draft on top: change some fields, then save the whole block. */
@@ -83,6 +84,7 @@ export function Avatar({ text, size = 32 }) {
 export const DIRECTORY_DEFAULTS = {
   passwords: { max_length: 128, min_unique: 0, history: 0, max_age_days: 0, forbid_personal: false, breach_check: false },
   recovery: { enabled: true, link_minutes: 60, revoke_sessions: true, notify_change: true },
+  mfa: { totp: true, email: false, backup_codes: true, backup_code_count: 10, email_code_minutes: 10, require: "off", grace_days: 0 },
   devices: { track: true, notify_new: false, remember_days: 0, max_per_user: 0 },
   api_keys: { enabled: false, max_per_user: 10, max_days: 365, scoped: true },
   claims: { mode: "all" },

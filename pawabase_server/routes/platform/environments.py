@@ -21,7 +21,7 @@ from pawabase_server.core.crypto import mask
 from pawabase_server.core.records import upsert
 from pawabase_server.db.models import ApiKey, Environment, Secret
 from pawabase_server.environments import blueprints, env_settings
-from pawabase_server.identity import directory, hosted, signup_form
+from pawabase_server.identity import directory, hosted, legal, signup_form
 from pawabase_server.platform import Platform
 from pawabase_server.routes.common import (
     MANAGE,
@@ -553,6 +553,8 @@ def register(r: Router, platform: Platform) -> None:
                 auth_update["signup_form"] = signup_form.clean(
                     auth_update["signup_form"], strict=True
                 )
+            if auth_update.get("legal") is not None:
+                auth_update["legal"] = legal.clean(auth_update["legal"], strict=True)
             if auth_update.get("directory") is not None:
                 auth_update["directory"] = directory.clean(auth_update["directory"], strict=True)
             if auth_update.get("password_rules") is not None:

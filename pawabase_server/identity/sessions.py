@@ -25,7 +25,7 @@ from pawabase_server.db.models import (
     Organization,
     SessionInfo,
 )
-from pawabase_server.identity import devices, rbac, signup_form
+from pawabase_server.identity import devices, links, mfa, rbac, signup_form
 from pawabase_server.identity.accounts import Accounts, user_view
 from pawabase_server.identity.clientinfo import client_info
 from pawabase_server.identity.environment import AuthConfig
@@ -166,6 +166,19 @@ async def start_session(
     device_key: str | None = None,
 ) -> dict[str, Any]:
     org = await require_membership(config, user, org)
+    if aal == "aal1" and await mfa.setup_required(config, user):
+        token = await links.issue(
+            accounts, config, "mfa_setup", user=user, data={"method": method, "org": org}
+        )
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "mfa_setup_required",
+                "message": "set up a second factor to finish signing in",
+                "mfa_token": token,
+                "methods": mfa.methods_offered(config),
+            },
+        )
     pair = await user.issue_token_pair(
         secret=accounts.refresh_secret(config.env),
         access_expires=timedelta(seconds=config.access_ttl),

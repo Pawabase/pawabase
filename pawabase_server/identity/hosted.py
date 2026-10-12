@@ -12,6 +12,7 @@ import re
 from typing import Any
 from urllib.parse import urlsplit
 
+from pawabase_server.identity import legal as legal_documents
 from pawabase_server.identity import signup_form
 
 COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -215,6 +216,72 @@ def validate_signup(
 
 #: Pages served live, and the extra states Studio previews (and shows the source of) so every screen can be designed.
 PAGES = ("login", "signup", "forgot", "reset")
+
+#: The second-factor steps of a hosted sign-in: answering a challenge, and enrolling when the directory requires a second factor.
+SETUP_JS = r"""
+let setup = null;
+function codeField(label, hint) {
+  return '<div class="fld"><label class="lab" for="code">' + label + '</label><input id="code" name="code" class="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" required autofocus>' + (hint ? '<small>' + hint + '</small>' : '') + '</div>';
+}
+function showChallenge(j) {
+  mfa = j.mfa_token; setup = null;
+  const factors = j.factors || [];
+  const emailOnly = factors.includes('email') && !factors.includes('totp');
+  const both = factors.includes('email') && factors.includes('totp');
+  const backup = factors.includes('recovery_code');
+  let html = codeField('Verification code', emailOnly ? 'We emailed you a 6-digit code.' : (factors.includes('totp') ? 'From your authenticator app' + (backup ? ', or one of your backup codes.' : '.') : 'Enter a backup code.'));
+  if (REMEMBER) html += '<div class="fld"><label class="check"><input type="checkbox" name="remember_device"><span>Don’t ask again on this device for ' + REMEMBER + ' days</span></label></div>';
+  html += '<button class="primary" type="submit"><span>Verify</span></button>';
+  if (both || emailOnly) html += '<button class="ghost" type="button" id="send-code">Email me a code</button>';
+  form.innerHTML = html;
+  const h = document.querySelector('h1'); if (h) h.textContent = 'Two-step verification';
+  const sub = document.querySelector('p.sub'); if (sub) sub.remove();
+  say(emailOnly ? 'We emailed a code to your address.' : '');
+  const send = document.getElementById('send-code');
+  if (send) send.addEventListener('click', async () => { try { await post('/mfa/send', { mfa_token: mfa }); say('We emailed you a code.'); } catch (e) { say(e.message, true); } });
+}
+function showSetup(j) {
+  mfa = null;
+  const methods = j.methods || ['totp'];
+  const token = j.mfa_token;
+  const h = document.querySelector('h1'); if (h) h.textContent = 'Secure your account';
+  const sub = document.querySelector('p.sub'); if (sub) sub.remove();
+  const choose = () => {
+    setup = null;
+    let html = '<p class="sub" style="margin:0">Your administrator requires a second step when you sign in. Choose how you want to get your codes.</p>';
+    if (methods.includes('totp')) html += '<button class="primary" type="button" data-m="totp"><span>Use an authenticator app</span></button>';
+    if (methods.includes('email')) html += '<button class="primary" type="button" data-m="email" style="margin-top:0"><span>Email me a code</span></button>';
+    form.innerHTML = html;
+    form.querySelectorAll('[data-m]').forEach((b) => b.addEventListener('click', () => start(b.dataset.m)));
+    say('');
+    if (methods.length === 1) start(methods[0]);
+  };
+  const start = async (method) => {
+    try {
+      const r = await post('/mfa/start', { mfa_token: token, method });
+      let html = '';
+      if (method === 'totp') html += '<p class="sub" style="margin:0">Add this key to your authenticator app (Google Authenticator, 1Password, Authy…), then enter the code it shows.</p><div class="fld"><label class="lab">Setup key</label><input readonly value="' + r.secret + '" onfocus="this.select()" style="font-family:ui-monospace,monospace"><small><a href="' + r.otpauth_uri + '">Open in your authenticator app</a></small></div>';
+      else html += '<p class="sub" style="margin:0">We sent a 6-digit code to ' + r.sent_to + '.</p>';
+      html += codeField('Code', '') + '<button class="primary" type="submit"><span>Turn on two-step verification</span></button>';
+      form.innerHTML = html;
+      setup = { submit: async (fd) => {
+        const j2 = await post('/mfa/finish', { mfa_token: token, code: fd.get('code') });
+        if (j2.recovery_codes && j2.recovery_codes.length) return showCodes(j2);
+        done(j2);
+      } };
+      say('');
+    } catch (e) { say(e.message, true); }
+  };
+  const showCodes = (j2) => {
+    setup = null;
+    const h2 = document.querySelector('h1'); if (h2) h2.textContent = 'Save your backup codes';
+    const items = j2.recovery_codes.map((c) => '<code style="display:block;padding:6px 0;font-size:15px">' + c + '</code>').join('');
+    form.innerHTML = '<p class="sub" style="margin:0">Each code works once, if you lose your phone. Keep them somewhere safe: they are not shown again.</p><div style="padding:12px 16px;border:1px solid var(--line);border-radius:var(--radius)">' + items + '</div><button class="primary" type="button" id="codes-done"><span>I have saved them</span></button>';
+    document.getElementById('codes-done').addEventListener('click', () => done(j2));
+  };
+  choose();
+}
+"""
 PREVIEW_PAGES = (*PAGES, "mfa", "check-email", "signed-in", "error")
 
 CSS_FORBIDDEN = re.compile(
@@ -297,26 +364,20 @@ def _password(
     )
 
 
-def _legal_checkbox(b: dict[str, Any]) -> str:
-    if not (b["terms_url"] or b["privacy_url"]):
+def _legal_checkbox(docs: list[dict[str, Any]]) -> str:
+    required = [d for d in docs if d["required"]]
+    if not required:
         return ""
-    parts = []
-    if b["terms_url"]:
-        parts.append(
-            f'<a href="{_e(b["terms_url"])}" target="_blank" rel="noopener noreferrer">Terms of Service</a>'
-        )
-    if b["privacy_url"]:
-        parts.append(
-            f'<a href="{_e(b["privacy_url"])}" target="_blank" rel="noopener noreferrer">Privacy Policy</a>'
-        )
-    return f'<div class="fld"><label class="check"><input type="checkbox" name="accepted_terms" required><span>I agree to the {" and ".join(parts)}</span></label></div>'
+    parts = [
+        f'<a href="{_e(d["url"])}" target="_blank" rel="noopener noreferrer">{_e(d["label"])}</a>'
+        for d in required
+    ]
+    joined = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+    return f'<div class="fld"><label class="check"><input type="checkbox" name="accepted_terms" required><span>I agree to the {joined}</span></label></div>'
 
 
-def terms_problem(branding: Any, accepted: bool) -> str | None:
-    b = resolved(branding)
-    if (b["terms_url"] or b["privacy_url"]) and not accepted:
-        return "You need to accept the terms to create an account"
-    return None
+def terms_problem(branding: Any, accepted: bool, legal: Any = None) -> str | None:
+    return legal_documents.problem(legal_documents.documents(legal, branding), accepted)
 
 
 def _fields_html(items: list[dict[str, Any]]) -> str:
@@ -365,6 +426,7 @@ def render(
     form: Any = None,
     remember_days: int = 0,
     discover: bool = False,
+    legal: Any = None,
     notice: tuple[str, str, str, str] | None = None,
 ) -> str:
     """One hosted page as HTML. ``base`` is the path the page posts to (``/auth/v1/hosted/<env>``).
@@ -373,6 +435,7 @@ def render(
     address)``, for the pages that only say something.
     """
     b = resolved(branding)
+    docs = legal_documents.documents(legal, branding)
     name = b["name"] or project_name or "Sign in"
     dark, auto = b["theme"] == "dark", b["theme"] == "auto"
     pairs = {k: query.get(k, "") for k in ("redirect_to", "state", "code_challenge", "token")}
@@ -477,7 +540,7 @@ def render(
             "new-password",
             rules=password_rules_list(password_min, password_rules),
         )
-        terms = _legal_checkbox(b)
+        terms = _legal_checkbox(docs)
         submit = (
             f'<button class="primary" type="submit"><span>{_e(b["signup_button"])}</span></button>'
         )
@@ -538,9 +601,8 @@ def render(
         links = f'<a href="{base}/login">Back to sign in</a>'
 
     legal_parts = [
-        f'<a href="{_e(b[key])}" target="_blank" rel="noopener noreferrer">{label}</a>'
-        for key, label in (("terms_url", "Terms"), ("privacy_url", "Privacy"))
-        if b[key]
+        f'<a href="{_e(d["url"])}" target="_blank" rel="noopener noreferrer">{_e(d["label"])}</a>'
+        for d in docs
     ]
     legal = " · ".join(legal_parts + ([_e(b["footer"])] if b["footer"] else []))
 
@@ -606,12 +668,13 @@ function say(text, bad) {{ if (!note) return; note.textContent = text; note.clas
 async function post(path, body) {{
   const r = await fetch(base + path, {{ method: 'POST', headers: {{ 'content-type': 'application/json' }}, body: JSON.stringify({{ ...carried, ...body }}) }});
   const j = await r.json().catch(() => ({{}}));
-  if (!r.ok) {{ const d = j.detail; throw new Error(typeof d === 'string' ? d : (d && (d.message && d.problems ? d.problems.join(' ') : d.message || (d.problems || []).join(' '))) || 'Something went wrong. Try again.'); }}
+  if (!r.ok) {{ const d = j.detail !== undefined ? j.detail : (j.problems || j.message ? j : j.error); throw new Error(typeof d === 'string' ? d : (d && (d.message && d.problems ? d.problems.join(' ') : d.message || (d.problems || []).join(' '))) || 'Something went wrong. Try again.'); }}
   return j;
 }}
 function finish(title, text) {{ if (form) form.remove(); const m = document.getElementById('magic'); if (m) m.remove(); const pr = document.querySelector('.progress'); if (pr) pr.remove(); const h = document.querySelector('h1'); if (h && title) h.textContent = title; const s = document.querySelector('p.sub'); if (s) s.remove(); say(text); }}
 function done(j) {{
-  if (j.mfa_required) {{ mfa = j.mfa_token; form.innerHTML = '<div class="fld"><label class="lab" for="code">Verification code</label><input id="code" name="code" class="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" required autofocus></div>' + (REMEMBER ? '<div class="fld"><label class="check"><input type="checkbox" name="remember_device"><span>Don’t ask again on this device for ' + REMEMBER + ' days</span></label></div>' : '') + '<button class="primary" type="submit"><span>Verify</span></button>'; say('Enter the 6-digit code from your authenticator app, or a recovery code.'); return; }}
+  if (j.mfa_setup_required) {{ showSetup(j); return; }}
+  if (j.mfa_required) {{ showChallenge(j); return; }}
   if (j.redirect) {{ say('Signed in. Taking you back…'); location.href = j.redirect; return; }}
   if (j.verify) return finish('Check your email', 'We sent a link to confirm your address. Open it, then sign in.');
   if (j.sent) return finish('Check your email', j.message || 'If the address has an account, a message is on its way.');
@@ -665,6 +728,7 @@ if (form) form.addEventListener('submit', async (event) => {{
   if (steps.length && !steps[0].hidden) {{ advance(); return; }}
   if (!form.reportValidity()) return;
   if (preview) {{ say('This is a preview. Nothing is sent.'); return; }}
+  if (setup) {{ const b = form.querySelector('button.primary[type=submit]'); b.disabled = true; try {{ await setup.submit(new FormData(form)); }} catch (e) {{ say(e.message, true); }} b.disabled = false; return; }}
   const fd = new FormData(form);
   const data = {{}}; const fields = {{}};
   for (const [k, v] of fd.entries()) {{ if (k.startsWith('f_')) fields[k.slice(2)] = v; else data[k] = v; }}
@@ -690,6 +754,7 @@ if (magic) magic.addEventListener('click', async () => {{
   try {{ done(await post('/magic', {{ email }})); }} catch (error) {{ say(error.message, true); }}
 }});
 """
+    script += SETUP_JS
     form_html = f'<form id="form" novalidate>{body}</form>' if body else ""
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">

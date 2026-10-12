@@ -7,6 +7,7 @@ import { api, del, envPath, patch, post, put, useApi } from "../../lib/api";
 import Domains from "./auth/Domains";
 import Invitations, { InviteSheet } from "./auth/Invitations";
 import Mfa from "./auth/Mfa";
+import Legal from "./auth/Legal";
 import Screens from "./auth/Screens";
 import ApiKeys from "./directory/ApiKeys";
 import Attributes from "./directory/Attributes";
@@ -28,7 +29,7 @@ const AUTH_GROUPS = [
   { title: "Sign-in", items: [["signin", "Sign-in & registration"], ["attributes", "Attributes"], ["providers", "Social providers"], ["federation", "Company sign-in"], ["oauth", "OAuth servers"]] },
   { title: "Security", items: [["passwords", "Password policy"], ["mfa", "Multi-factor"], ["recovery", "Account recovery"], ["devices", "Devices"], ["sessions", "Sessions"], ["protection", "Attack protection"], ["restrictions", "Restrictions"], ["domains", "Domains"]] },
   { title: "Developers", items: [["apikeys", "User API keys"]] },
-  { title: "Look & feel", items: [["screens", "Screens"], ["emails", "Email templates"]] },
+  { title: "Look & feel", items: [["screens", "Screens"], ["legal", "Legal"], ["emails", "Email templates"]] },
   { title: "Records", items: [["events", "Sign-in activity"], ["transfer", "Import & export"], ["config", "Configuration"]] },
 ];
 const AUTH_PARTS = AUTH_GROUPS.flatMap((group) => group.items);
@@ -47,8 +48,9 @@ const AUTH_ABOUT = {
   recovery: "How someone gets back into an account they cannot sign in to.",
   devices: "Which browsers and apps people sign in from, and which are trusted.",
   apikeys: "Keys people create for themselves to call the API as themselves.",
+  legal: "Your terms, privacy policy and other documents: what people see and what they must accept.",
   screens: "Every sign-in screen your people see: preview it, read its code, and change how it looks and what it says.",
-  mfa: "A second step at sign-in, and who has set it up.",
+  mfa: "Authenticator apps, emailed codes and backup codes; who must use them, and who has.",
   sessions: "Everyone who is signed in right now, and how long a sign-in lasts.",
   protection: "Slow down guessing: lock accounts after repeated failures, and see who is locked.",
   restrictions: "Who may create an account, and with which email addresses.",
@@ -88,6 +90,7 @@ export default function Users({ env }) {
       {tab === "devices" && <Devices env={env} base={base} />}
       {tab === "apikeys" && <ApiKeys env={env} base={base} />}
       {tab === "screens" && <Screens env={env} base={base} />}
+      {tab === "legal" && <Legal env={env} />}
       {tab === "mfa" && <Mfa env={env} base={base} />}
       {tab === "sessions" && <Sessions env={env} base={base} />}
       {tab === "protection" && <Protection env={env} base={base} />}

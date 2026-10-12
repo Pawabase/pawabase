@@ -18,7 +18,7 @@ from sillo import HttpContext, Router, html
 from sillo.exceptions import HTTPException
 
 from pawabase_server.core.ratelimit import rate_limit_middleware
-from pawabase_server.identity import devices, federation, hosted, links, signup_form
+from pawabase_server.identity import devices, federation, hosted, legal, links, mfa, signup_form
 from pawabase_server.identity import emails as auth_emails
 from pawabase_server.identity.accounts import (
     Accounts,
@@ -55,6 +55,20 @@ class SignUp(Hosted):
     #: Answers to the extra questions the environment asks at sign-up, by key.
     fields: dict[str, Any] = Field(default_factory=dict)
     accepted_terms: bool = False
+
+
+class MfaStart(BaseModel):
+    mfa_token: str = Field(min_length=1, max_length=2048)
+    method: str = Field(max_length=16)
+
+
+class MfaFinish(BaseModel):
+    mfa_token: str = Field(min_length=1, max_length=2048)
+    code: str = Field(min_length=6, max_length=32)
+
+
+class MfaSend(BaseModel):
+    mfa_token: str = Field(min_length=1, max_length=2048)
 
 
 class Reset(BaseModel):
@@ -146,6 +160,7 @@ def register(r: Router, accounts: Accounts) -> None:
             password_min=config.password_min_length,
             password_rules=config.password_rules,
             remember_days=config.policy("devices")["remember_days"],
+            legal=config.legal,
             discover=any(
                 c.get("domains")
                 for n, c in config.providers.items()
@@ -230,6 +245,25 @@ def register(r: Router, accounts: Accounts) -> None:
         """The sign-in succeeded: hand the page a code to take back to the app, or say so when there is nowhere to go."""
         if body.redirect_to and not config.redirect_allowed(body.redirect_to):
             raise HTTPException(status_code=400, detail="redirect_to is not an allowed URL")
+        if aal == "aal1" and await mfa.setup_required(config, user):
+            token = await links.issue(
+                accounts,
+                config,
+                "mfa_setup",
+                user=user,
+                data={
+                    "method": method,
+                    "org": org,
+                    "redirect_to": body.redirect_to,
+                    "state": body.state,
+                    "code_challenge": body.code_challenge,
+                },
+            )
+            return {
+                "mfa_setup_required": True,
+                "mfa_token": token,
+                "methods": mfa.methods_offered(config),
+            }
         target = body.redirect_to or (config.site_url or "")
         if not target:
             return {"signed_in": True}
@@ -294,7 +328,8 @@ def register(r: Router, accounts: Accounts) -> None:
             config.branding.get("signup_fields"),
         )
         problems = list(collected.problems)
-        if refusal := hosted.terms_problem(config.branding, body.accepted_terms):
+        docs = legal.documents(config.legal, config.branding)
+        if refusal := legal.problem(docs, body.accepted_terms):
             problems.append(refusal)
         if problems:
             raise HTTPException(status_code=422, detail=" ".join(problems))
@@ -306,6 +341,9 @@ def register(r: Router, accounts: Accounts) -> None:
             phone=collected.phone,
             name=collected.name or body.name or "",
             user_metadata=collected.metadata or None,
+            app_metadata=(
+                {"consent": record} if (record := legal.consent(config.legal, docs)) else None
+            ),
             max_users=accounts.max_users(config.env),
         )
         await accounts.emit(
@@ -325,6 +363,59 @@ def register(r: Router, accounts: Accounts) -> None:
             )
             return {"verify": True}
         return await finish(config, user, body, method="password", ctx=ctx)
+
+    @r.post(
+        "/hosted/{env}/mfa/start",
+        request_model=MfaStart,
+        middleware=limits,
+        exclude_from_schema=True,
+    )
+    async def mfa_start(ctx: HttpContext, env: str, body: MfaStart):
+        config = await config_of(env)
+        _, started = await mfa.setup_begin(accounts, config, body.mfa_token, body.method)
+        return started
+
+    @r.post(
+        "/hosted/{env}/mfa/finish",
+        request_model=MfaFinish,
+        middleware=limits,
+        exclude_from_schema=True,
+    )
+    async def mfa_finish(ctx: HttpContext, env: str, body: MfaFinish):
+        config = await config_of(env)
+        user, data, codes = await mfa.setup_finish(accounts, config, body.mfa_token, body.code)
+        await log_event(config.env, "mfa_enrolled", user=user, method="setup", ctx=ctx)
+        carried = Hosted(
+            redirect_to=data.get("redirect_to"),
+            state=data.get("state"),
+            code_challenge=data.get("code_challenge"),
+        )
+        outcome = await finish(
+            config,
+            user,
+            carried,
+            method=data.get("method", "password"),
+            aal="aal2",
+            org=data.get("org"),
+            ctx=ctx,
+        )
+        return {**outcome, "recovery_codes": codes}
+
+    @r.post(
+        "/hosted/{env}/mfa/send",
+        request_model=MfaSend,
+        middleware=limits,
+        exclude_from_schema=True,
+    )
+    async def mfa_send(ctx: HttpContext, env: str, body: MfaSend):
+        config = await config_of(env)
+        row = await links.consume(accounts, config, "mfa", body.mfa_token, peek=True)
+        if row.user is None or "email" not in await mfa.kinds(row.user):
+            raise HTTPException(
+                status_code=400, detail="email codes are not set up for this account"
+            )
+        await mfa.send_email_code(accounts, config, row.user)
+        return {"sent": True}
 
     @r.post(
         "/hosted/{env}/forgot", request_model=Email, middleware=limits, exclude_from_schema=True

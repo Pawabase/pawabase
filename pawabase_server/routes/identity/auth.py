@@ -15,7 +15,7 @@ from pawabase_server.core.context import require_context
 from pawabase_server.core.principal import Principal
 from pawabase_server.core.ratelimit import rate_limit_middleware
 from pawabase_server.db.models import AuthUser
-from pawabase_server.identity import devices, links, mfa, signup_form, user_keys
+from pawabase_server.identity import devices, legal, links, mfa, signup_form, user_keys
 from pawabase_server.identity import emails as auth_emails
 from pawabase_server.identity.accounts import (
     Accounts,
@@ -48,6 +48,9 @@ class SignUp(BaseModel):
     username: str | None = Field(default=None, max_length=150)
     name: str = Field(default="", max_length=200)
     data: dict[str, Any] = Field(default_factory=dict, description="Initial user_metadata")
+    accepted_terms: bool = Field(
+        default=False, description="Required when the environment lists required legal documents"
+    )
     redirect_to: str | None = None
 
 
@@ -137,15 +140,11 @@ async def authenticate_password(
         )
     if user.mfa_enabled and config.mfa_enabled and not await devices.is_trusted(config, user, ctx):
         await require_membership(config, user, org)
-        challenge = await links.issue(
-            accounts, config, "mfa", user=user, data={"method": "password", "org": org}
+        challenge = await mfa.challenge_payload(
+            accounts, config, user, data={"method": "password", "org": org}
         )
         await log_event(config.env, "mfa_challenge", user=user, ctx=ctx)
-        return user, {
-            "mfa_required": True,
-            "mfa_token": challenge,
-            "factors": ["totp", "recovery_code"],
-        }
+        return user, challenge
     return user, None
 
 
@@ -232,10 +231,17 @@ def register(r: Router, accounts: Accounts) -> None:
                     "problems": collected.problems,
                 },
             )
+        # The API enforces the documents listed under Legal; the branding's older terms links only gate the hosted page.
+        docs = legal.documents(config.legal)
+        if refusal := legal.problem(docs, body.accepted_terms):
+            raise HTTPException(status_code=422, detail=refusal)
         user = await create_account(
             config,
             email=body.email,
             password=body.password,
+            app_metadata={"consent": record}
+            if (record := legal.consent(config.legal, docs))
+            else None,
             username=collected.username or body.username,
             phone=collected.phone,
             name=collected.name or body.name,
