@@ -77,16 +77,38 @@ function readTheme() {
 function useTheme() {
   const [theme, setTheme] = useState(readTheme);
   useEffect(() => {
-    if (theme === "system") document.documentElement.removeAttribute("data-theme");
-    else document.documentElement.setAttribute("data-theme", theme);
+    document.documentElement.setAttribute("data-theme", theme === "light" ? "light" : "dark");
     try {
       localStorage.setItem("pawabase.theme", theme);
     } catch {
       /* private mode: the choice lasts for this page only */
     }
   }, [theme]);
-  const dark = theme === "dark" || (theme === "system" && window.matchMedia?.("(prefers-color-scheme: dark)").matches);
+  const dark = theme !== "light";
   return [dark, () => setTheme(dark ? "light" : "dark")];
+}
+
+/** A few real numbers about this environment, always in view. */
+function TopStats({ env }) {
+  const analytics = useApi(envPath(env, "/analytics"), { params: { range: "24h" } });
+  const resources = useApi(envPath(env, "/resources"));
+  const flows = useApi(envPath(env, "/flows"));
+  const keys = useApi(envPath(env, "/keys"));
+  const count = (state) => (state.data?.data ?? (Array.isArray(state.data) ? state.data : null))?.length;
+  const requests = analytics.data?.summary?.requests;
+  const items = [
+    ["Requests", requests != null ? Number(requests).toLocaleString() : null, "24h"],
+    ["Collections", count(resources)],
+    ["Flows", count(flows)],
+    ["Keys", count(keys)],
+  ].filter(([, value]) => value != null);
+  return (
+    <div className="top-stats" aria-label="This environment">
+      {items.map(([label, value, note]) => (
+        <span key={label} className="top-stat"><i>{label}{note ? ` · ${note}` : ""}</i><b>{value}</b></span>
+      ))}
+    </div>
+  );
 }
 
 function branchKey(env) {
@@ -389,7 +411,6 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
               </>
             )}
           </nav>
-          <SidebarControl mode={sidebar} onChange={setSidebar} />
         </aside>
         </div>
         {subnav && <SubNav subnav={subnav} backHref={env ? envHref(env, "overview") : "/"} />}
@@ -404,6 +425,7 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
                 {crumbs.map((c, i) => <span key={i} className="row" style={{ gap: 4 }}><span className="sep">/</span><span className="here">{c}</span></span>)}
               </div>
             </div>
+            {env && <TopStats env={env} />}
             <div className="top-actions">
               {env && <Button size="sm" data-tour="history" onClick={() => setHistoryOpen(true)} title="Checkout, create, merge, and review branches"><Icon name="gitBranch" size={15} /> History</Button>}
               <StatusLights />
