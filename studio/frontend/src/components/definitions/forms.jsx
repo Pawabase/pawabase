@@ -154,7 +154,7 @@ function ResourceForm({ body, patch, refs, isNew }) {
         </div>
       </Section>
       <Section title="Fields" description={`The primary key${body.timestamps !== false ? " and created_at / updated_at are" : " is"} added for you.`}>
-        <FieldsEditor value={body.fields || []} onChange={(fields) => patch({ fields })} schemas={refs.schemas} />
+        <FieldsEditor value={body.fields || []} onChange={(fields) => patch({ fields })} schemas={refs.schemas} indexable />
       </Section>
       <Section title="Access" description="Which endpoints exist, and who may call each.">
         <div className="ops-table">

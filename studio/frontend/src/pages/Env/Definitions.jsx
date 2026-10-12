@@ -5,7 +5,7 @@ import { download, toCsv } from "../../lib/tabular";
 import { TableView } from "./Database";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, CopyText, EmptyState, Field, Loading, Modal, PageHead, Table, formatCell, useAction } from "../../components/ui";
-import { HistoryPanel, ImportTable, SchemaBadge, SchemaPanel } from "../../components/SchemaPanels";
+import { HistoryPanel, ImportTable, IndexesPanel, SchemaBadge, SchemaPanel } from "../../components/SchemaPanels";
 import { DefinitionSheet, singular } from "../../components/definitions/DefinitionSheet";
 import { KINDS, editable, keyOf } from "../../lib/kinds";
 import { del, envPath, get, patch, post, put, useApi } from "../../lib/api";
@@ -133,6 +133,7 @@ export default function Definitions({ env, kind }) {
           extraTabs={kind === "resources" && !editing.isNew ? {
             records: { label: "Records", render: () => <Records base={envPath(env, `/resources/${editing.key}/records`)} fields={editing.body.fields || []} /> },
             schema: { label: reports[editing.key] && reports[editing.key].state !== "in_sync" ? "Schema •" : "Schema", render: () => <SchemaPanel env={env} name={editing.key} onChanged={schema.reload} onAdopted={() => { setEditing(null); list.reload(); }} /> },
+            indexes: { label: "Indexes", render: () => <IndexesPanel env={env} name={editing.key} onChanged={schema.reload} /> },
             history: { label: "History", render: () => <HistoryPanel env={env} name={editing.key} onChanged={schema.reload} /> },
           } : {}}
         />

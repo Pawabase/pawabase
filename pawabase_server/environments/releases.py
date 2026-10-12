@@ -49,6 +49,7 @@ DEFINITIONS: dict[str, tuple[type, tuple[str, ...]]] = {
             "realtime",
             "timestamps",
             "owner_field",
+            "indexes",
             "tags",
         ),
     ),

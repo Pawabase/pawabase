@@ -1447,3 +1447,6 @@ html, body { background: linear-gradient(135deg, #fde8f1 0%, #ece3f8 42%, #d7d5f
 @media (max-width: 1000px) { .screens { grid-template-columns: 1fr; } .screens-list { position: static; flex-direction: row; flex-wrap: wrap; } .screens-item { flex: 1 1 200px; } }
 
 .codeview-body code { color: var(--ink); }
+
+.index-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.index-row:last-child { border-bottom: 0; }

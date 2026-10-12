@@ -101,6 +101,8 @@ class Resource(_Definition):
     realtime = fields.BooleanField(default=False)
     timestamps = fields.BooleanField(default=True)
     owner_field = fields.CharField(max_length=64, null=True)
+    #: Indexes beyond the single-column ones fields ask for: ``[{"name", "columns", "unique", "where", "method"}]`` (see ``data/indexes.py``).
+    indexes = AnyJSONField(null=True, default=list)
     tags = AnyJSONField(default=list)
 
     class Meta:

@@ -8,6 +8,7 @@ connection's dialect, parameterised, with values encoded per column type.
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -15,7 +16,9 @@ from typing import Any
 
 from pypika_tortoise import Order, Table
 from pypika_tortoise.functions import Count, Star
+from tortoise.exceptions import IntegrityError
 
+from pawabase_server.core.errors import PawabaseError
 from pawabase_server.core.ids import new_ulid
 from pawabase_server.data import inspect as db_inspect
 from pawabase_server.data.source import DataSource, timed
@@ -68,6 +71,8 @@ class ResourceSpec:
     timestamps: bool = True
     owner_field: str | None = None
     relations: list[dict[str, Any]] = field(default_factory=list)
+    #: Declared indexes as stored (see ``data/indexes.py``); checked when a plan is made.
+    indexes: list[dict[str, Any]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         check_identifier(self.table)
@@ -95,6 +100,7 @@ class ResourceSpec:
             timestamps=resource.timestamps,
             owner_field=resource.owner_field,
             relations=list(resource.relations or []),
+            indexes=list(getattr(resource, "indexes", None) or []),
         )
 
     @property
@@ -109,6 +115,33 @@ class ResourceSpec:
             for name, spec in self.field_map.items()
             if name not in blocked and not spec.get("read_only")
         }
+
+
+def constraint_error(exc: IntegrityError) -> PawabaseError:
+    """What a database constraint refusing a write means to the caller: a 409 for a value that must be unique, a 422 for the rest.
+
+    The columns are named; the value is not repeated back.
+    """
+    text = str(exc)
+    columns: list[str] = []
+    if match := re.search(r"UNIQUE constraint failed: ([\w., ]+)", text):
+        columns = [part.split(".")[-1] for part in match.group(1).split(",")]
+    elif match := re.search(r"Key \(([^)]+)\)=", text):
+        columns = [part.strip().strip('"') for part in match.group(1).split(",")]
+    unique = bool(columns) or "unique" in text.lower() or "duplicate" in text.lower()
+    if unique:
+        which = ", ".join(columns) if columns else "a unique field"
+        return PawabaseError(
+            f"A record with the same {which} already exists.",
+            status=409,
+            code="unique_violation",
+            details={"columns": columns},
+        )
+    return PawabaseError(
+        "The database refused this change because it breaks a constraint.",
+        status=422,
+        code="constraint_violation",
+    )
 
 
 class ResourceStore:
@@ -312,16 +345,19 @@ class ResourceStore:
         qc = self.source.query_class
         query = qc.into(self.table).columns(*values.keys()).insert(*values.values())
         runner = client or self.source.client
-        if dialect == "postgres":
-            query = query.returning(self.table.field(self.spec.primary_key))
-            sql, params = query.get_parameterized_sql()
-            rows = await timed(runner, "execute_query_dict", sql, params)
-            new_id = rows[0][self.spec.primary_key]
-        else:
-            sql, params = query.get_parameterized_sql()
-            new_id = await timed(runner, "execute_insert", sql, params)
-            if self.spec.primary_key in values:
-                new_id = values[self.spec.primary_key]
+        try:
+            if dialect == "postgres":
+                query = query.returning(self.table.field(self.spec.primary_key))
+                sql, params = query.get_parameterized_sql()
+                rows = await timed(runner, "execute_query_dict", sql, params)
+                new_id = rows[0][self.spec.primary_key]
+            else:
+                sql, params = query.get_parameterized_sql()
+                new_id = await timed(runner, "execute_insert", sql, params)
+                if self.spec.primary_key in values:
+                    new_id = values[self.spec.primary_key]
+        except IntegrityError as exc:
+            raise constraint_error(exc) from exc
         record = await self._get_with(runner, new_id)
         return record or {self.spec.primary_key: decode_value(None, new_id), **dict(data)}
 
@@ -358,7 +394,10 @@ class ResourceStore:
                 == self._encode(self.spec.primary_key, record_id)
             )
             sql, params = query.get_parameterized_sql()
-            await timed(runner, "execute_query", sql, params)
+            try:
+                await timed(runner, "execute_query", sql, params)
+            except IntegrityError as exc:
+                raise constraint_error(exc) from exc
         return await self._get_with(runner, record_id)
 
     async def delete(self, record_id: Any, *, client: Any = None) -> bool:

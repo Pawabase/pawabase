@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from pawabase_server.data.source import DataSource
@@ -71,30 +72,65 @@ async def _primary_keys(source: DataSource, table: str) -> set[str]:
 
 
 async def list_indexes(source: DataSource, table: str) -> list[dict[str, Any]]:
+    """Every index on *table*: ``name``, ``unique``, ``columns`` and, where the database says, ``partial``, ``method``, ``size``, ``auto``.
+
+    ``auto`` marks what the database made for a primary key or a UNIQUE constraint: not something to drop as an index.
+    """
     check_identifier(table)
     if source.dialect == "sqlite":
         rows = await source.fetch(f'PRAGMA index_list("{table}")')
+        sql = {
+            r["name"]: r["sql"]
+            for r in await source.fetch(
+                "SELECT name, sql FROM sqlite_master WHERE type = 'index' AND tbl_name = ?", [table]
+            )
+        }
         indexes = []
         for row in rows:
-            columns = await source.fetch(f'PRAGMA index_info("{row["name"]}")')
+            columns = await source.fetch(f'PRAGMA index_xinfo("{row["name"]}")')
+            keyed = [c for c in columns if c.get("key")]
             indexes.append(
                 {
                     "name": row["name"],
                     "unique": bool(row["unique"]),
-                    "columns": [c["name"] for c in columns],
+                    "columns": [c["name"] for c in keyed if c["name"] is not None],
+                    "desc": [c["name"] for c in keyed if c.get("desc") and c["name"] is not None],
+                    "partial": bool(row.get("partial")),
+                    "method": "btree",
+                    "definition": sql.get(row["name"]),
+                    "auto": row.get("origin") in ("pk", "u"),
                 }
             )
         return indexes
     if source.dialect == "postgres":
         rows = await source.fetch(
-            "SELECT indexname AS name, indexdef AS definition FROM pg_indexes WHERE schemaname = current_schema() AND tablename = $1",
+            "SELECT i.relname AS name, ix.indisunique AS is_unique, ix.indisprimary AS is_primary, am.amname AS method, "
+            "pg_get_expr(ix.indpred, ix.indrelid) AS predicate, pg_relation_size(i.oid) AS size, "
+            "pg_get_indexdef(i.oid) AS definition, "
+            "ARRAY(SELECT a.attname FROM unnest(ix.indkey) WITH ORDINALITY k(attnum, ord) "
+            "JOIN pg_attribute a ON a.attrelid = ix.indrelid AND a.attnum = k.attnum ORDER BY k.ord) AS columns, "
+            "EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.oid) AS from_constraint "
+            "FROM pg_index ix JOIN pg_class i ON i.oid = ix.indexrelid JOIN pg_class t ON t.oid = ix.indrelid "
+            "JOIN pg_namespace n ON n.oid = t.relnamespace JOIN pg_am am ON am.oid = i.relam "
+            "WHERE t.relname = $1 AND n.nspname = current_schema()",
             [table],
         )
         return [
             {
                 "name": r["name"],
-                "unique": "UNIQUE" in r["definition"],
+                "unique": bool(r["is_unique"]),
+                "columns": list(r["columns"] or []),
+                "desc": [
+                    c
+                    for c in (r["columns"] or [])
+                    if re.search(rf"\b{re.escape(c)}\s+DESC\b", r["definition"] or "")
+                ],
+                "partial": r["predicate"] is not None,
+                "predicate": r["predicate"],
+                "method": r["method"],
+                "size": int(r["size"] or 0),
                 "definition": r["definition"],
+                "auto": bool(r["is_primary"] or r["from_constraint"]),
             }
             for r in rows
         ]
@@ -103,9 +139,19 @@ async def list_indexes(source: DataSource, table: str) -> list[dict[str, Any]]:
     for row in rows:
         entry = grouped.setdefault(
             row["Key_name"],
-            {"name": row["Key_name"], "unique": not row["Non_unique"], "columns": []},
+            {
+                "name": row["Key_name"],
+                "unique": not row["Non_unique"],
+                "columns": [],
+                "desc": [],
+                "partial": False,
+                "method": str(row.get("Index_type") or "BTREE").lower(),
+                "auto": row["Key_name"] == "PRIMARY",
+            },
         )
         entry["columns"].append(row["Column_name"])
+        if row.get("Collation") == "D":
+            entry["desc"].append(row["Column_name"])
     return list(grouped.values())
 
 

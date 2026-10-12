@@ -19,6 +19,13 @@ class ApplyBody(BaseModel):
     confirm: str | None = None
 
 
+class DropIndexBody(BaseModel):
+    #: The resource's name, to confirm.
+    confirm: str = Field(min_length=1)
+    #: Drop it even though it could not be rebuilt by a rollback.
+    irreversible: bool = False
+
+
 class AcknowledgeBody(BaseModel):
     #: Why the baseline is being taken, for the history (``"Imported from an existing table"``).
     note: str | None = Field(default=None, max_length=200)
@@ -77,6 +84,59 @@ def register(r: Router, platform: Platform) -> None:
         state = await platform.state(env)
         store = await state.store(name)
         return await schema.status(env, store.source, store.spec)
+
+    @r.get(
+        f"{base}/resources/{{name}}/indexes",
+        auth=MANAGE,
+        tags=["schema"],
+        summary="A table's indexes: declared, field, hand-made and system",
+    )
+    async def indexes(ctx: HttpContext, env: str, name: str):
+        state = await platform.state(env)
+        store = await state.store(name)
+        report = await schema.status(env, store.source, store.spec)
+        return {
+            "data": report["indexes"],
+            "capabilities": report["index_capabilities"],
+            "pending": [
+                c
+                for c in report["changes"]
+                if c["op"] in ("add_index", "replace_index", "drop_index")
+            ],
+            "table_exists": report["exists"],
+        }
+
+    @r.post(
+        f"{base}/resources/{{name}}/indexes/{{index}}/drop",
+        auth=MANAGE,
+        tags=["schema"],
+        request_model=DropIndexBody,
+        summary="Drop an index made outside Pawabase",
+    )
+    async def drop_index(ctx: HttpContext, env: str, name: str, index: str, body: DropIndexBody):
+        if body.confirm != name:
+            raise HTTPException(status_code=422, detail=f"send confirm: {name!r} to drop an index")
+        state = await platform.state(env)
+        store = await state.store(name)
+        try:
+            migration = await schema.drop_external(
+                env,
+                store.source,
+                store.spec,
+                index,
+                actor=actor(ctx),
+                irreversible=body.irreversible,
+            )
+        except schema.SchemaError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        await audit(
+            ctx,
+            "resource.index_dropped",
+            env=env,
+            target=name,
+            details={"index": index, "migration": migration.number},
+        )
+        return {"dropped": index, "migration": {"id": migration.id, "number": migration.number}}
 
     @r.post(
         f"{base}/resources/{{name}}/schema/apply",

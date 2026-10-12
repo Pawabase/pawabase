@@ -24,6 +24,8 @@ from sillo.exceptions import HTTPException
 from pawabase_server.core.ids import is_ulid, new_ulid
 from pawabase_server.core.schemas import SchemaError, validate_fields
 from pawabase_server.core.transformers import TransformerError, validate_transformer
+from pawabase_server.data import indexes as declared_indexes
+from pawabase_server.data.sql import SqlError
 from pawabase_server.db.models import (
     Branch,
     Bucket,
@@ -104,6 +106,8 @@ class ResourceBody(BaseModel):
     realtime: bool = False
     timestamps: bool = True
     owner_field: str | None = Field(default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
+    #: Declared indexes: ``[{"name", "columns", "unique", "where", "method"}]``.
+    indexes: list[dict[str, Any]] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
 
 
@@ -259,7 +263,23 @@ async def validate_resource(platform, env, body: ResourceBody) -> dict[str, Any]
             raise _invalid(f"relations[{index}].type is belongs_to or has_many")
     if body.rate_limit and not body.rate_limit.get("limit"):
         raise _invalid("rate_limit needs a limit")
+    names = {f["name"] for f in body.fields if isinstance(f, dict) and "name" in f} | {
+        body.primary_key
+    }
+    if body.timestamps:
+        names |= {"created_at", "updated_at"}
+    if body.owner_field:
+        names.add(body.owner_field)
+    try:
+        dialect = (await (await platform.state(env)).source()).dialect
+    except Exception:  # an environment whose database cannot be reached still accepts a definition
+        dialect = None
+    try:
+        declared = declared_indexes.clean(body.indexes, names, dialect=dialect)
+    except SqlError as exc:
+        raise _invalid(f"indexes: {exc}") from exc
     data = body.model_dump()
+    data["indexes"] = [index.view() for index in declared]
     data["fields_"] = data.pop("fields")
     data["table"] = body.table or body.name
     data["operations"] = {op: settings.model_dump() for op, settings in body.operations.items()}

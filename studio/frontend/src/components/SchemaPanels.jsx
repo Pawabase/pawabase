@@ -17,6 +17,8 @@ const OPS = {
   add_index: "Add index",
   retype_column: "Change type",
   drop_column: "Remove column",
+  replace_index: "Rebuild index",
+  drop_index: "Drop index",
 };
 
 /** How a resource's table compares with its definition, as a badge. */
@@ -114,7 +116,7 @@ export function SchemaPanel({ env, name, onChanged, onAdopted }) {
                       <span className="row wrap">
                         <b>{OPS[change.op] || change.op}</b>
                         {change.column && <code>{change.column}</code>}
-                        {!change.safe && <Badge tone="yellow">Rewrites values</Badge>}
+                        {!change.safe && <Badge tone="yellow">{["drop_index", "replace_index"].includes(change.op) ? "Changes an index" : "Rewrites values"}</Badge>}
                       </span>
                       <span className="hint">{change.detail}</span>
                       <pre className="code-block schema-sql">{change.sql.join(";\n")};</pre>
@@ -276,5 +278,212 @@ export function ImportTable({ env, base, onClose, onDone }) {
         </Loading>
       </div>
     </Modal>
+  );
+}
+
+const ORIGIN = {
+  declared: ["Declared", "blue"],
+  field: ["From a field", "green"],
+  system: ["Key or constraint", null],
+  external: ["Made by hand", "yellow"],
+};
+const STATE = { ok: null, missing: ["Not built yet", "yellow"], stale: ["Will be replaced", "yellow"] };
+const OPERATORS = [["=", "is"], ["!=", "is not"], ["<", "<"], ["<=", "≤"], [">", ">"], [">=", "≥"], ["is_null", "is empty"], ["not_null", "is not empty"]];
+
+function bytes(n) {
+  if (n == null) return "—";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function IndexEditor({ index, columns, capabilities, taken, onSave, onClose }) {
+  const [draft, setDraft] = useState(index || { name: "", columns: [], unique: false, where: [], method: "btree" });
+  const set = (values) => setDraft((d) => ({ ...d, ...values }));
+  const asObjects = (draft.columns || []).map((c) => (typeof c === "string" ? { name: c } : c));
+  const used = new Set(asObjects.map((c) => c.name));
+  const problems = [];
+  if (!/^[a-z][a-z0-9_]{0,29}$/.test(draft.name)) problems.push("Name: lowercase letters, digits and underscores, up to 30");
+  if (!index && taken.has(draft.name)) problems.push("An index with that name exists");
+  if (asObjects.length === 0) problems.push("Choose at least one column");
+  const methods = capabilities.methods || ["btree"];
+  return (
+    <Modal
+      title={index ? `Edit ${index.name}` : "Add an index"}
+      onClose={onClose}
+      footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={problems.length > 0} onClick={() => onSave({ ...draft, columns: asObjects })}>Save to the definition</Button></>}
+    >
+      <div className="stack lg">
+        <Field label="Name" hint="Lowercase letters, digits and underscores. Appears in the database as pbx_<table>_<name>_…">
+          <input value={draft.name} disabled={!!index} onChange={(e) => set({ name: e.target.value })} placeholder="by_tenant_recent" />
+        </Field>
+        <Field label="Columns" hint="Order matters: the first column is the one the index narrows by.">
+          <div className="stack sm">
+            {asObjects.map((c, i) => (
+              <div key={c.name} className="row">
+                <code style={{ minWidth: 140 }}>{i + 1}. {c.name}</code>
+                <label className="check small"><input type="checkbox" checked={!!c.desc} disabled={draft.method && draft.method !== "btree"} onChange={(e) => set({ columns: asObjects.map((x) => (x.name === c.name ? { ...x, desc: e.target.checked } : x)) })} /> Newest first</label>
+                <Button size="sm" disabled={i === 0} onClick={() => { const next = [...asObjects]; [next[i - 1], next[i]] = [next[i], next[i - 1]]; set({ columns: next }); }}>Up</Button>
+                <Button size="sm" onClick={() => set({ columns: asObjects.filter((x) => x.name !== c.name) })}>Remove</Button>
+              </div>
+            ))}
+            <select value="" onChange={(e) => e.target.value && set({ columns: [...asObjects, { name: e.target.value }] })} disabled={asObjects.length >= 8}>
+              <option value="">Add a column…</option>
+              {columns.filter((c) => !used.has(c)).map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        </Field>
+        <div className="row wrap" style={{ gap: 20 }}>
+          <label className="check"><input type="checkbox" checked={!!draft.unique} disabled={draft.method && draft.method !== "btree"} onChange={(e) => set({ unique: e.target.checked })} /> Unique: no two rows may share these values</label>
+          {methods.length > 1 && (
+            <Field label="Method"><select value={draft.method || "btree"} onChange={(e) => set({ method: e.target.value, unique: e.target.value === "btree" ? draft.unique : false })}>
+              {methods.map((m) => <option key={m} value={m}>{{ btree: "B-tree (general)", hash: "Hash (equality only)", brin: "BRIN (huge, ordered tables)" }[m] || m}</option>)}
+            </select></Field>
+          )}
+          {capabilities.concurrent && (
+            <label className="check"><input type="checkbox" checked={!!draft.concurrent} onChange={(e) => set({ concurrent: e.target.checked })} /> Build without blocking writes</label>
+          )}
+        </div>
+        {capabilities.partial ? (
+          <Field label="Only index rows where…" optional hint="A partial index is smaller and faster for a common slice, such as rows that are not deleted. Conditions are combined with AND.">
+            <div className="stack sm">
+              {(draft.where || []).map((w, i) => (
+                <div key={i} className="row">
+                  <select value={w.column} onChange={(e) => set({ where: draft.where.map((x, j) => (j === i ? { ...x, column: e.target.value } : x)) })}>
+                    <option value="">column…</option>
+                    {columns.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <select value={w.op} onChange={(e) => set({ where: draft.where.map((x, j) => (j === i ? { column: x.column, op: e.target.value, ...(["is_null", "not_null"].includes(e.target.value) ? {} : { value: x.value ?? "" }) } : x)) })}>
+                    {OPERATORS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                  {!["is_null", "not_null"].includes(w.op) && <input value={w.value ?? ""} onChange={(e) => set({ where: draft.where.map((x, j) => (j === i ? { ...x, value: /^-?\d+(\.\d+)?$/.test(e.target.value) ? Number(e.target.value) : e.target.value } : x)) })} placeholder="value" />}
+                  <Button size="sm" onClick={() => set({ where: draft.where.filter((_, j) => j !== i) })}>Remove</Button>
+                </div>
+              ))}
+              <Button size="sm" disabled={(draft.where || []).length >= 4} onClick={() => set({ where: [...(draft.where || []), { column: "", op: "is_null" }] })}>Add a condition</Button>
+            </div>
+          </Field>
+        ) : <p className="hint" style={{ margin: 0 }}>This database does not support partial indexes.</p>}
+        {problems.length > 0 && <ul className="note bad" style={{ margin: 0, paddingLeft: 18 }}>{problems.map((p) => <li key={p}>{p}</li>)}</ul>}
+      </div>
+    </Modal>
+  );
+}
+
+/** A table's indexes: those the definition declares, those fields ask for, and those somebody made by hand. */
+export function IndexesPanel({ env, name, onChanged }) {
+  const path = envPath(env, `/resources/${name}`);
+  const state = useApi(`${path}/indexes`);
+  const resource = useApi(path);
+  const [run, busy] = useAction();
+  const [editing, setEditing] = useState(null);
+  const [typed, setTyped] = useState("");
+  const [dropping, setDropping] = useState(null);
+  const data = state.data;
+  const body = resource.data;
+  const declared = (body?.indexes || []);
+  const columns = [...new Set([
+    ...(body?.fields || []).map((f) => f.name),
+    ...(body?.timestamps !== false ? ["created_at", "updated_at"] : []),
+    ...(body?.primary_key ? [body.primary_key] : []),
+  ])];
+  const refresh = () => { state.reload(); resource.reload(); onChanged?.(); };
+  const save = async (next) => {
+    const result = await run(() => put(path, { ...editable(body), indexes: next }), "Saved to the definition. Apply it to build the index.");
+    if (result) { setEditing(null); refresh(); }
+  };
+  const apply = async () => {
+    const changes = (data.pending || []).map((c) => c.id);
+    const risky = (data.pending || []).some((c) => !c.safe);
+    const result = await run(() => post(`${path}/schema/apply`, { changes, ...(risky ? { confirm: typed } : {}) }), "Applied to the table");
+    if (result) { setTyped(""); refresh(); }
+  };
+  const drop = async () => {
+    const result = await run(() => post(`${path}/indexes/${dropping.physical}/drop`, { confirm: typed, irreversible: dropping.irreversible }), "Index dropped");
+    if (result) { setDropping(null); setTyped(""); refresh(); }
+  };
+  const risky = (data?.pending || []).some((c) => !c.safe);
+  return (
+    <Loading state={state}>
+      {() => data && (
+        <div className="stack lg">
+          {(data.pending || []).length > 0 && (
+            <Card title="Waiting to be applied">
+              <div className="stack">
+                <p className="muted">Saving an index changes the definition, not the table. Building one reads the whole table, so on a large table it takes a while{data.capabilities?.concurrent ? " (choose “build without blocking writes” to keep writes flowing)" : " and may block writes"}.</p>
+                {data.pending.map((c) => (
+                  <div key={c.id} className="schema-change">
+                    <span className="stack sm">
+                      <span className="row wrap"><b>{OPS[c.op] || c.op}</b>{c.index && <code>{c.index}</code>}{!c.safe && <Badge tone="yellow">Changes an index</Badge>}</span>
+                      <span className="hint">{c.detail}</span>
+                      <pre className="code-block schema-sql">{c.sql.join(";\n")};</pre>
+                    </span>
+                  </div>
+                ))}
+                {risky && <Field label={`Type ${name} to confirm`} hint="Dropping or rebuilding an index slows queries until it is back, and removing a unique index lifts the guarantee. The change can be rolled back."><input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={name} /></Field>}
+                <div className="row"><Button variant="primary" disabled={busy || (risky && typed !== name) || !data.table_exists} onClick={apply}>Apply {data.pending.length} change{data.pending.length === 1 ? "" : "s"}</Button>{!data.table_exists && <span className="hint">Create the table first (Schema tab).</span>}</div>
+              </div>
+            </Card>
+          )}
+          <Card
+            title="Indexes"
+            actions={<Button size="sm" variant="primary" disabled={!body} onClick={() => setEditing({})}>Add an index</Button>}
+          >
+            {(data.data || []).length === 0 ? <p className="muted">No indexes yet. Add one for the columns your lists filter and sort by.</p> : (
+              <div className="stack">
+                {data.data.map((index) => {
+                  const origin = ORIGIN[index.origin] || [index.origin, null];
+                  const state_ = STATE[index.state];
+                  return (
+                    <div key={`${index.origin}:${index.physical}`} className="index-row">
+                      <div className="stack sm">
+                        <span className="row wrap">
+                          <b className="mono">{index.name}</b>
+                          <Badge tone={origin[1] || undefined}>{origin[0]}</Badge>
+                          {index.unique && <Badge tone="green">unique</Badge>}
+                          {index.partial && <Badge>partial</Badge>}
+                          {index.method && index.method !== "btree" && <Badge>{index.method}</Badge>}
+                          {state_ && <Badge tone={state_[1]}>{state_[0]}</Badge>}
+                        </span>
+                        <span className="hint">
+                          {index.columns.map((c) => c + ((index.desc || []).includes(c) ? " ↓" : "")).join(", ")}
+                          {index.predicate ? ` · where ${index.predicate}` : ""}
+                          {index.declared?.where?.length ? ` · where ${index.declared.where.map((w) => `${w.column} ${w.op.replace("_", " ")}${w.value !== undefined ? ` ${JSON.stringify(w.value)}` : ""}`).join(" and ")}` : ""}
+                          {index.size != null ? ` · ${bytes(index.size)}` : ""}
+                        </span>
+                        {index.note && <span className="hint">{index.note}</span>}
+                      </div>
+                      <div className="row">
+                        {index.origin === "declared" && index.declared && <Button size="sm" onClick={() => setEditing(index.declared)}>Edit</Button>}
+                        {index.origin === "declared" && index.declared && <Button size="sm" disabled={busy} onClick={() => save(declared.filter((d) => d.name !== index.name))}>Remove</Button>}
+                        {index.droppable && <Button size="sm" onClick={() => { setDropping({ physical: index.physical, name: index.name, partial: index.partial, irreversible: index.partial }); setTyped(""); }}>Drop</Button>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+          {editing && (
+            <IndexEditor
+              index={editing.name ? editing : null}
+              columns={columns}
+              capabilities={data.capabilities || {}}
+              taken={new Set(declared.map((d) => d.name))}
+              onClose={() => setEditing(null)}
+              onSave={(next) => save(editing.name ? declared.map((d) => (d.name === next.name ? next : d)) : [...declared, next])}
+            />
+          )}
+          {dropping && (
+            <Modal title={`Drop ${dropping.name}`} onClose={() => setDropping(null)} footer={<><Button onClick={() => setDropping(null)}>Cancel</Button><Button variant="primary" disabled={busy || typed !== name} onClick={drop}>Drop the index</Button></>}>
+              <div className="stack">
+                <p className="muted">This index was made outside Pawabase. Dropping it is recorded in the History tab{dropping.irreversible ? ", but it is partial or an expression, so a rollback could not rebuild it" : " and can be rolled back"}.</p>
+                <Field label={`Type ${name} to confirm`}><input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={name} /></Field>
+              </div>
+            </Modal>
+          )}
+        </div>
+      )}
+    </Loading>
   );
 }

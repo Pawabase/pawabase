@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pawabase_server.core.ids import new_ulid
+from pawabase_server.data import indexes as declared_indexes
 from pawabase_server.data import inspect as db_inspect
 from pawabase_server.data.source import DataSource
 from pawabase_server.data.sql import (
@@ -42,6 +43,8 @@ from pawabase_server.db.models import SchemaMigration
 SAFE_OPS = ("create_table", "add_column", "add_index")
 #: Changes that retire or rewrite data (always reversible until purged, but a person should look first).
 DESTRUCTIVE_OPS = ("retype_column", "drop_column")
+#: Index changes that are not a plain addition: dropping or rebuilding an index loosens a constraint or slows queries until it is back.
+INDEX_REVIEW_OPS = ("drop_index", "replace_index")
 
 
 class SchemaError(Exception):
@@ -63,9 +66,16 @@ class Change:
     steps: list[tuple[str, str | None]] = field(default_factory=list)
     #: Names a rollback restores from (parked columns, a parked table).
     needs: list[str] = field(default_factory=list)
+    #: The declared index this change is about, when it is about one.
+    index: str | None = None
+    #: A query that must return no rows before the change runs, and what to say when it does (a unique index over duplicates).
+    precheck: str | None = None
+    precheck_message: str = ""
 
     @property
     def id(self) -> str:
+        if self.index:
+            return f"{self.op}:index:{self.index}"
         return f"{self.op}:{self.column or ''}"
 
     @property
@@ -73,7 +83,7 @@ class Change:
         return self.op in SAFE_OPS
 
     def view(self) -> dict[str, Any]:
-        return {
+        out = {
             "id": self.id,
             "op": self.op,
             "column": self.column,
@@ -81,6 +91,9 @@ class Change:
             "safe": self.safe,
             "sql": [up for up, _ in self.steps],
         }
+        if self.index:
+            out["index"] = self.index
+        return out
 
 
 @dataclass
@@ -91,6 +104,8 @@ class Observed:
     columns: list[dict[str, Any]]
     index_names: dict[str, bool]
     parked: list[dict[str, Any]]
+    #: Every index as the database describes it (see ``inspect.list_indexes``).
+    indexes: list[dict[str, Any]] = field(default_factory=list)
 
 
 def family(declared: str) -> str:
@@ -136,9 +151,11 @@ async def observe(source: DataSource, spec: ResourceSpec) -> Observed:
             )
     columns: list[dict[str, Any]] = []
     index_names: dict[str, bool] = {}
+    indexes: list[dict[str, Any]] = []
     if exists:
         columns = await db_inspect.list_columns(source, spec.table)
-        for index in await db_inspect.list_indexes(source, spec.table):
+        indexes = await db_inspect.list_indexes(source, spec.table)
+        for index in indexes:
             index_names[index["name"]] = bool(index.get("unique"))
         for column in columns:
             match = PARKED.match(column["name"])
@@ -151,7 +168,124 @@ async def observe(source: DataSource, spec: ResourceSpec) -> Observed:
                         "migration": match[1],
                     }
                 )
-    return Observed(exists, columns, index_names, parked)
+    return Observed(exists, columns, index_names, parked, indexes)
+
+
+def recreate_sql(dialect: str, table: str, actual: dict[str, Any]) -> str | None:
+    """A statement that rebuilds an index the database has, from what the database says about it. None when that is not enough to go on."""
+    if actual.get("definition"):
+        return str(actual["definition"])
+    columns = actual.get("columns") or []
+    if not columns or actual.get("partial"):
+        return None
+    desc = set(actual.get("desc") or [])
+    listed = ", ".join(quote(dialect, c) + (" DESC" if c in desc else "") for c in columns)
+    kind = "UNIQUE INDEX" if actual.get("unique") else "INDEX"
+    exists = "" if dialect == "mysql" else "IF NOT EXISTS "
+    return f"CREATE {kind} {exists}{quote(dialect, actual['name'])} ON {quote(dialect, table)} ({listed})"
+
+
+def _describe_declared(item: declared_indexes.Declared) -> str:
+    cols = ", ".join(c["name"] + (" desc" if c.get("desc") else "") for c in item.columns)
+    extra = (
+        " where "
+        + " and ".join(
+            f"{w['column']} {w['op'].replace('_', ' ')}"
+            + (f" {w['value']!r}" if "value" in w else "")
+            for w in item.where
+        )
+        if item.where
+        else ""
+    )
+    return f"{'unique ' if item.unique else ''}index {item.name} on {cols}{extra}"
+
+
+def declared_changes(dialect: str, spec: ResourceSpec, seen: Observed) -> list[Change]:
+    """Declared indexes against the managed ones the table has: missing ones are added, edited ones swapped, removed ones dropped."""
+    table = spec.table
+    wanted = declared_indexes.clean(
+        spec.indexes, set(spec.field_map), dialect=dialect, strict=False
+    )
+    by_logical = {item.name: item for item in wanted}
+    present = {index["name"]: index for index in seen.indexes}
+    stale: dict[str, dict[str, Any]] = {}
+    for name, actual in present.items():
+        logical = declared_indexes.logical_name(name, table)
+        if logical is not None and not actual.get("auto"):
+            stale[name] = actual
+    wanted_names = {item.physical(table) for item in wanted}
+    changes: list[Change] = []
+
+    def duplicates(item: declared_indexes.Declared) -> tuple[str | None, str]:
+        if not item.unique or not seen.exists:
+            return None, ""
+        return (
+            declared_indexes.duplicates_sql(dialect, table, item),
+            f"Cannot make {item.name} unique: some values already appear more than once",
+        )
+
+    for item in wanted:
+        physical = item.physical(table)
+        if physical in present:
+            continue
+        previous = next(
+            (
+                n
+                for n in stale
+                if declared_indexes.logical_name(n, table) == item.name and n not in wanted_names
+            ),
+            None,
+        )
+        create = declared_indexes.create_sql(dialect, table, item)
+        drop = drop_index_sql(dialect, table, physical)
+        check, message = duplicates(item)
+        if previous is not None:
+            old = stale.pop(previous)
+            changes.append(
+                Change(
+                    "replace_index",
+                    None,
+                    f"Rebuild {_describe_declared(item)}; the old index is dropped first",
+                    [
+                        (
+                            drop_index_sql(dialect, table, previous),
+                            recreate_sql(dialect, table, old),
+                        ),
+                        (create, drop),
+                    ],
+                    index=item.name,
+                    precheck=check,
+                    precheck_message=message,
+                )
+            )
+        else:
+            changes.append(
+                Change(
+                    "add_index",
+                    None,
+                    f"Add {_describe_declared(item)}",
+                    [(create, drop)],
+                    index=item.name,
+                    precheck=check,
+                    precheck_message=message,
+                )
+            )
+    for name, actual in stale.items():
+        if name in wanted_names:
+            continue
+        logical = declared_indexes.logical_name(name, table) or name
+        if logical in by_logical:
+            continue
+        changes.append(
+            Change(
+                "drop_index",
+                None,
+                f"Drop index {logical}, which the definition no longer declares",
+                [(drop_index_sql(dialect, table, name), recreate_sql(dialect, table, actual))],
+                index=logical,
+            )
+        )
+    return changes
 
 
 def plan(dialect: str, spec: ResourceSpec, seen: Observed, migration_id: str) -> list[Change]:
@@ -194,10 +328,22 @@ def plan(dialect: str, spec: ResourceSpec, seen: Observed, migration_id: str) ->
             steps.append((add_column_sql(dialect, table, spec.field_map[spec.owner_field]), None))
         changes.append(Change("create_table", None, f"Create table {table}", steps))
         changes += [index_change(name, unique) for name, unique in wanted_index.items()]
+        changes += declared_changes(dialect, spec, seen)
         return changes
 
     actual = {column["name"]: column for column in seen.columns}
     ignored = {spec.primary_key, *(TIMESTAMP_FIELDS if spec.timestamps else ())}
+
+    def riding(column: str) -> list[dict[str, Any]]:
+        """Indexes that cover *column* besides its own: a rename would leave them indexing the parked copy, so they step aside."""
+        return [
+            index
+            for index in seen.indexes
+            if column in (index.get("columns") or [])
+            and not index.get("auto")
+            and index["name"] != index_name(table, column)
+        ]
+
     for name, column in spec.field_map.items():
         if name == spec.primary_key:
             continue
@@ -232,6 +378,9 @@ def plan(dialect: str, spec: ResourceSpec, seen: Observed, migration_id: str) ->
                     create_index_sql(dialect, table, name, unique=seen.index_names[indexed]),
                 )
             )
+        stepped_aside = [(i, recreate_sql(dialect, table, i)) for i in riding(name)]
+        for index, rebuild in stepped_aside:
+            steps.append((drop_index_sql(dialect, table, index["name"]), rebuild))
         steps += [
             (
                 rename_column_sql(dialect, table, name, parked),
@@ -256,6 +405,9 @@ def plan(dialect: str, spec: ResourceSpec, seen: Observed, migration_id: str) ->
                     drop_index_sql(dialect, table, indexed),
                 )
             )
+        for index, rebuild in stepped_aside:
+            if rebuild:
+                steps.append((rebuild, drop_index_sql(dialect, table, index["name"])))
         changes.append(
             Change(
                 "retype_column",
@@ -277,6 +429,10 @@ def plan(dialect: str, spec: ResourceSpec, seen: Observed, migration_id: str) ->
                     drop_index_sql(dialect, table, indexed),
                     create_index_sql(dialect, table, name, unique=seen.index_names[indexed]),
                 )
+            )
+        for index in riding(name):
+            steps.append(
+                (drop_index_sql(dialect, table, index["name"]), recreate_sql(dialect, table, index))
             )
         steps.append(
             (
@@ -300,6 +456,7 @@ def plan(dialect: str, spec: ResourceSpec, seen: Observed, migration_id: str) ->
         if name not in actual and name not in spec.field_map:
             continue
         changes.append(index_change(name, unique))
+    changes += declared_changes(dialect, spec, seen)
     return changes
 
 
@@ -536,6 +693,89 @@ def definition_from_table(table: dict[str, Any], dialect: str) -> tuple[dict[str
 # ── reading ──────────────────────────────────────────────────────────────────
 
 
+def describe_indexes(dialect: str, spec: ResourceSpec, seen: Observed) -> list[dict[str, Any]]:
+    """Every index of the table and every one the definition wants, with who owns it and whether it is as declared.
+
+    ``origin``: ``system`` (a key or a UNIQUE constraint), ``field`` (a field marked indexed or unique), ``declared`` (an index the
+    definition lists) or ``external`` (made by hand: Pawabase leaves it alone). ``state``: ``ok``, ``missing`` (declared, not built),
+    ``stale`` (an older version of a declared index, or one the definition dropped: applying replaces or removes it).
+    """
+    table = spec.table
+    wanted = declared_indexes.clean(
+        spec.indexes, set(spec.field_map), dialect=dialect, strict=False
+    )
+    declared = {item.physical(table): item for item in wanted}
+    by_logical = {item.name: item for item in wanted}
+    field_level = {
+        index_name(table, f["name"]) for f in spec.fields if f.get("indexed") or f.get("unique")
+    }
+    if spec.owner_field:
+        field_level.add(index_name(table, spec.owner_field))
+    out: list[dict[str, Any]] = []
+    for actual in seen.indexes:
+        name = actual["name"]
+        logical = declared_indexes.logical_name(name, table)
+        entry: dict[str, Any] = {
+            "name": name,
+            "physical": name,
+            "columns": actual.get("columns") or [],
+            "desc": actual.get("desc") or [],
+            "unique": bool(actual.get("unique")),
+            "partial": bool(actual.get("partial")),
+            "predicate": actual.get("predicate"),
+            "method": actual.get("method") or "btree",
+            "size": actual.get("size"),
+            "definition": actual.get("definition"),
+            "state": "ok",
+            "droppable": False,
+        }
+        if actual.get("auto"):
+            entry["origin"] = "system"
+        elif name in declared:
+            entry["origin"], entry["name"] = "declared", declared[name].name
+        elif logical is not None:
+            entry["origin"], entry["name"] = "declared", logical
+            entry["state"] = "stale"
+            entry["note"] = (
+                "an older version of this index; applying replaces it"
+                if logical in by_logical
+                else "the definition no longer declares it; applying drops it"
+            )
+        elif name in field_level:
+            entry["origin"] = "field"
+        else:
+            entry["origin"] = "external"
+            entry["droppable"] = True
+        out.append(entry)
+    have = {item["physical"] for item in out}
+    for physical, item in declared.items():
+        if physical not in have:
+            out.append(
+                {
+                    "name": item.name,
+                    "physical": physical,
+                    "columns": item.column_names,
+                    "desc": [c["name"] for c in item.columns if c.get("desc")],
+                    "unique": item.unique,
+                    "partial": bool(item.where),
+                    "predicate": None,
+                    "method": item.method,
+                    "size": None,
+                    "definition": None,
+                    "origin": "declared",
+                    "state": "missing",
+                    "droppable": False,
+                    "note": "declared, not built yet",
+                }
+            )
+    for item in wanted:
+        entry = next((e for e in out if e["origin"] == "declared" and e["name"] == item.name), None)
+        if entry is not None:
+            entry["declared"] = item.view()
+    order = {"declared": 0, "field": 1, "external": 2, "system": 3}
+    return sorted(out, key=lambda e: (order.get(e["origin"], 9), e["name"]))
+
+
 def _summary(changes: list[Change]) -> str:
     text = "; ".join(change.detail.split(";")[0] for change in changes)
     return text if len(text) <= 300 else text[:297] + "…"
@@ -578,6 +818,8 @@ async def status(env: str, source: DataSource, spec: ResourceSpec) -> dict[str, 
         "pending": len(changes),
         "destructive": len([change for change in changes if not change.safe]),
         "retained": seen.parked,
+        "indexes": describe_indexes(source.dialect, spec, seen),
+        "index_capabilities": declared_indexes.CAPABILITIES.get(source.dialect, {}),
         "columns": [
             {"name": c["name"], "type": c["type"]}
             for c in seen.columns
@@ -682,9 +924,23 @@ async def apply(
     if not chosen:
         return None
     if any(not change.safe for change in chosen) and not allow_destructive:
+        only_indexes = all(change.op in INDEX_REVIEW_OPS for change in chosen if not change.safe)
         raise SchemaError(
-            "these changes retire or rewrite existing values and need to be confirmed"
+            "these changes drop or rebuild indexes and need to be confirmed"
+            if only_indexes
+            else "these changes retire or rewrite existing values and need to be confirmed"
         )
+    for change in chosen:
+        if change.precheck:
+            found = await source.fetch(change.precheck)
+            if found:
+                sample = ", ".join(
+                    "(" + ", ".join(str(v) for k, v in row.items() if k != "n") + f") x{row['n']}"
+                    for row in found
+                )
+                raise SchemaError(
+                    f"{change.precheck_message}, for example {sample}. Remove or merge them first."
+                )
 
     ups: list[str] = []
     downs: list[str | None] = []
@@ -783,6 +1039,74 @@ async def roll_back(
     row.related_id = entry.id
     await row.save()
     return entry
+
+
+async def drop_external(
+    env: str,
+    source: DataSource,
+    spec: ResourceSpec,
+    name: str,
+    *,
+    actor: str | None = None,
+    irreversible: bool = False,
+) -> SchemaMigration:
+    """Drop an index somebody made by hand, on the record, with the statement that rebuilds it so a rollback can.
+
+    Only an index Pawabase does not manage is dropped here: a key, a constraint, a field's index and a declared index are changed by
+    editing the definition, so that the definition and the table cannot disagree.
+    """
+    seen = await observe(source, spec)
+    entry = next(
+        (e for e in describe_indexes(source.dialect, spec, seen) if e["physical"] == name), None
+    )
+    if entry is None:
+        raise SchemaError(f"the table has no index {name!r}")
+    if entry["origin"] != "external":
+        raise SchemaError(
+            {
+                "system": "this index backs a key or a unique constraint and cannot be dropped on its own",
+                "field": "this index follows a field marked indexed or unique: change the field instead",
+                "declared": "this index is declared by the definition: remove it from the definition and apply",
+            }.get(entry["origin"], "this index cannot be dropped here")
+        )
+    actual = next(i for i in seen.indexes if i["name"] == name)
+    rebuild = recreate_sql(source.dialect, spec.table, actual)
+    if rebuild is None and not irreversible:
+        raise SchemaError(
+            "this index cannot be rebuilt from what the database reports (a partial or expression index), "
+            "so dropping it could not be rolled back; confirm to drop it anyway"
+        )
+    up = drop_index_sql(source.dialect, spec.table, name)
+    try:
+        await source.execute(up)
+    except Exception as exc:
+        raise SchemaError(f"could not drop {name}: {exc}") from exc
+    after = await observe(source, spec)
+    return await SchemaMigration.create(
+        env=env,
+        resource=spec.name,
+        table_name=spec.table,
+        number=await _next_number(env, spec.name),
+        kind="apply",
+        status="applied",
+        source="studio",
+        summary=f"Drop index {name}",
+        changes=[
+            {
+                "id": f"drop_index:{name}",
+                "op": "drop_index",
+                "column": None,
+                "detail": f"Drop index {name}, made outside Pawabase",
+                "safe": False,
+                "sql": [up],
+                "index": name,
+            }
+        ],
+        up=[up],
+        down=[rebuild] if rebuild else [],
+        columns=snapshot_of(after.columns),
+        actor=actor,
+    )
 
 
 async def purge(source: DataSource, spec: ResourceSpec) -> list[str]:

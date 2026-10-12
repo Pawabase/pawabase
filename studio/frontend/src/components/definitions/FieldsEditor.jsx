@@ -62,7 +62,7 @@ function DefaultInput({ field, onChange }) {
   );
 }
 
-function FieldDetails({ field, onChange, schemas, depth }) {
+function FieldDetails({ field, onChange, schemas, depth, indexable }) {
   const t = field.type || "string";
   return (
     <div className="field-card-body">
@@ -121,6 +121,12 @@ function FieldDetails({ field, onChange, schemas, depth }) {
       <div className="row wrap" style={{ gap: 20 }}>
         <Switch size="sm" checked={field.nullable} onChange={(v) => onChange(setKey(field, "nullable", v))} label="Nullable" />
         <Switch size="sm" checked={field.read_only} onChange={(v) => onChange(setKey(field, "read_only", v))} label="Read only" />
+        {indexable && !["object", "json", "array", "ref"].includes(t) && (
+          <>
+            <Switch size="sm" checked={field.indexed || field.unique} disabled={!!field.unique} onChange={(v) => onChange(setKey(field, "indexed", v))} label="Indexed" />
+            <Switch size="sm" checked={field.unique} onChange={(v) => onChange(setKey(field, "unique", v))} label="Unique" />
+          </>
+        )}
         <Switch size="sm" checked={field.write_only} onChange={(v) => onChange(setKey(field, "write_only", v))} label="Write only" />
       </div>
       {t === "object" && (
@@ -133,7 +139,7 @@ function FieldDetails({ field, onChange, schemas, depth }) {
   );
 }
 
-export function FieldsEditor({ value = [], onChange, schemas = [], depth = 0, addLabel = "Add field", empty }) {
+export function FieldsEditor({ value = [], onChange, schemas = [], depth = 0, addLabel = "Add field", empty, indexable = false }) {
   const [open, setOpen] = useState(null);
   const update = (i, field) => onChange(value.map((f, j) => (j === i ? field : f)));
   const move = (i, by) => {
@@ -181,7 +187,7 @@ export function FieldsEditor({ value = [], onChange, schemas = [], depth = 0, ad
                 <IconButton icon="trash" label="Remove field" onClick={() => { onChange(value.filter((_, j) => j !== i)); setOpen(null); }} />
               </div>
             </div>
-            {isOpen && <FieldDetails field={field} schemas={schemas} depth={depth} onChange={(f) => update(i, f)} />}
+            {isOpen && <FieldDetails field={field} schemas={schemas} depth={depth} indexable={indexable} onChange={(f) => update(i, f)} />}
           </div>
         );
       })}
