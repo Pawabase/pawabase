@@ -167,7 +167,7 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.get("/hosted/{env}/preview/{page}", exclude_from_schema=True)
     async def preview(ctx: HttpContext, env: str, page: str):
-        if page not in hosted.PAGES:
+        if page not in hosted.PREVIEW_PAGES:
             raise HTTPException(status_code=404, detail="no such page")
         config = await config_of(env)
         raw = ctx.query_params.get("b", "")

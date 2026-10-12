@@ -379,3 +379,50 @@ async def test_a_form_is_validated_before_it_is_stored():
         signup_form.clean({"sign_in_with": ["username"]}, strict=True)
     cleaned = signup_form.clean({"sign_in_with": ["email", "phone"]}, strict=True)
     assert cleaned["attributes"]["phone"] == "required"
+
+
+async def test_every_screen_can_be_previewed_and_its_source_read(akz):
+    akz.api.auth = {
+        "branding": {"name": "Acme", "login_button": "Let me in", "forgot_title": "Lost it?"}
+    }
+    for page, expected in (
+        ("login", "Let me in"),
+        ("signup", "Create account"),
+        ("forgot", "Lost it?"),
+        ("reset", "Choose a new password"),
+        ("mfa", "Two-step verification"),
+        ("check-email", "Check your email"),
+        ("signed-in", "all set"),
+        ("error", "not allowed"),
+    ):
+        response = await akz.http.get(f"/auth/v1/hosted/development/preview/{page}")
+        assert response.status_code == 200 and expected in response.text, page
+    assert (
+        await akz.http.get("/auth/v1/hosted/development/mfa")
+    ).status_code == 404  # preview only
+    source = await akz.admin.post(
+        "/admin/v1/envs/development/hosted-source",
+        json={"page": "login", "branding": {"name": "Acme", "primary": "#0f766e"}},
+    )
+    assert source["live"] is True and "#0f766e" in source["html"] and "<form" in source["html"]
+
+
+async def test_custom_css_may_style_but_not_load_or_escape(akz):
+    from pawabase_server.identity import hosted
+
+    assert hosted.clean_branding({"custom_css": ".primary{border-radius:99px}"}) == {
+        "custom_css": ".primary{border-radius:99px}"
+    }
+    for bad in (
+        "@import 'https://evil.test/x.css';",
+        "a{background:url(https://evil.test/x)}",
+        "</style><script>alert(1)</script>",
+        "a{color:red",
+        "a{content:\\22 x}",
+    ):
+        assert hosted.clean_branding({"custom_css": bad}) == {}
+        with pytest.raises(ValueError):
+            hosted.clean_branding({"custom_css": bad}, strict=True)
+    akz.api.auth = {"branding": {"custom_css": ".primary{letter-spacing:.2em}"}}
+    page = (await akz.http.get("/auth/v1/hosted/development/login")).text
+    assert ".primary{letter-spacing:.2em}" in page

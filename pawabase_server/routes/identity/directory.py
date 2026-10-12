@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 from sillo import HttpContext, Router, created, no_content
@@ -10,10 +11,17 @@ from sillo.exceptions import HTTPException
 
 from pawabase_server.core.service import SERVICE_ONLY
 from pawabase_server.db.models import Device, UserApiKey
-from pawabase_server.identity import devices, user_keys
+from pawabase_server.identity import devices, hosted, user_keys
 from pawabase_server.identity.accounts import Accounts, get_user
 from pawabase_server.identity.environment import load_config
 from pawabase_server.routes.identity.auth import signed_in_user
+
+
+class SourceRequest(BaseModel):
+    page: str
+    #: The branding being edited; the environment's saved branding when omitted.
+    branding: dict[str, Any] | None = None
+    form: dict[str, Any] | None = None
 
 
 class KeyCreate(BaseModel):
@@ -99,6 +107,39 @@ def register_admin(r: Router, accounts: Accounts) -> None:
         if user is None:
             raise HTTPException(status_code=404, detail="no such user")
         return user
+
+    @r.post(
+        f"{base}/hosted-source",
+        auth=SERVICE_ONLY,
+        request_model=SourceRequest,
+        tags=["admin"],
+        summary="The HTML a hosted page is served as, for the branding being edited",
+    )
+    async def hosted_source(ctx: HttpContext, env: str, body: SourceRequest):
+        if body.page not in hosted.PREVIEW_PAGES:
+            raise HTTPException(status_code=404, detail="no such page")
+        config = await load_config(accounts, env)
+        branding = hosted.clean_branding(
+            config.branding if body.branding is None else body.branding
+        )
+        document = hosted.render(
+            body.page,
+            env=env,
+            project_name=config.project_name,
+            branding=branding,
+            providers=config.enabled_providers(),
+            signup_enabled=config.signup_enabled,
+            magic_link_enabled=config.magic_link_enabled,
+            query={},
+            nonce="NONCE",
+            base=f"/auth/v1/hosted/{env}",
+            preview=False,
+            password_min=config.password_min_length,
+            password_rules=config.password_rules,
+            form=config.signup_form if body.form is None else body.form,
+            remember_days=config.policy("devices")["remember_days"],
+        )
+        return {"page": body.page, "html": document, "live": body.page in hosted.PAGES}
 
     @r.get(f"{base}/api-keys", auth=SERVICE_ONLY, tags=["admin"], summary="Every user API key")
     async def all_keys(ctx: HttpContext, env: str):

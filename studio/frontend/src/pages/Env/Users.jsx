@@ -7,7 +7,14 @@ import { api, del, envPath, patch, post, put, useApi } from "../../lib/api";
 import Domains from "./auth/Domains";
 import Invitations, { InviteSheet } from "./auth/Invitations";
 import Mfa from "./auth/Mfa";
-import Passwords from "./auth/Passwords";
+import Screens from "./auth/Screens";
+import ApiKeys from "./directory/ApiKeys";
+import Attributes from "./directory/Attributes";
+import Devices from "./directory/Devices";
+import Federation from "./directory/Federation";
+import PasswordPolicy from "./directory/PasswordPolicy";
+import Recovery from "./directory/Recovery";
+import SignIn from "./directory/SignIn";
 import Protection from "./auth/Protection";
 import Restrictions from "./auth/Restrictions";
 import Sessions from "./auth/Sessions";
@@ -15,24 +22,16 @@ import { AUTH, AUTH_DEFAULTS, Avatar, device } from "./auth/shared";
 import Transfer from "./auth/Transfer";
 
 
-const AUTH_PARTS = [
-  ["users", "Users"],
-  ["orgs", "Organizations"],
-  ["invitations", "Invitations"],
-  ["roles", "Roles"],
-  ["providers", "Social providers"],
-  ["oauth", "OAuth servers"],
-  ["passwords", "Passwords"],
-  ["mfa", "Multi-factor"],
-  ["sessions", "Sessions"],
-  ["protection", "Attack protection"],
-  ["restrictions", "Restrictions"],
-  ["domains", "Domains"],
-  ["events", "Sign-in activity"],
-  ["transfer", "Import & export"],
-  ["emails", "Email templates"],
-  ["config", "Configuration"],
+// The secondary sidebar, in the order a person sets an environment's auth up.
+const AUTH_GROUPS = [
+  { items: [["users", "Users"], ["orgs", "Organizations"], ["invitations", "Invitations"], ["roles", "Roles"]] },
+  { title: "Sign-in", items: [["signin", "Sign-in & registration"], ["attributes", "Attributes"], ["providers", "Social providers"], ["federation", "Company sign-in"], ["oauth", "OAuth servers"]] },
+  { title: "Security", items: [["passwords", "Password policy"], ["mfa", "Multi-factor"], ["recovery", "Account recovery"], ["devices", "Devices"], ["sessions", "Sessions"], ["protection", "Attack protection"], ["restrictions", "Restrictions"], ["domains", "Domains"]] },
+  { title: "Developers", items: [["apikeys", "User API keys"]] },
+  { title: "Look & feel", items: [["screens", "Screens"], ["emails", "Email templates"]] },
+  { title: "Records", items: [["events", "Sign-in activity"], ["transfer", "Import & export"], ["config", "Configuration"]] },
 ];
+const AUTH_PARTS = AUTH_GROUPS.flatMap((group) => group.items);
 const AUTH_LABELS = Object.fromEntries(AUTH_PARTS);
 const AUTH_ABOUT = {
   users: "Everyone who has signed up to this environment. Open a person to manage their profile, security and access.",
@@ -41,7 +40,14 @@ const AUTH_ABOUT = {
   roles: "Named bundles of permissions you can give to people.",
   providers: "Let people sign in with an account they already have. Choose a provider to set it up.",
   oauth: "Your own OAuth or OpenID Connect servers, for an identity provider that is not on the list.",
-  passwords: "How strong passwords must be, and signing in without one.",
+  signin: "How people register and which identifiers they sign in with.",
+  attributes: "The details a person has: which sign-up asks for, which they may change, and which ride in their token.",
+  federation: "Let a company's people sign in with their own identity provider: OpenID Connect or SAML 2.0.",
+  passwords: "Strength, reuse, expiry and breach checks.",
+  recovery: "How someone gets back into an account they cannot sign in to.",
+  devices: "Which browsers and apps people sign in from, and which are trusted.",
+  apikeys: "Keys people create for themselves to call the API as themselves.",
+  screens: "Every sign-in screen your people see: preview it, read its code, and change how it looks and what it says.",
   mfa: "A second step at sign-in, and who has set it up.",
   sessions: "Everyone who is signed in right now, and how long a sign-in lasts.",
   protection: "Slow down guessing: lock accounts after repeated failures, and see who is locked.",
@@ -58,7 +64,10 @@ export default function Users({ env }) {
   const base = `/envs/${env}`;
   const subnav = {
     title: "Users & auth",
-    groups: [{ items: [...AUTH_PARTS.map(([key, label]) => ({ key, label })), { key: "policies", label: "Policies", href: envHref(env, "policies"), external: true }, { key: "directory", label: "Directory", href: envHref(env, "directory"), external: true }] }],
+    groups: [
+      ...AUTH_GROUPS.map((group) => ({ title: group.title, items: group.items.map(([key, label]) => ({ key, label })) })),
+      { items: [{ key: "policies", label: "Policies", href: envHref(env, "policies"), external: true }] },
+    ],
     active: tab,
     onSelect: setTab,
   };
@@ -71,7 +80,14 @@ export default function Users({ env }) {
       {tab === "roles" && <Roles base={base} />}
       {tab === "providers" && <Providers env={env} kind="social" />}
       {tab === "oauth" && <Providers env={env} kind="custom" />}
-      {tab === "passwords" && <Passwords env={env} />}
+      {tab === "signin" && <SignIn env={env} />}
+      {tab === "attributes" && <Attributes env={env} />}
+      {tab === "federation" && <Federation env={env} />}
+      {tab === "passwords" && <PasswordPolicy env={env} />}
+      {tab === "recovery" && <Recovery env={env} />}
+      {tab === "devices" && <Devices env={env} base={base} />}
+      {tab === "apikeys" && <ApiKeys env={env} base={base} />}
+      {tab === "screens" && <Screens env={env} base={base} />}
       {tab === "mfa" && <Mfa env={env} base={base} />}
       {tab === "sessions" && <Sessions env={env} base={base} />}
       {tab === "protection" && <Protection env={env} base={base} />}

@@ -40,6 +40,13 @@ DEFAULTS: dict[str, Any] = {
     "tagline": "",
     "hero_url": "",
     "login_title": "Welcome back",
+    "login_button": "Sign in",
+    "signup_button": "Create account",
+    "forgot_title": "Reset your password",
+    "forgot_subtitle": "Enter your email address and we'll send you a link to choose a new password.",
+    "reset_title": "Choose a new password",
+    "reset_subtitle": "Pick something you haven't used before.",
+    "custom_css": "",
     "login_subtitle": "",
     "signup_title": "Create your account",
     "signup_subtitle": "",
@@ -53,6 +60,13 @@ LIMITS = {
     "name": 80,
     "tagline": 140,
     "login_title": 80,
+    "login_button": 40,
+    "signup_button": 40,
+    "forgot_title": 80,
+    "forgot_subtitle": 200,
+    "reset_title": 80,
+    "reset_subtitle": 200,
+    "custom_css": 8000,
     "login_subtitle": 200,
     "signup_title": 80,
     "signup_subtitle": 200,
@@ -159,6 +173,14 @@ def clean_branding(raw: Any, *, strict: bool = False) -> dict[str, Any]:
                 problems.append("layout must be split or center")
         elif key == "signup_fields":
             out[key] = clean_fields(value, problems)
+        elif key == "custom_css":
+            css = clean_css(value) if isinstance(value, str) else None
+            if css is None:
+                problems.append(
+                    "custom_css must be plain CSS up to 8000 characters, without @import, url(), escapes or unbalanced braces"
+                )
+            else:
+                out[key] = css
         elif key in URLS:
             if isinstance(value, str) and len(value) <= LIMITS[key] and _safe_url(value):
                 out[key] = value
@@ -191,7 +213,24 @@ def validate_signup(
     return collected.metadata, collected.name, problems
 
 
+#: Pages served live, and the extra states Studio previews (and shows the source of) so every screen can be designed.
 PAGES = ("login", "signup", "forgot", "reset")
+PREVIEW_PAGES = (*PAGES, "mfa", "check-email", "signed-in", "error")
+
+CSS_FORBIDDEN = re.compile(
+    r"@import|@charset|url\s*\(|expression\s*\(|behavior\s*:|-moz-binding|javascript:|</?style|<!--|\\",
+    re.I,
+)
+
+
+def clean_css(value: str) -> str | None:
+    """Custom CSS for the hosted pages, or ``None`` when it could do more than style: no imports, no ``url()``, no escapes."""
+    if len(value) > LIMITS["custom_css"] or CSS_FORBIDDEN.search(value):
+        return None
+    if value.count("{") != value.count("}"):
+        return None
+    return value
+
 
 SOCIAL_ICONS = {
     "google": '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.5-.2-2.3H12v4.4h6.5a5.6 5.6 0 0 1-2.4 3.7v3h3.9c2.3-2.1 3.5-5.2 3.5-8.8z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 7.9-2.9l-3.9-3c-1.1.7-2.5 1.2-4 1.2-3.1 0-5.7-2.1-6.6-4.9H1.4v3.1A12 12 0 0 0 12 24z"/><path fill="#FBBC05" d="M5.4 14.4a7.2 7.2 0 0 1 0-4.8V6.5H1.4a12 12 0 0 0 0 11z"/><path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.4 6.5l4 3.1C6.3 6.9 8.9 4.8 12 4.8z"/></svg>',
@@ -344,15 +383,39 @@ def render(
     title = {
         "login": b["login_title"],
         "signup": b["signup_title"],
-        "forgot": "Reset your password",
-        "reset": "Choose a new password",
+        "forgot": b["forgot_title"],
+        "reset": b["reset_title"],
+        "mfa": "Two-step verification",
     }.get(page, "")
     subtitle = {
         "login": b["login_subtitle"],
         "signup": b["signup_subtitle"],
-        "forgot": "Enter your email address and we'll send you a link to choose a new password.",
-        "reset": "Pick something you haven't used before.",
+        "forgot": b["forgot_subtitle"],
+        "reset": b["reset_subtitle"],
+        "mfa": "Enter the 6-digit code from your authenticator app, or a recovery code.",
     }.get(page, "")
+    states = {
+        "check-email": (
+            "Check your email",
+            "We sent you a link. Open it on this device to continue.",
+            "Back to sign in",
+            f"{base}/login",
+        ),
+        "signed-in": (
+            "You're all set",
+            "You can close this window and return to the application.",
+            "",
+            "",
+        ),
+        "error": (
+            "This sign-in link is not allowed",
+            "The app that sent you here is not on this project's list of allowed addresses.",
+            "",
+            "",
+        ),
+    }
+    if notice is None and page in states:
+        notice = states[page]
     if notice:
         title, subtitle = notice[0], notice[1]
 
@@ -387,7 +450,9 @@ def render(
             + _password("password", "Password", "current-password", rules=None)
             + '<div class="row"><label class="check quiet"><input type="checkbox" name="remember" checked><span>Remember me</span></label>'
             + f'<a href="{base}/forgot{suffix}">Forgot password?</a></div>'
-            + '<button class="primary" type="submit"><span>Sign in</span></button>'
+            + '<button class="primary" type="submit"><span>'
+            + _e(b["login_button"])
+            + "</span></button>"
         )
         links = (
             f'<span>New here? <a href="{base}/signup{suffix}">Create an account</a></span>'
@@ -413,7 +478,9 @@ def render(
             rules=password_rules_list(password_min, password_rules),
         )
         terms = _legal_checkbox(b)
-        submit = '<button class="primary" type="submit"><span>Create account</span></button>'
+        submit = (
+            f'<button class="primary" type="submit"><span>{_e(b["signup_button"])}</span></button>'
+        )
         if two and rest:
             steps = 2
             body = (
@@ -441,6 +508,17 @@ def render(
                 + submit
             )
         links = f'<span>Already have an account? <a href="{base}/login{suffix}">Sign in</a></span>'
+    elif page == "mfa":
+        body = (
+            '<div class="fld"><label class="lab" for="code">Verification code</label><input id="code" name="code" class="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" required autofocus></div>'
+            + (
+                f'<div class="fld"><label class="check"><input type="checkbox" name="remember_device"><span>Don’t ask again on this device for {int(remember_days or 30)} days</span></label></div>'
+                if remember_days or preview
+                else ""
+            )
+            + '<button class="primary" type="submit"><span>Verify</span></button>'
+        )
+        links = f'<a href="{base}/login">Back to sign in</a>'
     elif page == "forgot":
         body = (
             '<div class="fld"><label class="lab" for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required autofocus></div>'
@@ -502,6 +580,7 @@ def render(
         else ""
     )
     badge = '<div class="preview">Preview</div>' if preview else ""
+    custom_css = b["custom_css"]
     sub = f'<p class="sub">{_e(subtitle)}</p>' if subtitle else ""
     progress = (
         '<div class="progress" aria-hidden="true"><i class="on"></i><i></i></div>'
@@ -664,6 +743,7 @@ button{{font:inherit;cursor:pointer}}
 @media (max-width:420px){{.pair,.rules{{grid-template-columns:1fr}}}}
 @media (prefers-reduced-motion:reduce){{*{{animation:none!important;transition:none!important}}}}
 {preview_css}
+{custom_css}
 </style></head>
 <body>{badge}
 <div class="wrap">
