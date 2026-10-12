@@ -77,19 +77,20 @@ function readTheme() {
 function useTheme() {
   const [theme, setTheme] = useState(readTheme);
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme === "light" ? "light" : "dark");
+    if (theme === "system") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", theme);
     try {
       localStorage.setItem("pawabase.theme", theme);
     } catch {
       /* private mode: the choice lasts for this page only */
     }
   }, [theme]);
-  const dark = theme !== "light";
+  const dark = theme === "dark" || (theme === "system" && window.matchMedia?.("(prefers-color-scheme: dark)").matches);
   return [dark, () => setTheme(dark ? "light" : "dark")];
 }
 
-/** A few real numbers about this environment, always in view. */
-function TopStats({ env }) {
+/** The few numbers worth a glance at the top of Overview: real counts, large. */
+function StatCards({ env, hrefFor }) {
   const analytics = useApi(envPath(env, "/analytics"), { params: { range: "24h" } });
   const resources = useApi(envPath(env, "/resources"));
   const flows = useApi(envPath(env, "/flows"));
@@ -97,15 +98,19 @@ function TopStats({ env }) {
   const count = (state) => (state.data?.data ?? (Array.isArray(state.data) ? state.data : null))?.length;
   const requests = analytics.data?.summary?.requests;
   const items = [
-    ["Requests", requests != null ? Number(requests).toLocaleString() : null, "24h"],
-    ["Collections", count(resources)],
-    ["Flows", count(flows)],
-    ["Keys", count(keys)],
+    ["Requests, 24h", requests != null ? Number(requests).toLocaleString() : null, "observability", "View"],
+    ["Collections", count(resources), "resources", "Open"],
+    ["Flows", count(flows), "flows", "Open"],
+    ["API keys", count(keys), "keys", "Manage"],
   ].filter(([, value]) => value != null);
   return (
-    <div className="top-stats" aria-label="This environment">
-      {items.map(([label, value, note]) => (
-        <span key={label} className="top-stat"><i>{label}{note ? ` · ${note}` : ""}</i><b>{value}</b></span>
+    <div className="stat-cards">
+      {items.map(([label, value, page, action]) => (
+        <div key={label} className="stat-card">
+          <b>{value}</b>
+          <span>{label}</span>
+          <Link href={hrefFor(page)} className="stat-card-link">{action}</Link>
+        </div>
       ))}
     </div>
   );
@@ -383,6 +388,7 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
       <div className={`shell side-${subnav && sidebar === "expanded" ? "hover" : sidebar} ${subnav ? "has-sub" : ""} ${navOpen ? "nav-open" : ""}`}>
        <div className="frame">
         <div className="side-slot">
+        <button type="button" className="side-collapse" onClick={() => setSidebar(sidebar === "expanded" ? "collapsed" : "expanded")} aria-label={sidebar === "expanded" ? "Collapse the sidebar" : "Expand the sidebar"} title={sidebar === "expanded" ? "Collapse" : "Expand"}><Icon name="chevronRight" size={16} style={{ transform: sidebar === "expanded" ? "rotate(180deg)" : "none" }} /></button>
         <aside className="sidebar">
           <Link href="/" className="brand" title="Pawabase Studio"><Logo sub="Studio" /></Link>
           <nav className="nav">
@@ -418,24 +424,24 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
         <div className="main-col">
         <main className="main">
           <div className="topbar">
-            <div className="row" style={{ minWidth: 0 }}>
-              <button type="button" className="icon-btn menu-btn" onClick={() => setNavOpen(true)} aria-label="Open navigation"><Icon name="menu" /></button>
+            <button type="button" className="icon-btn menu-btn" onClick={() => setNavOpen(true)} aria-label="Open navigation"><Icon name="menu" /></button>
+            <span data-tour="search" className="tour-wrap top-search"><CommandSearch /></span>
+            <div className="top-actions">
               <div className="crumbs">
                 <EnvMenu name={name} env={env} envs={envs} section={section} open={envMenu} setOpen={setEnvMenu} onHistory={() => setHistoryOpen(true)} onCreate={() => setNewEnv(true)} />
                 {crumbs.map((c, i) => <span key={i} className="row" style={{ gap: 4 }}><span className="sep">/</span><span className="here">{c}</span></span>)}
               </div>
-            </div>
-            {env && <TopStats env={env} />}
-            <div className="top-actions">
               {env && <Button size="sm" data-tour="history" onClick={() => setHistoryOpen(true)} title="Checkout, create, merge, and review branches"><Icon name="gitBranch" size={15} /> History</Button>}
               <StatusLights />
-              <span data-tour="search" className="tour-wrap"><CommandSearch /></span>
               <button type="button" data-tour="theme" className="icon-btn" onClick={toggleTheme} aria-label={dark ? "Switch to light" : "Switch to dark"}>
                 <Icon name={dark ? "sun" : "moon"} />
               </button>
             </div>
           </div>
-          <div className={`content ${full ? "full" : ""}`}>{children}</div>
+          <div className={`content ${full ? "full" : ""}`}>
+            {env && section === "overview" && <StatCards env={env} hrefFor={(page) => envHref(env, page)} />}
+            {children}
+          </div>
         </main>
         <Console env={env} />
         </div>
