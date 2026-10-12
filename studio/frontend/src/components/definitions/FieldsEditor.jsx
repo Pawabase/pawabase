@@ -2,7 +2,7 @@
 // expand into their constraints. Keys the editor does not know about are
 // carried through untouched.
 import { useState } from "react";
-import { Field, IconButton, Segmented, Switch, TagInput } from "../ui";
+import { Field, IconButton, JsonInput, Segmented, Switch, TagInput } from "../ui";
 import { Icon } from "../icons";
 import { RefSelect } from "./refs";
 
@@ -51,7 +51,9 @@ function DefaultInput({ field, onChange }) {
       />
     );
   }
-  if (["json", "array", "object", "ref"].includes(t)) return <span className="hint">Set defaults for this type in JSON view.</span>;
+  if (["json", "array", "object", "ref"].includes(t)) {
+    return <JsonInput value={has ? field.default : undefined} rows={3} placeholder="No default" onChange={(v) => onChange(v === undefined || v === null ? setKey(field, "default") : { ...field, default: v })} />;
+  }
   return (
     <input
       type={isNum(t) ? "number" : "text"}

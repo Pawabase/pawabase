@@ -1,6 +1,6 @@
 // One form per definition kind. Each receives the body being edited, a
 // `patch(changes)` to merge into it, and the project's references. The body
-// is exactly what the API stores, so the JSON tab and the form always agree.
+// is exactly what the API stores.
 import { useState } from "react";
 import { Field, JsonInput, KeyValue, Section, Segmented, Switch, TagInput, IconButton } from "../ui";
 import { Icon } from "../icons";

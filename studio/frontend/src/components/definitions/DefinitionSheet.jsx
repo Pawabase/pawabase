@@ -1,9 +1,9 @@
-// The create / edit panel for every definition kind: a form first, the raw
-// JSON one tab away for anyone who wants it, and kind-specific actions.
+// The create / edit panel for every definition kind: the form, any extra tabs
+// a kind adds (records, schema, history), and kind-specific actions.
 import { useState } from "react";
 import { SECTION_TONES } from "../Layout";
 import { Icon } from "../icons";
-import { Button, JsonInput, Section, Sheet, useAction } from "../ui";
+import { Button, Sheet, useAction } from "../ui";
 import { KINDS } from "../../lib/kinds";
 import { FORMS, problem } from "./forms";
 import { useRefs } from "./refs";
@@ -23,17 +23,12 @@ export function DefinitionSheet({ kind, env, editing, onClose, onSave, onDelete,
   const [formKey, setFormKey] = useState(0);
   const [run, busy] = useAction();
   const patch = (changes) => setBody((b) => ({ ...b, ...changes }));
-  const issue = body ? problem(kind, body) : "Fix the JSON first.";
+  const issue = problem(kind, body);
 
   const tabs = [
     { value: "form", label: "Configure" },
     ...Object.entries(extraTabs).map(([value, t]) => ({ value, label: t.label })),
-    { value: "json", label: "JSON" },
   ];
-  const switchTab = (next) => {
-    if (tab === "json") setFormKey((k) => k + 1); // forms rebuild from edited JSON
-    setTab(next);
-  };
   const save = async () => {
     const result = await run(() => onSave(body), "Saved");
     if (result) onClose(result);
@@ -51,7 +46,7 @@ export function DefinitionSheet({ kind, env, editing, onClose, onSave, onDelete,
       tone={SECTION_TONES[kind]}
       tabs={tabs}
       tab={tab}
-      onTab={switchTab}
+      onTab={setTab}
       onClose={() => onClose(undefined)}
       footer={
         <>
@@ -66,7 +61,7 @@ export function DefinitionSheet({ kind, env, editing, onClose, onSave, onDelete,
         </>
       }
     >
-      {tab === "form" && body && (
+      {tab === "form" && (
         <>
           {editing.isNew && meta.template && (
             <div className="alert info row" style={{ justifyContent: "space-between" }}>
@@ -76,12 +71,6 @@ export function DefinitionSheet({ kind, env, editing, onClose, onSave, onDelete,
           )}
           <Form key={formKey} body={body} patch={patch} refs={refs} isNew={editing.isNew} env={env} />
         </>
-      )}
-      {tab === "form" && !body && <div className="alert error">The JSON has an error. Fix it on the JSON tab.</div>}
-      {tab === "json" && (
-        <Section title="Definition JSON" description="Exactly what is stored. Changes here show up in the form.">
-          <JsonInput value={body} onChange={setBody} rows={26} />
-        </Section>
       )}
       {extraTabs[tab] && extraTabs[tab].render()}
     </Sheet>
