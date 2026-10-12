@@ -223,7 +223,11 @@ let setup = null;
 function codeField(label, hint) {
   return '<div class="fld"><label class="lab" for="code">' + label + '</label><input id="code" name="code" class="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" required autofocus>' + (hint ? '<small>' + hint + '</small>' : '') + '</div>';
 }
+function clearChrome() {
+  ['.links', '#magic', '.social', '.or'].forEach((q) => document.querySelectorAll(q).forEach((e) => e.remove()));
+}
 function showChallenge(j) {
+  clearChrome();
   mfa = j.mfa_token; setup = null;
   const factors = j.factors || [];
   const emailOnly = factors.includes('email') && !factors.includes('totp');
@@ -241,6 +245,7 @@ function showChallenge(j) {
   if (send) send.addEventListener('click', async () => { try { await post('/mfa/send', { mfa_token: mfa }); say('We emailed you a code.'); } catch (e) { say(e.message, true); } });
 }
 function showSetup(j) {
+  clearChrome();
   mfa = null;
   const methods = j.methods || ['totp'];
   const token = j.mfa_token;
