@@ -7,7 +7,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from pawabase_server.identity import hosted
+from pawabase_server.identity import hosted, signup_form
 
 APP = "https://app.example.com"
 
@@ -221,7 +221,6 @@ async def test_signup_asks_the_configured_questions_and_keeps_the_answers(akz):
     ada = next(u for u in users["data"] if u["email"] == "ada@example.com")
     assert ada["name"] == "Ada Lovelace"
     assert ada["user_metadata"] == {
-        "name": "Ada Lovelace",
         "company": "Acme",
         "team_size": "6-20",
         "updates": True,
@@ -268,3 +267,115 @@ def test_signup_fields_are_validated_when_branding_is_saved():
             strict=True,
         )
     assert "Bad Key" in str(problems.value) and "needs at least one option" in str(problems.value)
+
+
+FORM = {
+    "sign_in_with": ["email", "username", "phone"],
+    "attributes": {
+        "given_name": "required",
+        "family_name": "required",
+        "birthdate": "optional",
+        "country": "optional",
+    },
+    "custom": [
+        {
+            "key": "seats",
+            "label": "Seats",
+            "type": "number",
+            "min": 1,
+            "max": 500,
+            "required": True,
+        },
+        {"key": "site", "label": "Site", "type": "url"},
+    ],
+}
+
+
+async def test_a_cognito_style_form_picks_attributes_identifiers_and_rules(akz):
+    akz.api.auth = {
+        "site_url": APP,
+        "signup_form": FORM,
+        "password_rules": {"upper": True, "digit": True},
+    }
+    page = (await akz.http.get("/auth/v1/hosted/development/signup")).text
+    for expected in (
+        "First name",
+        "Last name",
+        "Seats",
+        "Date of birth",
+        "Username",
+        "Phone number",
+        "An uppercase letter",
+        "data-step",
+    ):
+        assert expected in page, expected
+    login = (await akz.http.get("/auth/v1/hosted/development/login")).text
+    assert "Email, username or phone" in login
+
+    async def go(**fields):
+        return await akz.http.post(
+            "/auth/v1/hosted/development/signup",
+            json={
+                "email": "grace@example.com",
+                "password": "Password-1",
+                "redirect_to": APP,
+                "fields": fields,
+            },
+        )
+
+    assert (await go(given_name="Grace")).status_code == 422
+    bad = await go(
+        given_name="Grace",
+        family_name="Hopper",
+        username="grace",
+        phone="+234 801 234 5678",
+        seats="0",
+    )
+    assert bad.status_code == 422 and "Seats must be at least 1" in bad.text
+    weak = await akz.http.post(
+        "/auth/v1/hosted/development/signup",
+        json={
+            "email": "g@example.com",
+            "password": "alllowercase",
+            "redirect_to": APP,
+            "fields": {
+                "given_name": "G",
+                "family_name": "H",
+                "username": "gh1",
+                "phone": "+2348012345678",
+                "seats": "3",
+            },
+        },
+    )
+    assert weak.status_code == 422 and "uppercase" in weak.text
+    ok = await go(
+        given_name="Grace",
+        family_name="Hopper",
+        username="Grace",
+        phone="+234 801 234 5678",
+        seats="12",
+        birthdate="1906-12-09",
+        country="Nigeria",
+        site="https://navy.test",
+    )
+    assert ok.status_code == 200, ok.text
+    users = await akz.admin.get("/admin/v1/envs/development/users")
+    grace = next(u for u in users["data"] if u["email"] == "grace@example.com")
+    assert grace["name"] == "Grace Hopper" and grace["username"] == "grace"
+    assert grace["user_metadata"]["seats"] == 12 and grace["user_metadata"]["country"] == "Nigeria"
+
+    for who in ("grace@example.com", "grace", "+2348012345678"):
+        signed = await akz.http.post(
+            "/auth/v1/hosted/development/signin",
+            json={"email": who, "password": "Password-1", "redirect_to": APP},
+        )
+        assert signed.status_code == 200 and "redirect" in signed.json(), who
+
+
+async def test_a_form_is_validated_before_it_is_stored():
+    with pytest.raises(ValueError):
+        signup_form.clean({"attributes": {"shoe_size": "required"}}, strict=True)
+    with pytest.raises(ValueError):
+        signup_form.clean({"sign_in_with": ["username"]}, strict=True)
+    cleaned = signup_form.clean({"sign_in_with": ["email", "phone"]}, strict=True)
+    assert cleaned["attributes"]["phone"] == "required"

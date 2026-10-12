@@ -22,6 +22,7 @@ from pawabase_server.core.context import PlatformContext
 from pawabase_server.core.ids import is_ulid
 from pawabase_server.core.tokens import derive_env_secret
 from pawabase_server.db.models import AuthUser, Identity, Membership
+from pawabase_server.identity import signup_form
 from pawabase_server.identity.environment import AuthConfig
 
 logger = logging.getLogger("pawabase.accounts")
@@ -46,7 +47,17 @@ def check_password_policy(config: AuthConfig, password: str) -> None:
             if len(password or "") < config.password_min_length
             else []
         )
-    if len(password or "") > 1024:
+    rules = config.password_rules or {}
+    value = password or ""
+    for rule, found, text in (
+        ("upper", re.search(r"[A-Z]", value), "an uppercase letter"),
+        ("lower", re.search(r"[a-z]", value), "a lowercase letter"),
+        ("digit", re.search(r"\d", value), "a number"),
+        ("symbol", re.search(r"[^A-Za-z0-9]", value), "a symbol"),
+    ):
+        if rules.get(rule) and not found:
+            problems.append(f"Password must contain {text}.")
+    if len(value) > 1024:
         problems.append("Password is too long.")
     if problems:
         raise HTTPException(
@@ -57,6 +68,25 @@ def check_password_policy(config: AuthConfig, password: str) -> None:
 
 async def find_by_email(env: str, email: str) -> AuthUser | None:
     return await AuthUser.filter(env=env, email=email.lower(), deleted_at=None).first()
+
+
+async def find_by_identifier(config: AuthConfig, value: str) -> AuthUser | None:
+    """The person a sign-in names: an email, or a username or phone number when the environment allows signing in with those."""
+    value = (value or "").strip()
+    if "@" in value:
+        return await find_by_email(config.env, normalise_email(value))
+    allowed = signup_form.sign_in_with(config.signup_form)
+    if "phone" in allowed and signup_form.PHONE.match(value):
+        found = await AuthUser.filter(
+            env=config.env, phone=signup_form.normalise_phone(value), deleted_at=None
+        ).first()
+        if found is not None:
+            return found
+    if "username" in allowed:
+        return await AuthUser.filter(
+            env=config.env, username=value.lower(), deleted_at=None
+        ).first()
+    return None
 
 
 async def get_user(env: str, user_id: Any) -> AuthUser | None:
@@ -79,6 +109,7 @@ async def create_account(
     email: str,
     password: str | None,
     username: str | None = None,
+    phone: str | None = None,
     name: str = "",
     user_metadata: dict[str, Any] | None = None,
     app_metadata: dict[str, Any] | None = None,
@@ -93,6 +124,10 @@ async def create_account(
         raise HTTPException(status_code=409, detail="an account with this email already exists")
     if username and await AuthUser.filter(env=config.env, username=username.lower()).exists():
         raise HTTPException(status_code=409, detail="that username is taken")
+    if phone and await AuthUser.filter(env=config.env, phone=phone, deleted_at=None).exists():
+        raise HTTPException(
+            status_code=409, detail="an account with this phone number already exists"
+        )
     if max_users and await AuthUser.filter(env=config.env, deleted_at=None).count() >= max_users:
         raise HTTPException(status_code=403, detail="the environment user limit has been reached")
     user = AuthUser(
@@ -100,6 +135,7 @@ async def create_account(
         email=email,
         username=await unique_username(config.env, username, email),
         name=name,
+        phone=phone,
         user_metadata=user_metadata or {},
         app_metadata=app_metadata or {},
         email_verified_at=datetime.now(UTC) if verified else None,

@@ -8,6 +8,7 @@ import Domains from "./auth/Domains";
 import Invitations, { InviteSheet } from "./auth/Invitations";
 import Mfa from "./auth/Mfa";
 import Pages from "./auth/Pages";
+import SignupForm from "./auth/SignupForm";
 import Passwords from "./auth/Passwords";
 import Protection from "./auth/Protection";
 import Restrictions from "./auth/Restrictions";
@@ -29,6 +30,7 @@ const AUTH_PARTS = [
   ["protection", "Attack protection"],
   ["restrictions", "Restrictions"],
   ["domains", "Domains"],
+  ["signup", "Sign-up form"],
   ["pages", "Sign-in pages"],
   ["events", "Sign-in activity"],
   ["transfer", "Import & export"],
@@ -49,6 +51,7 @@ const AUTH_ABOUT = {
   protection: "Slow down guessing: lock accounts after repeated failures, and see who is locked.",
   restrictions: "Who may create an account, and with which email addresses.",
   domains: "Where a browser may be sent after signing in.",
+  signup: "Choose how people sign in and which details sign-up asks for.",
   pages: "Hosted sign-in, sign-up and password-reset pages, in your branding.",
   events: "Every sign-in, refresh and failure, newest first.",
   transfer: "Move people, roles and organizations between environments.",
@@ -80,6 +83,7 @@ export default function Users({ env }) {
       {tab === "protection" && <Protection env={env} base={base} />}
       {tab === "restrictions" && <Restrictions env={env} />}
       {tab === "domains" && <Domains env={env} />}
+      {tab === "signup" && <SignupForm env={env} />}
       {tab === "pages" && <Pages env={env} />}
       {tab === "events" && <Events base={base} />}
       {tab === "transfer" && <Transfer env={env} base={base} />}

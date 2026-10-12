@@ -17,10 +17,18 @@ export default function Passwords({ env }) {
             <Field label="Minimum length" hint="Characters. Passwords over 1,024 characters are always refused.">
               <input type="number" min={6} max={128} value={value.password_min_length} onChange={(e) => set({ password_min_length: Math.min(128, Math.max(6, Number(e.target.value) || 8)) })} style={{ maxWidth: 160 }} />
             </Field>
+            <Field label="Must contain" hint="People see these as a checklist while they type.">
+              <div className="row" style={{ flexWrap: "wrap", gap: 16 }}>
+                {[["upper", "Uppercase letter"], ["lower", "Lowercase letter"], ["digit", "Number"], ["symbol", "Symbol"]].map(([key, label]) => (
+                  <label key={key} className="check"><input type="checkbox" checked={!!(value.password_rules || {})[key]} onChange={(e) => set({ password_rules: { ...(value.password_rules || {}), [key]: e.target.checked } })} /> {label}</label>
+                ))}
+              </div>
+            </Field>
             <div className="rule-list">
               <span className="eyebrow">What people will be told</span>
               <ul>
                 <li>At least {value.password_min_length} characters.</li>
+                {[["upper", "An uppercase letter."], ["lower", "A lowercase letter."], ["digit", "A number."], ["symbol", "A symbol."]].filter(([k]) => (value.password_rules || {})[k]).map(([k, t]) => <li key={k}>{t}</li>)}
                 {strict && <li>Sillo's full password validator: it rejects common and trivially guessable passwords.</li>}
               </ul>
             </div>

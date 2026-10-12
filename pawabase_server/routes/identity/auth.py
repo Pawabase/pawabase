@@ -16,12 +16,13 @@ from pawabase_server.core.principal import Principal
 from pawabase_server.core.ratelimit import rate_limit_middleware
 from pawabase_server.db.models import AuthUser
 from pawabase_server.identity import emails as auth_emails
-from pawabase_server.identity import links, mfa
+from pawabase_server.identity import links, mfa, signup_form
 from pawabase_server.identity.accounts import (
     Accounts,
     check_password_policy,
     create_account,
     find_by_email,
+    find_by_identifier,
     get_user,
     is_locked,
     normalise_email,
@@ -99,8 +100,8 @@ async def authenticate_password(
     """
     if not email or not password:
         raise HTTPException(status_code=400, detail="email and password are required")
-    email = normalise_email(email)
-    user = await find_by_email(config.env, email)
+    email = email.strip().lower()
+    user = await find_by_identifier(config, email)
     refusal = HTTPException(status_code=400, detail="invalid email or password")
     if user is None:
         await log_event(
@@ -204,13 +205,31 @@ def register(r: Router, accounts: Accounts) -> None:
             raise HTTPException(status_code=403, detail="sign-up is disabled")
         if body.redirect_to and not config.redirect_allowed(body.redirect_to):
             raise HTTPException(status_code=400, detail="redirect_to is not an allowed URL")
+        collected = signup_form.collect(
+            config.signup_form,
+            {
+                **body.data,
+                "name": body.name or body.data.get("name"),
+                "username": body.username or body.data.get("username"),
+            },
+            config.branding.get("signup_fields"),
+        )
+        if collected.problems:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "the sign-up form is incomplete",
+                    "problems": collected.problems,
+                },
+            )
         user = await create_account(
             config,
             email=body.email,
             password=body.password,
-            username=body.username,
-            name=body.name,
-            user_metadata=body.data,
+            username=collected.username or body.username,
+            phone=collected.phone,
+            name=collected.name or body.name,
+            user_metadata={**body.data, **collected.metadata},
             max_users=accounts.max_users(config.env),
         )
         await accounts.emit(

@@ -251,9 +251,7 @@ async def _restore_data(
             warnings.append(f"data for {name!r} was skipped: the environment has no such resource")
             continue
         store: ResourceStore = await state.store(name)
-        await schema.apply_safe(
-            environment.name, source, store.spec, actor=None, origin="restore"
-        )
+        await schema.apply_safe(environment.name, source, store.spec, actor=None, origin="restore")
         spec = store.spec
         if replace:
             await source.execute(f"DELETE FROM {quote(source.dialect, spec.table)}")

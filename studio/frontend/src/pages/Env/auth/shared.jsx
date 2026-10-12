@@ -24,6 +24,8 @@ export const AUTH_DEFAULTS = {
   allowed_email_domains: [],
   blocked_email_domains: [],
   max_sessions: 0,
+  signup_form: { sign_in_with: ["email"], attributes: {}, custom: [], steps: "auto" },
+  password_rules: {},
 };
 
 /** The environment's auth settings with a draft on top: change some fields, then save the whole block. */

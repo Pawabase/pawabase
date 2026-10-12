@@ -42,6 +42,10 @@ class AuthConfig:
     max_sessions: int = 0
     #: How the hosted sign-in pages look: name, logo, colours, wording (see ``identity/hosted.py``).
     branding: dict[str, Any] = field(default_factory=dict)
+    #: What sign-up asks and which identifiers sign in (see ``identity/signup_form.py``).
+    signup_form: dict[str, Any] = field(default_factory=dict)
+    #: Character classes a password must contain: ``upper``, ``lower``, ``digit``, ``symbol``.
+    password_rules: dict[str, bool] = field(default_factory=dict)
 
     @classmethod
     def from_api(cls, env: str, payload: dict[str, Any]) -> AuthConfig:

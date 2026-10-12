@@ -19,7 +19,7 @@ from sillo.exceptions import HTTPException
 
 from pawabase_server.core.ratelimit import rate_limit_middleware
 from pawabase_server.identity import emails as auth_emails
-from pawabase_server.identity import hosted, links
+from pawabase_server.identity import hosted, links, signup_form
 from pawabase_server.identity.accounts import (
     Accounts,
     create_account,
@@ -92,7 +92,15 @@ def register(r: Router, accounts: Accounts) -> None:
             out["x-frame-options"] = "DENY"
         return out
 
-    def build(page: str, config: AuthConfig, ctx: HttpContext, *, branding: Any, preview: bool):
+    def build(
+        page: str,
+        config: AuthConfig,
+        ctx: HttpContext,
+        *,
+        branding: Any,
+        preview: bool,
+        form: Any = None,
+    ):
         nonce = secrets.token_urlsafe(16)
         query = {
             k: v
@@ -102,7 +110,7 @@ def register(r: Router, accounts: Accounts) -> None:
         if query.get("redirect_to") and not config.redirect_allowed(query["redirect_to"]):
             return html(
                 hosted.render(
-                    "login",
+                    "notice",
                     env=config.env,
                     project_name=config.project_name,
                     branding=branding,
@@ -112,8 +120,13 @@ def register(r: Router, accounts: Accounts) -> None:
                     query={},
                     nonce=nonce,
                     base=f"/auth/v1/hosted/{config.env}",
-                    preview=True,
-                ).replace("<h1>", "<h1>This sign-in link is not allowed. ", 1),
+                    notice=(
+                        "This sign-in link is not allowed",
+                        "The app that sent you here is not on this project's list of allowed addresses.",
+                        "",
+                        "",
+                    ),
+                ),
                 status_code=400,
                 headers=headers(nonce),
             )
@@ -130,6 +143,8 @@ def register(r: Router, accounts: Accounts) -> None:
             base=f"/auth/v1/hosted/{config.env}",
             preview=preview,
             password_min=config.password_min_length,
+            password_rules=config.password_rules,
+            form=config.signup_form if form is None else form,
         )
         return html(body, headers=headers(nonce, framed=preview))
 
@@ -147,7 +162,20 @@ def register(r: Router, accounts: Accounts) -> None:
             )
         except ValueError:
             decoded = config.branding
-        return build(page, config, ctx, branding=decoded, preview=True)
+        raw_form = ctx.query_params.get("f", "")
+        try:
+            form = (
+                signup_form.clean(
+                    json.loads(
+                        base64.urlsafe_b64decode(raw_form + "=" * (-len(raw_form) % 4)).decode()
+                    )
+                )
+                if raw_form
+                else None
+            )
+        except ValueError:
+            form = None
+        return build(page, config, ctx, branding=decoded, preview=True, form=form)
 
     @r.get("/hosted/{env}/{page}", exclude_from_schema=True)
     async def serve(ctx: HttpContext, env: str, page: str):
@@ -210,17 +238,24 @@ def register(r: Router, accounts: Accounts) -> None:
             raise HTTPException(status_code=403, detail="sign-up is disabled")
         if body.redirect_to and not config.redirect_allowed(body.redirect_to):
             raise HTTPException(status_code=400, detail="redirect_to is not an allowed URL")
-        metadata, asked_name, problems = hosted.validate_signup(
-            config.branding, body.fields, body.accepted_terms
+        collected = signup_form.collect(
+            config.signup_form,
+            {"name": body.name, **body.fields},
+            config.branding.get("signup_fields"),
         )
+        problems = list(collected.problems)
+        if refusal := hosted.terms_problem(config.branding, body.accepted_terms):
+            problems.append(refusal)
         if problems:
             raise HTTPException(status_code=422, detail=" ".join(problems))
         user = await create_account(
             config,
             email=body.email,
             password=body.password,
-            name=body.name or asked_name,
-            user_metadata=metadata or None,
+            username=collected.username,
+            phone=collected.phone,
+            name=collected.name or body.name or "",
+            user_metadata=collected.metadata or None,
             max_users=accounts.max_users(config.env),
         )
         await accounts.emit(
