@@ -1384,3 +1384,7 @@ html, body { background: linear-gradient(135deg, #fde8f1 0%, #ece3f8 42%, #d7d5f
 .shell .nav a.active .icon { color: var(--brand-strong); }
 .shell .nav a.active { background: linear-gradient(90deg, color-mix(in srgb, var(--brand) 16%, transparent), color-mix(in srgb, var(--brand) 4%, transparent)); color: var(--brand-strong); }
 .side-env { display: none; }
+
+/* table heads: bold text on the page, no coloured band */
+.shell th { background: none; color: var(--text); font-weight: 650; font-size: 14px; padding: 12px 18px; border-bottom: 1px solid var(--line-2); border-radius: 0; }
+.shell th:first-child, .shell th:last-child { border-radius: 0; }
