@@ -164,3 +164,107 @@ async def test_the_preview_shows_unsaved_branding(akz):
     )
     page = await akz.http.get("/auth/v1/hosted/development/preview/login", params={"b": raw})
     assert "Draft Co" in page.text and "#0a7d4f" in page.text and "Preview" in page.text
+
+
+async def test_signup_asks_the_configured_questions_and_keeps_the_answers(akz):
+    akz.api.auth = {
+        "site_url": APP,
+        "branding": {
+            "terms_url": "https://acme.test/terms",
+            "signup_fields": [
+                {"key": "name", "label": "Full name", "type": "text", "required": True},
+                {"key": "company", "label": "Company", "type": "text"},
+                {
+                    "key": "team_size",
+                    "label": "Team size",
+                    "type": "select",
+                    "options": ["1-5", "6-20", "21+"],
+                    "required": True,
+                },
+                {"key": "updates", "label": "Send me product news", "type": "checkbox"},
+            ],
+        },
+    }
+    page = (await akz.http.get("/auth/v1/hosted/development/signup")).text
+    for label in ("Full name", "Company", "Team size", "Send me product news", "I agree to the"):
+        assert label in page
+
+    async def go(**extra):
+        body = {
+            "email": "ada@example.com",
+            "password": "correct-horse-1",
+            "redirect_to": APP,
+            "accepted_terms": True,
+            **extra,
+        }
+        return await akz.http.post("/auth/v1/hosted/development/signup", json=body)
+
+    missing = await go(fields={"company": "Acme"})
+    assert missing.status_code == 422 and "Full name is required" in missing.text
+    no_terms = await go(fields={"name": "Ada Lovelace", "team_size": "1-5"}, accepted_terms=False)
+    assert no_terms.status_code == 422 and "accept the terms" in no_terms.text
+    wrong = await go(fields={"name": "Ada", "team_size": "500"})
+    assert wrong.status_code == 422
+
+    created = await go(
+        fields={
+            "name": "Ada Lovelace",
+            "company": "Acme",
+            "team_size": "6-20",
+            "updates": True,
+            "sneaky": "x",
+        }
+    )
+    assert created.status_code == 200, created.text
+    assert "redirect" in created.json()
+    users = await akz.admin.get("/admin/v1/envs/development/users")
+    ada = next(u for u in users["data"] if u["email"] == "ada@example.com")
+    assert ada["name"] == "Ada Lovelace"
+    assert ada["user_metadata"] == {
+        "name": "Ada Lovelace",
+        "company": "Acme",
+        "team_size": "6-20",
+        "updates": True,
+    }
+
+
+async def test_a_recovery_link_opens_the_branded_reset_page_and_sets_the_password(branded):
+    await branded.signup()
+    from pawabase_server.identity import links
+
+    await branded.http.post(
+        "/auth/v1/recover", json={"email": "ada@example.com"}, headers=branded.headers()
+    )
+    token = branded.api.last_token()
+    opened = await branded.http.get("/auth/v1/links/development/recovery", params={"token": token})
+    assert (
+        opened.status_code in (302, 307)
+        and "/hosted/development/reset" in opened.headers["location"]
+    )
+    page = await branded.http.get(opened.headers["location"])
+    assert "Choose a new password" in page.text and "Acme Cloud" in page.text
+    done = await branded.http.post(
+        "/auth/v1/hosted/development/reset", json={"token": token, "password": "a-brand-new-pass-9"}
+    )
+    assert done.status_code == 200 and done.json()["changed"] is True
+    signed = await branded.http.post(
+        "/auth/v1/token",
+        json={"email": "ada@example.com", "password": "a-brand-new-pass-9"},
+        headers=branded.headers(),
+    )
+    assert signed.status_code == 200
+    del links
+
+
+def test_signup_fields_are_validated_when_branding_is_saved():
+    with pytest.raises(ValueError) as problems:
+        hosted.clean_branding(
+            {
+                "signup_fields": [
+                    {"key": "Bad Key", "label": "x"},
+                    {"key": "size", "label": "Size", "type": "select"},
+                ]
+            },
+            strict=True,
+        )
+    assert "Bad Key" in str(problems.value) and "needs at least one option" in str(problems.value)

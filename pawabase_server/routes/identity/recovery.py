@@ -7,6 +7,7 @@ registered.
 
 from __future__ import annotations
 
+import secrets
 from datetime import UTC, datetime
 from typing import Literal
 from urllib.parse import urlencode
@@ -17,7 +18,7 @@ from sillo.exceptions import HTTPException
 
 from pawabase_server.core.ratelimit import rate_limit_middleware
 from pawabase_server.identity import emails as auth_emails
-from pawabase_server.identity import links
+from pawabase_server.identity import hosted, links
 from pawabase_server.identity.accounts import (
     Accounts,
     check_password_policy,
@@ -250,12 +251,13 @@ def register(r: Router, accounts: Accounts) -> None:
         token = ctx.query_params.get("token", "")
         redirect_to = ctx.query_params.get("redirect_to")
         if kind == "recovery":
-            return html(_recovery_page(env, token))
+            # The branded page, with the token carried across.
+            return redirect(f"/auth/v1/hosted/{env}/reset?{urlencode({'token': token})}")
         try:
             result = await complete(accounts, config, kind, token, ctx=ctx)
         except HTTPException as exc:
-            return html(
-                _page("This link cannot be used", str(exc.detail)), status_code=exc.status_code
+            return _notice(
+                config, "This link cannot be used", str(exc.detail), status_code=exc.status_code
             )
         if redirect_to and config.redirect_allowed(redirect_to) and "access_token" in result:
             fragment = urlencode(
@@ -266,35 +268,9 @@ def register(r: Router, accounts: Accounts) -> None:
                 }
             )
             return redirect(f"{redirect_to}#{fragment}")
-        return html(
-            _page("You're all set", "You can close this window and return to the application.")
+        return _notice(
+            config, "You're all set", "You can close this window and return to the application."
         )
-
-
-def _page(title: str, message: str) -> str:
-    import html as escape
-
-    return (
-        "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
-        f"<title>{escape.escape(title)}</title><body style='font-family:system-ui;max-width:32rem;margin:4rem auto;padding:0 1rem'>"
-        f"<h1>{escape.escape(title)}</h1><p>{escape.escape(message)}</p></body>"
-    )
-
-
-def _recovery_page(env: str, token: str) -> str:
-    import html as escape
-    import json
-
-    return (
-        "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'><title>Choose a new password</title>"
-        "<body style='font-family:system-ui;max-width:32rem;margin:4rem auto;padding:0 1rem'>"
-        "<h1>Choose a new password</h1><form id=f><input id=p type=password required minlength=8 autocomplete=new-password "
-        "style='width:100%;padding:.5rem;font-size:1rem'><p><button style='padding:.5rem 1rem'>Save</button></p></form><p id=m></p>"
-        "<script>document.getElementById('f').onsubmit=async e=>{e.preventDefault();"
-        f"const r=await fetch('/auth/v1/links/{escape.escape(env)}/recovery',{{method:'POST',headers:{{'content-type':'application/json'}},"
-        f"body:JSON.stringify({{token:{json.dumps(token)},password:document.getElementById('p').value}})}});"
-        "const b=await r.json();document.getElementById('m').textContent=r.ok?'Your password was changed. You can sign in now.':(b.detail?.problems||[b.detail]).join(' ')}</script></body>"
-    )
 
 
 def register_keyless_recovery(r: Router, accounts: Accounts) -> None:
@@ -305,3 +281,33 @@ def register_keyless_recovery(r: Router, accounts: Accounts) -> None:
             accounts, config, "recovery", body.token, ctx=ctx, password=body.password
         )
         return {"changed": True, "user": result.get("user")}
+
+
+def _notice(config: AuthConfig, title: str, message: str, *, status_code: int = 200):
+    """A branded page that only says something: a link that was used, or one that could not be."""
+    nonce = secrets.token_urlsafe(16)
+    body = hosted.render(
+        "notice",
+        env=config.env,
+        project_name=config.project_name,
+        branding=config.branding,
+        providers=[],
+        signup_enabled=False,
+        magic_link_enabled=False,
+        query={},
+        nonce=nonce,
+        base=f"/auth/v1/hosted/{config.env}",
+        notice=(title, message, "Go to sign in", f"/auth/v1/hosted/{config.env}/login"),
+    )
+    return html(
+        body,
+        status_code=status_code,
+        headers={
+            "content-security-policy": (
+                f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'unsafe-inline'; "
+                "img-src https: data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'"
+            ),
+            "x-frame-options": "DENY",
+            "cache-control": "no-store",
+        },
+    )

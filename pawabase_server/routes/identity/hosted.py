@@ -29,6 +29,7 @@ from pawabase_server.identity.accounts import (
 from pawabase_server.identity.environment import AuthConfig, load_config
 from pawabase_server.identity.sessions import log_event
 from pawabase_server.routes.identity.auth import authenticate_password, verify_second_factor
+from pawabase_server.routes.identity.recovery import complete
 
 SENT = {"sent": True, "message": "If the address has an account, a message is on its way."}
 
@@ -50,6 +51,14 @@ class SignUp(Hosted):
     email: str = Field(max_length=320)
     password: str = Field(max_length=1024)
     name: str | None = Field(default=None, max_length=200)
+    #: Answers to the extra questions the environment asks at sign-up, by key.
+    fields: dict[str, Any] = Field(default_factory=dict)
+    accepted_terms: bool = False
+
+
+class Reset(BaseModel):
+    token: str = Field(min_length=1, max_length=2048)
+    password: str = Field(max_length=1024)
 
 
 class Email(Hosted):
@@ -88,7 +97,7 @@ def register(r: Router, accounts: Accounts) -> None:
         query = {
             k: v
             for k, v in ctx.query_params.items()
-            if k in ("redirect_to", "state", "code_challenge")
+            if k in ("redirect_to", "state", "code_challenge", "token")
         }
         if query.get("redirect_to") and not config.redirect_allowed(query["redirect_to"]):
             return html(
@@ -120,6 +129,7 @@ def register(r: Router, accounts: Accounts) -> None:
             nonce=nonce,
             base=f"/auth/v1/hosted/{config.env}",
             preview=preview,
+            password_min=config.password_min_length,
         )
         return html(body, headers=headers(nonce, framed=preview))
 
@@ -200,11 +210,17 @@ def register(r: Router, accounts: Accounts) -> None:
             raise HTTPException(status_code=403, detail="sign-up is disabled")
         if body.redirect_to and not config.redirect_allowed(body.redirect_to):
             raise HTTPException(status_code=400, detail="redirect_to is not an allowed URL")
+        metadata, asked_name, problems = hosted.validate_signup(
+            config.branding, body.fields, body.accepted_terms
+        )
+        if problems:
+            raise HTTPException(status_code=422, detail=" ".join(problems))
         user = await create_account(
             config,
             email=body.email,
             password=body.password,
-            name=body.name,
+            name=body.name or asked_name,
+            user_metadata=metadata or None,
             max_users=accounts.max_users(config.env),
         )
         await accounts.emit(
@@ -263,3 +279,11 @@ def register(r: Router, accounts: Accounts) -> None:
                 link=links.link(config, "magic", token, body.redirect_to),
             )
         return SENT
+
+    @r.post("/hosted/{env}/reset", request_model=Reset, middleware=limits, exclude_from_schema=True)
+    async def reset(ctx: HttpContext, env: str, body: Reset):
+        config = await config_of(env)
+        result = await complete(
+            accounts, config, "recovery", body.token, ctx=ctx, password=body.password
+        )
+        return {"changed": True, "user": result.get("user")}

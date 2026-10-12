@@ -1419,3 +1419,5 @@ html, body { background: linear-gradient(135deg, #fde8f1 0%, #ece3f8 42%, #d7d5f
 .pages-frame { border: 1px solid var(--line-2); border-radius: 24px; overflow: hidden; background: var(--surface); }
 .pages-frame iframe { display: block; width: 100%; height: 640px; border: 0; }
 @media (max-width: 1100px) { .pages-grid { grid-template-columns: 1fr; } .pages-preview { position: static; } }
+
+.q-row { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 16px; }
