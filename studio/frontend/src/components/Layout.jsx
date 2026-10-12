@@ -471,8 +471,8 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
           </div>
           {env && !classic && <ServiceBar env={env} section={section} />}
           <div className={`content ${full ? "full" : ""}`}>
-            {env && !classic && section === "overview" && <Home env={env} hrefFor={(key) => envHref(env, key)} />}
-            {children}
+            {env && !classic && section === "overview" && <Home env={env} />}
+            {!(env && !classic && section === "overview") && children}
           </div>
         </main>
         <Console env={env} />

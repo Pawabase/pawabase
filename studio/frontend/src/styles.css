@@ -1831,3 +1831,23 @@ html, body { background: var(--canvas); }
 .pill kbd { font: 600 10.5px var(--mono); color: var(--faint); border: 1px solid var(--line-2); border-radius: 999px; padding: 0 7px; }
 .pill .to-right { transform: rotate(-90deg); }
 .learn { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px 22px; padding-top: 4px; }
+
+/* ── Home: a list and an address ──────────────────────────────────────────────────────────────────────────────────── */
+.home3 { max-width: 760px; margin: 28px auto 0; }
+.home3-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+.home3-head h1 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.03em; }
+.home3-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 20px; overflow: hidden; background: var(--surface); }
+.home3-list li + li { border-top: 1px solid var(--line); }
+.home3-list a { display: flex; align-items: center; gap: 12px; padding: 16px 22px; color: var(--text); text-decoration: none; }
+.home3-list a:hover { background: var(--sunken); }
+.home3-list b { font-size: 14.5px; font-weight: 600; }
+.state { font: 550 12px var(--sans); font-style: normal; padding: 3px 11px; border-radius: 999px; background: var(--sunken); color: var(--muted); }
+.state.ok { background: var(--ok-soft); color: var(--ok); }
+.state.warn { background: var(--warn-soft); color: var(--warn); }
+.home3-empty { border: 1px dashed var(--line-2); border-radius: 20px; padding: 56px 24px; text-align: center; }
+.home3-empty p { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+.home3-empty span { color: var(--muted); font-size: 13.5px; }
+.home3-connect { display: flex; align-items: center; gap: 12px; margin-top: 22px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+.home3-connect code { font: 12.5px var(--mono); color: var(--text); }
+.home3-connect button, .home3-connect a { background: none; border: 0; padding: 0; color: var(--brand-strong); font: 550 13px var(--sans); cursor: pointer; text-decoration: none; }
+.home3-connect a { margin-left: auto; }
