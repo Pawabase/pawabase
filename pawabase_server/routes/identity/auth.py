@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -58,6 +61,12 @@ class TokenRequest(BaseModel):
     org: str | None = Field(default=None, max_length=63)
 
 
+class CodeExchange(BaseModel):
+    code: str = Field(min_length=1, max_length=2048)
+    #: The secret the app made the code's challenge from, when the sign-in began with a ``code_challenge``.
+    code_verifier: str | None = Field(default=None, max_length=256)
+
+
 class UserUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=200)
     avatar_url: str | None = Field(default=None, max_length=2048)
@@ -74,6 +83,87 @@ class Logout(BaseModel):
 async def config_for(accounts: Accounts, ctx: HttpContext) -> AuthConfig:
     context = require_context(ctx)
     return await load_config(accounts, context.env)
+
+
+async def authenticate_password(
+    accounts: Accounts,
+    config: AuthConfig,
+    email: str | None,
+    password: str | None,
+    org: str | None,
+    ctx: HttpContext,
+) -> tuple[AuthUser, dict[str, Any] | None]:
+    """Check an email and password, with lockout and logging.
+
+    Returns ``(user, None)`` when the person is who they say, or ``(user, challenge)`` when a second factor is needed first.
+    """
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="email and password are required")
+    email = normalise_email(email)
+    user = await find_by_email(config.env, email)
+    refusal = HTTPException(status_code=400, detail="invalid email or password")
+    if user is None:
+        await log_event(
+            config.env, "sign_in", email=email, success=False, reason="unknown email", ctx=ctx
+        )
+        raise refusal
+    if is_locked(user):
+        await log_event(config.env, "sign_in", user=user, success=False, reason="locked", ctx=ctx)
+        raise HTTPException(status_code=429, detail="too many failed attempts; try again later")
+    if not user.check_password(password):
+        await record_failure(
+            user,
+            *config.lockout(accounts.settings.lockout_threshold, accounts.settings.lockout_minutes),
+        )
+        await log_event(
+            config.env, "sign_in", user=user, success=False, reason="wrong password", ctx=ctx
+        )
+        raise refusal
+    if user.is_disabled:
+        await log_event(config.env, "sign_in", user=user, success=False, reason="disabled", ctx=ctx)
+        raise HTTPException(status_code=403, detail="this account is disabled")
+    if config.require_email_verification and user.email_verified_at is None:
+        raise HTTPException(status_code=403, detail="confirm your email address first")
+    if user.mfa_enabled and config.mfa_enabled:
+        await require_membership(config, user, org)
+        challenge = await links.issue(
+            accounts, config, "mfa", user=user, data={"method": "password", "org": org}
+        )
+        await log_event(config.env, "mfa_challenge", user=user, ctx=ctx)
+        return user, {
+            "mfa_required": True,
+            "mfa_token": challenge,
+            "factors": ["totp", "recovery_code"],
+        }
+    return user, None
+
+
+async def verify_second_factor(
+    accounts: Accounts,
+    config: AuthConfig,
+    mfa_token: str | None,
+    code: str | None,
+    ctx: HttpContext,
+) -> tuple[AuthUser, str, str | None, str]:
+    """Check a second-factor code against a challenge. Returns ``(user, method, org, factor used)``; the challenge is then spent."""
+    if not mfa_token or not code:
+        raise HTTPException(status_code=400, detail="mfa_token and code are required")
+    row = await links.consume(accounts, config, "mfa", mfa_token, peek=True)
+    user = row.user
+    if user is None or user.is_disabled:
+        raise HTTPException(status_code=400, detail="the challenge is no longer valid")
+    used = await mfa.verify(accounts, user, code)
+    if used is None:
+        await record_failure(
+            user,
+            *config.lockout(accounts.settings.lockout_threshold, accounts.settings.lockout_minutes),
+        )
+        await log_event(
+            config.env, "mfa_verify", user=user, success=False, reason="wrong code", ctx=ctx
+        )
+        raise HTTPException(status_code=400, detail="the code is not valid")
+    await links.consume(accounts, config, "mfa", mfa_token)
+    return user, (row.data or {}).get("method", "password"), (row.data or {}).get("org"), used
 
 
 async def signed_in_user(ctx: HttpContext) -> tuple[AuthUser, Principal]:
@@ -165,104 +255,52 @@ def register(r: Router, accounts: Accounts) -> None:
             )
         if grant == "mfa":
             return await _complete_mfa(ctx, config, body)
-        if not body.email or not body.password:
-            raise HTTPException(status_code=400, detail="email and password are required")
-        email = normalise_email(body.email)
-        user = await find_by_email(config.env, email)
-        refusal = HTTPException(status_code=400, detail="invalid email or password")
-        if user is None:
-            await log_event(
-                config.env,
-                "sign_in",
-                email=email,
-                success=False,
-                reason="unknown email",
-                ctx=ctx,
-            )
-            raise refusal
-        if is_locked(user):
-            await log_event(
-                config.env,
-                "sign_in",
-                user=user,
-                success=False,
-                reason="locked",
-                ctx=ctx,
-            )
-            raise HTTPException(status_code=429, detail="too many failed attempts; try again later")
-        if not user.check_password(body.password):
-            await record_failure(
-                user,
-                *config.lockout(
-                    accounts.settings.lockout_threshold, accounts.settings.lockout_minutes
-                ),
-            )
-            await log_event(
-                config.env,
-                "sign_in",
-                user=user,
-                success=False,
-                reason="wrong password",
-                ctx=ctx,
-            )
-            raise refusal
-        if user.is_disabled:
-            await log_event(
-                config.env,
-                "sign_in",
-                user=user,
-                success=False,
-                reason="disabled",
-                ctx=ctx,
-            )
-            raise HTTPException(status_code=403, detail="this account is disabled")
-        if config.require_email_verification and user.email_verified_at is None:
-            raise HTTPException(status_code=403, detail="confirm your email address first")
-        if user.mfa_enabled and config.mfa_enabled:
-            await require_membership(config, user, body.org)
-            challenge = await links.issue(
-                accounts, config, "mfa", user=user, data={"method": "password", "org": body.org}
-            )
-            await log_event(config.env, "mfa_challenge", user=user, ctx=ctx)
-            return {
-                "mfa_required": True,
-                "mfa_token": challenge,
-                "factors": ["totp", "recovery_code"],
-            }
+        user, challenge = await authenticate_password(
+            accounts, config, body.email, body.password, body.org, ctx
+        )
+        if challenge is not None:
+            return challenge
         return await start_session(accounts, config, user, method="password", ctx=ctx, org=body.org)
 
     async def _complete_mfa(ctx: HttpContext, config: AuthConfig, body: TokenRequest):
-        if not body.mfa_token or not body.code:
-            raise HTTPException(status_code=400, detail="mfa_token and code are required")
-        row = await links.consume(accounts, config, "mfa", body.mfa_token, peek=True)
-        user = row.user
-        if user is None or user.is_disabled:
-            raise HTTPException(status_code=400, detail="the challenge is no longer valid")
-        used = await mfa.verify(accounts, user, body.code)
-        if used is None:
-            await record_failure(
-                user,
-                *config.lockout(
-                    accounts.settings.lockout_threshold, accounts.settings.lockout_minutes
-                ),
-            )
-            await log_event(
-                config.env,
-                "mfa_verify",
-                user=user,
-                success=False,
-                reason="wrong code",
-                ctx=ctx,
-            )
-            raise HTTPException(status_code=400, detail="the code is not valid")
-        await links.consume(accounts, config, "mfa", body.mfa_token)
-        method = (row.data or {}).get("method", "password")
-        org = (row.data or {}).get("org") or body.org
+        user, method, org, used = await verify_second_factor(
+            accounts, config, body.mfa_token, body.code, ctx
+        )
         session = await start_session(
-            accounts, config, user, method=method, ctx=ctx, aal="aal2", org=org
+            accounts, config, user, method=method, ctx=ctx, aal="aal2", org=org or body.org
         )
         session["mfa_method"] = used
         return session
+
+    @r.post(
+        "/token/exchange",
+        request_model=CodeExchange,
+        middleware=limits,
+        summary="Exchange the code a hosted sign-in page returned for a session",
+    )
+    async def exchange_code(ctx: HttpContext, body: CodeExchange):
+        config = await config_for(accounts, ctx)
+        row = await links.consume(accounts, config, "code", body.code)
+        data = row.data or {}
+        challenge = data.get("challenge")
+        if challenge:
+            digest = hashlib.sha256((body.code_verifier or "").encode()).digest()
+            if not hmac.compare_digest(
+                base64.urlsafe_b64encode(digest).rstrip(b"=").decode(), challenge
+            ):
+                raise HTTPException(status_code=400, detail="the code verifier does not match")
+        user = row.user
+        if user is None or user.is_disabled:
+            raise HTTPException(status_code=400, detail="the account is not available")
+        return await start_session(
+            accounts,
+            config,
+            user,
+            method=data.get("method", "password"),
+            ctx=ctx,
+            aal=data.get("aal", "aal1"),
+            org=data.get("org"),
+        )
 
     @r.post(
         "/logout",

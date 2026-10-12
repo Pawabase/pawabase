@@ -21,6 +21,7 @@ from pawabase_server.core.crypto import mask
 from pawabase_server.core.records import upsert
 from pawabase_server.db.models import ApiKey, Environment, Secret
 from pawabase_server.environments import blueprints, env_settings
+from pawabase_server.identity import hosted
 from pawabase_server.platform import Platform
 from pawabase_server.routes.common import (
     MANAGE,
@@ -540,6 +541,12 @@ def register(r: Router, platform: Platform) -> None:
         check_infra(updates.get("infra"))
         if updates.get("settings") is not None:
             updates["settings"] = env_settings.validate(updates["settings"])
+        branding = (updates.get("auth") or {}).get("branding")
+        if branding is not None:
+            try:
+                updates["auth"]["branding"] = hosted.clean_branding(branding, strict=True)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
         for section in ("infra", "auth", "settings"):
             if section in updates and updates[section] is not None:
                 merged = {**(getattr(environment, section) or {}), **updates[section]}

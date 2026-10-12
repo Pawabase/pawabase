@@ -27,6 +27,7 @@ LIFETIMES = {
     "mfa": 300,
     "email_change": 24 * 3600,
     "link": 600,
+    "code": 120,
 }
 
 

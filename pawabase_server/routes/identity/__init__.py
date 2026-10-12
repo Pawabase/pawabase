@@ -8,13 +8,14 @@ from pawabase_server.identity.accounts import Accounts
 
 
 def register_routes(app: SilloApp, accounts: Accounts) -> None:
-    from pawabase_server.routes.identity import admin, auth, orgs, recovery, security
+    from pawabase_server.routes.identity import admin, auth, hosted, orgs, recovery, security
 
     public = Router(prefix="/auth/v1")
     auth.register(public, accounts)
     recovery.register(public, accounts)
     recovery.register_keyless_recovery(public, accounts)
     security.register(public, accounts)
+    hosted.register(public, accounts)
     orgs.register(public, accounts)
     app.mount_router(public)
 

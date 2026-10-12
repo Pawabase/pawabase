@@ -1,0 +1,166 @@
+"""The hosted sign-in pages: branding, the redirect flow, and the code exchange."""
+
+import base64
+import hashlib
+import json
+from urllib.parse import parse_qs, urlparse
+
+import pytest
+
+from pawabase_server.identity import hosted
+
+APP = "https://app.example.com"
+
+
+@pytest.fixture
+def branded(akz):
+    akz.api.auth = {
+        "site_url": APP,
+        "branding": {
+            "name": "Acme Cloud",
+            "primary": "#e11d48",
+            "login_title": "Hello again",
+            "radius": 8,
+            "terms_url": "https://acme.test/terms",
+        },
+    }
+    return akz
+
+
+def test_branding_keeps_only_safe_tokens():
+    assert hosted.clean_branding(
+        {
+            "primary": "red",
+            "radius": 99,
+            "font": "comic",
+            "logo_url": "javascript:alert(1)",
+            "name": "Acme",
+        }
+    ) == {"name": "Acme"}
+    with pytest.raises(ValueError) as problems:
+        hosted.clean_branding({"primary": "red", "logo_url": "http://x.test/a.png"}, strict=True)
+    assert "primary" in str(problems.value) and "logo_url" in str(problems.value)
+
+
+async def test_the_page_is_served_without_a_key_and_wears_the_branding(branded):
+    page = await branded.http.get("/auth/v1/hosted/development/login")
+    assert page.status_code == 200
+    assert "Hello again" in page.text and "#e11d48" in page.text and "Acme Cloud" in page.text
+    assert "frame-ancestors 'none'" in page.headers["content-security-policy"]
+    assert (await branded.http.get("/auth/v1/hosted/development/nonsense")).status_code == 404
+    assert (await branded.http.get("/auth/v1/hosted/elsewhere/login")).status_code == 404
+
+
+async def test_markup_in_branding_is_escaped(akz):
+    akz.api.auth = {
+        "branding": {
+            "name": "<script>alert(1)</script>",
+            "login_title": "<img src=x onerror=alert(1)>",
+        }
+    }
+    page = (await akz.http.get("/auth/v1/hosted/development/login")).text
+    assert "<script>alert(1)" not in page and "<img src=x" not in page and "&lt;script&gt;" in page
+
+
+async def test_a_page_will_not_serve_a_redirect_that_is_not_allowed(branded):
+    refused = await branded.http.get(
+        "/auth/v1/hosted/development/login", params={"redirect_to": "https://evil.test/x"}
+    )
+    assert refused.status_code == 400
+
+
+async def test_sign_in_returns_a_code_the_app_exchanges_once(branded):
+    await branded.signup()
+    verifier = "a-long-random-verifier-0123456789"
+    challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    )
+    done = await branded.http.post(
+        "/auth/v1/hosted/development/signin",
+        json={
+            "email": "ada@example.com",
+            "password": "correct-horse-1",
+            "redirect_to": f"{APP}/callback",
+            "state": "xyz",
+            "code_challenge": challenge,
+        },
+    )
+    assert done.status_code == 200, done.text
+    target = urlparse(done.json()["redirect"])
+    assert target.netloc == "app.example.com" and parse_qs(target.query)["state"] == ["xyz"]
+    code = parse_qs(target.query)["code"][0]
+    assert "access_token" not in done.text  # tokens never travel in the URL
+
+    wrong = await branded.http.post(
+        "/auth/v1/token/exchange",
+        json={"code": code, "code_verifier": "not-it"},
+        headers=branded.headers(),
+    )
+    assert wrong.status_code == 400
+    # The wrong verifier spent the code: a thief who has the code but not the verifier gets nothing, and neither does a retry.
+    again = await branded.http.post(
+        "/auth/v1/token/exchange",
+        json={"code": code, "code_verifier": verifier},
+        headers=branded.headers(),
+    )
+    assert again.status_code == 400
+
+
+async def test_a_good_exchange_gives_a_session(branded):
+    await branded.signup()
+    verifier = "another-long-random-verifier-98765"
+    challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    )
+    done = await branded.http.post(
+        "/auth/v1/hosted/development/signin",
+        json={
+            "email": "ada@example.com",
+            "password": "correct-horse-1",
+            "redirect_to": APP,
+            "code_challenge": challenge,
+        },
+    )
+    code = parse_qs(urlparse(done.json()["redirect"]).query)["code"][0]
+    session = await branded.http.post(
+        "/auth/v1/token/exchange",
+        json={"code": code, "code_verifier": verifier},
+        headers=branded.headers(),
+    )
+    assert session.status_code == 200, session.text
+    body = session.json()
+    assert body["access_token"] and body["user"]["email"] == "ada@example.com"
+    replay = await branded.http.post(
+        "/auth/v1/token/exchange",
+        json={"code": code, "code_verifier": verifier},
+        headers=branded.headers(),
+    )
+    assert replay.status_code == 400
+
+
+async def test_wrong_passwords_and_closed_redirects_are_refused(branded):
+    await branded.signup()
+    bad = await branded.http.post(
+        "/auth/v1/hosted/development/signin",
+        json={"email": "ada@example.com", "password": "nope-nope-1", "redirect_to": APP},
+    )
+    assert bad.status_code == 400
+    elsewhere = await branded.http.post(
+        "/auth/v1/hosted/development/signin",
+        json={
+            "email": "ada@example.com",
+            "password": "correct-horse-1",
+            "redirect_to": "https://evil.test",
+        },
+    )
+    assert elsewhere.status_code == 400
+
+
+async def test_the_preview_shows_unsaved_branding(akz):
+    raw = (
+        base64.urlsafe_b64encode(json.dumps({"name": "Draft Co", "primary": "#0a7d4f"}).encode())
+        .decode()
+        .rstrip("=")
+    )
+    page = await akz.http.get("/auth/v1/hosted/development/preview/login", params={"b": raw})
+    assert "Draft Co" in page.text and "#0a7d4f" in page.text and "Preview" in page.text

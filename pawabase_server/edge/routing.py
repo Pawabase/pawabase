@@ -29,6 +29,8 @@ ROUTES: tuple[Upstream, ...] = (
     Upstream("/auth/v1/authorize/", "auth", "none"),
     Upstream("/auth/v1/callback/", "auth", "none"),
     Upstream("/auth/v1/links/", "auth", "none"),
+    # The hosted sign-in pages are browser navigations too.
+    Upstream("/auth/v1/hosted/", "auth", "none"),
     Upstream("/auth/v1/", "auth"),
     Upstream("/rest/", "data"),
     Upstream("/storage/v1/signed/", "storage", "none"),
