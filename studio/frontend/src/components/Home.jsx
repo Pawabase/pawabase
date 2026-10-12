@@ -48,11 +48,6 @@ function Map({ hrefFor, counts }) {
       <svg className="map-edges" viewBox="0 0 1000 400" preserveAspectRatio="none" aria-hidden>
         <path className="map-spine" d="M720 50V380" />
         {EDGES.map((edge) => <path key={edge.join("-")} d={curve(edge)} className={lit(edge) ? "on" : ""} />)}
-        <text x="70" y="22" className="map-cap">APPS</text>
-        <text x="280" y="22" className="map-cap">FRONT DOOR</text>
-        <text x="520" y="22" className="map-cap">DATA</text>
-        <text x="720" y="22" className="map-cap">EVENTS</text>
-        <text x="925" y="22" className="map-cap">REACT</text>
       </svg>
       {NODES.map((node) => {
         const item = node.service ? service(node.service) : null;
@@ -61,8 +56,7 @@ function Map({ hrefFor, counts }) {
           <>
             <span className="map-glyph"><Hair name={item ? item.icon : node.glyph} size={24} /></span>
             <b>{item ? item.label : node.label}</b>
-            <small>{item ? item.pages.map(([, label]) => label).slice(0, 2).join(" · ") : node.note}</small>
-            {count != null && <em>{count}</em>}
+            {count != null && count !== "0" && <em>{count}</em>}
           </>
         );
         const style = { left: `${node.x / 10}%`, top: `${(node.y / 400) * 100}%` };
@@ -120,62 +114,39 @@ export default function Home({ env, hrefFor }) {
   };
   const open = TOPICS.find((item) => item.key === topic);
 
+  const nextStep = steps.find((step) => !step.done);
+  const [panel, setPanel] = useState(null);
+
   return (
     <section className="home2" aria-label="Environment">
       <header className="home2-head">
-        <div>
-          <span className="home2-kicker">Environment</span>
-          <h1>{env}</h1>
-        </div>
-        <div className="home2-endpoint">
-          <span>API endpoint</span>
-          <code>{gatewayUrl || "—"}</code>
-          {gatewayUrl && <button type="button" onClick={() => { copy(gatewayUrl); setCopied(true); setTimeout(() => setCopied(false), 1400); }}>{copied ? "Copied" : "Copy"}</button>}
-        </div>
-        <div className="home2-tools">
-          <button type="button" onClick={() => startTour()}>Tour</button>
-          <button type="button" onClick={openTerminal}>Terminal <kbd>⌘J</kbd></button>
-        </div>
+        <h1>{env}</h1>
+        {gatewayUrl && (
+          <button type="button" className="chip-btn" onClick={() => { copy(gatewayUrl); setCopied(true); setTimeout(() => setCopied(false), 1400); }} title="Copy the API endpoint">
+            <code>{gatewayUrl}</code><span>{copied ? "Copied" : "Copy"}</span>
+          </button>
+        )}
       </header>
 
       <Map hrefFor={hrefFor} counts={counts} />
 
-      <div className="operate">
-        <span className="operate-label">Operate</span>
-        <span className="operate-line" aria-hidden />
-        {["monitoring", "settings"].map((key) => {
-          const item = service(key);
-          return (
-            <Link key={key} href={hrefFor(item.pages[0][0])} className="operate-item">
-              <Hair name={item.icon} size={20} />
-              <span><b>{item.label}</b><small>{item.pages.map(([, label]) => label).join(" · ")}</small></span>
-            </Link>
-          );
-        })}
+      <div className="home2-actions">
+        {nextStep ? (
+          <Link href={hrefFor(nextStep.page)} className="pill dark"><span>Next</span>{nextStep.label}<Hair name="chevron" size={14} className="to-right" /></Link>
+        ) : (
+          <span className="pill plain">Everything is set up</span>
+        )}
+        <button type="button" className="pill" onClick={() => setPanel("changes")}>Recent changes</button>
+        <button type="button" className="pill" onClick={() => setPanel("learn")}>Learn</button>
+        <button type="button" className="pill" onClick={openTerminal}>Terminal <kbd>⌘J</kbd></button>
+        <button type="button" className="pill" onClick={() => startTour()}>Tour</button>
       </div>
 
-      <div className="home2-cols">
-        <section>
-          <h2>Set up <span>{finished} of {steps.length}</span></h2>
-          {!(dismissed && finished === steps.length) ? (
-            <ol className="steps">
-              {steps.map((step, index) => (
-                <li key={step.label} className={step.done ? "done" : ""}>
-                  <Link href={hrefFor(step.page)}>
-                    <span className="steps-n">{step.done ? <Hair name="check" size={13} /> : index + 1}</span>
-                    <span>{step.label}</span>
-                  </Link>
-                </li>
-              ))}
-            </ol>
-          ) : <p className="muted">Everything is set up.</p>}
-          {finished === steps.length && !dismissed && <button type="button" className="quiet" onClick={() => { setDismissed(true); try { localStorage.setItem(DISMISS, "1"); } catch { /* shown again */ } }}>Hide this</button>}
-        </section>
-        <section>
-          <h2>Recent changes <Link href="/audit">All</Link></h2>
-          {events.length === 0 ? <p className="muted">Nothing yet. Changes made in Studio, the API and the CLI appear here.</p> : (
+      {panel === "changes" && (
+        <Sheet title="Recent changes" subtitle="Made in Studio, the API and the CLI" onClose={() => setPanel(null)} footer={<Link href="/audit" className="pill">Open the audit log</Link>}>
+          {events.length === 0 ? <p className="muted">Nothing yet.</p> : (
             <ul className="changes">
-              {events.slice(0, 7).map((entry, index) => (
+              {events.slice(0, 20).map((entry, index) => (
                 <li key={entry.id || index}>
                   <span><b>{entry.action}</b>{entry.target ? <small>{entry.target}</small> : null}</span>
                   <time>{when(entry.created_at)}</time>
@@ -183,22 +154,25 @@ export default function Home({ env, hrefFor }) {
               ))}
             </ul>
           )}
-        </section>
-      </div>
+        </Sheet>
+      )}
 
-      <h2 className="learn-title">Learn the model <span>Six short pages</span></h2>
-      <div className="learn">
-        {TOPICS.map((item) => (
-          <button key={item.key} type="button" className="learn-item" onClick={() => setTopic(item.key)}>
-            <Art name={item.key} />
-            <b>{item.title}</b>
-            <small>{item.line}</small>
-          </button>
-        ))}
-      </div>
+      {panel === "learn" && (
+        <Sheet title="Learn the model" subtitle="Six short pages" onClose={() => setPanel(null)} footer={<button type="button" className="pill" onClick={() => setPanel(null)}>Close</button>}>
+          <div className="learn">
+            {TOPICS.map((item) => (
+              <button key={item.key} type="button" className="learn-item" onClick={() => { setPanel(null); setTopic(item.key); }}>
+                <Art name={item.key} />
+                <b>{item.title}</b>
+                <small>{item.line}</small>
+              </button>
+            ))}
+          </div>
+        </Sheet>
+      )}
 
       {open && (
-        <Sheet title={open.title} subtitle={open.line} onClose={() => setTopic(null)} footer={<button type="button" className="quiet" onClick={() => setTopic(null)}>Close</button>}>
+        <Sheet title={open.title} subtitle={open.line} onClose={() => setTopic(null)} footer={<button type="button" className="pill" onClick={() => setTopic(null)}>Close</button>}>
           <div className="topic">
             <Art name={open.key} className="topic-art" />
             <p>{open.body}</p>
