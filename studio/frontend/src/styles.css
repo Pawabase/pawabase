@@ -1337,3 +1337,50 @@ html, body { background: linear-gradient(135deg, #fde8f1 0%, #ece3f8 42%, #d7d5f
 .shell .cmd-field input:focus { box-shadow: none; border: 0; }
 .stat-card span { max-width: 58%; }
 .shell th { text-transform: capitalize; }
+
+/* edge to edge, with a solid top bar */
+.shell { padding: 0; }
+.shell .frame { border-radius: 0; box-shadow: none; }
+.shell .topbar { position: sticky; top: 0; z-index: 30; background: color-mix(in srgb, var(--brand) 9%, var(--canvas)); backdrop-filter: none; border-bottom: 1px solid color-mix(in srgb, var(--brand) 14%, var(--line)); padding: 14px 32px; }
+.shell .content { padding-top: 24px; }
+
+/* slimmer top bar */
+.shell .topbar { padding: 8px 24px; gap: 10px; box-shadow: 0 1px 0 color-mix(in srgb, var(--brand) 12%, var(--line)), 0 6px 18px rgba(70, 50, 140, 0.05); border-bottom: 0; }
+.top-search .cmd-field, .top-search .cmd.open .cmd-field, .top-search .cmd-field:focus-within { height: 42px; border-radius: 12px; font-size: 14px; padding: 0 14px; }
+.shell .crumb-btn { height: 42px; border-radius: 12px; padding: 0 12px; font-size: 13.5px; }
+.shell .icon-btn { width: 42px; height: 42px; border-radius: 12px; }
+.shell .top-actions .btn.sm { height: 42px; border-radius: 12px; }
+.shell .content { padding-top: 22px; }
+
+/* a more considered sidebar */
+.shell.side-expanded .sidebar {
+  background:
+    radial-gradient(260px 220px at 0% 100%, color-mix(in srgb, var(--brand) 16%, transparent), transparent 70%),
+    linear-gradient(180deg, var(--surface) 0%, color-mix(in srgb, var(--brand) 4%, var(--surface)) 100%);
+  border-right: 1px solid color-mix(in srgb, var(--brand) 10%, var(--line));
+}
+.shell.side-expanded .sidebar .brand { height: 84px; }
+.shell .nav-group + .nav-group { margin-top: 4px; }
+.shell .nav-title { display: flex; align-items: center; gap: 10px; padding: 18px 12px 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .14em; color: var(--faint); }
+.shell .nav-title::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, var(--line-2), transparent); }
+.shell .nav a { height: 46px; padding: 0 10px; gap: 12px; border-radius: 14px; font-size: 14.5px; transition: background .15s, color .15s; }
+.shell .nav a .icon { width: 36px; height: 36px; padding: 8px; border-radius: 11px; background: color-mix(in srgb, var(--brand) 6%, transparent); box-sizing: border-box; color: var(--muted); transition: background .15s, color .15s, box-shadow .15s; stroke-width: 1.7; }
+.shell .nav a:hover { background: color-mix(in srgb, var(--brand) 6%, transparent); }
+.shell .nav a:hover .icon { background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--brand-strong); }
+.shell .nav a.active { background: linear-gradient(90deg, color-mix(in srgb, var(--brand) 14%, transparent), transparent); color: var(--text); font-weight: 600; }
+.shell .nav a.active .icon { background: linear-gradient(135deg, #8b6cf0, #5b44d6); color: #fff; box-shadow: 0 6px 14px rgba(91, 68, 214, 0.35); }
+.shell.side-expanded .nav a.active::before { left: -20px; top: 9px; bottom: 9px; background: linear-gradient(180deg, #8b6cf0, #5b44d6); }
+.side-env { margin: 0 20px 20px; padding: 12px 14px; border-radius: 16px; display: flex; align-items: center; gap: 12px; background: color-mix(in srgb, var(--surface) 80%, transparent); border: 1px solid color-mix(in srgb, var(--brand) 16%, var(--line)); box-shadow: 0 6px 20px rgba(70, 50, 140, 0.07); }
+.side-env i { width: 9px; height: 9px; border-radius: 50%; background: #2e8a5e; box-shadow: 0 0 0 4px rgba(46, 138, 94, 0.16); flex-shrink: 0; }
+.side-env small { display: block; font-size: 11px; color: var(--faint); }
+.side-env b { display: block; font-size: 14px; font-weight: 600; }
+.shell.side-hover .side-env, .shell.side-collapsed .side-env { display: none; }
+
+/* icons carry no background of their own */
+.shell .nav a .icon, .shell .nav a:hover .icon, .shell .nav a.active .icon { background: none; box-shadow: none; padding: 0; width: 23px; height: 23px; border-radius: 0; }
+.shell .nav a { gap: 16px; padding: 0 14px; }
+.shell .nav a .icon { color: var(--muted); }
+.shell .nav a:hover .icon { color: var(--brand-strong); }
+.shell .nav a.active .icon { color: var(--brand-strong); }
+.shell .nav a.active { background: linear-gradient(90deg, color-mix(in srgb, var(--brand) 16%, transparent), color-mix(in srgb, var(--brand) 4%, transparent)); color: var(--brand-strong); }
+.side-env { display: none; }
