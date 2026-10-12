@@ -7,9 +7,18 @@ const DEFAULTS = {
   name: "", logo_url: "", primary: "#6d5bd0", background: "#f3f1fb", card: "#ffffff", text: "#1f1b2e",
   radius: 14, font: "system", theme: "light", login_title: "Welcome back", login_subtitle: "",
   signup_title: "Create your account", signup_subtitle: "", terms_url: "", privacy_url: "", footer: "",
+  layout: "split", tagline: "", hero_url: "", signup_fields: [],
 };
 const FONTS = [["system", "System"], ["rounded", "Rounded"], ["serif", "Serif"], ["mono", "Mono"]];
-const PAGE_OPTIONS = [["login", "Sign in"], ["signup", "Sign up"], ["forgot", "Forgot password"]];
+const PAGE_OPTIONS = [["login", "Sign in"], ["signup", "Sign up"], ["forgot", "Forgot"], ["reset", "New password"]];
+const TYPES = [["text", "Short text"], ["tel", "Phone"], ["textarea", "Long text"], ["select", "Choice"], ["checkbox", "Checkbox"]];
+
+function slug(label, taken) {
+  const base = (label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "field").replace(/^[0-9]/, "f_$&").slice(0, 28);
+  let key = base;
+  for (let n = 2; taken.has(key); n += 1) key = `${base}_${n}`;
+  return key;
+}
 
 function encode(value) {
   const bytes = new TextEncoder().encode(JSON.stringify(value));
@@ -61,8 +70,43 @@ export default function Pages({ env }) {
                 <Field label={`Corner radius: ${branding.radius}px`}><input type="range" min="0" max="28" value={branding.radius} onChange={(e) => set({ radius: Number(e.target.value) })} /></Field>
                 <Field label="Font"><select value={branding.font} onChange={(e) => set({ font: e.target.value })}>{FONTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
               </div>
+              <Field label="Layout" hint="Split puts your tagline and image beside the form. Centered is a single card."><Segmented options={[["split", "Split"], ["center", "Centered"]]} value={branding.layout} onChange={(v) => set({ layout: v })} /></Field>
+              {branding.layout === "split" && (
+                <>
+                  <Field label="Tagline" hint="A sentence beside the form."><input value={branding.tagline} onChange={(e) => set({ tagline: e.target.value })} maxLength={140} placeholder="Ship faster with Acme" /></Field>
+                  <Field label="Background image" optional hint="An https image behind the tagline, tinted with your brand colour."><input value={branding.hero_url} onChange={(e) => set({ hero_url: e.target.value })} placeholder="https://acme.com/hero.jpg" /></Field>
+                </>
+              )}
               <Field label="Theme"><Segmented options={[["light", "Light"], ["dark", "Dark"], ["auto", "Match the device"]]} value={branding.theme} onChange={(v) => set({ theme: v })} /></Field>
             </SettingsPanel>
+
+            <Card
+              title="What sign-up asks"
+              actions={<button type="button" className="btn sm" disabled={(branding.signup_fields || []).length >= 8} onClick={() => {
+                const taken = new Set((branding.signup_fields || []).map((f) => f.key));
+                set({ signup_fields: [...(branding.signup_fields || []), { key: slug("New question", taken), label: "New question", type: "text", required: false }] });
+              }}>Add a question</button>}
+            >
+              <div className="stack">
+                <p className="muted" style={{ margin: 0 }}>Email and password are always asked. Answers are saved on the person as <code>user_metadata</code>. A question keyed <code>name</code> also fills their name.</p>
+                {(branding.signup_fields || []).length === 0 && <p className="hint">Nothing extra: sign-up shows an optional full name.</p>}
+                {(branding.signup_fields || []).map((field, index) => {
+                  const change = (values) => set({ signup_fields: branding.signup_fields.map((f, i) => (i === index ? { ...f, ...values } : f)) });
+                  return (
+                    <div key={field.key} className="q-row">
+                      <div className="row">
+                        <input value={field.label} onChange={(e) => change({ label: e.target.value })} placeholder="Question" aria-label="Question" />
+                        <select value={field.type} onChange={(e) => change({ type: e.target.value })} aria-label="Answer type" style={{ maxWidth: 150 }}>{TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+                        <label className="check" style={{ whiteSpace: "nowrap" }}><input type="checkbox" checked={!!field.required} onChange={(e) => change({ required: e.target.checked })} /> Required</label>
+                        <button type="button" className="btn sm" onClick={() => set({ signup_fields: branding.signup_fields.filter((_, i) => i !== index) })} aria-label="Remove question">Remove</button>
+                      </div>
+                      {field.type === "select" && <input value={(field.options || []).join(", ")} onChange={(e) => change({ options: e.target.value.split(",").map((o) => o.trim()).filter(Boolean) })} placeholder="Choices, separated by commas" aria-label="Choices" />}
+                      <input value={field.help || ""} onChange={(e) => change({ help: e.target.value })} placeholder="Help text (optional)" aria-label="Help text" />
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
 
             <Card title="Words">
               <div className="stack lg">
@@ -86,7 +130,7 @@ export default function Pages({ env }) {
           <div className="pages-preview">
             <div className="row spread" style={{ marginBottom: 10 }}>
               <Segmented options={PAGE_OPTIONS} value={page} onChange={setPage} />
-              <a className="hint" href={`${base}/auth/v1/hosted/${env}/${page}`} target="_blank" rel="noopener noreferrer">Open the real page</a>
+              {page !== "reset" && <a className="hint" href={`${base}/auth/v1/hosted/${env}/${page}`} target="_blank" rel="noopener noreferrer">Open the real page</a>}
             </div>
             <div className="pages-frame">
               <iframe title="Sign-in page preview" src={previewUrl} sandbox="allow-scripts allow-same-origin" />
