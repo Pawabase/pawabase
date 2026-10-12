@@ -11,6 +11,7 @@ import asyncio
 import base64
 import hashlib
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -59,6 +60,10 @@ def _problem(error: DeploymentError) -> HTTPException:
     return HTTPException(
         status_code=error.status, detail={"message": error.message, "problems": error.problems}
     )
+
+
+SOURCE_SUFFIXES = {".py", ".toml", ".txt", ".md", ".json", ".yaml", ".yml", ".cfg", ".ini"}
+MAX_SOURCE_BYTES = 400_000
 
 
 def register(r: Router, platform: Platform) -> None:
@@ -244,6 +249,81 @@ def register(r: Router, platform: Platform) -> None:
         )
         await audit(ctx, "function.branch_removed", env=env, target=branch)
         return {"removed": True}
+
+    # ── source: what is deployed, readable ───────────────────────────────
+
+    def _source_root(env: str, branch: str) -> Path:
+        """Where the code being served sits: the active deployment, else the code mounted for the project."""
+        current = platform.deployments.current(env, branch)
+        return current if current.is_dir() else Path(platform.settings.code_path)
+
+    def _listable(root: Path):
+        for item in sorted(root.rglob("*")):
+            if not item.is_file():
+                continue
+            parts = item.relative_to(root).parts
+            if any(
+                part.startswith(".") or part in ("__pycache__", "node_modules", "packages")
+                for part in parts
+            ):
+                continue
+            if item.suffix.lower() not in SOURCE_SUFFIXES:
+                continue
+            yield item
+
+    @r.get(
+        f"{base}/function-source",
+        auth=MANAGE,
+        tags=["functions"],
+        summary="The files of the code being served",
+    )
+    async def source_tree(ctx: HttpContext, env: str):
+        _manage_scope(ctx)
+        await get_environment(env)
+        branch = ctx.query_params.get("branch") or MAIN
+        root = _source_root(env, branch)
+        files = []
+        if root.is_dir():
+            for item in _listable(root):
+                files.append(
+                    {"path": item.relative_to(root).as_posix(), "size": item.stat().st_size}
+                )
+                if len(files) >= 400:
+                    break
+        stamp = platform.deployments.stamp(env, branch) or {}
+        return {
+            "branch": branch,
+            "deployment_id": stamp.get("id"),
+            "checksum": stamp.get("checksum"),
+            "mounted": not platform.deployments.current(env, branch).is_dir(),
+            "files": files,
+        }
+
+    @r.get(
+        f"{base}/function-source/file", auth=MANAGE, tags=["functions"], summary="One source file"
+    )
+    async def source_file(ctx: HttpContext, env: str):
+        _manage_scope(ctx)
+        await get_environment(env)
+        branch = ctx.query_params.get("branch") or MAIN
+        requested = ctx.query_params.get("path") or ""
+        root = _source_root(env, branch).resolve()
+        target = (root / requested).resolve()
+        if not requested or root not in target.parents or not target.is_file():
+            raise HTTPException(status_code=404, detail="no such file")
+        if (
+            any(part.startswith(".") for part in target.relative_to(root).parts)
+            or target.suffix.lower() not in SOURCE_SUFFIXES
+        ):
+            raise HTTPException(status_code=404, detail="no such file")
+        size = target.stat().st_size
+        if size > MAX_SOURCE_BYTES:
+            raise HTTPException(status_code=413, detail="that file is too large to show")
+        try:
+            text = target.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(status_code=415, detail="that file is not text") from exc
+        return {"path": requested, "size": size, "content": text, "lines": text.count("\n") + 1}
 
     @r.get(f"{base}/function-runs", auth=MANAGE, tags=["functions"])
     async def runs(ctx: HttpContext, env: str):

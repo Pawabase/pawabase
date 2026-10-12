@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import fnmatch
+import inspect
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -163,9 +165,25 @@ def register(r: Router, platform: Platform) -> None:
         await platform.state(env)
         code = platform.ensure_code()
         branch = ctx.query_params.get("branch") or None
+        roots = [
+            platform.deployments.current(env, branch or "main").resolve(),
+            Path(platform.settings.code_path).resolve(),
+        ]
+
+        def where(handler: Any) -> dict[str, Any]:
+            try:
+                file = Path(inspect.getsourcefile(handler) or "").resolve()
+                line = inspect.getsourcelines(handler)[1]
+            except (OSError, TypeError):
+                return {"file": None, "line": None}
+            for root in roots:
+                if root in file.parents:
+                    return {"file": file.relative_to(root).as_posix(), "line": line}
+            return {"file": None, "line": None}
+
         return {
             "data": [
-                {**spec.describe(), "source": _source_of(spec.project)}
+                {**spec.describe(), "source": _source_of(spec.project), **where(spec.handler)}
                 for spec in platform.function_specs(env, branch)
             ],
             "branch": branch or "main",

@@ -1388,3 +1388,28 @@ html, body { background: linear-gradient(135deg, #fde8f1 0%, #ece3f8 42%, #d7d5f
 /* table heads: bold text on the page, no coloured band */
 .shell th { background: none; color: var(--text); font-weight: 650; font-size: 14px; padding: 12px 18px; border-bottom: 1px solid var(--line-2); border-radius: 0; }
 .shell th:first-child, .shell th:last-child { border-radius: 0; }
+
+/* ── function code, runs, logs ─────────────────────────────────────────────────────────────────────────────────────── */
+.codeview { border: 1px solid var(--line-2); border-radius: 14px; background: #14122a; color: #e6e3f7; font: 12.5px/1.65 var(--mono); overflow: auto; max-height: 62vh; padding: 10px 0; }
+.codeview-line { display: flex; white-space: pre; }
+.codeview-line.target { background: rgba(139, 108, 240, 0.22); }
+.codeview-n { flex: none; width: 52px; padding-right: 14px; text-align: right; color: #6d6a8f; user-select: none; }
+.codeview-t { padding-right: 18px; }
+.tok-kw { color: #c4a6ff; }
+.tok-str { color: #a9e0b0; }
+.tok-com { color: #7c7a9c; font-style: italic; }
+.tok-dec { color: #ffd479; }
+.tok-num { color: #ffab8a; }
+.tok-const { color: #8fc7ff; }
+.logview { border: 1px solid var(--line); border-radius: 12px; background: var(--sunken); padding: 10px 12px; font: 12.5px/1.6 var(--mono); max-height: 260px; overflow: auto; }
+.logview code { margin-left: 10px; color: var(--muted); }
+.fn-facts { margin: 0; display: grid; gap: 0; }
+.fn-facts > div { display: flex; gap: 20px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.fn-facts dt { width: 120px; color: var(--muted); flex: none; }
+.fn-facts dd { margin: 0; }
+.source-grid { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 20px; }
+.source-files { display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--line); padding-right: 8px; max-height: 66vh; overflow: auto; }
+.source-files button { text-align: left; background: none; border: 0; padding: 7px 12px; border-radius: 10px; font: 12.5px var(--mono); color: var(--muted); cursor: pointer; word-break: break-all; }
+.source-files button:hover { background: var(--sunken); color: var(--text); }
+.source-files button.on { background: var(--brand-soft); color: var(--brand-strong); }
+.truncate { display: inline-block; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
