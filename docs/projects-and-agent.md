@@ -66,3 +66,18 @@ id so a repeat is answered rather than done twice.
 
 Set `PAWABASE_NAMESPACE` to a value unique to the runtime. It prefixes the platform event channel, realtime fan-out channel, caches,
 rate-limit counters and queue names. Left empty, names are what they always were.
+
+## Pushing instructions
+
+A control plane that can reach the runtime may hand it one signed instruction directly instead of waiting for the agent to poll:
+
+```
+POST /platform/v1/agent/execute      (a management key)
+{"job": {"id": "...", "kind": "project.create", "pool": "...", "project_id": "...", "payload": {...}, "expires_at": ..., "attempt": 1, "sig": "..."}}
+```
+
+The instruction is verified exactly as a polled one (signature under `PAWABASE_AGENT_TOKEN`, `PAWABASE_AGENT_POOL`, the allowlist, expiry) and executed once. `project.create` may carry `storage.bucket`: the project's own bucket on the deployment's S3 server. `project.delete` with `"purge": true` queues the purge of the project's environments and answers retryably until it is empty, then unregisters it.
+
+## Studio confined to one project
+
+`PAWABASE_STUDIO_ACCESS_SECRET` turns on link-only access. A link that carries a `project` claim starts a session that sees that project's environments and nothing else: other environments, the audit log, runtime-wide usage, promote/previews, deleting an environment and writes to an environment's `infra` are refused (`studio/scope.py`). A link without a project is unconfined, as before.
