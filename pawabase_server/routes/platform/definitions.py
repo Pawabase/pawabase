@@ -107,7 +107,8 @@ class ResourceBody(BaseModel):
     timestamps: bool = True
     owner_field: str | None = Field(default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
     #: Declared indexes: ``[{"name", "columns", "unique", "where", "method"}]``.
-    indexes: list[dict[str, Any]] = Field(default_factory=list)
+    #: ``null`` is what a resource saved before indexes existed reports; it means none.
+    indexes: list[dict[str, Any]] | None = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
 
 
@@ -275,7 +276,7 @@ async def validate_resource(platform, env, body: ResourceBody) -> dict[str, Any]
     except Exception:  # an environment whose database cannot be reached still accepts a definition
         dialect = None
     try:
-        declared = declared_indexes.clean(body.indexes, names, dialect=dialect)
+        declared = declared_indexes.clean(body.indexes or [], names, dialect=dialect)
     except SqlError as exc:
         raise _invalid(f"indexes: {exc}") from exc
     data = body.model_dump()
@@ -422,6 +423,13 @@ def secret_free(item: Any) -> dict[str, Any]:
     return dump(item, exclude=("secret_ciphertext",))
 
 
+def resource_view(item: Any) -> dict[str, Any]:
+    """A resource as the API reports it. ``indexes`` is a list even for a resource saved before indexes existed."""
+    out = dump(item)
+    out["indexes"] = out.get("indexes") or []
+    return out
+
+
 KINDS: list[dict[str, Any]] = [
     {"path": "schemas", "model": SchemaDef, "body": SchemaBody, "validate": validate_schema},
     {
@@ -435,6 +443,7 @@ KINDS: list[dict[str, Any]] = [
         "path": "resources",
         "model": Resource,
         "body": ResourceBody,
+        "view": resource_view,
         "validate": validate_resource,
         "on_create": refuse_integer_keys,
     },

@@ -293,3 +293,23 @@ async def test_declared_indexes_are_part_of_the_resource_and_its_blueprint(order
     blueprint = await api.studio.get(f"{ENV}/blueprint")
     stored = next(r for r in blueprint["definitions"]["resources"] if r["name"] == "orders")
     assert [i["name"] for i in stored["indexes"]] == ["by_tenant", "open_only"]
+
+
+async def test_a_resource_saved_before_indexes_existed_can_be_updated_from_what_the_api_returned(
+    orders,
+):
+    from pawabase_server.db.models import Resource
+
+    api = orders
+    await Resource.filter(name="orders").update(
+        indexes=None
+    )  # what the migration left on an old row
+    body = await api.studio.get(ORDERS)
+    assert body["indexes"] == []  # reported as a list, so a client can send it straight back
+    echoed = {
+        k: v
+        for k, v in body.items()
+        if k not in ("id", "environment_id", "created_at", "updated_at")
+    }
+    await api.studio.put(ORDERS, json=echoed)
+    await api.studio.put(ORDERS, json={**echoed, "indexes": None})  # and a null is tolerated too
