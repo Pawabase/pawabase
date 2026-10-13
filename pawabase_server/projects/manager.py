@@ -394,6 +394,28 @@ class ProjectManager:
         return None
 
 
+async def attach_to_default_project(environment: Environment) -> Environment:
+    """File an environment made through the management API under the default project, in the schema it would always have had.
+
+    Studio and the CLI of earlier versions create environments by name; with projects they belong to one, and until a caller says
+    otherwise it is the default project.
+    """
+    if environment.project_id:
+        return environment
+    project = await Project.get_or_none(is_default=True)
+    if project is None:
+        return environment
+    binding = await ProjectDatabaseBinding.get_or_none(project_id=project.id)
+    provider = binding.provider if binding else "postgres"
+    environment.project_id = project.id
+    environment.slug = environment.slug or environment.name
+    environment.schema_name = environment.schema_name or schema_for(
+        True, environment.name, environment.name, provider
+    )
+    await environment.save(update_fields=["project_id", "slug", "schema_name", "updated_at"])
+    return environment
+
+
 async def ensure_default_project(
     settings: Settings, box: SecretBox | None = None
 ) -> dict[str, Any]:

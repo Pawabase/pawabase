@@ -11,6 +11,8 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime, timedelta
 
+from pawabase_server.core.namespace import scoped
+
 _RESERVE_LUA = """
 local amount = tonumber(ARGV[1])
 local granted = amount
@@ -82,9 +84,10 @@ class RequestQuota:
     @property
     def _redis_prefix(self) -> str:
         # The deployment-wide counters keep the names they have always had.
-        return (
+        base = (
             f"pawabase:quota:requests:{self.scope}:" if self.scope else "pawabase:quota:requests:"
         )
+        return scoped(base)
 
     @property
     def enabled(self) -> bool:

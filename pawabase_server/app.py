@@ -33,6 +33,7 @@ from sillo.security import CorsConfig, CORSMiddleware
 
 from pawabase_server.compiler.dispatch import DataPlaneDispatcher
 from pawabase_server.core.auth import UserBackend
+from pawabase_server.core.namespace import scoped
 from pawabase_server.core.service import create_service
 from pawabase_server.db.database import (
     MIGRATIONS_MODULE,
@@ -204,7 +205,7 @@ def create_public(app: SilloApp, settings: Settings | None = None) -> Any:
         from sillo.cache import RedisCache
         from sillo.security import RedisBackend
 
-        cache = RedisCache(url=settings.redis_url, namespace="edge")
+        cache = RedisCache(url=settings.redis_url, namespace=scoped("edge"))
         rate_backend = RedisBackend(url=settings.redis_url)
     record = app.state["record"]
 

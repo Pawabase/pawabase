@@ -22,7 +22,7 @@ from sillo.cache import BaseCache, MemoryCache
 from sillo.cache import base as cache_base
 from tortoise.exceptions import IntegrityError
 
-from pawabase_server.core import envvars
+from pawabase_server.core import envvars, namespace
 from pawabase_server.core.context import PlatformContext
 from pawabase_server.core.crypto import SecretBox, is_reference, reference_name
 from pawabase_server.core.events import EventBus
@@ -78,6 +78,7 @@ class Platform:
         queue: QueueConnection | None = None,
         bus: EventBus | None = None,
     ) -> None:
+        namespace.configure(settings.namespace)
         self.settings = settings
         self._deprecations: set[tuple[str, str]] = set()
         self.box = SecretBox(settings.master_key)
@@ -109,6 +110,7 @@ class Platform:
             install_requirements=settings.function_install_enabled,
             index_url=settings.function_index_url,
             install_timeout=settings.function_install_timeout,
+            binary_only=settings.function_install_binary_only,
         )
         self.app: Any = None
         self.app: Any = None
@@ -120,13 +122,15 @@ class Platform:
         if self.settings.redis_url:
             from sillo.cache import RedisCache
 
-            return RedisCache(url=self.settings.redis_url, namespace="pawabase")
+            return RedisCache(url=self.settings.redis_url, namespace=namespace.scoped("pawabase"))
         return MemoryCache(namespace="pawabase")
 
     def _build_queue(self) -> Any:
         from sillo.work.commands import connection_for
 
-        return connection_for(self.settings.redis_url or None, prefix=self.settings.queue_prefix)
+        return connection_for(
+            self.settings.redis_url or None, prefix=namespace.scoped(self.settings.queue_prefix)
+        )
 
     def bind(self) -> Platform:
         global _current

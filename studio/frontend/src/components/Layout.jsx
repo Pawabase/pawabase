@@ -299,8 +299,12 @@ function SubNav({ subnav, backHref }) {
 }
 
 /** The breadcrumb's project and environment, as one control that opens a wide menu: switch environment, create one, and the runtime-wide pages. */
-function EnvMenu({ name, env, envs, section, open, setOpen, onHistory, onCreate }) {
+function EnvMenu({ name, env, envs, projects = [], section, open, setOpen, onHistory, onCreate }) {
   const ref = useRef(null);
+  const current = (envs || []).find((e) => e.name === env);
+  const project = projects.find((p) => p.id === current?.project_id);
+  const siblings = project ? (envs || []).filter((e) => e.project_id === project.id) : envs || [];
+  const others = projects.filter((p) => p.id !== project?.id);
   useDismiss(open, () => setOpen(false), ref);
   const index = Math.max(0, (envs || []).findIndex((e) => e.name === env));
   const go = (href) => { setOpen(false); router.visit(href); };
@@ -328,9 +332,23 @@ function EnvMenu({ name, env, envs, section, open, setOpen, onHistory, onCreate 
             <section className="envmenu-col">
               <div className="envmenu-head"><span className="eyebrow">Project</span></div>
               <div className="envmenu-project">
-                <span className="avatar pastel lavender">{name.slice(0, 1).toUpperCase()}</span>
-                <div><b>{name}</b><small>This Studio manages one project</small></div>
+                <span className="avatar pastel lavender">{(project?.name || name).slice(0, 1).toUpperCase()}</span>
+                <div><b>{project?.name || name}</b><small>{project ? `${project.slug} · database ${project.database?.status || "not bound"}` : "This Studio manages one project"}</small></div>
               </div>
+              {others.length > 0 && (
+                <div className="envmenu-list">
+                  {others.map((p) => {
+                    const first = (envs || []).find((e) => e.project_id === p.id);
+                    return first ? (
+                      <Link key={p.id} href={envHref(first.name, section || "overview")} className="envmenu-action" onClick={() => setOpen(false)}>
+                        <span className="avatar pastel sky" style={{ width: 22, height: 22, borderRadius: 7, fontSize: 11 }}>{p.name.slice(0, 1).toUpperCase()}</span>
+                        <span className="grow"><b>{p.name}</b><small>{p.slug}</small></span>
+                        <Icon name="chevronRight" size={14} className="faint" />
+                      </Link>
+                    ) : null;
+                  })}
+                </div>
+              )}
               <div className="envmenu-list">
                 {actions.map(([icon, label, hint, onClick]) => (
                   <button key={label} type="button" className="envmenu-action" onClick={onClick}>
@@ -347,10 +365,10 @@ function EnvMenu({ name, env, envs, section, open, setOpen, onHistory, onCreate 
                 <Button size="sm" variant="primary" onClick={() => { setOpen(false); onCreate(); }}><Icon name="plus" size={14} /> Create environment</Button>
               </div>
               <div className="envmenu-grid">
-                {(envs || []).map((e, i) => (
+                {siblings.map((e, i) => (
                   <Link key={e.name} href={envHref(e.name, section || "overview")} className={`envmenu-item ${e.name === env ? "current" : ""}`} onClick={() => setOpen(false)}>
-                    <span className={`avatar pastel ${envTone(e.name, i)}`}>{e.name.slice(0, 1).toUpperCase()}</span>
-                    <span className="grow"><b>{e.name}</b><small>{e.name === env ? "Current environment" : e.is_default ? "Default environment" : e.version ? `Version ${e.version}` : "Switch to this"}</small></span>
+                    <span className={`avatar pastel ${envTone(e.name, i)}`}>{(e.slug || e.name).slice(0, 1).toUpperCase()}</span>
+                    <span className="grow"><b>{e.slug || e.name}</b><small>{e.name === env ? "Current environment" : e.is_default ? "Default environment" : e.version ? `Version ${e.version}` : "Switch to this"}</small></span>
                     {e.name === env ? <Icon name="check" size={15} /> : <Icon name="chevronRight" size={14} className="faint" />}
                   </Link>
                 ))}
@@ -428,7 +446,7 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
             <span data-tour="search" className="tour-wrap top-search"><CommandSearch /></span>
             <div className="top-actions">
               <div className="crumbs">
-                <EnvMenu name={name} env={env} envs={envs} section={section} open={envMenu} setOpen={setEnvMenu} onHistory={() => setHistoryOpen(true)} onCreate={() => setNewEnv(true)} />
+                <EnvMenu name={name} env={env} envs={envs} projects={runtime?.projects || []} section={section} open={envMenu} setOpen={setEnvMenu} onHistory={() => setHistoryOpen(true)} onCreate={() => setNewEnv(true)} />
                 {crumbs.map((c, i) => <span key={i} className="row" style={{ gap: 4 }}><span className="sep">/</span><span className="here">{c}</span></span>)}
               </div>
               {env && <Button size="sm" data-tour="history" onClick={() => setHistoryOpen(true)} title="Checkout, create, merge, and review branches"><Icon name="gitBranch" size={15} /> History</Button>}

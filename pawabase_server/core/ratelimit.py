@@ -8,6 +8,7 @@ from sillo import json as json_response
 from sillo.middleware.base import BaseMiddleware
 from sillo.security import RateLimitConfig, RateLimitMiddleware
 
+from pawabase_server.core.namespace import scoped
 from pawabase_server.core.telemetry import note
 
 
@@ -86,7 +87,7 @@ def rate_limit_middleware(
         RouteRateLimit(
             limit=int(settings["limit"]),
             window=int(settings.get("window", 60)),
-            namespace=namespace,
+            namespace=scoped(namespace),
             backend=backend,
         )
     ]

@@ -18,11 +18,13 @@ from pawabase_server.automation.jobs.environments import PurgeEnvironmentJob
 from pawabase_server.core import envvars
 from pawabase_server.core.crypto import mask
 from pawabase_server.core.records import upsert
-from pawabase_server.db.models import ApiKey, Environment, Secret
+from pawabase_server.db.models import ApiKey, Environment, Project, ProjectDatabaseBinding, Secret
 from pawabase_server.environments import blueprints, env_settings
 from pawabase_server.environments.keys import create_key
 from pawabase_server.identity import directory, hosted, legal, signup_form
 from pawabase_server.platform import Platform
+from pawabase_server.projects.manager import attach_to_default_project
+from pawabase_server.projects.manager import view as project_view
 from pawabase_server.routes.common import (
     MANAGE,
     NAME_PATTERN,
@@ -212,9 +214,14 @@ def register(r: Router, platform: Platform) -> None:
     @r.get("/runtime", auth=MANAGE, tags=["runtime"], summary="This runtime and its environments")
     async def runtime(ctx: HttpContext):
         environments = await Environment.all()
+        projects = []
+        for project in await Project.all():
+            binding = await ProjectDatabaseBinding.get_or_none(project_id=project.id)
+            projects.append(project_view(project, binding))
         return {
             "name": platform.settings.project_name,
             "app_env": platform.settings.app_env,
+            "projects": projects,
             "environments": [environment_view(e) for e in environments],
         }
 
@@ -291,6 +298,7 @@ def register(r: Router, platform: Platform) -> None:
         async with in_transaction():
             for name in names:
                 environment = await Environment.create(name=name, settings={"public_docs": False})
+                await attach_to_default_project(environment)
                 environments.append(environment)
                 publishable, _ = await create_key(
                     environment,
@@ -390,6 +398,7 @@ def register(r: Router, platform: Platform) -> None:
             raise HTTPException(status_code=409, detail=f"environment {body.name!r} already exists")
         await check_environment_name(body.name)
         environment = await Environment.create(name=body.name, settings={"public_docs": False})
+        await attach_to_default_project(environment)
         publishable, _ = await create_key(
             environment,
             "Default publishable key",
@@ -444,6 +453,7 @@ def register(r: Router, platform: Platform) -> None:
             preview_source=source.name,
             preview_expires_at=datetime.now(UTC) + timedelta(hours=body.expires_in_hours),
         )
+        await attach_to_default_project(preview)
         publishable, _ = await create_key(
             preview,
             "Preview publishable key",

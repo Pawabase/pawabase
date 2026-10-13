@@ -22,6 +22,7 @@ from typing import Any
 from sillo.events import EventEmitter
 from sillo_wire import Hub
 
+from pawabase_server.core.namespace import scoped
 from pawabase_server.realtime.names import room_name, split_room
 from pawabase_server.realtime.presence import PresenceRegistry
 from pawabase_server.realtime.stats import Stats
@@ -50,7 +51,8 @@ class Fanout:
         self.instance = instance
         self.heartbeat_interval = heartbeat_interval
         self._beat: asyncio.Task[None] | None = None
-        self.emitter.on(FANOUT_CHANNEL, self._receive)
+        self.channel = scoped(FANOUT_CHANNEL)
+        self.emitter.on(self.channel, self._receive)
 
     async def start(self) -> None:
         await self.emitter.start()
@@ -70,7 +72,7 @@ class Fanout:
             await asyncio.sleep(self.heartbeat_interval)
             try:
                 await self.emitter.emit_async(
-                    FANOUT_CHANNEL, {"kind": "heartbeat", "origin": self.instance}
+                    self.channel, {"kind": "heartbeat", "origin": self.instance}
                 )
             except Exception:
                 logger.warning("heartbeat was not sent", exc_info=True)
@@ -110,7 +112,7 @@ class Fanout:
         await self._send({"kind": "presence", "room": room_name(env, channel), "message": message})
 
     async def _send(self, envelope: dict[str, Any]) -> None:
-        await self.emitter.emit_async(FANOUT_CHANNEL, {**envelope, "origin": self.instance})
+        await self.emitter.emit_async(self.channel, {**envelope, "origin": self.instance})
 
     # ── receiving ────────────────────────────────────────────────────────
 
