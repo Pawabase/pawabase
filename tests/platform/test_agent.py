@@ -233,3 +233,14 @@ async def test_the_default_project_cannot_be_deleted_by_an_instruction(api, agen
     agent, plane = make_agent(agent_settings, [job("project.delete", default.id, id="op-d")])
     await agent.step()
     assert plane.reports[0]["ok"] is False and "default" in plane.reports[0]["error"]
+
+
+def test_core_and_cloud_sign_and_derive_the_same_way():
+    # The same vector is asserted in Pawabase Cloud's tests (cloudlib.agent_protocol, cloudlib.pools).
+    envelope = protocol.sign_request(
+        "vector-secret", "agent-1", {"pool": "p", "capacity": 4}, now=1760000000, nonce="n0nce"
+    )
+    assert envelope["sig"] == "deafb2144b86508fad2af714c3105933ec4300980f1a9cdad2a194abd73e91fb"
+    from pawabase_server.agent.executor import derive_password
+
+    assert derive_password("shared-seed", "p_abc123") == "12e73344e3c82357d1c866741ff3bc061039eeec"

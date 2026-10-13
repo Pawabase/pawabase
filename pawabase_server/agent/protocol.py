@@ -41,11 +41,16 @@ def _mac(secret: str, text: str) -> str:
 
 
 def sign_request(
-    secret: str, agent_id: str, body: Mapping[str, Any], *, now: float | None = None
+    secret: str,
+    agent_id: str,
+    body: Mapping[str, Any],
+    *,
+    now: float | None = None,
+    nonce: str | None = None,
 ) -> dict[str, Any]:
     """The envelope the agent sends: the body plus identity, time, nonce and signature."""
     ts = int(now if now is not None else time.time())
-    nonce = secrets.token_hex(12)
+    nonce = nonce or secrets.token_hex(12)
     digest = hashlib.sha256(canonical(body).encode()).hexdigest()
     return {
         "agent_id": agent_id,
