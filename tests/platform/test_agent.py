@@ -66,6 +66,7 @@ def job(
 def agent_settings(settings, monkeypatch, tmp_path):
     settings.agent_url = "https://cloud.test"
     settings.agent_id = "agent-1"
+    settings.agent_api_key = "pb_pk_control_plane_key"
     settings.agent_token = SECRET
     settings.agent_pool = POOL
     settings.agent_secret_seed = "seed-for-derived-role-passwords-0123456789"
@@ -112,6 +113,7 @@ def test_an_instruction_must_be_signed_allowed_unexpired_and_for_this_pool():
 def test_the_agent_will_not_start_misconfigured(settings):
     settings.agent_url = "http://cloud.example.com"
     settings.agent_id, settings.agent_token, settings.agent_pool = "a", "t", "p"
+    settings.agent_api_key = "k"
     with pytest.raises(ConfigurationError, match="https"):
         check_configuration(settings)
     settings.agent_url = ""

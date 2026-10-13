@@ -34,6 +34,7 @@ def check_configuration(settings: Settings) -> None:
         for name, value in (
             ("PAWABASE_AGENT_URL", settings.agent_url),
             ("PAWABASE_AGENT_ID", settings.agent_id),
+            ("PAWABASE_AGENT_API_KEY", settings.agent_api_key),
             ("PAWABASE_AGENT_TOKEN", settings.agent_token),
             ("PAWABASE_AGENT_POOL", settings.agent_pool),
         )
@@ -57,7 +58,10 @@ class ControlPlane:
     def __init__(self, settings: Settings, http: httpx.AsyncClient | None = None) -> None:
         self.settings = settings
         self.http = http or httpx.AsyncClient(
-            base_url=settings.agent_url.rstrip("/"), timeout=30.0, follow_redirects=False
+            base_url=settings.agent_url.rstrip("/"),
+            timeout=30.0,
+            follow_redirects=False,
+            headers={"apikey": settings.agent_api_key},
         )
 
     async def call(self, function: str, body: dict[str, Any]) -> dict[str, Any]:

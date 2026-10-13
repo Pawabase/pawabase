@@ -167,6 +167,8 @@ class Settings(Config):
     #: Where this runtime's agent polls for provisioning jobs. Empty: no agent runs here.
     agent_url: str = ""
     agent_id: str = ""
+    #: The control plane's publishable key, which its gateway asks of every call (it opens the door; the agent's signature is the credential).
+    agent_api_key: str = ""
     agent_token: str = ""
     #: The runtime pool this agent serves. It only takes jobs assigned to it.
     agent_pool: str = ""
