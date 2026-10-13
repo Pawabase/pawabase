@@ -44,7 +44,7 @@ export function DefinitionSheet({ kind, env, editing, onClose, onSave, onDelete,
       subtitle={subtitle || meta.description}
       icon={kind}
       tone={SECTION_TONES[kind]}
-      tabs={tabs}
+      tabs={tabs.length > 1 ? tabs : undefined}
       tab={tab}
       onTab={setTab}
       onClose={() => onClose(undefined)}
