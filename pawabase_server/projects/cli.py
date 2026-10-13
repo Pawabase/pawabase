@@ -5,6 +5,7 @@ authority as running the server. It calls the project manager directly; nothing 
 
     project create NAME [--slug S] [--id ID]
     project list | show REF | update REF --name N | delete REF
+    project limits show REF | set REF [--daily-requests N] [--monthly-requests N] [--rate-limit N] [--rate-window N] [--max-active-connections N] [--reset]
     project db bind REF (--database-url-env VAR | --database-url URL) [--mode M] [--rebind] [--no-test]
     project db test REF | project db rotate REF (--database-url-env VAR | --database-url URL)
     project init                  make the default project and attach existing environments (what start-up does)
@@ -40,6 +41,17 @@ def parser() -> argparse.ArgumentParser:
     update = pcmd.add_parser("update")
     update.add_argument("ref")
     update.add_argument("--name", required=True)
+    limits = pcmd.add_parser("limits")
+    lcmd = limits.add_subparsers(dest="limits_cmd", required=True)
+    lcmd.add_parser("show").add_argument("ref")
+    lset = lcmd.add_parser("set")
+    lset.add_argument("ref")
+    lset.add_argument("--daily-requests", type=int)
+    lset.add_argument("--monthly-requests", type=int)
+    lset.add_argument("--rate-limit", type=int)
+    lset.add_argument("--rate-window", type=int)
+    lset.add_argument("--max-active-connections", type=int)
+    lset.add_argument("--reset", action="store_true")
     pcmd.add_parser("init")
     db = pcmd.add_parser("db")
     dcmd = db.add_subparsers(dest="dbcmd", required=True)
@@ -77,6 +89,29 @@ async def execute(args: argparse.Namespace, manager: ProjectManager, settings: S
             return await manager.show(args.ref)
         if args.cmd == "update":
             return await manager.update(args.ref, name=args.name)
+        if args.cmd == "limits":
+            if args.limits_cmd == "show":
+                shown = await manager.show(args.ref)
+                return {
+                    "id": shown["id"],
+                    "slug": shown["slug"],
+                    "limits": shown["limits"],
+                    "limits_version": shown["limits_version"],
+                }
+            changes = {
+                field: value
+                for field, value in {
+                    "daily_request_limit": args.daily_requests,
+                    "monthly_request_limit": args.monthly_requests,
+                    "rate_limit": args.rate_limit,
+                    "rate_window": args.rate_window,
+                    "max_active_connections": args.max_active_connections,
+                }.items()
+                if value is not None
+            }
+            if not changes and not args.reset:
+                raise ProjectError("set at least one limit or use --reset")
+            return await manager.patch_limits(args.ref, changes, reset=args.reset)
         if args.cmd == "delete":
             return await manager.delete(args.ref)
         if args.cmd == "init":

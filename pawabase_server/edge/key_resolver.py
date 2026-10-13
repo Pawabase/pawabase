@@ -46,7 +46,11 @@ async def lookup_key(raw: str, env: str | None = None) -> dict[str, Any]:
     Raises:
         KeyRejected: Unknown, revoked, expired, or for a different environment.
     """
-    key = await ApiKey.filter(key_hash=hash_api_key(raw)).select_related("environment").first()
+    key = (
+        await ApiKey.filter(key_hash=hash_api_key(raw))
+        .select_related("environment", "environment__project")
+        .first()
+    )
     if key is not None and env and key.environment.name != env:
         raise KeyRejected(f"this key does not belong to environment {env!r}")
     now = datetime.now(UTC)
@@ -59,9 +63,15 @@ async def lookup_key(raw: str, env: str | None = None) -> dict[str, Any]:
     if key.last_used_at is None or now - key.last_used_at > USAGE_WRITE_INTERVAL:
         await ApiKey.filter(id=key.id).update(last_used_at=now, use_count=key.use_count + 1)
     environment = key.environment
+    project = environment.project
     settings = environment.settings or {}
     return {
         "env": environment.name,
+        # Edge-internal fields are cached with the key answer, avoiding a request-time
+        # project lookup for limit enforcement.
+        "project_id": project.id if project is not None else None,
+        "project_limits": project.limits if project is not None else {},
+        "project_limits_version": project.limits_version if project is not None else 1,
         "role": "service" if key.role == "secret" else "anon",
         "scopes": key.scopes or [],
         "allowed_ips": key.allowed_ips or [],

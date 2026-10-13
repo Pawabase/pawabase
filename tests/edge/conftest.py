@@ -11,6 +11,9 @@ os.environ.setdefault("SILLO_ENV_FILE", "")
 KEYS = {
     "pk_anon": {
         "env": "main",
+        "project_id": "project-main",
+        "project_limits": {},
+        "project_limits_version": 1,
         "role": "anon",
         "key_id": "k1",
         "scopes": [],
@@ -18,12 +21,18 @@ KEYS = {
     },
     "sk_service": {
         "env": "main",
+        "project_id": "project-main",
+        "project_limits": {},
+        "project_limits_version": 1,
         "role": "service",
         "key_id": "k2",
         "scopes": ["*"],
     },
     "sk_restricted": {
         "env": "main",
+        "project_id": "project-main",
+        "project_limits": {},
+        "project_limits_version": 1,
         "role": "service",
         "key_id": "k3",
         "scopes": ["*"],

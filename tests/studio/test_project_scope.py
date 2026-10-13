@@ -61,6 +61,9 @@ def test_the_rule_is_an_allow_list_that_fails_closed():
         ("/envs/main/flows/new", "GET"),
         ("/studio/api/platform/envs/main/resources", "POST"),
         ("/studio/api/platform/runtime", "GET"),
+        ("/studio/api/project/usage", "GET"),
+        ("/studio/api/platform/usage", "GET"),
+        ("/studio/api/gateway/usage", "GET"),
         ("/studio/api/auth/envs/main/users", "GET"),
         ("/studio/api/realtime/main/publish", "POST"),
         ("/assets/main-abc.js", "GET"),
@@ -76,7 +79,6 @@ def test_the_rule_is_an_allow_list_that_fails_closed():
         ("/studio/api/platform/envs/main", "DELETE"),
         ("/studio/api/platform/envs/main/previews", "POST"),
         ("/studio/api/platform/envs/main/promote", "POST"),
-        ("/studio/api/platform/usage", "GET"),
         ("/studio/api/platform/workers", "GET"),
         ("/studio/api/platform/runtime", "POST"),
         ("/studio/api/platform/envs/../envs/other-prod/keys", "GET"),
@@ -118,6 +120,12 @@ async def test_the_runtime_listing_and_the_pages_are_cut_down_to_the_project(con
     assert redirect.status_code == 302 and redirect.headers["location"] == "/envs/main"
     page = await confined.http.get("/environments", headers={"X-Inertia": "true"})
     assert "other-prod" not in page.text
+
+
+async def test_a_confined_session_can_read_its_project_usage(confined):
+    await confined.http.get(f"/studio-access?token={link()}")
+    usage = await confined.http.get("/studio/api/project/usage")
+    assert usage.status_code == 200
 
 
 async def test_the_bridge_and_the_explorer_refuse_other_environments_and_infra_writes(confined):

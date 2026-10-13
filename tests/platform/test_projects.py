@@ -100,6 +100,23 @@ async def test_a_project_has_one_database_and_environments_get_their_own_schema(
     assert unchanged.get("unchanged")
 
 
+async def test_project_gateway_limits_are_versioned_and_validate_their_shape(api):
+    m = manager(api)
+    project, _ = await m.create_project(name="metered")
+    original = project.limits_version
+    updated = await m.update(
+        "metered", limits={"daily_request_limit": 1000, "rate_limit": 20, "rate_window": 60}
+    )
+    assert updated["limits"] == {"daily_request_limit": 1000, "rate_limit": 20, "rate_window": 60}
+    assert updated["limits_version"] == original + 1
+    patched = await m.patch_limits(
+        "metered", {"daily_request_limit": 0, "max_active_connections": 5}
+    )
+    assert patched["limits"] == {"rate_limit": 20, "rate_window": 60, "max_active_connections": 5}
+    with pytest.raises(ProjectError):
+        await m.update("metered", limits={"unknown": 1})
+
+
 async def test_two_projects_can_each_have_a_production_without_seeing_each_other(api, tmp_path):
     m = manager(api)
     for name in ("shop", "crm"):

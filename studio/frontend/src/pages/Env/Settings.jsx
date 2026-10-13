@@ -70,7 +70,7 @@ const SETTINGS_SECTIONS = [
   ["maintenance", "Maintenance", "Pause the public API"],
   ["realtime", "Realtime", "Channel and policy rules"],
   ["infrastructure", "Infrastructure", "Database, storage, mail"],
-  ["limits", "Limits", "Quotas on this installation"],
+  ["limits", "Limits", "Installation quotas"],
   ["custom", "Custom values", "Your own $settings"],
   ["advanced", "Advanced", "Export, import, delete"],
 ];
@@ -247,18 +247,13 @@ const LIMIT_LABELS = {
   MAX_USERS: ["Active users", (v) => (Number(v) ? `up to ${Number(v).toLocaleString()}` : "no limit")],
   MAX_API_KEYS_PER_ENVIRONMENT: ["API keys", (v) => (Number(v) ? `up to ${v}` : "no limit")],
   MAX_UPLOAD_BYTES: ["Largest upload", (v) => bytes(Number(v))],
-  DAILY_REQUEST_LIMIT: ["Requests per day", (v) => (Number(v) ? Number(v).toLocaleString() : "no limit")],
-  MONTHLY_REQUEST_LIMIT: ["Requests per month", (v) => (Number(v) ? Number(v).toLocaleString() : "no limit")],
-  MAX_ACTIVE_CONNECTIONS: ["Realtime connections", (v) => (Number(v) ? `up to ${v}` : "no limit")],
-  RATE_LIMIT: ["Rate limit", (v) => (v == null ? "gateway default" : `${v} per window`)],
-  RATE_WINDOW: ["Rate window", (v) => (v == null ? "gateway default" : `${v} seconds`)],
 };
 
 function Limits({ usage, configuration }) {
   if (!usage || !configuration) return <p className="muted" style={{ margin: 0 }}>Loading limits…</p>;
   const used = { MAX_USERS: usage.users, MAX_API_KEYS_PER_ENVIRONMENT: usage.api_keys };
   return <div className="stack" style={{ gap: 10 }}>
-    <p className="muted" style={{ margin: 0 }}>Limits come from variables. <code>{configuration.variables.environment_prefix}&lt;NAME&gt;</code> sets one for this environment; <code>{configuration.variables.global_prefix}&lt;NAME&gt;</code> for every environment. The deployment-wide request and connection limits always apply on top.</p>
+    <p className="muted" style={{ margin: 0 }}>These installation safeguards come from deployment configuration. API request, rate, and realtime connection limits are configured per project.</p>
     {configuration.limits.map((row) => {
       const [label, format] = LIMIT_LABELS[row.key] || [row.key, String];
       return <div key={row.key} className="spread card sunken" style={{ padding: "12px 14px" }}>

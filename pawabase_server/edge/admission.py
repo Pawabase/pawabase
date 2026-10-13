@@ -1,6 +1,6 @@
 """Deciding whether there is room for a request or a connection: rate limits, request quotas and connection ceilings.
 
-Every limit exists twice: once for the whole installation and once per environment, set with ``<ENV>_*`` variables (see
+Every limit exists twice: once for the whole installation and once per project (see
 :mod:`pawabase_server.edge.limits`). A request has to fit under both. Limits are applied *after* a key has been resolved so a flood of bad keys is spent
 against the caller's address, not against any environment's budget.
 """
@@ -71,10 +71,10 @@ class Admission:
         self.max_connections = settings.max_active_connections
 
     async def admit_request(
-        self, scope: dict[str, Any], receive: Any, context: Any
+        self, scope: dict[str, Any], receive: Any, context: Any, info: dict[str, Any] | None = None
     ) -> Refusal | None:
         """Rate limit and quota checks for one HTTP request. ``None`` means it may proceed."""
-        own = self.env_limits.for_environment(context.env) if context is not None else None
+        own = self._project_limit(info)
         limiter = own.limiter if own is not None and own.limiter is not None else self.limiter
         result = await limiter.check(HttpContext(scope, receive))
         if result is not None and not result.allowed:
@@ -90,7 +90,7 @@ class Admission:
         if own is not None and own.quota is not None and not await own.quota.acquire():
             self.stats["quota_rejected"] += 1
             return Refusal(
-                429, "request_quota_exceeded", "This environment's request quota has been reached."
+                429, "request_quota_exceeded", "This project's request quota has been reached."
             )
         if not await self.request_quota.acquire():
             self.stats["quota_rejected"] += 1
@@ -100,21 +100,23 @@ class Admission:
         return None
 
     @contextlib.asynccontextmanager
-    async def connection(self, context: Any) -> AsyncIterator[None]:
-        """Hold one connection slot, for the environment and for the installation, for as long as the ``with`` block runs.
+    async def connection(
+        self, context: Any, info: dict[str, Any] | None = None
+    ) -> AsyncIterator[None]:
+        """Hold one connection slot, for the project and for the installation, for as long as the ``with`` block runs.
 
         Raises :class:`Rejected` when either ceiling is reached. Slots are released however the block ends, so a bridge that crashes cannot
         leak capacity.
         """
-        own = self.env_limits.for_environment(context.env) if context is not None else None
-        env_slots = own.connections if own is not None else None
-        if env_slots is not None and env_slots.locked():
+        own = self._project_limit(info)
+        project_slots = own.connections if own is not None else None
+        if project_slots is not None and project_slots.locked():
             self.stats["connections_rejected"] += 1
             raise Rejected(
                 Refusal(
                     429,
-                    "environment_connection_limit",
-                    "environment connection limit reached",
+                    "project_connection_limit",
+                    "project connection limit reached",
                     ws_code=WS_CAPACITY,
                 )
             )
@@ -125,7 +127,7 @@ class Admission:
             )
         held: list[asyncio.BoundedSemaphore] = []
         try:
-            for slots in (env_slots, self.connections):
+            for slots in (project_slots, self.connections):
                 if slots is not None:
                     await slots.acquire()
                     held.append(slots)
@@ -136,6 +138,13 @@ class Admission:
 
     def active_connections(self) -> int:
         return self.max_connections - self.connections._value if self.connections is not None else 0
+
+    def _project_limit(self, info: dict[str, Any] | None):
+        if not info:
+            return None
+        return self.env_limits.for_project(
+            info.get("project_id"), info.get("project_limits_version"), info.get("project_limits")
+        )
 
     async def close(self) -> None:
         await self.env_limits.close()

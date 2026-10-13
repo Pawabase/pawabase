@@ -32,6 +32,33 @@ logger = logging.getLogger("pawabase.projects")
 SLUG = re.compile(r"^[a-z][a-z0-9-]{1,39}$")
 ID = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 SCHEMA = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
+LIMIT_FIELDS = frozenset(
+    {
+        "daily_request_limit",
+        "monthly_request_limit",
+        "rate_limit",
+        "rate_window",
+        "max_active_connections",
+        "max_users_per_month",
+        "max_active_users",
+        "max_api_keys",
+        "max_auth_sessions_per_user",
+        "max_mfa_factors_per_user",
+        "max_auth_providers",
+        "max_flow_runs_per_month",
+        "max_scheduled_jobs",
+        "max_function_invocations_per_month",
+        "max_function_deployments",
+        "max_storage_bytes",
+        "max_upload_bytes",
+        "max_database_bytes",
+        "max_backups",
+        "max_environments",
+        "max_realtime_channels",
+        "max_webhooks",
+        "max_inbound_hooks",
+    }
+)
 
 
 class ProjectError(Exception):
@@ -40,6 +67,22 @@ class ProjectError(Exception):
     def __init__(self, message: str, code: str = "invalid") -> None:
         super().__init__(message)
         self.code = code
+
+
+def validate_limits(limits: dict[str, Any]) -> dict[str, int]:
+    """Validate the persisted project gateway policy. Zero means unlimited."""
+    if not isinstance(limits, dict):
+        raise ProjectError("project limits must be an object")
+    unknown = set(limits) - LIMIT_FIELDS
+    if unknown:
+        raise ProjectError(f"unknown project limit: {sorted(unknown)[0]}")
+    cleaned: dict[str, int] = {}
+    for name, value in limits.items():
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ProjectError(f"{name} must be a non-negative whole number")
+        if value:
+            cleaned[name] = value
+    return cleaned
 
 
 def view(project: Project, binding: ProjectDatabaseBinding | None = None) -> dict[str, Any]:
@@ -51,6 +94,8 @@ def view(project: Project, binding: ProjectDatabaseBinding | None = None) -> dic
         "origin": project.origin,
         "external_ref": project.external_ref,
         "is_default": project.is_default,
+        "limits": validate_limits(project.limits or {}),
+        "limits_version": project.limits_version,
         "created_at": project.created_at.isoformat() if project.created_at else None,
     }
     if binding is not None:
@@ -127,6 +172,7 @@ class ProjectManager:
         id: str | None = None,
         origin: str = "local",
         external_ref: str | None = None,
+        limits: dict[str, Any] | None = None,
     ) -> tuple[Project, bool]:
         """Register a project. Returns ``(project, created)``; asking again with the same id or slug answers with the one that exists."""
         name = name.strip()
@@ -154,20 +200,40 @@ class ProjectManager:
                 origin=origin,
                 external_ref=external_ref,
                 status="pending",
+                limits=validate_limits(limits or {}),
             )
         except IntegrityError:  # another process made it a moment ago
             return await self.find(id or slug), False
         logger.info("project %s created (%s)", project.slug, project.id)
         return project, True
 
-    async def update(self, ref: str, *, name: str | None = None) -> dict[str, Any]:
+    async def update(
+        self, ref: str, *, name: str | None = None, limits: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         project = await self.find(ref)
+        changed: list[str] = []
         if name is not None:
             if not name.strip() or len(name) > 120:
                 raise ProjectError("a project needs a name of up to 120 characters")
             project.name = name.strip()
-            await project.save(update_fields=["name", "updated_at"])
+            changed.append("name")
+        if limits is not None:
+            project.limits = validate_limits(limits)
+            project.limits_version += 1
+            changed.extend(["limits", "limits_version"])
+        if changed:
+            await project.save(update_fields=[*changed, "updated_at"])
+            if limits is not None:
+                await self._invalidate(project)
         return await self.show(project.id)
+
+    async def patch_limits(
+        self, ref: str, changes: dict[str, Any], *, reset: bool = False
+    ) -> dict[str, Any]:
+        project = await self.find(ref)
+        policy = {} if reset else validate_limits(project.limits or {})
+        policy.update(changes)
+        return await self.update(project.id, limits=policy)
 
     async def delete(self, ref: str) -> dict[str, Any]:
         """Unregister an empty project. Environments and databases are never removed as a side effect: delete the environments first, and

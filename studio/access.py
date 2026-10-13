@@ -13,13 +13,16 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import re
 import time
-from http.cookies import SimpleCookie
 from collections.abc import Awaitable, Callable
+from http.cookies import SimpleCookie
 from typing import Any
 
 import jwt
+
+logger = logging.getLogger("pawabase.studio.access")
 
 COOKIE = "pb_studio"
 ISSUER, AUDIENCE = "pawabase-cloud", "studio"
@@ -155,6 +158,7 @@ class StudioAccessGate:
             if project and self.guard is not None:
                 allowed = await self.guard(scope, project)
                 if not allowed:
+                    logger.warning("project-scoped Studio request refused: project=%s path=%s", project, path)
                     if scope["type"] == "websocket":
                         await send({"type": "websocket.close", "code": 4403})
                     else:
