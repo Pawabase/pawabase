@@ -29,6 +29,8 @@ from pawabase_server.db.models import (
     InboundHook,
     MailTemplate,
     PolicyDef,
+    Project,
+    ProjectDatabaseBinding,
     Resource,
     RouteDef,
     Schedule,
@@ -38,6 +40,7 @@ from pawabase_server.db.models import (
     WebhookEndpoint,
 )
 from pawabase_server.policies import Policy, PolicyEngine, python_policies
+from pawabase_server.projects.refs import RefError, resolve_ref
 
 if TYPE_CHECKING:
     from pawabase_server.platform import Platform
@@ -46,6 +49,25 @@ if TYPE_CHECKING:
 def data_schema_name(env_name: str) -> str:
     """The Postgres schema an environment's resource tables live in on the shared default database."""
     return f"pb_{hashlib.sha256(env_name.encode()).hexdigest()[:12]}"
+
+
+def project_data_url(base: str, schema: str) -> str:
+    """An environment's address inside its project's database: its own schema (PostgreSQL), file (SQLite) or database prefix (MySQL).
+
+    PostgreSQL: *base* with ``schema=<schema>``. SQLite: the ``{env}`` of *base* becomes the schema name, or, when *base* has none, *base*
+    names a directory and the file is ``<schema>.db`` inside it.
+    """
+    if base.startswith(("postgres://", "postgresql://")):
+        if "schema=" in base:
+            return base
+        return base + ("&" if "?" in base else "?") + f"schema={schema}"
+    if base.startswith(("sqlite://", "sqlite:")):
+        if "{env}" in base:
+            return base.replace("{env}", schema)
+        if base.endswith(".db") or base.endswith(".sqlite"):
+            return base  # one file for the project; the schema name is not a file here
+        return f"{base.rstrip('/')}/{schema}.db"
+    return base.replace("{env}", schema)
 
 
 def default_data_url(template: str, env_name: str) -> str:
@@ -84,6 +106,12 @@ class EnvironmentState:
     inbound_hooks: dict[str, InboundHook] = field(default_factory=dict)
     schedules: list[Schedule] = field(default_factory=list)
     secret_values: dict[str, str] = field(default_factory=dict)
+    #: The project this environment belongs to, and the address of that project's database (resolved when the state was loaded).
+    project_id: str | None = None
+    project_slug: str | None = None
+    project_is_default: bool = True
+    project_database: str | None = None
+    project_problem: str | None = None
     engine: PolicyEngine = field(default_factory=PolicyEngine)
     compiled_schemas: dict[str, Any] = field(default_factory=dict)
     schema_problems: list[str] = field(default_factory=list)
@@ -108,7 +136,8 @@ class EnvironmentState:
         """Where this environment's resource data lives.
 
         In order: ``<ENV>_DATA_URL`` from the process environment; the deprecated
-        ``infra.database_url`` an older install stored on the environment; the
+        ``infra.database_url`` an older install stored on the environment (it wins over the project so that attaching an environment to
+        a project never moves where its data is read from); the project's database binding, in the environment's own schema; the
         platform default (``PAWABASE_DEFAULT_DATA_URL``), one schema per environment.
         """
         own = self.platform.env_setting(self, "DATA_URL")
@@ -122,17 +151,29 @@ class EnvironmentState:
                 f"set {envvars.prefix_for(self.env_name)}_DATA_URL instead",
             )
             return self.platform.resolve_value(self, configured)
+        if self.project_database:
+            return project_data_url(self.project_database, self.data_schema())
+        if self.project_problem:
+            raise HTTPException(
+                status_code=503,
+                detail=f"this project's database cannot be reached: {self.project_problem}",
+            )
         return default_data_url(self.platform.settings.default_data_url, self.env_name)
 
     def database_source(self) -> str:
-        """Where the data database comes from: ``environment`` (a variable), ``stored`` (deprecated ``infra``) or ``default``."""
+        """Where the data database comes from: ``environment`` (a variable), ``project`` (its binding), ``stored`` (deprecated ``infra``)
+        or ``default``."""
         if envvars.get(self.env_name, "DATA_URL"):
             return "environment"
-        return "stored" if self.infra.get("database_url") else "default"
+        if self.infra.get("database_url"):
+            return "stored"
+        if self.project_database and not self.project_is_default:
+            return "project"
+        return "default"
 
     def data_schema(self) -> str:
-        """The Postgres schema holding this environment's resource tables in the shared default database."""
-        return data_schema_name(self.env_name)
+        """The schema holding this environment's resource tables: the one recorded on the environment, else the legacy derived name."""
+        return self.environment.schema_name or data_schema_name(self.env_name)
 
     def database_table(self, table: str) -> str:
         """The physical table name: the resource's own.
@@ -173,6 +214,28 @@ class EnvironmentState:
 
                     self._compiled = compile_environment(self)
         return self._compiled
+
+
+async def attach_project(platform: Platform, state: EnvironmentState) -> None:
+    """Note which project the environment belongs to and where that project's database is, from its binding.
+
+    A binding that cannot be read is not an error here: the environment loads, and only a request that needs the data says why it cannot
+    have it. Nothing is guessed in place of a project's database.
+    """
+    project_id = state.environment.project_id
+    if not project_id:
+        return
+    state.project_id = project_id
+    project = await Project.get_or_none(id=project_id)
+    state.project_slug = project.slug if project else None
+    state.project_is_default = bool(project and project.is_default)
+    binding = await ProjectDatabaseBinding.get_or_none(project_id=project_id)
+    if binding is None:
+        return
+    try:
+        state.project_database = resolve_ref(platform.box, binding.connection_ref)
+    except RefError as exc:
+        state.project_problem = str(exc)
 
 
 async def load_state(platform: Platform, environment: Environment) -> EnvironmentState:
@@ -226,6 +289,7 @@ async def load_state(platform: Platform, environment: Environment) -> Environmen
     state.webhooks = list(webhooks)
     state.inbound_hooks = {h.slug: h for h in hooks}
     state.schedules = list(schedules)
+    await attach_project(platform, state)
     for secret in secrets:
         try:
             state.secret_values[secret.name] = platform.box.open(secret.ciphertext, state.env_name)

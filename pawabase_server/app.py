@@ -48,6 +48,7 @@ from pawabase_server.identity.accounts import Accounts
 from pawabase_server.observability.request_metrics import RequestRollup
 from pawabase_server.observability.status import StatusProber
 from pawabase_server.platform import Platform
+from pawabase_server.projects.manager import ProjectError, ensure_default_project
 from pawabase_server.realtime import Realtime
 from pawabase_server.settings import Settings
 
@@ -58,17 +59,20 @@ DEFAULT_ENVIRONMENT = "development"
 INTERNAL = "pawabase.internal"
 
 
-async def ensure_default_environment() -> None:
-    """Give a fresh runtime its first environment, so Studio has something to manage."""
-    from tortoise.exceptions import IntegrityError
-
-    if await Environment.exists():
-        return
+async def ensure_default_environment(settings: Settings, box: Any = None) -> None:
+    """Give a fresh runtime its default project and first environment, and attach environments from before projects existed to it."""
     try:
-        await Environment.create(name=DEFAULT_ENVIRONMENT, is_default=True)
-        logger.info("created the default environment %r", DEFAULT_ENVIRONMENT)
-    except IntegrityError:  # another instance created it first
-        pass
+        report = await ensure_default_project(settings, box)
+    except ProjectError as exc:
+        logger.error("the default project could not be set up: %s", exc)
+        return
+    if report["created"] or report["attached"]:
+        logger.info(
+            "default project %r: created %s, attached %s",
+            report["project"],
+            report["created"] or "nothing",
+            report["attached"] or "nothing",
+        )
 
 
 async def housekeeping(realtime: Realtime, interval: float) -> None:
@@ -130,7 +134,7 @@ def create_app(
         await platform.start()
         if role != "server":
             return
-        await ensure_default_environment()
+        await ensure_default_environment(settings, platform.box)
         await platform.audit_configuration()
         rollup.start()
         await realtime.start()

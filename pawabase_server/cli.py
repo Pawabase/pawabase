@@ -7,6 +7,8 @@ worker     run the queue worker, as a process of its own
 scheduler  run the scheduler, as a process of its own
 migrate    apply pending database migrations; ``migrate make NAME`` writes a new one
 check      validate the configuration and exit non-zero when something is wrong
+agent      run the Cloud runtime agent: it applies provisioning instructions and is not in the request path (``agent once`` takes one round)
+project    manage projects and their databases from this machine (``project --help``); ``env`` manages a project's environments
 copy-data  copy every environment's resource data from another database (e.g. SQLite files) into the configured one
 version    print the version
 =========  ==============================================================================
@@ -44,6 +46,29 @@ def main(argv: list[str] | None = None) -> int:
         asyncio.run(migrate(args))
         return 0
 
+    if command == "agent":
+        import logging
+
+        from pawabase_server.agent.runner import ConfigurationError
+        from pawabase_server.agent.runner import run as run_agent
+
+        settings = Settings()
+        logging.basicConfig(
+            level=settings.log_level.upper(), format="%(levelname)s %(name)s: %(message)s"
+        )
+        try:
+            return asyncio.run(run_agent(settings, once="once" in args))
+        except ConfigurationError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 78
+        except KeyboardInterrupt:
+            return 0
+
+    if command in ("project", "env"):
+        from pawabase_server.projects.cli import run as manage_projects
+
+        return asyncio.run(manage_projects([command, *args], Settings()))
+
     if command == "copy-data":
         from pawabase_server.data.copy_cli import run as copy_data
 
@@ -80,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     print(
-        f"usage: pawabase-server [serve|worker|scheduler|migrate|copy-data|check|version] (got {command!r})",
+        f"usage: pawabase-server [serve|worker|scheduler|agent|project|env|migrate|copy-data|check|version] (got {command!r})",
         file=sys.stderr,
     )
     return 64

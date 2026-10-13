@@ -11,7 +11,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 from sillo import HttpContext, Router, created, no_content
-from sillo.auth.apikey import generate_api_key
 from sillo.exceptions import HTTPException
 from tortoise.transactions import in_transaction
 
@@ -21,6 +20,7 @@ from pawabase_server.core.crypto import mask
 from pawabase_server.core.records import upsert
 from pawabase_server.db.models import ApiKey, Environment, Secret
 from pawabase_server.environments import blueprints, env_settings
+from pawabase_server.environments.keys import create_key
 from pawabase_server.identity import directory, hosted, legal, signup_form
 from pawabase_server.platform import Platform
 from pawabase_server.routes.common import (
@@ -139,42 +139,6 @@ class PromoteRequest(BaseModel):
 
 
 SECRET_NAME = re.compile(r"^[A-Z][A-Z0-9_]{0,127}$")
-
-
-async def create_key(
-    environment: Environment,
-    name: str,
-    role: str,
-    *,
-    scopes: list[str] | None = None,
-    expires_at: datetime | None = None,
-    allowed_ips: list[str] | None = None,
-    allowed_routes: list[str] | None = None,
-    created_by: str | None = None,
-    max_keys: int = 0,
-) -> tuple[str, ApiKey]:
-    """Mint a key with Sillo's API-key generator; only the hash is stored."""
-    if (
-        max_keys
-        and await ApiKey.filter(environment=environment, revoked_at=None).count() >= max_keys
-    ):
-        raise HTTPException(
-            status_code=403, detail="the environment API key limit has been reached"
-        )
-    full, _raw, digest = generate_api_key(prefix="pb_pk" if role == "publishable" else "pb_sk")
-    key = await ApiKey.create(
-        environment=environment,
-        name=name,
-        role=role,
-        prefix=full[:14],
-        key_hash=digest,
-        scopes=scopes or [],
-        expires_at=expires_at,
-        allowed_ips=allowed_ips or [],
-        allowed_routes=allowed_routes or [],
-        created_by=created_by,
-    )
-    return full, key
 
 
 def key_view(key: ApiKey) -> dict[str, Any]:
