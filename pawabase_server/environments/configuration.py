@@ -23,11 +23,6 @@ LIMITS = (
     ("MAX_USERS", "max_users"),
     ("MAX_API_KEYS_PER_ENVIRONMENT", "max_api_keys_per_environment"),
     ("MAX_UPLOAD_BYTES", "max_upload_bytes"),
-    ("DAILY_REQUEST_LIMIT", "daily_request_limit"),
-    ("MONTHLY_REQUEST_LIMIT", "monthly_request_limit"),
-    ("MAX_ACTIVE_CONNECTIONS", "max_active_connections"),
-    ("RATE_LIMIT", None),
-    ("RATE_WINDOW", None),
 )
 
 

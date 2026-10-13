@@ -366,8 +366,8 @@ async def test_configuration_reports_each_value_with_its_source(api, monkeypatch
         "environment",
     )
     assert (limits["MAX_USERS"]["value"], limits["MAX_USERS"]["source"]) == (100, "deployment")
-    assert limits["DAILY_REQUEST_LIMIT"]["source"] == "default"
-    assert limits["RATE_LIMIT"]["value"] is None  # only the gateway knows it
+    assert "DAILY_REQUEST_LIMIT" not in limits  # gateway policies belong to projects
+    assert "RATE_LIMIT" not in limits
     assert limits["MAX_USERS"]["variable"] == "DEVELOPMENT_MAX_USERS"
     assert report["variables"] == {
         "environment_prefix": "DEVELOPMENT_",

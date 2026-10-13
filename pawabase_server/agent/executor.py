@@ -94,17 +94,25 @@ class Executor:
             id=job["project_id"],
             origin="cloud",
             external_ref=job["project_id"],
+            limits=p.get("limits"),
         )
         bucket = (p.get("storage") or {}).get("bucket")
         if bucket:
             if not BUCKET.match(str(bucket)):
-                raise OperationError("a bucket name is 3 to 63 lowercase letters, digits and hyphens")
+                raise OperationError(
+                    "a bucket name is 3 to 63 lowercase letters, digits and hyphens"
+                )
             project.details = {**(project.details or {}), "storage": {"bucket": str(bucket)}}
             await project.save()
         return {"project": view(project), "created": created}
 
     async def project_update(self, job: dict[str, Any]) -> dict[str, Any]:
-        return await self.manager.update(job["project_id"], name=job["payload"].get("name"))
+        payload = job["payload"]
+        return await self.manager.update(
+            job["project_id"],
+            name=payload.get("name"),
+            limits=payload.get("limits") if "limits" in payload else None,
+        )
 
     async def project_bind_database(self, job: dict[str, Any]) -> dict[str, Any]:
         url, url_env, mode = self.database_address(job["payload"].get("database") or {})

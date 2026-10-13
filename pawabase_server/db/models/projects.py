@@ -32,6 +32,9 @@ class Project(Model):
     external_ref = fields.CharField(max_length=64, null=True)
     is_default = fields.BooleanField(default=False)
     details = AnyJSONField(default=dict)
+    #: Versioned gateway entitlement, carried by the API-key cache rather than read per request.
+    limits = AnyJSONField(default=dict)
+    limits_version = fields.IntField(default=1)
 
     class Meta:
         table = "pb_projects"

@@ -23,6 +23,13 @@ CACHE_SECONDS = 5.0
 ENV = re.compile(r"[a-z][a-z0-9_-]{0,62}")
 #: Pages and assets that need no environment.
 OPEN_PATHS = {"/", "/environments", "/studio/status", "/studio-access"}
+# ``platform/usage`` and ``gateway/usage`` are retained for an already-open
+# Studio bundle; bridge.py narrows the latter to the signed-link project.
+PROJECT_OPEN = {
+    "/studio/api/project/usage",
+    "/studio/api/platform/usage",
+    "/studio/api/gateway/usage",
+}
 OPEN_PREFIXES = ("/assets/",)
 #: Bridge targets whose paths are ``envs/{env}/…`` (platform, auth) or ``{env}/…`` (the others).
 ENV_UNDER = {"platform": "envs", "auth": "envs"}
@@ -37,7 +44,8 @@ WRITES = {"POST", "PUT", "PATCH", "DELETE"}
 
 def permitted(path: str, method: str, envs: frozenset[str] | set[str]) -> bool:
     """Whether a Studio request for *path* may run in a session confined to the environments *envs*."""
-    if path in OPEN_PATHS or path.startswith(OPEN_PREFIXES):
+    path = path.rstrip("/") or "/"
+    if path in OPEN_PATHS or path in PROJECT_OPEN or path.startswith(OPEN_PREFIXES):
         return True
     segments = [s for s in path.split("/") if s]
     if any(s in ("..", ".") for s in segments):
@@ -60,9 +68,7 @@ def permitted(path: str, method: str, envs: frozenset[str] | set[str]) -> bool:
         if target in ENV_FIRST:
             return len(rest) >= 1 and rest[0] in envs
         return False
-    if segments[:2] == ["studio", "ws"]:
-        return True  # a ticket the page asked for, and a ticket is for one environment
-    return False
+    return segments[:2] == ["studio", "ws"]  # a ticket is for one environment
 
 
 def body_allowed(path: str, method: str, body: Any) -> bool:
@@ -94,6 +100,14 @@ class ProjectScope:
 
     async def guard(self, scope: dict[str, Any], project: str) -> bool:
         """The access gate's question for every request of a confined session. Sets what the handlers need to confine themselves."""
+        path = str(scope.get("path") or "").rstrip("/") or "/"
+        if path in PROJECT_OPEN:
+            # These routes are independently narrowed to the signed project ID;
+            # requiring a runtime environment lookup first makes usage disappear
+            # during a harmless, transient control-plane lookup failure.
+            scope["studio_project"] = project
+            scope["studio_envs"] = frozenset()
+            return True
         try:
             envs = await self.environments(project)
         except Exception:  # noqa: BLE001 - if the runtime cannot say what the project has, nothing is shown

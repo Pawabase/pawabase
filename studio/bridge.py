@@ -66,6 +66,20 @@ def outside_free(ctx: HttpContext, env: str) -> bool:
 def register(app: SilloApp, deps: Deps) -> None:
     core = deps.core
 
+    @app.get("/studio/api/project/usage", exclude_from_schema=True)
+    async def project_usage(ctx: HttpContext):
+        """Usage for the confined project, never installation-wide counters."""
+        project = ctx.scope.get("studio_project")
+        if not project:
+            return JSONResponse({"detail": "project-scoped Studio access is required"}, status_code=403)
+        try:
+            result = await core.request(
+                "GET", "/internal/v1/gateway/usage", params={"project": project}
+            )
+        except ServiceError as exc:
+            return error_response(exc)
+        return JSONResponse(result)
+
     @app.post("/studio/api/explorer/sign-in", exclude_from_schema=True)
     async def explorer_sign_in(ctx: HttpContext):
         """Obtain an application-user token for Explorer without an API key."""
@@ -214,6 +228,17 @@ def register(app: SilloApp, deps: Deps) -> None:
         if confined and not body_allowed("/" + clean, ctx.method, body):
             return JSONResponse({"detail": "this setting is managed by your hosting service"}, status_code=403)
         params = dict(ctx.query_params)
+        # A tab that loaded the old Usage page asks the generic gateway bridge.
+        # Keep it working, but narrow the answer exactly as the dedicated route
+        # above does—never return the installation's other project counters.
+        if confined and target == "gateway" and clean == "usage" and ctx.method == "GET":
+            try:
+                scoped = await core.request(
+                    "GET", "/internal/v1/gateway/usage", params={"project": confined}
+                )
+            except ServiceError as exc:
+                return error_response(exc)
+            return JSONResponse((scoped.get("project") or {}).get("usage") or {})
         call: dict[str, Any] = {"json": body, "params": params or None}
         segments = clean.split("/")
         if (
