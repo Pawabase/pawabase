@@ -161,6 +161,54 @@ async def test_a_project_is_provisioned_from_instructions_with_no_password_in_th
     assert plane.reports[2]["result"]["keys"] == {"publishable": "(created)", "secret": "(created)"}
 
 
+async def test_a_project_instruction_can_name_the_projects_bucket(api, agent_settings):
+    pid = "01JCLOUDPROJECT0000000002"
+    executor = Executor(agent_settings)
+    await executor.execute(
+        job("project.create", pid, id="op-b", payload={"name": "Bucketed", "slug": "bucketed", "storage": {"bucket": "pb-bucketed"}})
+    )
+    project = await Project.get(id=pid)
+    assert project.details["storage"] == {"bucket": "pb-bucketed"}
+    with pytest.raises(Exception, match="bucket name"):
+        await executor.execute(
+            job("project.create", "01JCLOUDPROJECT0000000003", id="op-c", payload={"name": "Bad", "slug": "bad", "storage": {"bucket": "../x"}})
+        )
+
+
+async def test_a_signed_instruction_can_be_pushed_to_the_runtime(api, agent_settings):
+    pid = "01JCLOUDPROJECT0000000004"
+    pushed = job("project.create", pid, id="op-push", payload={"name": "Pushed", "slug": "pushed"})
+    answer = await api.studio.post("/platform/v1/agent/execute", json={"job": pushed})
+    assert answer["ok"] is True
+    assert (await Project.get(id=pid)).slug == "pushed"
+    forged = {**pushed, "id": "op-forged", "payload": {"name": "X", "slug": "x"}}
+    with pytest.raises(Exception, match="signature"):
+        await api.studio.post("/platform/v1/agent/execute", json={"job": forged})
+
+
+async def test_a_pushed_delete_purges_environments_before_unregistering(api, agent_settings):
+    pid = "01JCLOUDPROJECT0000000005"
+    steps = [
+        ("project.create", {"name": "Gone", "slug": "gone"}),
+        ("project.bind_database", {"database": {"mode": "managed", "host": "pool-db", "database": "gone_db", "role": "gone_role"}}),
+        ("environment.create", {"slug": "development"}),
+    ]
+    for n, (kind, payload) in enumerate(steps):
+        await api.studio.post("/platform/v1/agent/execute", json={"job": job(kind, pid, id=f"del-{n}", payload=payload)})
+    assert await Environment.filter(project_id=pid).count() == 1
+    first = job("project.delete", pid, id="del-x", payload={"purge": True})
+    answer = None
+    with pytest.raises(Exception):
+        answer = await api.studio.post("/platform/v1/agent/execute", json={"job": first})
+    assert answer is None
+    await api.drain()
+    assert await Environment.filter(project_id=pid).count() == 0
+    again = job("project.delete", pid, id="del-x", payload={"purge": True})
+    done = await api.studio.post("/platform/v1/agent/execute", json={"job": again})
+    assert done["ok"] is True
+    assert await Project.filter(id=pid).count() == 0
+
+
 async def test_an_instruction_done_twice_is_answered_not_done_again(api, agent_settings):
     create = job("project.create", id="op-once", payload={"name": "Shop", "slug": "shop"})
     agent, plane = make_agent(agent_settings, [create])
