@@ -12,6 +12,7 @@ import hmac
 import json
 import logging
 import os
+import re
 from typing import Any
 
 from tortoise.exceptions import IntegrityError
@@ -24,6 +25,8 @@ from pawabase_server.projects.manager import ProjectError, ProjectManager, view
 from pawabase_server.settings import Settings
 
 logger = logging.getLogger("pawabase.agent")
+
+BUCKET = re.compile(r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$")
 
 
 class OperationError(Exception):
@@ -92,6 +95,12 @@ class Executor:
             origin="cloud",
             external_ref=job["project_id"],
         )
+        bucket = (p.get("storage") or {}).get("bucket")
+        if bucket:
+            if not BUCKET.match(str(bucket)):
+                raise OperationError("a bucket name is 3 to 63 lowercase letters, digits and hyphens")
+            project.details = {**(project.details or {}), "storage": {"bucket": str(bucket)}}
+            await project.save()
         return {"project": view(project), "created": created}
 
     async def project_update(self, job: dict[str, Any]) -> dict[str, Any]:
