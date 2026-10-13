@@ -16,6 +16,7 @@ from sillo_inertia import Inertia
 
 from pawabase_server.core.clients import ServiceClient, ServiceError
 from studio.config import StudioSettings
+from studio.scope import narrow_runtime
 
 MAX_JSON_BODY = 25 * 1024 * 1024
 
@@ -42,8 +43,14 @@ class Deps:
             path = f"{path}{separator}branch={quote(branch, safe='')}"
         return await self.core.request(method, "/platform/v1" + path, **kwargs)
 
-    async def env_props(self, ctx: HttpContext) -> dict[str, Any]:
+    async def runtime(self, ctx: HttpContext) -> dict[str, Any]:
+        """The runtime and its environments; for a session confined to a project, only that project's."""
         runtime = await self.call(ctx, "GET", "/runtime")
+        project = ctx.scope.get("studio_project")
+        return narrow_runtime(runtime, project) if project else runtime
+
+    async def env_props(self, ctx: HttpContext) -> dict[str, Any]:
+        runtime = await self.runtime(ctx)
         return {"runtime": runtime, "envs": runtime["environments"]}
 
 

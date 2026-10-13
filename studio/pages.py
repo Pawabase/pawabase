@@ -83,7 +83,7 @@ def register(app: SilloApp, deps: Deps) -> None:
     async def home(ctx: HttpContext):
         """Open straight into the runtime's default environment."""
         try:
-            runtime = await deps.call(ctx, "GET", "/runtime")
+            runtime = await deps.runtime(ctx)
         except ServiceError as exc:
             return await unavailable(exc)
         chosen = default_environment(runtime["environments"])

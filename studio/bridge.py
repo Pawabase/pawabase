@@ -16,6 +16,7 @@ from sillo.responses import JSONResponse
 
 from pawabase_server.core.clients import ServiceError
 from pawabase_server.core.context import PlatformContext
+from studio.scope import body_allowed, narrow_runtime
 from studio.support import Deps, error_response, json_body
 
 #: Bridge targets and the path prefix calls are confined to.
@@ -56,6 +57,12 @@ VISIBLE_HEADERS = {
 }
 
 
+def outside_free(ctx: HttpContext, env: str) -> bool:
+    """Whether *env* may be used by this request: always, unless the session is confined to a project that does not have it."""
+    project = ctx.scope.get("studio_project")
+    return project is None or env in ctx.scope.get("studio_envs", ())
+
+
 def register(app: SilloApp, deps: Deps) -> None:
     core = deps.core
 
@@ -66,6 +73,8 @@ def register(app: SilloApp, deps: Deps) -> None:
         env = str(body.get("env") or "")
         if not ENV_NAME.fullmatch(env):
             return JSONResponse({"detail": "invalid environment"}, status_code=400)
+        if not outside_free(ctx, env):
+            return JSONResponse({"detail": "that environment is not part of your project"}, status_code=403)
         if body.get("mfa_token"):
             payload = {
                 "grant_type": "mfa",
@@ -108,6 +117,8 @@ def register(app: SilloApp, deps: Deps) -> None:
         requested_path = str(body.get("path") or "/")
         if not ENV_NAME.fullmatch(env):
             return JSONResponse({"detail": "invalid environment"}, status_code=400)
+        if not outside_free(ctx, env):
+            return JSONResponse({"detail": "that environment is not part of your project"}, status_code=403)
         if not API_VERSION.fullmatch(version):
             return JSONResponse({"detail": "invalid API version"}, status_code=400)
         if method not in EXPLORER_METHODS:
@@ -199,6 +210,9 @@ def register(app: SilloApp, deps: Deps) -> None:
                     body = json.loads(raw)
                 except ValueError:
                     return JSONResponse({"detail": "send JSON"}, status_code=400)
+        confined = ctx.scope.get("studio_project")
+        if confined and not body_allowed("/" + clean, ctx.method, body):
+            return JSONResponse({"detail": "this setting is managed by your hosting service"}, status_code=403)
         params = dict(ctx.query_params)
         call: dict[str, Any] = {"json": body, "params": params or None}
         segments = clean.split("/")
@@ -217,6 +231,8 @@ def register(app: SilloApp, deps: Deps) -> None:
             return error_response(exc)
         if result in ({}, None, "") and ctx.method == "DELETE":
             return JSONResponse(None, status_code=204)
+        if confined and target == "platform" and clean == "runtime":
+            result = narrow_runtime(result, confined)
         return JSONResponse(result)
 
     app.route(
