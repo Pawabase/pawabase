@@ -25,6 +25,7 @@ import hashlib
 import io
 import json
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -169,11 +170,13 @@ class Deployments:
         install_requirements: bool = True,
         index_url: str = "",
         install_timeout: int = 300,
+        binary_only: bool = False,
     ) -> None:
         self.root = Path(root).resolve()
         self.install_requirements = install_requirements
         self.index_url = index_url
         self.install_timeout = install_timeout
+        self.binary_only = binary_only
         self._seen: dict[str, _Seen] = {}
 
     # ── where things are ────────────────────────────────────────────────
@@ -255,8 +258,26 @@ class Deployments:
             shutil.rmtree(building, ignore_errors=True)
         return digest
 
+    @staticmethod
+    def _install_environment() -> dict[str, str]:
+        """What the installer runs with: the way to the network and the package index, and nothing of the server's own configuration.
+
+        A package's build script is code the customer chose. It must not be handed the master key, the database addresses or the
+        internal secret just because the installer was started by the server.
+        """
+        keep = (
+            "PATH", "LANG", "LC_ALL", "SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE",
+            "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
+        )  # fmt: skip
+        env = {name: os.environ[name] for name in keep if name in os.environ}
+        env.update({k: v for k, v in os.environ.items() if k.startswith(("PIP_", "UV_"))})
+        env["HOME"] = env.get("TMPDIR", "/tmp")
+        return env
+
     def _pip(self, requirements: Path, target: Path) -> None:
         index = ["--index-url", self.index_url] if self.index_url else []
+        if self.binary_only:
+            index = [*index, "--only-binary", ":all:"]
         uv = shutil.which("uv")
         if uv:
             command = [
@@ -289,7 +310,12 @@ class Deployments:
             ]
         try:
             done = subprocess.run(
-                command, capture_output=True, text=True, timeout=self.install_timeout, check=False
+                command,
+                capture_output=True,
+                text=True,
+                timeout=self.install_timeout,
+                check=False,
+                env=self._install_environment(),
             )  # noqa: S603 - argv list, lines are validated
         except subprocess.TimeoutExpired as exc:
             raise DeploymentError(

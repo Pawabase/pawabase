@@ -27,6 +27,7 @@ def register_routes(
     from pawabase_server.routes import realtime as realtime_routes
     from pawabase_server.routes.data import hooks, invoke, storage
     from pawabase_server.routes.platform import (
+        agent,
         automation,
         backups,
         data,
@@ -44,6 +45,7 @@ def register_routes(
 
     management = Router(prefix="/platform/v1")
     for module in (
+        agent,
         environments,
         definitions,
         releases,

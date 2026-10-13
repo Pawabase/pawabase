@@ -150,6 +150,31 @@ class Settings(Config):
     #: Jobs a worker process runs at once.
     worker_concurrency: int = 4
     queue_prefix: str = "pawabase:queue:"
+    #: Put this in front of every Redis channel, cache key and queue name, so runtimes can share one Redis without hearing each other.
+    #: Empty keeps today's names. Set it to something unique per runtime when a Redis is shared.
+    namespace: str = ""
+    #: Install a deployment's libraries from wheels only (``--only-binary :all:``): a source distribution runs its build script, which is
+    #: customer-controlled code, with the API's privileges.
+    function_install_binary_only: bool = False
+
+    # ── projects ─────────────────────────────────────────────────────────
+    #: The project a fresh installation starts with, and the one environments from before projects existed are attached to.
+    default_project: str = "default"
+    #: The database that project is bound to. Empty uses ``default_data_url``, which is where an installation's data already is.
+    default_database_url: str = ""
+
+    # ── runtime agent (Cloud-managed deployments only) ───────────────────
+    #: Where this runtime's agent polls for provisioning jobs. Empty: no agent runs here.
+    agent_url: str = ""
+    agent_id: str = ""
+    #: The control plane's publishable key, which its gateway asks of every call (it opens the door; the agent's signature is the credential).
+    agent_api_key: str = ""
+    agent_token: str = ""
+    #: The runtime pool this agent serves. It only takes jobs assigned to it.
+    agent_pool: str = ""
+    agent_poll_seconds: float = 5.0
+    #: Derives the passwords of managed project databases from their ids, so a job names a database without carrying a password.
+    agent_secret_seed: str = ""
     request_retention_days: int = 14
     #: How often function and flow run records are written, in seconds. They gather in memory and go to the database in one batch.
     #: ``0`` writes each record before the request returns.

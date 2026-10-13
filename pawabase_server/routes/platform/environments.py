@@ -11,7 +11,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 from sillo import HttpContext, Router, created, no_content
-from sillo.auth.apikey import generate_api_key
 from sillo.exceptions import HTTPException
 from tortoise.transactions import in_transaction
 
@@ -19,10 +18,13 @@ from pawabase_server.automation.jobs.environments import PurgeEnvironmentJob
 from pawabase_server.core import envvars
 from pawabase_server.core.crypto import mask
 from pawabase_server.core.records import upsert
-from pawabase_server.db.models import ApiKey, Environment, Secret
+from pawabase_server.db.models import ApiKey, Environment, Project, ProjectDatabaseBinding, Secret
 from pawabase_server.environments import blueprints, env_settings
+from pawabase_server.environments.keys import create_key
 from pawabase_server.identity import directory, hosted, legal, signup_form
 from pawabase_server.platform import Platform
+from pawabase_server.projects.manager import attach_to_default_project
+from pawabase_server.projects.manager import view as project_view
 from pawabase_server.routes.common import (
     MANAGE,
     NAME_PATTERN,
@@ -141,42 +143,6 @@ class PromoteRequest(BaseModel):
 SECRET_NAME = re.compile(r"^[A-Z][A-Z0-9_]{0,127}$")
 
 
-async def create_key(
-    environment: Environment,
-    name: str,
-    role: str,
-    *,
-    scopes: list[str] | None = None,
-    expires_at: datetime | None = None,
-    allowed_ips: list[str] | None = None,
-    allowed_routes: list[str] | None = None,
-    created_by: str | None = None,
-    max_keys: int = 0,
-) -> tuple[str, ApiKey]:
-    """Mint a key with Sillo's API-key generator; only the hash is stored."""
-    if (
-        max_keys
-        and await ApiKey.filter(environment=environment, revoked_at=None).count() >= max_keys
-    ):
-        raise HTTPException(
-            status_code=403, detail="the environment API key limit has been reached"
-        )
-    full, _raw, digest = generate_api_key(prefix="pb_pk" if role == "publishable" else "pb_sk")
-    key = await ApiKey.create(
-        environment=environment,
-        name=name,
-        role=role,
-        prefix=full[:14],
-        key_hash=digest,
-        scopes=scopes or [],
-        expires_at=expires_at,
-        allowed_ips=allowed_ips or [],
-        allowed_routes=allowed_routes or [],
-        created_by=created_by,
-    )
-    return full, key
-
-
 def key_view(key: ApiKey) -> dict[str, Any]:
     data = dump(key, exclude=("key_hash",))
     data["active"] = key.revoked_at is None and (
@@ -248,9 +214,14 @@ def register(r: Router, platform: Platform) -> None:
     @r.get("/runtime", auth=MANAGE, tags=["runtime"], summary="This runtime and its environments")
     async def runtime(ctx: HttpContext):
         environments = await Environment.all()
+        projects = []
+        for project in await Project.all():
+            binding = await ProjectDatabaseBinding.get_or_none(project_id=project.id)
+            projects.append(project_view(project, binding))
         return {
             "name": platform.settings.project_name,
             "app_env": platform.settings.app_env,
+            "projects": projects,
             "environments": [environment_view(e) for e in environments],
         }
 
@@ -327,6 +298,7 @@ def register(r: Router, platform: Platform) -> None:
         async with in_transaction():
             for name in names:
                 environment = await Environment.create(name=name, settings={"public_docs": False})
+                await attach_to_default_project(environment)
                 environments.append(environment)
                 publishable, _ = await create_key(
                     environment,
@@ -426,6 +398,7 @@ def register(r: Router, platform: Platform) -> None:
             raise HTTPException(status_code=409, detail=f"environment {body.name!r} already exists")
         await check_environment_name(body.name)
         environment = await Environment.create(name=body.name, settings={"public_docs": False})
+        await attach_to_default_project(environment)
         publishable, _ = await create_key(
             environment,
             "Default publishable key",
@@ -480,6 +453,7 @@ def register(r: Router, platform: Platform) -> None:
             preview_source=source.name,
             preview_expires_at=datetime.now(UTC) + timedelta(hours=body.expires_in_hours),
         )
+        await attach_to_default_project(preview)
         publishable, _ = await create_key(
             preview,
             "Preview publishable key",

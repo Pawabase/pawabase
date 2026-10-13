@@ -28,6 +28,7 @@ from typing import Any
 from sillo.events import EventEmitter
 
 from pawabase_server.core.ids import new_ulid
+from pawabase_server.core.namespace import scoped
 
 logger = logging.getLogger("pawabase.events")
 
@@ -101,7 +102,7 @@ class EventBus:
             options["url"] = url
         self.emitter = emitter or EventEmitter(backend, on_error=self._on_error, **options)
         self.backend = backend
-        self.channel = channel
+        self.channel = scoped(channel)
         self.source = source
         self.published = 0
         self._handlers: list[Handler] = []

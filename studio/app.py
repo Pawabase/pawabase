@@ -23,6 +23,7 @@ from studio.access import StudioAccessGate
 from studio.config import StudioSettings
 from studio.password_access import StudioPasswordGate
 from studio.register import register_routes
+from studio.scope import ProjectScope
 
 ROOT = Path(__file__).resolve().parent
 ENTRY = "src/main.jsx"
@@ -102,7 +103,11 @@ def create_studio(
     )
     if settings.studio_access_secret:
         app.use(
-            StudioAccessGate(settings.studio_access_secret, secure_cookie=settings.cookie_secure)
+            StudioAccessGate(
+                settings.studio_access_secret,
+                secure_cookie=settings.cookie_secure,
+                guard=ProjectScope(client).guard,
+            )
         )
     elif settings.password_access_enabled:
         app.use(

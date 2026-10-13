@@ -48,6 +48,7 @@ from pawabase_server.db.models.platform_ops import (
     StatusPage,
     StatusSample,
 )
+from pawabase_server.db.models.projects import AgentOperation, Project, ProjectDatabaseBinding
 from pawabase_server.db.models.releases import (
     ApiVersion,
     Branch,
@@ -70,6 +71,9 @@ from pawabase_server.db.models.users import (
 )
 
 __all__ = [
+    "AgentOperation",
+    "Project",
+    "ProjectDatabaseBinding",
     "AlarmEvent",
     "AlarmRule",
     "ApiKey",

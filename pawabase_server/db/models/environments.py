@@ -24,7 +24,18 @@ class Environment(Model):
     """
 
     id = ulid_pk()
+    #: The key every table in this runtime files this environment's data under (an ``env`` column, a Redis key, a bucket prefix). It stays
+    #: unique across the runtime and never changes, which is why it is not the name people see: that is ``slug``, unique per project.
     name = fields.CharField(max_length=63, unique=True)
+    project = fields.ForeignKeyField(
+        "models.Project", related_name="environments", null=True, on_delete=fields.RESTRICT
+    )
+    #: The environment's name inside its project (``production``). Unique with the project; ``name`` equals it for the default project.
+    slug = fields.CharField(max_length=63, null=True)
+    #: The PostgreSQL schema holding this environment's tables in its project's database (the SQLite file's stem on SQLite).
+    schema_name = fields.CharField(max_length=63, null=True)
+    #: ``ready``, ``provisioning``, ``failed`` or ``deleting``. Null (rows from before projects) means ready.
+    status = fields.CharField(max_length=16, null=True, default="ready")
     is_default = fields.BooleanField(default=False)
     infra = AnyJSONField(default=dict)
     auth = AnyJSONField(default=dict)
@@ -39,6 +50,7 @@ class Environment(Model):
     class Meta:
         table = "pb_environments"
         ordering = ["name"]
+        unique_together = (("project", "slug"),)
 
 
 class ApiKey(Model):

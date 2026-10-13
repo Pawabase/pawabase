@@ -26,6 +26,7 @@ from typing import Any
 from sillo.security import RateLimitConfig, RateLimitMiddleware
 
 from pawabase_server.core import envvars
+from pawabase_server.core.namespace import scoped
 from pawabase_server.edge.quotas import RequestQuota
 
 logger = logging.getLogger("pawabase.gateway")
@@ -94,7 +95,7 @@ class EnvironmentLimits:
                 RateLimitConfig(
                     limit=rate or settings.rate_limit,
                     window=window or settings.rate_window,
-                    namespace=f"gw:{env}",
+                    namespace=scoped(f"gw:{env}"),
                     backend=self._backend,
                     key_func=self._key_func,
                 )

@@ -106,6 +106,9 @@ class StorageManager:
                 config["driver"] = "s3" if config.get("endpoint") else "local"
         else:
             config = self.platform.settings.default_storage()
+        if state.project_bucket and config.get("driver") == "s3":
+            # A project made by a control plane has a bucket of its own on the deployment's S3 server.
+            config["bucket"] = state.project_bucket
 
         overlay: dict[str, Any] = {}
         for variable, field in ENVIRONMENT_STORAGE.items():

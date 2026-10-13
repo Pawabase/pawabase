@@ -15,6 +15,7 @@ from typing import Any
 from sillo.core.http import HttpContext
 from sillo.security import RateLimitConfig, RateLimitMiddleware
 
+from pawabase_server.core.namespace import scoped
 from pawabase_server.core.telemetry import note
 from pawabase_server.edge.errors import WS_CAPACITY, Refusal
 from pawabase_server.edge.limits import EnvironmentLimits
@@ -55,7 +56,7 @@ class Admission:
             RateLimitConfig(
                 limit=settings.rate_limit,
                 window=settings.rate_window,
-                namespace="gw",
+                namespace=scoped("gw"),
                 backend=rate_backend,
                 key_func=limit_key,
             )
