@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 // Small dependency-free time-series charts drawn in real pixels (so text and
 // strokes never stretch), with a hover crosshair and tooltip.
 //
-// series: [{ key, label, color, type: "area" | "line" | "bar" }]
+// series: [{ key, label, color, type: "area" | "line" | "bar", grouped?: boolean }]
 // data:   [{ t: iso, [key]: number }]
 
 function useWidth() {
@@ -60,11 +60,14 @@ export default function Chart({ series, data, height = 220, stepSeconds, format 
   const pad = { top: 12, right: 8, bottom: 26, left: 40 };
   const innerW = Math.max(0, width - pad.left - pad.right);
   const innerH = height - pad.top - pad.bottom;
-  const stacked = series.filter((s) => s.type === "bar");
+  const bars = series.filter((s) => s.type === "bar");
+  const stacked = bars.filter((s) => !s.grouped);
+  const grouped = bars.filter((s) => s.grouped);
   const peak = Math.max(
     0,
     ...data.map((row) => Math.max(
       stacked.reduce((sum, s) => sum + (row[s.key] || 0), 0),
+      ...grouped.map((s) => row[s.key] || 0),
       ...series.filter((s) => s.type !== "bar").map((s) => row[s.key] || 0),
     )),
   );
@@ -101,7 +104,7 @@ export default function Chart({ series, data, height = 220, stepSeconds, format 
             let base = 0;
             const w = Math.max(2, Math.min(22, slot * 0.62));
             return (
-              <g key={row.t}>
+              <g key={`stack-${row.t}`}>
                 {stacked.map((s, k) => {
                   const v = row[s.key] || 0;
                   if (!v) return null;
@@ -110,6 +113,22 @@ export default function Chart({ series, data, height = 220, stepSeconds, format 
                   base += v;
                   const last = k === stacked.length - 1 || stacked.slice(k + 1).every((o) => !row[o.key]);
                   return <rect key={s.key} x={x(i) - w / 2} y={y1} width={w} height={Math.max(1, h)} rx={last ? Math.min(5, w / 2) : 0} style={{ fill: s.color }} />;
+                })}
+              </g>
+            );
+          })}
+          {grouped.length > 0 && data.map((row, i) => {
+            const groupW = Math.max(2, Math.min(28, slot * 0.72));
+            const gap = grouped.length > 1 ? Math.min(2, groupW * 0.08) : 0;
+            const w = Math.max(1, (groupW - gap * (grouped.length - 1)) / grouped.length);
+            const start = x(i) - groupW / 2;
+            return (
+              <g key={`group-${row.t}`}>
+                {grouped.map((s, k) => {
+                  const v = row[s.key];
+                  if (v == null || v === 0) return null;
+                  const y1 = y(v);
+                  return <rect key={s.key} x={start + k * (w + gap)} y={y1} width={w} height={Math.max(1, y(0) - y1)} rx={Math.min(4, w / 2)} style={{ fill: s.color }} />;
                 })}
               </g>
             );

@@ -27,6 +27,7 @@ export function Metrics({ env }) {
   const spec = catalog.find((m) => m.name === metric);
   const d = data.data;
   const rows = useMemo(() => (d?.points || []).map((point, i) => ({ t: point.t, value: point.value ?? 0, previous: d.previous?.[i]?.value ?? 0 })), [d]);
+  const latency = metric === "latency_avg" || metric === "latency_p95";
   const unit = d?.unit === "count" ? "" : d?.unit === "%" ? "%" : d?.unit ? ` ${d.unit}` : "";
   const show = (v) => (v == null ? "no data" : `${compact(v)}${unit}`);
   return (
@@ -60,8 +61,8 @@ export function Metrics({ env }) {
                 data={rows}
                 format={(v) => `${compact(v)}${unit}`}
                 series={[
-                  ...(compare ? [{ key: "previous", label: "Previous period", color: "var(--faint)", type: "line", dashed: true }] : []),
-                  { key: "value", label: spec?.label || metric, color: "var(--brand)", type: spec?.unit === "count" ? "area" : "line" },
+                  ...(compare ? [{ key: "previous", label: "Previous period", color: "var(--faint)", type: latency ? "bar" : "line", grouped: latency, dashed: true }] : []),
+                  { key: "value", label: spec?.label || metric, color: "var(--brand)", type: latency ? "bar" : spec?.unit === "count" ? "area" : "line", grouped: latency },
                 ]}
                 empty="Nothing recorded for this metric in the range."
               />

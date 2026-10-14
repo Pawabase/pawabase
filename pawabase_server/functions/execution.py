@@ -19,6 +19,7 @@ from pawabase_server.db.models import FlowRun as FlowRunRecord
 from pawabase_server.db.models import FunctionRun
 from pawabase_server.environments.state import EnvironmentState
 from pawabase_server.flows import FlowError, FlowRun
+from pawabase_server.functions.execution_limits import ExecutionLimitExceeded
 from pawabase_server.functions.registry import MAIN, FunctionError
 from pawabase_server.functions.runtime import ApiRuntime, function_context
 from pawabase_server.platform import Platform, json_safe
@@ -144,20 +145,26 @@ async def call_function(
     try:
         with span("function", name, trigger=trigger):
             owner = _owner_of(spec) if platform.isolated(state, spec) else None
-            work = (
-                platform.sandboxes.invoke(
-                    platform.deployments,
-                    env=owner[0],
-                    branch=owner[1],
-                    function=name,
-                    context=context,
-                    runtime=runtime,
-                    transactions=platform.sandbox_transactions,
+            async with platform.project_execution.acquire(
+                state.project_id,
+                max_concurrent=int(state.project_limits.get("max_function_concurrency") or 0),
+                max_queued=int(state.project_limits.get("max_queued_jobs") or 0),
+                nested=depth > 0,
+            ):
+                work = (
+                    platform.sandboxes.invoke(
+                        platform.deployments,
+                        env=owner[0],
+                        branch=owner[1],
+                        function=name,
+                        context=context,
+                        runtime=runtime,
+                        transactions=platform.sandbox_transactions,
+                    )
+                    if owner is not None
+                    else spec.handler(context)
                 )
-                if owner is not None
-                else spec.handler(context)
-            )
-            output = await asyncio.wait_for(work, timeout=spec.timeout)
+                output = await asyncio.wait_for(work, timeout=spec.timeout)
         return output
     except TimeoutError as exc:
         status, error = "failed", f"function {name!r} exceeded {spec.timeout}s"
@@ -168,6 +175,9 @@ async def call_function(
         # A function that chose to fail: its status and code reach the caller as they are, not as a 500.
         status, error = "failed", exc.message
         raise FlowError(exc.message, status=exc.status, code=exc.code, details=exc.details) from exc
+    except ExecutionLimitExceeded as exc:
+        status, error = "failed", str(exc)
+        raise FlowError(str(exc), status=429, code=exc.code) from exc
     except Exception as exc:
         # Whatever the function raised without meaning to: the run keeps what broke and where in the function (not thirty frames of the
         # framework), and the caller gets a function error carrying a request id. The original stays as its cause, for the log.

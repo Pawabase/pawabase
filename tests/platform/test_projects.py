@@ -105,14 +105,33 @@ async def test_project_gateway_limits_are_versioned_and_validate_their_shape(api
     project, _ = await m.create_project(name="metered")
     original = project.limits_version
     updated = await m.update(
-        "metered", limits={"daily_request_limit": 1000, "rate_limit": 20, "rate_window": 60}
+        "metered",
+        limits={
+            "daily_request_limit": 1000,
+            "rate_limit": 20,
+            "rate_window": 60,
+            "max_function_concurrency": 2,
+            "max_queued_jobs": 16,
+        },
     )
-    assert updated["limits"] == {"daily_request_limit": 1000, "rate_limit": 20, "rate_window": 60}
+    assert updated["limits"] == {
+        "daily_request_limit": 1000,
+        "rate_limit": 20,
+        "rate_window": 60,
+        "max_function_concurrency": 2,
+        "max_queued_jobs": 16,
+    }
     assert updated["limits_version"] == original + 1
     patched = await m.patch_limits(
         "metered", {"daily_request_limit": 0, "max_active_connections": 5}
     )
-    assert patched["limits"] == {"rate_limit": 20, "rate_window": 60, "max_active_connections": 5}
+    assert patched["limits"] == {
+        "rate_limit": 20,
+        "rate_window": 60,
+        "max_active_connections": 5,
+        "max_function_concurrency": 2,
+        "max_queued_jobs": 16,
+    }
     with pytest.raises(ProjectError):
         await m.update("metered", limits={"unknown": 1})
 

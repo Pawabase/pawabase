@@ -7,79 +7,10 @@
  * butter, sky — for anything that is decoration rather than state.
  *
  * Status colours (ok / warn / danger / info) mean a state and are never used
- * for decoration. Pastel fills always carry dark ink, in either theme.
+ * for decoration. Studio uses one focused dark theme.
  */
 
 :root {
-  --frame: #ebe8f3;
-  --canvas: #f6f4fa;
-  --surface: #ffffff;
-  --sunken: #f1eef7;
-  --line: #e7e3ef;
-  --line-2: #d9d4e4;
-  --ink: #1f1b2e;
-  --on-ink: #ffffff;
-  --text: var(--ink);
-  --muted: #6b6680;
-  --faint: #9d98b0;
-
-  --brand: #6d5bd0;
-  --brand-strong: #5a48bd;
-  --brand-soft: #eeeafd;
-  --brand-ring: rgba(109, 91, 208, 0.28);
-
-  --lavender: #cfc4fa;
-  --peach: #ffd4b8;
-  --mint: #c4ebd9;
-  --butter: #f8e6a8;
-  --sky: #c3dcf6;
-  --rose: #f7cadb;
-  --pastel-ink: #1f1b2e;
-
-  --ok: #2e8a5e;
-  --ok-soft: #def4e9;
-  --warn: #a36a09;
-  --warn-soft: #fcf1d2;
-  --danger: #c2413b;
-  --danger-soft: #fce3e1;
-  --info: #3b6db4;
-  --info-soft: #e0ebfa;
-
-  --shadow-pop: 0 18px 50px rgba(31, 27, 46, 0.16), 0 2px 8px rgba(31, 27, 46, 0.06);
-  --r-xl: 30px;
-  --r-lg: 22px;
-  --r-md: 16px;
-  --r-sm: 12px;
-  --mono: "Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --sans: "Geist Variable", "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --frame: #0e0d13;
-    --canvas: #16151d;
-    --surface: #1f1d28;
-    --sunken: #282533;
-    --line: #2d2a39;
-    --line-2: #3a3649;
-    --ink: #f1eff8;
-    --on-ink: #16151d;
-    --muted: #aaa5bd;
-    --faint: #706b84;
-    --brand: #b9abff;
-    --brand-strong: #cdc3ff;
-    --brand-soft: #2c2745;
-    --brand-ring: rgba(185, 171, 255, 0.3);
-    --ok: #6fd3a2; --ok-soft: #1c3329;
-    --warn: #efc463; --warn-soft: #3a3019;
-    --danger: #f39a93; --danger-soft: #3d2224;
-    --info: #8fb8f2; --info-soft: #1d2a40;
-    --shadow-pop: 0 18px 50px rgba(0, 0, 0, 0.5);
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
   --frame: #0e0d13;
   --canvas: #16151d;
   --surface: #1f1d28;
@@ -88,17 +19,35 @@
   --line-2: #3a3649;
   --ink: #f1eff8;
   --on-ink: #16151d;
+  --text: var(--ink);
   --muted: #aaa5bd;
   --faint: #706b84;
+
   --brand: #b9abff;
   --brand-strong: #cdc3ff;
   --brand-soft: #2c2745;
   --brand-ring: rgba(185, 171, 255, 0.3);
+
+  --lavender: #cfc4fa;
+  --peach: #ffd4b8;
+  --mint: #c4ebd9;
+  --butter: #f8e6a8;
+  --sky: #c3dcf6;
+  --rose: #f7cadb;
+  --pastel-ink: #f1eff8;
+
   --ok: #6fd3a2; --ok-soft: #1c3329;
   --warn: #efc463; --warn-soft: #3a3019;
   --danger: #f39a93; --danger-soft: #3d2224;
   --info: #8fb8f2; --info-soft: #1d2a40;
-  --shadow-pop: 0 18px 50px rgba(0, 0, 0, 0.5);
+
+  --shadow-pop: 0 18px 50px rgba(31, 27, 46, 0.16), 0 2px 8px rgba(31, 27, 46, 0.06);
+  --r-xl: 30px;
+  --r-lg: 22px;
+  --r-md: 16px;
+  --r-sm: 12px;
+  --mono: "Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: "Geist Variable", "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   color-scheme: dark;
 }
 
@@ -169,6 +118,8 @@ svg.icon { width: 18px; height: 18px; flex-shrink: 0; }
 .menu-btn { display: none; }
 .content { padding: 4px 32px 64px; max-width: 1320px; }
 .content.full { max-width: none; padding: 0; height: calc(100% - 76px); }
+.flow-main { display: flex; flex-direction: column; overflow: hidden; }
+.flow-main .flow-content { flex: 1; min-height: 0; height: auto; overflow: hidden; }
 .page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 24px; }
 .page-head p { margin: 6px 0 0; color: var(--muted); max-width: 720px; }
 
@@ -211,9 +162,10 @@ a.card:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(31, 27,
 .btn.icon-only { padding: 6px; width: 30px; height: 30px; }
 .btn .icon { width: 16px; height: 16px; }
 
-input, select, textarea { width: 100%; background: var(--surface); color: var(--text); border: 1px solid var(--line-2); border-radius: var(--r-sm); padding: 9px 12px; font: inherit; font-size: 13.5px; transition: border-color 0.15s, box-shadow 0.15s; }
+input, select, textarea { width: 100%; background: var(--surface); color: var(--text); border: 1px solid var(--line-2); border-radius: var(--r-sm); padding: 9px 12px; font: inherit; font-size: 13.5px; transition: border-color 0.15s; }
 input::placeholder, textarea::placeholder { color: var(--faint); }
-input:focus, select:focus, textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 4px var(--brand-ring); }
+/* A field has one border. Focus changes that border instead of drawing a second ring around it. */
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--brand); box-shadow: none; }
 select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239d98b0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; background-size: 16px; padding-right: 32px; }
 textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; min-height: 100px; line-height: 1.55; }
 textarea.prose { font-family: var(--sans); font-size: 13.5px; }
@@ -381,28 +333,37 @@ tr.clickable:hover td { background: var(--sunken); }
 .login-form .card { width: 100%; max-width: 400px; padding: 32px; }
 
 /* ── flow editor ──────────────────────────────────────────────────────── */
-.flow-shell { display: grid; grid-template-columns: 250px 1fr 330px; height: 100%; }
+.flow-shell { display: grid; grid-template-columns: 228px minmax(0, 1fr) 304px; width: 100%; height: 100%; min-height: 0; }
 .palette, .inspector { background: var(--surface); overflow: auto; }
 .palette { border-right: 1px solid var(--line); }
 .inspector { border-left: 1px solid var(--line); }
-.palette-group { padding: 8px 12px; }
-.palette-group h4 { margin: 10px 4px 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--faint); font-weight: 700; }
-.palette-item { padding: 8px 10px; border-radius: var(--r-sm); background: var(--sunken); margin-bottom: 6px; cursor: grab; font-size: 12.5px; font-weight: 600; border: 1px solid transparent; }
+.palette-group { padding: 5px 10px; }
+.palette-group h4 { margin: 9px 3px 6px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--faint); font-weight: 750; }
+.palette-item { padding: 7px 8px; border-radius: var(--r-sm); background: var(--sunken); margin-bottom: 4px; cursor: grab; font-size: 12px; font-weight: 600; border: 1px solid transparent; }
 .palette-item:hover { border-color: var(--brand); background: var(--brand-soft); }
-.palette-item small { display: block; color: var(--muted); font-size: 11px; line-height: 1.35; margin-top: 2px; font-weight: 450; }
-.flow-node { background: var(--surface); border: 1px solid var(--line-2); border-radius: 14px; min-width: 170px; max-width: 240px; font-size: 12px; box-shadow: 0 4px 14px rgba(31, 27, 46, 0.06); }
-.flow-node.selected { border-color: var(--brand); box-shadow: 0 0 0 4px var(--brand-ring); }
+.palette-item-title, .flow-node-title { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.palette-item-title .icon { flex: none; color: var(--brand); }
+.palette-item small { display: block; color: var(--muted); font-size: 10.5px; line-height: 1.3; margin: 3px 0 0 22px; font-weight: 450; }
+.flow-toolbar { position: absolute; z-index: 4; top: 10px; left: 10px; right: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; pointer-events: none; }
+.flow-toolbar-title, .flow-toolbar-actions { pointer-events: auto; }
+.flow-toolbar-title { min-width: 0; padding: 6px 9px; background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--line); border-radius: 9px; }
+.flow-toolbar-title b { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-toolbar-actions { gap: 5px; }
+.flow-toolbar-actions .btn { padding: 6px 9px; font-size: 11px; }
+.flow-node { background: var(--surface); border: 1px solid var(--line-2); border-radius: 12px; min-width: 170px; max-width: 240px; font-size: 12px; }
+.flow-node.selected { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-ring); }
 .flow-node.trigger .flow-node-head { background: var(--lavender); color: var(--pastel-ink); border-radius: 13px 13px 0 0; }
 .flow-node.failed { border-color: var(--danger); }
-.flow-node.ran { box-shadow: 0 0 0 3px var(--mint); }
-.flow-node-head { padding: 8px 11px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 6px; font-weight: 650; }
+.flow-node.ran { outline: 3px solid var(--mint); }
+.flow-node-head { padding: 7px 9px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 6px; font-weight: 650; }
+.flow-node-title .icon { color: var(--brand); flex: none; }
 .flow-node-body { padding: 7px 11px; color: var(--muted); font-family: var(--mono); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flow-handles { display: flex; justify-content: space-around; padding: 4px 6px 8px; font-size: 10px; color: var(--faint); }
 .react-flow__handle { width: 10px; height: 10px; background: var(--brand); border: 2px solid var(--surface); }
 .react-flow__handle.error-handle { background: var(--danger); }
 .react-flow { background: var(--canvas); }
 .react-flow__background { color: var(--line-2); }
-.react-flow__controls { box-shadow: none; border-radius: 12px; overflow: hidden; }
+.react-flow__controls { box-shadow: none; border-radius: 10px; overflow: hidden; }
 .react-flow__controls button { background: var(--surface); border-color: var(--line); fill: var(--text); }
 .react-flow__minimap { background: var(--surface); border-radius: 12px; overflow: hidden; }
 .react-flow__edge-path { stroke: var(--line-2); stroke-width: 1.8; }
@@ -418,8 +379,7 @@ tr.clickable:hover td { background: var(--sunken); }
 
 /* ── top bar: status lights and page search ─────────────────────────────── */
 :root { --chart-mint: #2fa57a; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --chart-mint: #6fd3a2; } }
-:root[data-theme="dark"] { --chart-mint: #6fd3a2; }
+:root { --chart-mint: #6fd3a2; }
 
 .small { font-size: 12.5px; }
 .lights { position: relative; display: flex; align-items: center; gap: 5px; padding: 8px 10px; border-radius: 99px; cursor: default; outline: none; }
@@ -856,34 +816,36 @@ html, body { background: var(--canvas); }
 .dock-env { margin-left: auto; font-family: var(--mono); font-size: 12px; }
 .dock-chevron { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; }
 .dock-chevron:hover { background: var(--sunken); color: var(--text); }
-.term { height: min(340px, 42vh); display: flex; flex-direction: column; background: #1e1e1e; color: #cccccc; border-bottom: 1px solid #2b2b2b; font-family: Menlo, "SF Mono", Consolas, "Courier New", monospace; font-size: 12.5px; }
+/* Keep the console deliberately distinct: VS Code's familiar dark workbench
+   colors make commands, paths, errors, and selection states readable. */
+.term { --term-bg: #1e1e1e; --term-panel: #252526; --term-line: #3c3c3c; --term-text: #d4d4d4; --term-muted: #9d9d9d; --term-blue: #569cd6; --term-green: #4ec9b0; --term-red: #f14c4c; height: min(340px, 42vh); display: flex; flex-direction: column; background: var(--term-bg); color: var(--term-text); font-family: Menlo, "SF Mono", Consolas, "Courier New", monospace; font-size: 12.5px; }
 .dock.max .term { height: min(78vh, calc(100vh - 160px)); }
-.term-head { display: flex; align-items: stretch; justify-content: space-between; background: #252526; border-bottom: 1px solid #2b2b2b; min-height: 35px; font-family: var(--sans); }
+.term-head { display: flex; align-items: stretch; justify-content: space-between; background: var(--term-panel); border-bottom: 1px solid var(--term-line); min-height: 35px; font-family: var(--sans); }
 .term-tabs { display: flex; align-items: stretch; min-width: 0; overflow-x: auto; }
-.term-tab { display: flex; align-items: center; gap: 7px; padding: 0 8px 0 14px; color: #969696; font-size: 12.5px; cursor: pointer; border-right: 1px solid #2b2b2b; white-space: nowrap; border-top: 1px solid transparent; }
-.term-tab:hover { color: #e7e7e7; }
-.term-tab.on { background: #1e1e1e; color: #ffffff; border-top-color: #007acc; }
-.term-tab button, .term-icon { display: grid; place-items: center; width: 24px; height: 24px; margin: auto 0; border: 0; border-radius: 5px; background: none; color: #a0a0a0; cursor: pointer; padding: 0; }
-.term-tab button:hover, .term-icon:hover { background: #3a3d41; color: #ffffff; }
-.term-icon.on { background: #3a3d41; color: #ffffff; }
+.term-tab { display: flex; align-items: center; gap: 7px; padding: 0 8px 0 14px; color: var(--term-muted); font-size: 12.5px; cursor: pointer; border-right: 1px solid var(--term-line); white-space: nowrap; border-top: 2px solid transparent; }
+.term-tab:hover { color: var(--term-text); background: #2d2d2d; }
+.term-tab.on { background: var(--term-bg); color: #fff; border-top-color: #007acc; }
+.term-tab button, .term-icon { display: grid; place-items: center; width: 24px; height: 24px; margin: auto 0; border: 0; border-radius: 5px; background: none; color: var(--term-muted); cursor: pointer; padding: 0; }
+.term-tab button:hover, .term-icon:hover { background: #3a3d41; color: #fff; }
+.term-icon.on { background: #3a3d41; color: #fff; }
 .term-tabs > .term-icon { margin: auto 6px; }
 .term-tools { display: flex; align-items: center; gap: 2px; padding-right: 8px; }
-.term-find { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #252526; border-bottom: 1px solid #2b2b2b; color: #a0a0a0; font-family: var(--sans); font-size: 12px; }
-.term-find input { flex: 1; min-width: 0; max-width: 320px; border: 1px solid #3c3c3c; border-radius: 4px; background: #3c3c3c; color: #cccccc; padding: 3px 8px; font: inherit; outline: none; box-shadow: none; }
+.term-find { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--term-panel); border-bottom: 1px solid var(--term-line); color: var(--term-muted); font-family: var(--sans); font-size: 12px; }
+.term-find input { flex: 1; min-width: 0; max-width: 320px; border: 1px solid var(--term-line); border-radius: 4px; background: #3c3c3c; color: var(--term-text); padding: 3px 8px; font: inherit; outline: none; box-shadow: none; }
 .term-find input:focus { border-color: #007fd4; box-shadow: none; }
-.term-out { flex: 1; overflow: auto; padding: 10px 16px; line-height: 1.55; }
+.term-out { flex: 1; overflow: auto; padding: 10px 16px; line-height: 1.55; background: var(--term-bg); }
 .term-entry { margin-bottom: 10px; }
-.term-ps { color: #0dbc79; }
+.term-ps { color: var(--term-green); }
 .term-ps b { font-weight: 600; }
-.term-path { color: #3b8eea; margin-left: 6px; }
+.term-path { color: var(--term-blue); margin-left: 6px; }
 .term-in .term-path { margin-left: 0; }
-.term-cmd { color: #cccccc; }
-.term pre { margin: 2px 0 0; white-space: pre-wrap; color: #cccccc; font-size: 12.5px; }
-.term pre.term-err { color: #f14c4c; }
+.term-cmd { color: var(--term-text); }
+.term pre { margin: 2px 0 0; white-space: pre-wrap; color: var(--term-text); font-size: 12.5px; }
+.term pre.term-err { color: var(--term-red); }
 .term-hello { color: #6a9955 !important; }
-.term mark { background: #515c6a; color: #ffffff; border-radius: 2px; box-shadow: 0 0 0 1px #ea5c0055; }
-.term-in { display: flex; gap: 8px; align-items: center; padding: 8px 16px; background: #1e1e1e; }
-.term-in input { flex: 1; min-width: 0; border: 0; outline: none; box-shadow: none; appearance: none; padding: 0; border-radius: 0; background: transparent; color: #cccccc; font: inherit; caret-color: #aeafad; }
+.term mark { background: #515c6a; color: #fff; border-radius: 2px; box-shadow: none; }
+.term-in { display: flex; gap: 8px; align-items: center; padding: 8px 16px; background: var(--term-bg); border-top: 1px solid var(--term-line); }
+.term-in input { flex: 1; min-width: 0; border: 0; outline: none; box-shadow: none; appearance: none; padding: 0; border-radius: 0; background: transparent; color: var(--term-text); font: inherit; caret-color: #aeafad; }
 .term-out::-webkit-scrollbar, .term-tabs::-webkit-scrollbar { height: 8px; width: 10px; }
 .term-out::-webkit-scrollbar-thumb { background: #424242; }
 .term { scrollbar-color: #424242 transparent; }
@@ -1243,26 +1205,16 @@ html, body { background: var(--canvas); }
    ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
 :root {
   --r-xl: 36px; --r-lg: 28px; --r-md: 20px; --r-sm: 12px;
-  --ink: #14123a;
-  --text: #14123a;
-  --muted: #5d5a7a;
-  --faint: #8f8cab;
-  --canvas: #f0eefc;
-  --sunken: #f4f2fc;
-  --line: #ebe8f5;
-  --line-2: #dcd8ec;
+  --ink: #f1eff8; --text: #f1eff8; --muted: #aaa5bd; --faint: #706b84;
+  --canvas: #16151d; --sunken: #282533; --line: #2d2a39; --line-2: #3a3649;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --ink: #f1eff8; --text: #f1eff8; --muted: #aaa5bd; --faint: #706b84; --canvas: #16151d; --sunken: #282533; --line: #2d2a39; --line-2: #3a3649; }
-}
-:root[data-theme="dark"] { --ink: #f1eff8; --text: #f1eff8; --muted: #aaa5bd; --faint: #706b84; --canvas: #16151d; --sunken: #282533; --line: #2d2a39; --line-2: #3a3649; }
 
-html, body { background: linear-gradient(135deg, #fde8f1 0%, #ece3f8 42%, #d7d5fa 100%) fixed; }
-:root[data-theme="dark"] html, :root[data-theme="dark"] body { background: var(--frame); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) html, :root:not([data-theme="light"]) body { background: var(--frame); } }
+html, body { background: var(--frame); }
 .shell { height: 100%; padding: 18px; box-sizing: border-box; background: none; }
 .shell .frame { height: 100%; border-radius: 40px; overflow: hidden; background: var(--canvas); box-shadow: 0 30px 80px rgba(70, 50, 140, 0.16), 0 0 0 1px rgba(255, 255, 255, 0.7) inset; }
 @media (max-width: 900px) { .shell { padding: 0; } .shell .frame { border-radius: 0; } }
+.shell.flow-page { padding: 0; }
+.shell.flow-page .frame { border-radius: 0; box-shadow: none; }
 
 /* sidebar */
 .shell.side-expanded .side-slot { width: 300px; }
@@ -1385,8 +1337,56 @@ html, body { background: linear-gradient(135deg, #fde8f1 0%, #ece3f8 42%, #d7d5f
 
 .shell .cmd-field input { border: 0; background: none; box-shadow: none; min-height: 0; height: 100%; padding: 0; border-radius: 0; font-size: inherit; }
 .shell .cmd-field input:focus { box-shadow: none; border: 0; }
+/* Console controls are intentionally unframed inside the dock. This comes after
+   the shared shell field rule so it cannot inherit a second field border. */
+.shell .term-in input { min-height: 0; height: auto; border: 0; border-radius: 0; padding: 0; background: transparent; box-shadow: none; }
+.shell .term-in input:focus { border: 0; box-shadow: none; }
+.shell .term-find input { min-height: 0; height: auto; border: 1px solid var(--term-line); border-radius: 4px; padding: 3px 8px; background: #3c3c3c; color: var(--term-text); box-shadow: none; }
+.shell .term-find input:focus { border-color: #007fd4; box-shadow: none; }
 .stat-card span { max-width: 58%; }
 .shell th { text-transform: capitalize; }
+
+/* Flow creation is a workbench, not a dashboard page. Keep this route-specific
+   contract after the shared v2 component rules so dashboard page padding can
+   never turn the editor back into an inset card. The main column already
+   yields space to the docked terminal, so no viewport-height arithmetic is
+   needed here. */
+.shell.flow-page .main.flow-main { min-width: 0; min-height: 0; overflow: hidden; }
+.shell.flow-page .content.flow-content {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  max-width: none;
+  padding: 0;
+  overflow: hidden;
+}
+.shell.flow-page .flow-shell {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.shell.flow-page .palette,
+.shell.flow-page .inspector {
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.shell.flow-page .flow-canvas {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--canvas);
+}
+.shell.flow-page .flow-canvas > .react-flow { position: absolute; inset: 0; }
+.shell.flow-page .inspector-tabs { padding: 8px 12px 0; }
+.shell.flow-page .inspector-body { padding: 0 14px 20px; }
 
 /* edge to edge, with a solid top bar */
 .shell { padding: 0; }

@@ -10,6 +10,7 @@ import pytest
 from pawabase_server.agent import protocol
 from pawabase_server.agent.executor import Executor
 from pawabase_server.agent.runner import Agent, ConfigurationError, check_configuration
+from pawabase_server.core.clients import ServiceError
 from pawabase_server.db.models import AgentOperation, Environment, Project, ProjectDatabaseBinding
 
 SECRET = "agent-secret-for-tests-0123456789abcdef"
@@ -165,13 +166,23 @@ async def test_a_project_instruction_can_name_the_projects_bucket(api, agent_set
     pid = "01JCLOUDPROJECT0000000002"
     executor = Executor(agent_settings)
     await executor.execute(
-        job("project.create", pid, id="op-b", payload={"name": "Bucketed", "slug": "bucketed", "storage": {"bucket": "pb-bucketed"}})
+        job(
+            "project.create",
+            pid,
+            id="op-b",
+            payload={"name": "Bucketed", "slug": "bucketed", "storage": {"bucket": "pb-bucketed"}},
+        )
     )
     project = await Project.get(id=pid)
     assert project.details["storage"] == {"bucket": "pb-bucketed"}
     with pytest.raises(Exception, match="bucket name"):
         await executor.execute(
-            job("project.create", "01JCLOUDPROJECT0000000003", id="op-c", payload={"name": "Bad", "slug": "bad", "storage": {"bucket": "../x"}})
+            job(
+                "project.create",
+                "01JCLOUDPROJECT0000000003",
+                id="op-c",
+                payload={"name": "Bad", "slug": "bad", "storage": {"bucket": "../x"}},
+            )
         )
 
 
@@ -190,15 +201,28 @@ async def test_a_pushed_delete_purges_environments_before_unregistering(api, age
     pid = "01JCLOUDPROJECT0000000005"
     steps = [
         ("project.create", {"name": "Gone", "slug": "gone"}),
-        ("project.bind_database", {"database": {"mode": "managed", "host": "pool-db", "database": "gone_db", "role": "gone_role"}}),
+        (
+            "project.bind_database",
+            {
+                "database": {
+                    "mode": "managed",
+                    "host": "pool-db",
+                    "database": "gone_db",
+                    "role": "gone_role",
+                }
+            },
+        ),
         ("environment.create", {"slug": "development"}),
     ]
     for n, (kind, payload) in enumerate(steps):
-        await api.studio.post("/platform/v1/agent/execute", json={"job": job(kind, pid, id=f"del-{n}", payload=payload)})
+        await api.studio.post(
+            "/platform/v1/agent/execute",
+            json={"job": job(kind, pid, id=f"del-{n}", payload=payload)},
+        )
     assert await Environment.filter(project_id=pid).count() == 1
     first = job("project.delete", pid, id="del-x", payload={"purge": True})
     answer = None
-    with pytest.raises(Exception):
+    with pytest.raises(ServiceError):
         answer = await api.studio.post("/platform/v1/agent/execute", json={"job": first})
     assert answer is None
     await api.drain()

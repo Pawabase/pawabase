@@ -20,7 +20,7 @@ from sillo.exceptions import HTTPException
 
 from pawabase_server.core.context import current_context
 from pawabase_server.core.ids import new_ulid
-from pawabase_server.db.models import FunctionDeployment, FunctionRun
+from pawabase_server.db.models import Environment, FunctionDeployment, FunctionRun
 from pawabase_server.functions.deployments import DeploymentError
 from pawabase_server.functions.registry import MAIN
 from pawabase_server.platform import Platform
@@ -121,6 +121,53 @@ def register(r: Router, platform: Platform) -> None:
         platform.envs.forget(env)
         return deployment
 
+    async def enforce_deployment_limit(environment: Environment, branch: str) -> None:
+        """Reserve an active function-deployment slot for a new branch.
+
+        A deployment revision replaces the active revision on its branch, so updating
+        an existing branch does not consume another slot.  The limit is project-wide
+        and is read from the cached environment state (which is invalidated when the
+        project's plan changes), while the active count is authoritative in the
+        control-plane database.
+        """
+        state = await platform.state(environment.name)
+        raw_limit = state.project_limits.get("max_function_deployments")
+        if raw_limit in (None, 0):  # zero/omitted means unlimited in project policies
+            return
+        try:
+            limit = int(raw_limit)
+        except (TypeError, ValueError):
+            return
+        if limit < 1 or not state.project_id:
+            return
+
+        # Re-deploying or rolling back the current branch is a replacement, not a
+        # new slot.  This check also makes the reactivate endpoint obey the same rule.
+        if await FunctionDeployment.filter(
+            environment_id=environment.id, branch=branch, status="active"
+        ).exists():
+            return
+
+        environment_ids = await Environment.filter(project_id=state.project_id).values_list(
+            "id", flat=True
+        )
+        used = await FunctionDeployment.filter(
+            environment_id__in=environment_ids, status="active"
+        ).count()
+        if used >= limit:
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "message": (
+                        f"This project's plan allows {limit} active function deployment"
+                        f"{'s' if limit != 1 else ''}; upgrade your plan to deploy another."
+                    ),
+                    "code": "plan_limit",
+                    "limit": limit,
+                    "used": used,
+                },
+            )
+
     @r.get(f"{base}/function-deployments", auth=MANAGE, tags=["functions"])
     async def deployments(ctx: HttpContext, env: str):
         _manage_scope(ctx)
@@ -143,6 +190,7 @@ def register(r: Router, platform: Platform) -> None:
             raise HTTPException(status_code=422, detail="archive is not valid base64") from exc
         if len(raw) > platform.limit(env, "MAX_UPLOAD_BYTES", platform.settings.max_upload_bytes):
             raise HTTPException(status_code=413, detail="archive exceeds the upload limit")
+        await enforce_deployment_limit(environment, body.branch)
         deployment = await FunctionDeployment.create(
             id=new_ulid(),
             environment=environment,
@@ -185,6 +233,7 @@ def register(r: Router, platform: Platform) -> None:
         row = await FunctionDeployment.get_or_none(id=deployment_id, environment=environment)
         if row is None or row.status == "removed":
             raise HTTPException(status_code=404, detail="no such function deployment")
+        await enforce_deployment_limit(environment, row.branch)
         await activate(env, row, None)
         await audit(
             ctx, "function.activated", env=env, target=row.id, details={"branch": row.branch}

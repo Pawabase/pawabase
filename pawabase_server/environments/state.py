@@ -113,6 +113,8 @@ class EnvironmentState:
     project_database: str | None = None
     #: The bucket the project's own storage lives in, when its control plane made one (the S3 credentials stay the deployment's).
     project_bucket: str | None = None
+    project_limits: dict[str, int] = field(default_factory=dict)
+    project_limits_version: int = 1
     project_problem: str | None = None
     engine: PolicyEngine = field(default_factory=PolicyEngine)
     compiled_schemas: dict[str, Any] = field(default_factory=dict)
@@ -233,6 +235,8 @@ async def attach_project(platform: Platform, state: EnvironmentState) -> None:
     state.project_is_default = bool(project and project.is_default)
     if project is not None:
         state.project_bucket = ((project.details or {}).get("storage") or {}).get("bucket")
+        state.project_limits = dict(project.limits or {})
+        state.project_limits_version = project.limits_version
     binding = await ProjectDatabaseBinding.get_or_none(project_id=project_id)
     if binding is None:
         return

@@ -302,7 +302,9 @@ class Edge:
                 self.stats["refused"] += 1
                 await respond(send, refusal, request_id)
                 return
-        if (refusal := await self.admission.admit_request(scope, receive, context, info)) is not None:
+        if (
+            refusal := await self.admission.admit_request(scope, receive, context, info)
+        ) is not None:
             await respond(send, refusal, request_id)
             return
         if (refusal := await self._user_key(request, context)) is not None:
