@@ -367,6 +367,46 @@ async def test_inbound_hooks_verify_paystack_sha512_signatures(acme):
     assert events[0]["payload"]["body"]["event"] == "charge.success"
 
 
+async def test_inbound_hooks_verify_timestamped_signatures(acme):
+    import time
+
+    api = acme
+    hook = await api.studio.post(
+        f"{ENV}/inbound-hooks",
+        json={
+            "slug": "bachs",
+            "target": "payment.completed",
+            "verification": "hmac-sha256-ts",
+            "signature_header": "x-bachs-signature-v2",
+        },
+    )
+    secret = hook["secret"]
+    body = json.dumps({"type": "collection.succeeded", "data": {"checkout_id": "chk_1"}}).encode()
+
+    def sign(stamp, key=secret):
+        return hmac.new(key.encode(), f"{stamp}.".encode() + body, hashlib.sha256).hexdigest()
+
+    async def post(headers):
+        return await api.http.post(
+            "/hooks/v1/development/bachs",
+            content=body,
+            headers={"content-type": "application/json", **headers},
+        )
+
+    now = int(time.time())
+    # The t=…,v1=… form, with a second v1 as during a secret rotation.
+    header = f"t={now},v1={sign(now, 'the-old-secret')},v1={sign(now)}"
+    assert (await post({"x-bachs-signature-v2": header})).status_code == 202
+    # A stale delivery, a wrong secret, and a body signed without the timestamp are all refused.
+    old = now - 3600
+    assert (await post({"x-bachs-signature-v2": f"t={old},v1={sign(old)}"})).status_code == 401
+    assert (
+        await post({"x-bachs-signature-v2": f"t={now},v1={sign(now, 'nope')}"})
+    ).status_code == 401
+    bare = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    assert (await post({"x-bachs-signature-v2": f"t={now},v1={bare}"})).status_code == 401
+
+
 async def test_storage_with_policies_and_signed_urls(acme):
     api = acme
     await api.studio.post(
