@@ -23,6 +23,12 @@ x-pawabase: &pawabase
     PAWABASE_WORKER_MODE: external
     PAWABASE_HOST: 0.0.0.0
     PAWABASE_INTERNAL_HOST: 0.0.0.0
+    # Fast Linux event loop and HTTP parser. Set either to `auto` to let Uvicorn select a portable fallback.
+    PAWABASE_HTTP_LOOP: ${PAWABASE_HTTP_LOOP:-uvloop}
+    PAWABASE_HTTP_PROTOCOL: ${PAWABASE_HTTP_PROTOCOL:-httptools}
+    PAWABASE_HTTP_BACKLOG: ${PAWABASE_HTTP_BACKLOG:-2048}
+    PAWABASE_HTTP_KEEP_ALIVE: ${PAWABASE_HTTP_KEEP_ALIVE:-10}
+    PAWABASE_HTTP_LIMIT_CONCURRENCY: ${PAWABASE_HTTP_LIMIT_CONCURRENCY:-0}
     PAWABASE_INTERNAL_SECRET: ${PAWABASE_INTERNAL_SECRET:-dev-internal-secret-change-me-please}
     PAWABASE_JWT_MASTER_SECRET: ${PAWABASE_JWT_MASTER_SECRET:-dev-jwt-master-secret-change-me-please}
     PAWABASE_MASTER_KEY: ${PAWABASE_MASTER_KEY:-dev-master-key-change-me-please-0000}
@@ -70,6 +76,10 @@ services:
   worker:
     <<: *pawabase
     command: ["watchfiles", "--filter", "python", "python -m pawabase_server worker", "/app/pawabase_server"]
+    # Four worker processes × the default four concurrent jobs gives this 16-vCPU Docker runtime a useful starting point.
+    # Override PAWABASE_WORKER_REPLICAS for the host's CPU/RAM budget; the scheduler remains a singleton.
+    deploy:
+      replicas: ${PAWABASE_WORKER_REPLICAS:-4}
     healthcheck:
       disable: true
     depends_on:

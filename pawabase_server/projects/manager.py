@@ -57,6 +57,8 @@ LIMIT_FIELDS = frozenset(
         "max_realtime_channels",
         "max_webhooks",
         "max_inbound_hooks",
+        "max_function_concurrency",
+        "max_queued_jobs",
     }
 )
 

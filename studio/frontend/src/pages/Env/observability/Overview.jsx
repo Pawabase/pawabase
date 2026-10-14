@@ -33,8 +33,8 @@ function indicators(s) {
   return [
     { key: "requests", label: "Requests", value: num(t.requests), sub: `${t.error_rate}% server errors`, bad: t.error_rate >= 5, rows: s.traffic.series, spark: sum(["requests"]), color: COLOR.info, section: "routes",
       lines: [["requests", "Requests", COLOR.info, "area"], ["client_errors", "4xx", COLOR.warn, "line"], ["errors", "5xx", COLOR.bad, "line"]] },
-    { key: "latency", label: "Latency", value: ms(t.avg_latency_ms), sub: "average per request", rows: s.traffic.series, spark: (r) => r.latency_ms || 0, color: COLOR.brand, section: "routes",
-      lines: [["latency_ms", "Average latency (ms)", COLOR.brand, "area"]] },
+    { key: "latency", label: "Latency", value: ms(t.avg_latency_ms), sub: "average per request", rows: s.traffic.series, spark: (r) => r.latency_ms || 0, color: COLOR.brand, section: "routes", format: ms,
+      lines: [["latency_ms", "Average latency (ms)", COLOR.brand, "bar"]] },
     { key: "jobs", label: "Jobs", value: num(s.jobs.totals.total), sub: s.jobs.totals.failed ? `${num(s.jobs.totals.failed)} failed · ${s.jobs.backlog.waiting} waiting` : `${s.jobs.backlog.waiting} waiting`, bad: s.jobs.totals.failed > 0, rows: s.jobs.series, spark: sum(["succeeded", "failed", "retrying"]), color: COLOR.ok, section: "queues",
       lines: [["succeeded", "Succeeded", COLOR.ok, "area"], ["failed", "Failed", COLOR.bad, "line"], ["retrying", "Retrying", COLOR.warn, "line"]] },
     { key: "flows", label: "Flow runs", value: num(s.flows.totals.runs), sub: s.flows.totals.failed ? `${s.flows.totals.failed} failed` : "none failed", bad: s.flows.totals.failed > 0, rows: s.flows.series, spark: sum(["succeeded", "failed"]), color: COLOR.brand, section: "flows",
@@ -103,7 +103,7 @@ function Body({ s, services, focus, setFocus, filter, setFilter, showAll, setSho
 
       <Card title={active.label} className="chart-card"
         actions={<><Legend items={active.lines.map(([, label, color]) => [label, color])} /><button type="button" className="chip" onClick={() => onOpen(active.section)}>Open {active.label.toLowerCase()} →</button></>}>
-        <Chart height={230} stepSeconds={s.window.step_seconds} data={active.rows}
+        <Chart height={230} stepSeconds={s.window.step_seconds} data={active.rows} format={active.format}
           series={active.lines.map(([key, label, color, type]) => ({ key, label, color, type }))} empty={`No ${active.label.toLowerCase()} activity in this window.`} />
       </Card>
 

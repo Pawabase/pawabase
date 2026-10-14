@@ -71,6 +71,13 @@ class Settings(Config):
     log_level: str = "info"
     #: Which peers uvicorn believes about ``X-Forwarded-*`` (the edge applies its own ``trusted_proxies`` on top).
     forwarded_allow_ips: str = "*"
+    #: Uvicorn's event loop and HTTP parser. Docker defaults to uvloop + httptools; ``auto`` keeps Uvicorn's portable selection.
+    http_loop: Literal["auto", "asyncio", "uvloop"] = "auto"
+    http_protocol: Literal["auto", "h11", "httptools"] = "auto"
+    #: Socket backlog and connection behaviour for both HTTP listeners. ``0`` means no application-level concurrency cap.
+    http_backlog: int = 2048
+    http_keep_alive: int = 10
+    http_limit_concurrency: int = 0
 
     # ── core ─────────────────────────────────────────────────────────────
     app_env: Literal["local", "testing", "staging", "production"] = "local"

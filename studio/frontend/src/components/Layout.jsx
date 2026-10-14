@@ -66,29 +66,6 @@ export function envHref(env, section, child = "") {
   }
 }
 
-function readTheme() {
-  try {
-    return localStorage.getItem("pawabase.theme") || "system";
-  } catch {
-    return "system";
-  }
-}
-
-function useTheme() {
-  const [theme, setTheme] = useState(readTheme);
-  useEffect(() => {
-    if (theme === "system") document.documentElement.removeAttribute("data-theme");
-    else document.documentElement.setAttribute("data-theme", theme);
-    try {
-      localStorage.setItem("pawabase.theme", theme);
-    } catch {
-      /* private mode: the choice lasts for this page only */
-    }
-  }, [theme]);
-  const dark = theme === "dark" || (theme === "system" && window.matchMedia?.("(prefers-color-scheme: dark)").matches);
-  return [dark, () => setTheme(dark ? "light" : "dark")];
-}
-
 /** The few numbers worth a glance at the top of Overview: real counts, large. */
 function StatCards({ env, hrefFor }) {
   const analytics = useApi(envPath(env, "/analytics"), { params: { range: "24h" } });
@@ -381,16 +358,26 @@ function EnvMenu({ name, env, envs, projects = [], section, open, setOpen, onHis
   );
 }
 
-export default function Layout({ title, crumbs = [], children, full, subnav }) {
+export default function Layout({ title, crumbs = [], children, full, subnav, flowPage = false }) {
   const { props, url } = usePage();
   const { runtime, envs, env, section } = props;
-  const [dark, toggleTheme] = useTheme();
   const [navOpen, setNavOpen] = useState(false);
   const [sidebar, setSidebar] = useSidebarMode();
+  const sidebarBeforeFlow = useRef(sidebar);
   const [envMenu, setEnvMenu] = useState(false);
   const [newEnv, setNewEnv] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(() => new URLSearchParams(url.split("?")[1] || "").has("history"));
   useEffect(() => { setNavOpen(false); setEnvMenu(false); }, [url]);
+  useEffect(() => {
+    if (!flowPage) return undefined;
+    sidebarBeforeFlow.current = sidebar;
+    if (sidebar !== "collapsed") setSidebar("collapsed");
+    return () => {
+      if (sidebarBeforeFlow.current !== "collapsed") setSidebar(sidebarBeforeFlow.current);
+    };
+  // The editor owns this temporary navigation mode for its lifetime.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flowPage]);
   useEffect(() => setHistoryOpen(new URLSearchParams(url.split("?")[1] || "").has("history")), [url]);
   const closeHistory = () => {
     setHistoryOpen(false);
@@ -403,7 +390,7 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
   return (
     <ToastProvider>
       <Head title={title} />
-      <div className={`shell side-${subnav && sidebar === "expanded" ? "hover" : sidebar} ${subnav ? "has-sub" : ""} ${navOpen ? "nav-open" : ""}`}>
+      <div className={`shell side-${subnav && sidebar === "expanded" ? "hover" : sidebar} ${subnav ? "has-sub" : ""} ${navOpen ? "nav-open" : ""} ${flowPage ? "flow-page" : ""}`}>
        <div className="frame">
         <div className="side-slot">
         <button type="button" className="side-collapse" onClick={() => setSidebar(sidebar === "expanded" ? "collapsed" : "expanded")} aria-label={sidebar === "expanded" ? "Collapse the sidebar" : "Expand the sidebar"} title={sidebar === "expanded" ? "Collapse" : "Expand"}><Icon name="chevronRight" size={16} style={{ transform: sidebar === "expanded" ? "rotate(180deg)" : "none" }} /></button>
@@ -440,7 +427,7 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
         {subnav && <SubNav subnav={subnav} backHref={env ? envHref(env, "overview") : "/"} />}
         {navOpen && <div className="sheet-overlay" style={{ zIndex: 39 }} onClick={() => setNavOpen(false)} />}
         <div className="main-col">
-        <main className="main">
+        <main className={`main ${flowPage ? "flow-main" : ""}`}>
           <div className="topbar">
             <button type="button" className="icon-btn menu-btn" onClick={() => setNavOpen(true)} aria-label="Open navigation"><Icon name="menu" /></button>
             <span data-tour="search" className="tour-wrap top-search"><CommandSearch /></span>
@@ -451,12 +438,9 @@ export default function Layout({ title, crumbs = [], children, full, subnav }) {
               </div>
               {env && <Button size="sm" data-tour="history" onClick={() => setHistoryOpen(true)} title="Checkout, create, merge, and review branches"><Icon name="gitBranch" size={15} /> History</Button>}
               <StatusLights />
-              <button type="button" data-tour="theme" className="icon-btn" onClick={toggleTheme} aria-label={dark ? "Switch to light" : "Switch to dark"}>
-                <Icon name={dark ? "sun" : "moon"} />
-              </button>
             </div>
           </div>
-          <div className={`content ${full ? "full" : ""}`}>
+          <div className={`content ${full ? "full" : ""} ${flowPage ? "flow-content" : ""}`}>
             {env && section === "overview" && <StatCards env={env} hrefFor={(page) => envHref(env, page)} />}
             {children}
           </div>

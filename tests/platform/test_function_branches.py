@@ -10,7 +10,9 @@ import pytest
 from pawabase import codec
 
 from pawabase_server.core.tokens import issue_user_token
+from pawabase_server.db.models import Project
 from pawabase_server.functions.deployments import Deployments, unpack
+from pawabase_server.projects.manager import ProjectManager
 
 
 def env(name="development"):
@@ -94,6 +96,36 @@ async def test_environments_do_not_share_functions(shop):
     assert await call(shop, "a", env_name="production") == (200, {"data": "prod"}) and await call(
         shop, "a"
     ) == (200, {"data": "dev"})
+
+
+async def test_plan_limits_active_function_deployment_slots_across_environments(api):
+    project = await Project.get(is_default=True)
+    await ProjectManager(api.settings, api.platform.box).update(
+        project.id, limits={"max_function_deployments": 1}
+    )
+    first = await api.studio.post(
+        f"{env()}/function-deployments",
+        json={"archive": bundle(**{"functions/a.py": fn("a", "one")})},
+    )
+    assert first["deployment"]["status"] == "active"
+
+    # A replacement on the same branch is allowed: it does not create another
+    # active deployment slot.
+    replacement = await api.studio.post(
+        f"{env()}/function-deployments",
+        json={"archive": bundle(**{"functions/a.py": fn("a", "two")})},
+    )
+    assert replacement["deployment"]["status"] == "active"
+
+    with pytest.raises(Exception) as refused:
+        await api.studio.post(
+            f"{env()}/function-deployments",
+            json={
+                "branch": "feature-limit",
+                "archive": bundle(**{"functions/b.py": fn("b", "blocked")}),
+            },
+        )
+    assert refused.value.status == 402
 
 
 async def test_a_branch_has_its_own_functions_and_falls_back_to_the_environments(shop):

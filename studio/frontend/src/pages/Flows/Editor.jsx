@@ -5,6 +5,7 @@ import {
 } from "@xyflow/react";
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import Layout, { envHref } from "../../components/Layout";
+import { Icon } from "../../components/icons";
 import { Badge, Button, Field, Json, JsonInput, Tabs, useAction } from "../../components/ui";
 import { envPath, post, put } from "../../lib/api";
 
@@ -12,6 +13,10 @@ const CATEGORY_ORDER = ["triggers", "control", "resources", "responses", "auth",
 const rank = (c) => (CATEGORY_ORDER.includes(c) ? CATEGORY_ORDER.indexOf(c) : 99);
 const plain = (text) => (text || "").replace(/``/g, "");
 const BlocksContext = createContext({ byKey: {}, trace: {} });
+
+function blockIcon(block) {
+  return block?.key ? `block:${block.key}` : "flowBlock";
+}
 
 export default function FlowEditor(props) {
   return (
@@ -101,18 +106,19 @@ function Editor({ env, flow, blocks }) {
   const nodeTypes = useMemo(() => ({ block: BlockNode }), []);
 
   return (
-    <Layout title={meta.name || "New flow"} crumbs={[<a key="f" href={envHref(env, "flows")}>flows</a>, meta.name || "new"]} full>
+    <Layout title={meta.name || "New flow"} crumbs={[<a key="f" href={envHref(env, "flows")}>flows</a>, meta.name || "new"]} full flowPage>
       <BlocksContext.Provider value={{ byKey, trace }}>
         <div className="flow-shell">
           <Palette blocks={blocks} onAdd={addBlock} />
-          <div ref={wrapper} onDrop={onDrop} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }} style={{ position: "relative" }}>
-            <div className="row" style={{ position: "absolute", zIndex: 4, top: 12, left: 12, right: 12, justifyContent: "space-between", pointerEvents: "none" }}>
-              <div className="row" style={{ pointerEvents: "auto" }}>
+          <div className="flow-canvas" ref={wrapper} onDrop={onDrop} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}>
+            <div className="flow-toolbar">
+              <div className="row flow-toolbar-title">
+                <Icon name="flowBlock" size={18} />
                 <b>{meta.name || "Untitled flow"}</b>
                 <Badge tone={meta.enabled ? "green" : ""}>{meta.enabled ? "enabled" : "disabled"}</Badge>
                 {problems && (problems.length ? <Badge tone="red">{problems.length} problem(s)</Badge> : <Badge tone="green">valid</Badge>)}
               </div>
-              <div className="row" style={{ pointerEvents: "auto" }}>
+              <div className="row flow-toolbar-actions">
                 <Button onClick={validate} disabled={busy}>Validate</Button>
                 {!isNew && <Button onClick={() => setPanel("run")}>Test run</Button>}
                 <Button variant="primary" onClick={save} disabled={busy || !meta.name}>Save</Button>
@@ -138,14 +144,14 @@ function Editor({ env, flow, blocks }) {
             </ReactFlow>
           </div>
           <aside className="inspector">
-            <div style={{ padding: "8px 12px 0" }}>
+            <div className="inspector-tabs">
               <Tabs
                 value={panel}
                 onChange={setPanel}
                 tabs={[{ value: "flow", label: "Flow" }, ...(selectedNode ? [{ value: "node", label: "Block" }] : []), ...(!isNew ? [{ value: "run", label: "Run" }] : [])]}
               />
             </div>
-            <div style={{ padding: "0 14px 20px" }} className="stack">
+            <div className="stack inspector-body">
               {panel === "flow" && <FlowSettings meta={meta} setMeta={setMeta} isNew={isNew} problems={problems} />}
               {panel === "node" && selectedNode && (
                 <NodeInspector
@@ -196,7 +202,7 @@ function Palette({ blocks, onAdd }) {
               onDoubleClick={() => onAdd(b.key)}
               title="Drag onto the canvas, or double-click to add"
             >
-              {b.title}
+              <span className="palette-item-title"><Icon name={blockIcon(b)} size={15} /><span>{b.title}</span></span>
               <small>{plain(b.description)}</small>
             </div>
           ))}
@@ -217,7 +223,7 @@ function BlockNode({ id, data, selected }) {
     <div className={`flow-node ${selected ? "selected" : ""} ${block.trigger ? "trigger" : ""} ${state || ""}`}>
       {!block.trigger && <Handle type="target" position={Position.Top} />}
       <div className="flow-node-head">
-        <b>{data.label || block.title}</b>
+        <span className="flow-node-title"><Icon name={blockIcon(block)} size={15} /><b>{data.label || block.title}</b></span>
         <span className="faint mono" style={{ fontSize: 10 }}>{id}</span>
       </div>
       <div className="flow-node-body" title={summary}>{summary || data.block}</div>

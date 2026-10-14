@@ -28,7 +28,9 @@ async def confined(tmp_path):
 
     dist = tmp_path / "frontend" / "dist"
     (dist / ".vite").mkdir(parents=True)
-    (dist / ".vite" / "manifest.json").write_text('{"src/main.jsx": {"file": "assets/main-abc.js"}}')
+    (dist / ".vite" / "manifest.json").write_text(
+        '{"src/main.jsx": {"file": "assets/main-abc.js"}}'
+    )
     settings = StudioSettings(
         _env_file=None,
         app_env="testing",
@@ -45,7 +47,9 @@ async def confined(tmp_path):
     await app._startup()
     http = AsyncTestClient(app, base_url="http://studio.test", follow_redirects=False)
     try:
-        yield Studio(app=app, http=http, api=core, accounts=core.identity, angula=core, settings=settings)
+        yield Studio(
+            app=app, http=http, api=core, accounts=core.identity, angula=core, settings=settings
+        )
     finally:
         await http.aclose()
         await app._shutdown()
@@ -157,7 +161,9 @@ async def test_the_bridge_and_the_explorer_refuse_other_environments_and_infra_w
     )
     assert ok.status_code == 200
     settings = await confined.http.patch(
-        "/studio/api/platform/envs/main", json={"auth": {"site_url": "https://a.test"}}, headers=csrf
+        "/studio/api/platform/envs/main",
+        json={"auth": {"site_url": "https://a.test"}},
+        headers=csrf,
     )
     assert settings.status_code == 200
 

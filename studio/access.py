@@ -158,7 +158,9 @@ class StudioAccessGate:
             if project and self.guard is not None:
                 allowed = await self.guard(scope, project)
                 if not allowed:
-                    logger.warning("project-scoped Studio request refused: project=%s path=%s", project, path)
+                    logger.warning(
+                        "project-scoped Studio request refused: project=%s path=%s", project, path
+                    )
                     if scope["type"] == "websocket":
                         await send({"type": "websocket.close", "code": 4403})
                     else:

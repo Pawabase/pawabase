@@ -120,8 +120,8 @@ export default function Overview({ runtime, env, overview }) {
         )}
         {tab === "latency" && (
           <>
-            <p className="chart-sum"><b>{compact(s.avg_latency_ms)} ms</b> average latency</p>
-            <Chart height={320} stepSeconds={step} data={series} format={(v) => `${compact(v)}`} series={[{ key: "latency_ms", label: "Avg latency (ms)", color: C.latency, type: "line" }]} empty="No requests to measure yet." />
+            <p className="chart-sum"><b>{compact(s.avg_latency_ms)} ms</b> average latency across requests</p>
+            <Chart height={320} stepSeconds={step} data={series} format={(v) => `${compact(v)} ms`} series={[{ key: "latency_ms", label: "Average latency", color: C.latency, type: "bar" }]} empty="No requests to measure yet." />
           </>
         )}
         {tab === "automation" && (

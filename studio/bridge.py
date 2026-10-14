@@ -30,7 +30,15 @@ BRIDGE: dict[str, str] = {
 
 #: The public data-plane prefixes the explorer and the terminal's ``http`` command may call, beyond ``/rest``. Never ``/platform``,
 #: ``/admin`` or ``/internal``: those are management, and this request carries no operator.
-PUBLIC_PREFIXES = ("/functions/v1/", "/flows/v1/", "/auth/v1/", "/storage/v1/", "/health/v1", "/docs/v1/", "/hooks/v1/")
+PUBLIC_PREFIXES = (
+    "/functions/v1/",
+    "/flows/v1/",
+    "/auth/v1/",
+    "/storage/v1/",
+    "/health/v1",
+    "/docs/v1/",
+    "/hooks/v1/",
+)
 ENV_NAME = re.compile(r"[a-z][a-z0-9_-]{0,62}")
 API_VERSION = re.compile(r"v[1-9][0-9]*")
 EXPLORER_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
@@ -71,7 +79,9 @@ def register(app: SilloApp, deps: Deps) -> None:
         """Usage for the confined project, never installation-wide counters."""
         project = ctx.scope.get("studio_project")
         if not project:
-            return JSONResponse({"detail": "project-scoped Studio access is required"}, status_code=403)
+            return JSONResponse(
+                {"detail": "project-scoped Studio access is required"}, status_code=403
+            )
         try:
             result = await core.request(
                 "GET", "/internal/v1/gateway/usage", params={"project": project}
@@ -88,7 +98,9 @@ def register(app: SilloApp, deps: Deps) -> None:
         if not ENV_NAME.fullmatch(env):
             return JSONResponse({"detail": "invalid environment"}, status_code=400)
         if not outside_free(ctx, env):
-            return JSONResponse({"detail": "that environment is not part of your project"}, status_code=403)
+            return JSONResponse(
+                {"detail": "that environment is not part of your project"}, status_code=403
+            )
         if body.get("mfa_token"):
             payload = {
                 "grant_type": "mfa",
@@ -132,7 +144,9 @@ def register(app: SilloApp, deps: Deps) -> None:
         if not ENV_NAME.fullmatch(env):
             return JSONResponse({"detail": "invalid environment"}, status_code=400)
         if not outside_free(ctx, env):
-            return JSONResponse({"detail": "that environment is not part of your project"}, status_code=403)
+            return JSONResponse(
+                {"detail": "that environment is not part of your project"}, status_code=403
+            )
         if not API_VERSION.fullmatch(version):
             return JSONResponse({"detail": "invalid API version"}, status_code=400)
         if method not in EXPLORER_METHODS:
@@ -150,7 +164,9 @@ def register(app: SilloApp, deps: Deps) -> None:
                 or any(ord(c) < 0x20 for c in clean)
                 or not (clean.startswith("/rest/v") or clean.startswith(PUBLIC_PREFIXES))
             ):
-                return JSONResponse({"detail": "that is not a public endpoint path"}, status_code=400)
+                return JSONResponse(
+                    {"detail": "that is not a public endpoint path"}, status_code=400
+                )
             target_path = endpoint
         else:
             expected_prefix = f"/rest/{version}"
@@ -205,7 +221,9 @@ def register(app: SilloApp, deps: Deps) -> None:
                     if key.lower() in VISIBLE_HEADERS
                 },
                 "body": result.get("body"),
-                "size": len(json.dumps(result.get("body"), default=str)) if result.get("body") is not None else 0,
+                "size": len(json.dumps(result.get("body"), default=str))
+                if result.get("body") is not None
+                else 0,
             }
         )
 
@@ -226,7 +244,9 @@ def register(app: SilloApp, deps: Deps) -> None:
                     return JSONResponse({"detail": "send JSON"}, status_code=400)
         confined = ctx.scope.get("studio_project")
         if confined and not body_allowed("/" + clean, ctx.method, body):
-            return JSONResponse({"detail": "this setting is managed by your hosting service"}, status_code=403)
+            return JSONResponse(
+                {"detail": "this setting is managed by your hosting service"}, status_code=403
+            )
         params = dict(ctx.query_params)
         # A tab that loaded the old Usage page asks the generic gateway bridge.
         # Keep it working, but narrow the answer exactly as the dedicated route

@@ -41,6 +41,11 @@ def listeners(server: Server) -> list[uvicorn.Server]:
         proxy_headers=True,
         forwarded_allow_ips=s.forwarded_allow_ips,
         access_log=s.log_level == "debug",
+        loop=s.http_loop,
+        http=s.http_protocol,
+        backlog=s.http_backlog,
+        timeout_keep_alive=s.http_keep_alive,
+        limit_concurrency=s.http_limit_concurrency or None,
     )
     public = uvicorn.Server(uvicorn.Config(server.public, host=s.host, port=s.port, **common))
     # The application's lifespan is run by the public listener; this one only serves.

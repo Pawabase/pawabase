@@ -31,6 +31,7 @@ from pawabase_server.data.source import DataSourcePool
 from pawabase_server.environments.state import EnvironmentCache, EnvironmentState
 from pawabase_server.functions.deployment_mirror import DeploymentMirror
 from pawabase_server.functions.deployments import Deployments
+from pawabase_server.functions.execution_limits import ProjectExecutionLimiter
 from pawabase_server.functions.record_buffer import RecordBuffer
 from pawabase_server.functions.registry import (
     MAIN,
@@ -104,6 +105,7 @@ class Platform:
                 idle_seconds=settings.sandbox_idle_seconds,
             )
         )
+        self.project_execution = ProjectExecutionLimiter()
         self.sandbox_transactions = Transactions()
         self.deployments = Deployments(
             settings.deployments_path or Path(settings.code_path) / ".deployments",
