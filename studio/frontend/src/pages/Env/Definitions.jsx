@@ -54,6 +54,14 @@ export default function Definitions({ env, kind }) {
     arrived.current = true;
   }, [list.data, kind]);
   const create = () => setEditing({ isNew: true, body: meta.blank || meta.template });
+  // ?new=1 (the top bar's New menu) opens the create sheet straight away, once.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has("new")) return;
+    create();
+    params.delete("new");
+    window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}`);
+  }, [kind]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <Layout title={meta.title} subnav={DATA_PAGES.some(([page]) => page === kind) ? dataSubnav(env, kind) : undefined}>
       {browse ? <RecordsView env={env} resource={browse} onBack={() => setBrowse(null)} onEdit={() => { setEditing({ isNew: false, key: keyOf(kind, browse), body: editable(browse) }); }} /> : <>
@@ -298,20 +306,20 @@ function RecordsView({ env, resource, onBack, onEdit }) {
     if (data.truncated) alert(`Exported the first ${data.data.length.toLocaleString()} of ${data.total.toLocaleString()} records.`);
   };
   return (
-    <div className="stack lg">
-      <div className="row wrap">
-        <Button size="sm" onClick={onBack}><Icon name="chevronRight" size={14} className="rotate-180" /> Resources</Button>
-        <h1 style={{ fontSize: 20 }}>{resource.name}</h1>
-        <span className="muted small">table <code>{table}</code></span>
-        <span className="grow" />
-        <Button size="sm" disabled={busy} onClick={() => exportAs("csv")}><Icon name="backups" size={14} /> Export CSV</Button>
-        <Button size="sm" disabled={busy} onClick={() => exportAs("json")}>Export JSON</Button>
-        <Button size="sm" onClick={() => setImporting(true)}>Import</Button>
-        <Button size="sm" disabled={busy} onClick={async () => { if (await run(() => post(envPath(env, `/resources/${resource.name}/migrate`)), "Table created or extended")) setVersion((v) => v + 1); }}><Icon name="database" size={14} /> Create / migrate table</Button>
-        <Button size="sm" variant="primary" onClick={onEdit}>Edit definition</Button>
-      </div>
+    <>
+      <PageHead
+        title={<span className="row" style={{ gap: 10 }}><button type="button" className="appbar-icon" onClick={onBack} title="Back to resources" aria-label="Back to resources"><Icon name="chevronRight" size={16} className="rotate-180" /></button>{resource.name}</span>}
+        description={<>Records in table <code>{table}</code></>}
+        actions={<>
+          <Button size="sm" disabled={busy} onClick={() => exportAs("csv")}><Icon name="backups" size={14} /> Export CSV</Button>
+          <Button size="sm" disabled={busy} onClick={() => exportAs("json")}>Export JSON</Button>
+          <Button size="sm" onClick={() => setImporting(true)}>Import</Button>
+          <Button size="sm" disabled={busy} onClick={async () => { if (await run(() => post(envPath(env, `/resources/${resource.name}/migrate`)), "Table created or extended")) setVersion((v) => v + 1); }}><Icon name="database" size={14} /> Create / migrate table</Button>
+          <Button size="sm" variant="primary" onClick={onEdit}>Edit definition</Button>
+        </>}
+      />
       <TableView key={`${table}:${version}`} base={envPath(env, "/database")} table={table} />
       {importing && <ImportWizard env={env} resource={resource} onClose={() => setImporting(false)} onDone={() => setVersion((v) => v + 1)} />}
-    </div>
+    </>
   );
 }
