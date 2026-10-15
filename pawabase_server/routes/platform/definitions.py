@@ -43,6 +43,7 @@ from pawabase_server.db.models import (
 )
 from pawabase_server.environments.releases import DEFINITIONS, snapshot_environment
 from pawabase_server.flows import validate_flow
+from pawabase_server.infra.storage import transform as storage_transform
 from pawabase_server.platform import Platform
 from pawabase_server.policies import PolicyEngine, PolicyError, validate_condition
 from pawabase_server.routes.common import (
@@ -148,6 +149,15 @@ class BucketBody(BaseModel):
     accepts: list[str] = Field(default_factory=list)
     max_bytes: int = Field(default=0, ge=0)
     signed_uploads: bool = True
+    signed_downloads: bool = False
+    #: Who may list, replace and delete. Unset follows ``read_policy`` (list) and ``write_policy`` (replace, delete).
+    list_policy: Any = None
+    update_policy: Any = None
+    delete_policy: Any = None
+    #: Delivery transformation settings; see ``infra/storage/transform.py``. ``{}`` is the defaults.
+    transforms: dict[str, Any] = Field(default_factory=dict)
+    #: ``max-age`` seconds for objects the gateway serves; 0 revalidates every time.
+    cache_max_age: int = Field(default=0, ge=0, le=365 * 24 * 3600)
 
 
 class MailTemplateBody(BaseModel):
@@ -353,12 +363,16 @@ async def validate_flow_body(platform, env, body: FlowBody) -> dict[str, Any]:
 
 async def validate_bucket(platform, env, body: BucketBody) -> dict[str, Any]:
     engine = await _engine(platform, env)
-    for label in ("read_policy", "write_policy"):
+    for label in ("read_policy", "write_policy", "list_policy", "update_policy", "delete_policy"):
         value = getattr(body, label)
         _check_policy_ref(engine, value, label)
         if value is not None and engine.resolve_ref(value).handler is not None:
             raise _invalid(f"{label}: bucket policies are JSON conditions")
-    return body.model_dump()
+    try:
+        transforms = storage_transform.validate_settings(body.transforms)
+    except ValueError as exc:
+        raise _invalid(f"transforms: {exc}") from exc
+    return {**body.model_dump(), "transforms": transforms}
 
 
 async def validate_mail_template(platform, env, body: MailTemplateBody) -> dict[str, Any]:
