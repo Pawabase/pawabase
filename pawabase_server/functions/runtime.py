@@ -295,7 +295,14 @@ class ApiRuntime(BaseRuntime):
         return await collect(self._bucket(bucket).get(key, signed=True), limit=limit)
 
     async def storage_signed_url(self, bucket, key, method="GET", expires_in=300):
-        return self._bucket(bucket).signed_url(key, method=method, expires_in=expires_in)
+        return self.platform.storage.signed_url(
+            self.state,
+            bucket,
+            key,
+            method=method,
+            expires_in=expires_in,
+            credential={"is_service": True, "role": "service", "scopes": []},
+        )
 
     async def storage_delete(self, bucket, key):
         return await self._bucket(bucket).delete(key, signed=True)
