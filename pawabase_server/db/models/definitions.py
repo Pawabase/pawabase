@@ -174,6 +174,16 @@ class Bucket(_Definition):
     accepts = AnyJSONField(default=list)
     max_bytes = fields.BigIntField(default=0)
     signed_uploads = fields.BooleanField(default=True)
+    signed_downloads = fields.BooleanField(default=False)
+    #: Who may list, replace and delete. Unset falls back to what an older bucket had:
+    #: listing follows ``read_policy``, replacing follows ``write_policy`` and deleting follows ``write_policy``.
+    list_policy = AnyJSONField(null=True)
+    update_policy = AnyJSONField(null=True)
+    delete_policy = AnyJSONField(null=True)
+    #: Delivery transformations (see ``infra/storage/transform.py``); ``{}`` is the defaults.
+    transforms = AnyJSONField(default=dict)
+    #: ``Cache-Control: max-age`` for objects served from the gateway. 0 revalidates every time.
+    cache_max_age = fields.IntField(default=0)
 
     class Meta:
         table = "pb_buckets"
