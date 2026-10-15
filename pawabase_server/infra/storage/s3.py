@@ -241,6 +241,18 @@ class S3Driver(Driver):
             async for chunk in response.aiter_bytes(CHUNK):
                 yield chunk
 
+    async def read_range(self, key: str, start: int, end: int) -> AsyncIterator[bytes]:
+        """Stream bytes ``start``..``end`` (inclusive) so a seek in a video fetches only what it plays."""
+        url, path = self._url(key)
+        headers = self._headers("GET", url, path, extra={"range": f"bytes={start}-{end}"})
+        async with self._client.stream("GET", url, headers=headers) as response:
+            if response.status_code == 404:
+                raise FileNotFound(key)
+            if response.status_code >= 300:
+                raise StorageError(f"s3 refused the read ({response.status_code})")
+            async for chunk in response.aiter_bytes(CHUNK):
+                yield chunk
+
     async def stat(self, key: str) -> FileInfo:
         response = await self._request("HEAD", key)
         if response.status_code == 404:
