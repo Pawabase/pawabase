@@ -70,6 +70,8 @@ def test_the_rule_is_an_allow_list_that_fails_closed():
         ("/studio/api/gateway/usage", "GET"),
         ("/studio/api/auth/envs/main/users", "GET"),
         ("/studio/api/realtime/main/publish", "POST"),
+        ("/studio/api/object/main/avatars/a.png", "PUT"),
+        ("/studio/api/object/main/avatars/a.png", "GET"),
         ("/assets/main-abc.js", "GET"),
     ]
     no = [
@@ -90,6 +92,7 @@ def test_the_rule_is_an_allow_list_that_fails_closed():
         ("/studio/api/auth/users", "GET"),
         ("/studio/api/realtime/other-prod/publish", "POST"),
         ("/studio/api/telemetry/overview", "GET"),
+        ("/studio/api/object/other-prod/avatars/a.png", "PUT"),
         ("/studio/api/unknown/x", "GET"),
         ("/internal/v1/anything", "GET"),
     ]
