@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
 
 export function Button({ variant, size, className = "", ...props }) {
@@ -440,5 +440,82 @@ export function Tile({ tone = "lavender", icon, value, label, i = 0 }) {
         <span>{label}</span>
       </div>
     </div>
+  );
+}
+
+/**
+ * The one popover every menu in Studio uses: anchored under its trigger, kept inside the viewport,
+ * closed by Escape or a click outside, and returning focus to the trigger when it closes.
+ *
+ * `trigger` is a render function `(props) => element` that receives the props the button needs.
+ */
+export function Popover({ trigger, children, align = "start", width = 320, label, className = "" }) {
+  const [open, setOpen] = useState(false);
+  const [shift, setShift] = useState(0);
+  const wrap = useRef(null);
+  const panel = useRef(null);
+  const button = useRef(null);
+  const close = (refocus = true) => {
+    setOpen(false);
+    if (refocus) button.current?.focus?.();
+  };
+  useEffect(() => {
+    if (!open) return undefined;
+    const key = (event) => { if (event.key === "Escape") { event.stopPropagation(); close(); } };
+    const down = (event) => { if (wrap.current && !wrap.current.contains(event.target)) close(false); };
+    window.addEventListener("keydown", key, true);
+    window.addEventListener("pointerdown", down);
+    return () => { window.removeEventListener("keydown", key, true); window.removeEventListener("pointerdown", down); };
+  }, [open]);
+  useLayoutEffect(() => {
+    if (!open || !panel.current) { setShift(0); return; }
+    const rect = panel.current.getBoundingClientRect();
+    const gap = 8;
+    if (rect.right > window.innerWidth - gap) setShift(window.innerWidth - gap - rect.right);
+    else if (rect.left < gap) setShift(gap - rect.left);
+    else setShift(0);
+    // Focus the first field (a search box) or the first item, so the menu works from the keyboard.
+    const first = panel.current.querySelector("input, [role=menuitem], [role=option], a, button");
+    first?.focus?.({ preventScroll: true });
+  }, [open]);
+  const onKeyDown = (event) => {
+    if (!["ArrowDown", "ArrowUp"].includes(event.key) || !panel.current) return;
+    const items = [...panel.current.querySelectorAll("[role=menuitem], [role=option]")].filter((el) => !el.disabled);
+    if (!items.length) return;
+    event.preventDefault();
+    const at = items.indexOf(document.activeElement);
+    const next = event.key === "ArrowDown" ? (at + 1) % items.length : (at <= 0 ? items.length - 1 : at - 1);
+    items[next].focus();
+  };
+  return (
+    <div className={`popover-wrap ${className}`} ref={wrap}>
+      {trigger({ ref: button, "aria-haspopup": "menu", "aria-expanded": open, onClick: () => setOpen((value) => !value) })}
+      {open && (
+        <div
+          ref={panel}
+          className={`popover align-${align}`}
+          role="menu"
+          aria-label={label}
+          style={{ width, transform: shift ? `translateX(${shift}px)` : undefined }}
+          onKeyDown={onKeyDown}
+        >
+          {typeof children === "function" ? children({ close }) : children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A value worth copying (an ID, a URL), shown truncated in a bordered chip with a copy icon. */
+export function IdChip({ value, label, title }) {
+  const toast = useToast();
+  if (!value) return null;
+  const copy = async () => toast((await copyToClipboard(value)) ? `${label || "Value"} copied` : "Could not copy. Select it and copy by hand.", "ok");
+  return (
+    <span className="id-chip" title={title || `${label ? `${label}: ` : ""}${value}`}>
+      {label && <span className="id-chip-label">{label}</span>}
+      <code className="id-chip-value">{value}</code>
+      <button type="button" className="id-chip-copy" onClick={copy} aria-label={`Copy ${label || "value"}`}><Icon name="copy" size={13} /></button>
+    </span>
   );
 }
