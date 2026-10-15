@@ -117,8 +117,11 @@ export default function Console({ env }) {
       }
       if (event.key === "Escape") setOpen(false);
     };
+    // The top bar's terminal button asks for the dock the same way the shortcut does.
+    const toggle = () => setOpen((value) => !value);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("pawabase:console", toggle);
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("pawabase:console", toggle); };
   }, []);
 
   useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 0); }, [open]);
