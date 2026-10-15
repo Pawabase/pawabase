@@ -226,3 +226,28 @@ async def test_the_explorer_can_call_any_public_endpoint_and_nothing_else(studio
         "/rest/v1/a\\b",
     ):
         assert (await call(refused)).status_code == 400, refused
+
+
+async def test_a_stored_object_comes_back_as_itself_for_preview_and_download(studio):
+    """An operator reading an object they already administer should not need a signed link, and the bytes arrive renderable."""
+    response = await studio.http.get("/studio/api/object/main/avatars/logo.png")
+    assert response.status_code == 200
+    assert response.content == b"\x89PNG\r\n\x1a\n"
+    assert response.headers["content-type"] == "image/png"
+    assert response.headers["content-disposition"] == 'inline; filename="logo.png"'
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert "sandbox" in response.headers["content-security-policy"]
+    call = studio.api.raw_call
+    assert (call["method"], call["path"]) == ("GET", "/storage/v1/object/avatars/logo.png")
+    assert (call["context"].env, call["context"].role) == ("main", "service")
+
+    # The environment has to be one this session may name, and the key has to stay inside the bucket.
+    assert (await studio.http.get("/studio/api/object/Bad/avatars/x.png")).status_code == 403
+    assert (await studio.http.get("/studio/api/object/main/avatars/%2E%2E/secret")).status_code == 400
+
+    async def missing(method, path, **kwargs):
+        return {"status": 404, "headers": {}, "body": {"detail": "no such object"}, "content": b""}
+
+    studio.api.request_raw = missing
+    gone = await studio.http.get("/studio/api/object/main/avatars/missing.png")
+    assert gone.status_code == 404 and gone.json()["detail"] == "no such object"
