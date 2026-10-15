@@ -170,6 +170,7 @@ class ServiceClient:
         params: dict[str, Any] | None = None,
         context: PlatformContext | None = None,
         headers: dict[str, str] | None = None,
+        content: bytes | None = None,
     ) -> dict[str, Any]:
         """Call a service and preserve status and headers, including error responses.
 
@@ -179,6 +180,8 @@ class ServiceClient:
         kwargs: dict[str, Any] = {"headers": self.headers(context=context, extra=headers)}
         if json is not None:
             kwargs["json"] = json
+        if content is not None:
+            kwargs["content"] = content
         if params:
             kwargs["params"] = {key: value for key, value in params.items() if value is not None}
         if self.app is not None:
@@ -204,6 +207,8 @@ class ServiceClient:
             "status": response.status_code,
             "headers": dict(response.headers),
             "body": body,
+            # The raw bytes as well: an operator tool may be reading something that is not JSON at all, such as a stored object.
+            "content": response.content,
         }
 
     def _decode(self, status: int, response: Any) -> Any:
