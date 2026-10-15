@@ -416,6 +416,7 @@ async def test_storage_with_policies_and_signed_urls(acme):
             "read_policy": "public",
             "write_policy": {"eq": ["$object.segments.0", "$auth.user_id"]},
             "accepts": ["image/png"],
+            "signed_downloads": True,
         },
     )
     ada = api.user_headers("development", user_id="7")
@@ -460,6 +461,80 @@ async def test_storage_with_policies_and_signed_urls(acme):
     await api.drain()
     uploads = (await api.studio.get(f"{ENV}/events?name=file.uploaded"))["data"]
     assert uploads[0]["payload"]["key"] == "7/me.png"
+
+
+async def test_signed_storage_stays_behind_pawabase_and_enforces_bucket_rules(acme):
+    api = acme
+    body = {
+        "name": "audio",
+        "public": False,
+        "read_policy": "authenticated",
+        "write_policy": "authenticated",
+        "accepts": ["audio/*"],
+        "max_bytes": 1024,
+        "signed_uploads": False,
+        "signed_downloads": False,
+    }
+    await api.studio.post(f"{ENV}/buckets", json=body)
+    ada = api.user_headers("development", user_id="7")
+
+    # Disabled means disabled for both application callers and Studio, with a useful status instead of a 500.
+    assert (
+        await api.http.post(
+            "/storage/v1/sign/audio/song.mp3", json={"method": "PUT"}, headers=ada
+        )
+    ).status_code == 403
+    from pawabase_server.core.clients import ServiceError
+
+    with pytest.raises(ServiceError) as refused:
+        await api.studio.post(
+            f"{ENV}/buckets/audio/sign",
+            json={"key": "song.mp3", "method": "PUT"},
+        )
+    assert refused.value.status == 403
+
+    body.update({"signed_uploads": True, "signed_downloads": True})
+    await api.studio.put(f"{ENV}/buckets/audio", json=body)
+
+    grant = await api.studio.post(
+        f"{ENV}/buckets/audio/sign",
+        json={
+            "key": "song.mp3",
+            "method": "PUT",
+            "content_type": "audio/mpeg",
+            "max_bytes": 512,
+        },
+    )
+    assert grant["url"].startswith(f"{api.settings.public_url}/storage/v1/signed/")
+    path = grant["url"].replace(api.settings.public_url, "")
+
+    # A DOCX/ZIP body cannot become audio merely by claiming audio/mpeg.
+    disguised = await api.http.put(
+        path,
+        content=b"PK\x03\x04" + b"\x00" * 64,
+        headers={"content-type": "audio/mpeg"},
+    )
+    assert disguised.status_code == 400
+
+    uploaded = await api.http.put(
+        path,
+        content=b"ID3" + b"\x00" * 64,
+        headers={"content-type": "audio/mpeg"},
+    )
+    assert uploaded.status_code == 201
+
+    read = await api.studio.post(
+        f"{ENV}/buckets/audio/sign",
+        json={"key": "song.mp3", "method": "GET", "expires_in": 3600},
+    )
+    assert read["url"].startswith(f"{api.settings.public_url}/storage/v1/signed/")
+    read_path = read["url"].replace(api.settings.public_url, "")
+    assert (await api.http.get(read_path)).status_code == 200
+
+    # Turning signed downloads off revokes even a previously issued bearer link immediately.
+    body["signed_downloads"] = False
+    await api.studio.put(f"{ENV}/buckets/audio", json=body)
+    assert (await api.http.get(read_path)).status_code == 404
 
 
 async def test_schedules_and_jobs(acme):
