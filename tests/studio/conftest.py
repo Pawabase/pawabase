@@ -118,10 +118,18 @@ class FakeApi:
             "context": context,
             "headers": headers,
         }
+        if path.startswith("/storage/v1/object/"):
+            return {
+                "status": 200,
+                "headers": {"content-type": "image/png", "etag": '"abc"'},
+                "body": None,
+                "content": b"\x89PNG\r\n\x1a\n",
+            }
         return {
             "status": 201,
             "headers": {"content-type": "application/json", "set-cookie": "secret=bad"},
             "body": {"id": 7, **(json or {})},
+            "content": b'{"id": 7}',
         }
 
 

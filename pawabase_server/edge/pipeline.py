@@ -280,6 +280,18 @@ class Edge:
 
     # ── HTTP ─────────────────────────────────────────────────────────────
 
+    def _wrong_host(self, request: Request) -> bool:
+        """Whether a keyless object URL names an environment other than the one this hostname serves.
+
+        A hostname mapped to one environment answers for that environment's objects only, so another project's URL cannot be
+        opened through it.
+        """
+        served = self.served(request.host)
+        if served is None:
+            return False
+        parts = request.path.split("/")  # "", storage, v1, files, <env>, ...
+        return len(parts) > 4 and parts[4] != served
+
     async def _http(self, scope, receive, send, upstream: Upstream) -> None:
         request = self._request(scope)
         request_id = self._request_id(request)
@@ -291,6 +303,9 @@ class Edge:
             await respond(send, refusal, request_id)
             return
         scope[IP_SCOPE] = request.client_ip
+        if upstream.prefix == "/storage/v1/files/" and self._wrong_host(request):
+            await respond_json(send, 404, {"detail": "Not found"})
+            return
         if context is not None:
             scope[SCOPE_KEY] = context
             scope[KEY_SCOPE] = context.key_id

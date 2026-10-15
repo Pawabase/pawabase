@@ -239,6 +239,16 @@ prefix (`<env>/<bucket>/`) inside that one remote bucket. Presigned URLs are sig
 `PAWABASE_STORAGE_PUBLIC_ENDPOINT`, the address browsers reach, which differs from the internal
 `http://minio:9000` the API talks to.
 
+**Object delivery.** Objects are served by the application gateway, never by the storage provider. Every object has
+a stable URL, `/storage/v1/files/<env>/<bucket>/<key>`, a keyless route (the environment is in the path, like the other
+browser-navigation routes, and a hostname mapped to one environment refuses another's). All reads (`/object`, `/files`,
+`/share`, legacy `/signed`) share `infra/storage/delivery.py`: content type from sniffing, inline only for safe types,
+ranges, validators, gzip for text and `infra/storage/transform.py` image variants (bounded dimensions, size, time and
+concurrency; cached by object version and options; the read policy is checked first). Policies are per action (read,
+upload, list, replace, delete). Studio manages objects through `/platform/v1/envs/{env}/buckets/{bucket}/object*` with its
+service credential, outside the bucket's application policies. Temporary links (`ObjectShare`, `infra/storage/shares.py`)
+are looked up by token hash, name one object, expire and can be revoked.
+
 Values of the form `secret://NAME` are resolved from the environment's encrypted secrets when they
 are used. They are never returned by the API.
 

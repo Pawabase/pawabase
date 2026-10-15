@@ -91,3 +91,24 @@ export function useApi(path, { service, params, interval } = {}) {
 export function envPath(env, rest = "") {
   return `/envs/${env}${rest}`;
 }
+
+/** Upload one file as Studio. The bytes go through Studio's own authority, not a signed URL and not the bucket's application policies. */
+export async function uploadObject(env, bucket, key, file) {
+  const path = key.split("/").map(encodeURIComponent).join("/");
+  const response = await fetch(`/studio/api/object/${encodeURIComponent(env)}/${encodeURIComponent(bucket)}/${path}`, {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { "Content-Type": file.type || "application/octet-stream", "X-XSRF-TOKEN": xsrf() },
+    body: file,
+  });
+  const text = await response.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  if (!response.ok) throw new ApiError(response.status, data);
+  return data;
+}
+
+/** The address Studio serves one object at, for previews and downloads. */
+export function studioObjectUrl(env, bucket, key, query = "") {
+  return `/studio/api/object/${encodeURIComponent(env)}/${encodeURIComponent(bucket)}/${key.split("/").map(encodeURIComponent).join("/")}${query}`;
+}

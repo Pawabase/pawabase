@@ -354,20 +354,68 @@ def register(r: Router, platform: Platform) -> None:
         source = await state.source()
         if table not in await db_inspect.list_tables(source):
             raise HTTPException(status_code=404, detail=f"no table {table!r}")
-        limit = max(1, min(int(ctx.query_params.get("limit", 50)), 500))
-        offset = max(0, int(ctx.query_params.get("offset", 0)))
-        placeholder = {"postgres": "$1", "mysql": "%s"}.get(source.dialect, "?")
-        second = {"postgres": "$2", "mysql": "%s"}.get(source.dialect, "?")
+        q = ctx.query_params
+        limit = max(1, min(int(q.get("limit", 50)), 500))
+        offset = max(0, int(q.get("offset", 0)))
+        dialect = source.dialect
+        # Sorting and filtering name columns, which cannot be bound as parameters, so only the table's real
+        # columns are accepted; values are always bound.
+        columns = {c["name"] for c in (await db_inspect.describe_table(source, table))["columns"]}
+
+        def param(n: int) -> str:
+            return {"postgres": f"${n}", "mysql": "%s"}.get(dialect, "?")
+
+        where, args = "", []
+        column, value = q.get("filter_column", ""), q.get("filter_value", "")
+        if column:
+            if column not in columns:
+                raise HTTPException(status_code=400, detail=f"no column {column!r}")
+            op = q.get("filter_op", "contains")
+            target = _quoted(dialect, column)
+            if op == "eq":
+                where, args = (
+                    f" WHERE CAST({target} AS {'CHAR' if dialect == 'mysql' else 'TEXT'}) = {param(1)}",
+                    [value],
+                )
+            elif op == "contains":
+                like = "ILIKE" if dialect == "postgres" else "LIKE"
+                where, args = (
+                    f" WHERE CAST({target} AS {'CHAR' if dialect == 'mysql' else 'TEXT'}) {like} {param(1)}",
+                    [f"%{value}%"],
+                )
+            elif op == "null":
+                where = f" WHERE {target} IS NULL"
+            elif op == "not_null":
+                where = f" WHERE {target} IS NOT NULL"
+            else:
+                raise HTTPException(
+                    status_code=400, detail="filter_op must be eq, contains, null or not_null"
+                )
+        order = ""
+        if sort := q.get("sort", ""):
+            if sort not in columns:
+                raise HTTPException(status_code=400, detail=f"no column {sort!r}")
+            direction = "DESC" if q.get("order", "asc").lower() == "desc" else "ASC"
+            order = f" ORDER BY {_quoted(dialect, sort)} {direction}"
+        n = len(args)
         rows = await source.fetch(
-            f"SELECT * FROM {_quoted(source.dialect, table)} LIMIT {placeholder} OFFSET {second}",
-            [limit, offset],
+            f"SELECT * FROM {_quoted(dialect, table)}{where}{order} LIMIT {param(n + 1)} OFFSET {param(n + 2)}",
+            [*args, limit, offset],
         )
+        total = None
+        if where:
+            counted = await source.fetch(
+                f"SELECT COUNT(*) AS total FROM {_quoted(dialect, table)}{where}", args
+            )
+            total = int(counted[0]["total"]) if counted else 0
         from pawabase_server.data.sql import decode_value
 
         return {
             "data": [{k: decode_value(None, v) for k, v in row.items()} for row in rows],
             "limit": limit,
             "offset": offset,
+            # Set when a filter applies: how many rows match it.
+            "total": total,
         }
 
     @r.post(

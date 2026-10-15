@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 from sillo import HttpContext, Router, no_content
 from sillo.exceptions import HTTPException
+from sillo.storage import FileNotFound, PolicyRefused, StorageError, UnsafeKey, stream_upload
+from sillo.storage.paths import normalise as held_normalise
 from tortoise.functions import Count
 
 from pawabase_server.db.models import (
@@ -22,16 +24,20 @@ from pawabase_server.db.models import (
     JobRun,
     MailLog,
     MetricCounter,
+    ObjectShare,
     RequestLog,
     WorkerHeartbeat,
 )
 from pawabase_server.environments.configuration import report as configuration_report
+from pawabase_server.infra.storage import shares as object_shares
+from pawabase_server.infra.storage import transform
 from pawabase_server.observability import route_stats
+from pawabase_server.observability.advisor import advise
 from pawabase_server.observability.analytics import DEFAULT_RANGE, environment_analytics
 from pawabase_server.observability.capacity import report as capacity_report
 from pawabase_server.observability.system_health import system_report
 from pawabase_server.platform import PLATFORM_QUEUES, Platform
-from pawabase_server.routes.common import MANAGE, audit, dump, get_environment, page_params
+from pawabase_server.routes.common import MANAGE, actor, audit, dump, get_environment, page_params
 
 
 class InvalidateBody(BaseModel):
@@ -41,8 +47,23 @@ class InvalidateBody(BaseModel):
 
 class SignBody(BaseModel):
     key: str
-    method: str = "GET"
+    method: Literal["GET", "PUT"] = "GET"
     expires_in: int = Field(default=300, ge=1, le=7 * 24 * 3600)
+    content_type: str = ""
+    max_bytes: int = Field(default=0, ge=0)
+
+
+class ShareBody(BaseModel):
+    key: str = Field(min_length=1, max_length=1024)
+    #: Seconds until the link stops working (one minute to one year).
+    expires_in: int = Field(default=3600, ge=60, le=365 * 24 * 3600)
+    permissions: Literal["view", "download", "both"] = "both"
+    label: str = Field(default="", max_length=120)
+
+
+class MoveBody(BaseModel):
+    source: str = Field(min_length=1, max_length=1024)
+    target: str = Field(min_length=1, max_length=1024)
 
 
 class MailTestBody(BaseModel):
@@ -325,12 +346,226 @@ def register(r: Router, platform: Platform) -> None:
                     "content_type": f.content_type,
                     "modified": f.modified,
                     "etag": f.etag,
+                    "url": platform.storage.object_url(state, bucket, f.key),
                 }
                 for f in page.files
             ],
             "prefixes": list(page.prefixes),
             "cursor": page.cursor,
         }
+
+    def service_bucket(state, bucket: str):
+        """Studio's own authority over a bucket: the bucket's rules about types and size still apply, its access policies do not."""
+        return platform.storage.bucket(state, bucket, credential={"is_service": True})
+
+    def object_key(ctx: HttpContext) -> str:
+        key = ctx.query_params.get("key", "")
+        if not key:
+            raise HTTPException(400, "pass the object's key as ?key=")
+        return key
+
+    def visibility(model) -> str:
+        if model.public or model.read_policy == "public":
+            return "public"
+        return "restricted"
+
+    @r.get(
+        f"{base}/buckets/{{bucket}}/object",
+        auth=MANAGE,
+        tags=["storage"],
+        summary="One object's details: metadata, gateway URL, visibility",
+    )
+    async def object_details(ctx: HttpContext, env: str, bucket: str):
+        state = await platform.state(env)
+        held = service_bucket(state, bucket)
+        key = object_key(ctx)
+        try:
+            info = await held.stat(key)
+        except (FileNotFound, UnsafeKey) as exc:
+            raise HTTPException(404, "no such object") from exc
+        except StorageError as exc:
+            raise HTTPException(502, "the storage provider could not be reached") from exc
+        model = state.buckets[bucket]
+        name = info.key.rsplit("/", 1)[-1]
+        live = await ObjectShare.filter(env=env, bucket=bucket, key=info.key).all()
+        created = None
+        local = getattr(held.driver, "_path", None)
+        if local is not None:
+            try:
+                stats = local(info.key).stat()
+                created = getattr(stats, "st_birthtime", None) or stats.st_ctime
+            except OSError:
+                created = None
+        return {
+            "bucket": bucket,
+            "key": info.key,
+            "name": name,
+            "extension": name.rsplit(".", 1)[-1].lower() if "." in name else "",
+            "size": info.size,
+            "content_type": info.content_type,
+            "declared_type": info.declared_type,
+            "etag": info.etag,
+            "modified": info.modified,
+            #: Local disk only; S3-compatible services record the last modification and nothing earlier.
+            "created": created,
+            "provider": held.driver.name,
+            "url": platform.storage.object_url(state, bucket, info.key),
+            "visibility": visibility(model),
+            "transforms": {**transform.settings(model.transforms)},
+            "transformable": info.content_type in transform.SOURCES,
+            "shares": sum(1 for row in live if object_shares.status(row) == "active"),
+        }
+
+    @r.put(
+        f"{base}/buckets/{{bucket}}/object",
+        auth=MANAGE,
+        tags=["storage"],
+        summary="Upload or replace an object as Studio (the bucket's access policies do not apply)",
+    )
+    async def put_object(ctx: HttpContext, env: str, bucket: str):
+        state = await platform.state(env)
+        held = service_bucket(state, bucket)
+        key = object_key(ctx)
+        limit = platform.limit(env, "MAX_UPLOAD_BYTES", platform.settings.max_upload_bytes)
+        content_type = ctx.headers.get("content-type", "")
+        if content_type.startswith("multipart/form-data"):
+            files = await ctx.files
+            upload = files.get("file") or next(iter(files.values()), None)
+            if upload is None:
+                raise HTTPException(400, "send the file in a 'file' form field")
+            source, content_type = stream_upload(upload), upload.content_type or ""
+        else:
+            source = ctx.stream()
+
+        async def capped():
+            total = 0
+            async for chunk in source:
+                total += len(chunk)
+                if limit and total > limit:
+                    raise HTTPException(413, "the upload is larger than this environment allows")
+                yield chunk
+
+        replacing = await held.driver.exists(held_normalise(key))
+        try:
+            stored = await held.put(key, capped(), content_type=content_type)
+        except (UnsafeKey, StorageError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+        platform.storage.variants.purge(env, bucket, stored.key)
+        await audit(
+            ctx,
+            "storage.replaced" if replacing else "storage.uploaded",
+            env=env,
+            target=f"{bucket}/{stored.key}",
+        )
+        return {
+            "bucket": bucket,
+            "key": stored.key,
+            "size": stored.size,
+            "content_type": stored.content_type,
+            "etag": stored.etag,
+            "replaced": replacing,
+            "url": platform.storage.object_url(state, bucket, stored.key),
+        }
+
+    @r.post(
+        f"{base}/buckets/{{bucket}}/object/move",
+        auth=MANAGE,
+        tags=["storage"],
+        request_model=MoveBody,
+        summary="Rename or move an object inside its bucket",
+    )
+    async def move_object(ctx: HttpContext, env: str, bucket: str, body: MoveBody):
+        state = await platform.state(env)
+        held = service_bucket(state, bucket)
+        try:
+            source = held_normalise(body.source)
+            target = held_normalise(body.target)
+            if source == target:
+                raise HTTPException(400, "the new key is the same as the old one")
+            if await held.driver.exists(target):
+                raise HTTPException(409, "an object with that key already exists")
+            info = await held.stat(source)
+            await held.put(target, held.get(source), content_type=info.content_type)
+            await held.delete(source)
+        except FileNotFound as exc:
+            raise HTTPException(404, "no such object") from exc
+        except (UnsafeKey, StorageError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+        platform.storage.variants.purge(env, bucket, source)
+        await object_shares.revoke_object(env, bucket, source)
+        await audit(ctx, "storage.moved", env=env, target=f"{bucket}/{source} -> {target}")
+        return {
+            "bucket": bucket,
+            "key": target,
+            "url": platform.storage.object_url(state, bucket, target),
+        }
+
+    @r.get(
+        f"{base}/buckets/{{bucket}}/shares",
+        auth=MANAGE,
+        tags=["storage"],
+        summary="Share links for a bucket, or for one object with ?key=",
+    )
+    async def list_shares(ctx: HttpContext, env: str, bucket: str):
+        state = await platform.state(env)
+        query = ObjectShare.filter(env=env, bucket=bucket)
+        if key := ctx.query_params.get("key"):
+            query = query.filter(key=key)
+        rows = await query.order_by("-created_at").limit(200)
+        data = []
+        for row in rows:
+            item = object_shares.describe(row)
+            token = object_shares.reveal(row, platform.box)
+            item["url"] = platform.storage.share_url(state, token) if token else None
+            data.append(item)
+        return {"data": data}
+
+    @r.post(
+        f"{base}/buckets/{{bucket}}/shares",
+        auth=MANAGE,
+        tags=["storage"],
+        request_model=ShareBody,
+        summary="Create a temporary share link for one object",
+    )
+    async def create_share(ctx: HttpContext, env: str, bucket: str, body: ShareBody):
+        state = await platform.state(env)
+        held = service_bucket(state, bucket)
+        try:
+            info = await held.stat(body.key)
+        except (FileNotFound, UnsafeKey) as exc:
+            raise HTTPException(404, "no such object") from exc
+        row, token = await object_shares.create(
+            env,
+            bucket,
+            info.key,
+            expires_in=body.expires_in,
+            permissions=body.permissions,
+            label=body.label,
+            created_by=actor(ctx) or "",
+            box=platform.box,
+        )
+        await audit(ctx, "storage.shared", env=env, target=f"{bucket}/{info.key}")
+        return {
+            **object_shares.describe(row),
+            "token": token,
+            "url": platform.storage.share_url(state, token),
+        }
+
+    @r.delete(
+        f"{base}/buckets/{{bucket}}/shares/{{share_id}}",
+        auth=MANAGE,
+        tags=["storage"],
+        summary="Revoke a share link",
+    )
+    async def revoke_share(ctx: HttpContext, env: str, bucket: str, share_id: str):
+        row = await ObjectShare.get_or_none(id=share_id, env=env, bucket=bucket)
+        if row is None:
+            raise HTTPException(404, "no such share link")
+        if row.revoked_at is None:
+            row.revoked_at = datetime.now(UTC)
+            await row.save()
+        await audit(ctx, "storage.unshared", env=env, target=f"{bucket}/{row.key}")
+        return object_shares.describe(row)
 
     @r.delete(
         f"{base}/buckets/{{bucket}}/objects/{{key:path}}",
@@ -343,6 +578,8 @@ def register(r: Router, platform: Platform) -> None:
         held = platform.storage.bucket(state, bucket, credential={"is_service": True})
         if not await held.delete(key, signed=True):
             raise HTTPException(status_code=404, detail="no such object")
+        platform.storage.variants.purge(env, bucket, key)
+        await object_shares.revoke_object(env, bucket, key)
         await audit(ctx, "storage.deleted", env=env, target=f"{bucket}/{key}")
         return no_content()
 
@@ -355,10 +592,22 @@ def register(r: Router, platform: Platform) -> None:
     )
     async def sign(ctx: HttpContext, env: str, bucket: str, body: SignBody):
         state = await platform.state(env)
-        held = platform.storage.bucket(state, bucket, credential={"is_service": True})
-        return {
-            "url": held.signed_url(body.key, method=body.method.upper(), expires_in=body.expires_in)
-        }
+        try:
+            url = platform.storage.signed_url(
+                state,
+                bucket,
+                body.key,
+                method=body.method,
+                expires_in=body.expires_in,
+                content_type=body.content_type,
+                max_bytes=body.max_bytes,
+                credential={"is_service": True},
+            )
+        except PolicyRefused as exc:
+            raise HTTPException(403, "signed access is disabled for this bucket") from exc
+        except UnsafeKey as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"url": url}
 
     # ── mail ─────────────────────────────────────────────────────────────
 
@@ -665,6 +914,20 @@ def register(r: Router, platform: Platform) -> None:
                 "events": platform.bus.backend,
             },
         }
+
+    @r.get(
+        f"{base}/advisor",
+        auth=MANAGE,
+        tags=["observability"],
+        summary="What needs the application owner's attention: failing requests and work, and limits close to full",
+    )
+    async def advisor(ctx: HttpContext, env: str):
+        await get_environment(env)
+        try:
+            minutes = max(5, min(int(ctx.query_params.get("minutes", 60)), 1440))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="minutes must be an integer") from exc
+        return await advise(platform, env, minutes)
 
     @r.get(
         f"{base}/observability/system",

@@ -51,7 +51,10 @@ class Deps:
 
     async def env_props(self, ctx: HttpContext) -> dict[str, Any]:
         runtime = await self.runtime(ctx)
-        return {"runtime": runtime, "envs": runtime["environments"]}
+        # A session confined to one project (Pawabase Cloud) cannot open runtime-wide pages such as the
+        # audit log or the environment list, so the interface leaves out the links to them.
+        confined = bool(ctx.scope.get("studio_project"))
+        return {"runtime": runtime, "envs": runtime["environments"], "confined": confined}
 
 
 def detail_of(exc: ServiceError) -> str:

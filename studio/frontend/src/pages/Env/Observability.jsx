@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/Layout";
 import { Icon } from "../../components/icons";
-import { Segmented } from "../../components/ui";
+import { PageHead, Segmented } from "../../components/ui";
 import { envPath, get } from "../../lib/api";
 import AuditLog from "./observability/Audit";
 import { CacheAndMetrics, Database } from "./observability/Data";
@@ -103,21 +103,18 @@ export default function Observability({ env }) {
 
   return (
     <Layout title="Observability" subnav={subnav}>
+      <PageHead
+        title="Observability"
+        description={<>Traffic, background work, messaging and data across <b>{env}</b>.</>}
+        actions={<>
+          <button type="button" className={`live ${live ? "" : "paused"}`} onClick={() => setLive(!live)} title={live ? "Pause automatic refresh" : "Resume automatic refresh"}>
+            <i />{live ? "Live" : "Paused"} · {ago(now - updatedAt)}
+          </button>
+          <button type="button" className="btn sm" onClick={() => system.reload()} aria-label="Refresh now"><Icon name="play" size={14} />Refresh</button>
+          {NEEDS_WINDOW.has(section) && <Segmented options={WINDOWS} value={minutes} onChange={setMinutes} />}
+        </>}
+      />
       <div className="stack lg">
-        <div className="obs-bar">
-          <div>
-            <h1 style={{ margin: 0, fontSize: 28 }}>Observability</h1>
-            <p className="muted" style={{ margin: "4px 0 0" }}>Traffic, background work, messaging and data across <b>{env}</b>.</p>
-          </div>
-          <div className="row" style={{ gap: 10 }}>
-            <button type="button" className={`live ${live ? "" : "paused"}`} onClick={() => setLive(!live)} title={live ? "Pause automatic refresh" : "Resume automatic refresh"}>
-              <i />{live ? "Live" : "Paused"} · {ago(now - updatedAt)}
-            </button>
-            <button type="button" className="btn sm" onClick={() => system.reload()} aria-label="Refresh now"><Icon name="play" size={14} />Refresh</button>
-            {NEEDS_WINDOW.has(section) && <Segmented options={WINDOWS} value={minutes} onChange={setMinutes} />}
-          </div>
-        </div>
-
         <div className="stack lg" style={{ minWidth: 0 }}>
           {section === "overview" && <Overview {...shared} />}
           {section === "routes" && <Routes env={env} minutes={minutes} onRoute={setRoute} onTrace={openTrace} />}

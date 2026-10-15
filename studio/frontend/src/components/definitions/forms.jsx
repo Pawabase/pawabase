@@ -455,7 +455,12 @@ function ScheduleForm({ body, patch, refs, isNew }) {
 const MIME_PRESETS = ["image/*", "video/*", "audio/*", "application/pdf", "text/*"];
 const MB = 1024 * 1024;
 
+const FORMATS = ["webp", "avif", "jpeg", "png"];
+
 export function BucketForm({ body, patch, refs, isNew }) {
+  const transforms = body.transforms || {};
+  const setTransform = (change) => patch({ transforms: { ...transforms, ...change } });
+  const number = (name, fallback) => (transforms[name] ?? fallback);
   return (
     <>
       <Section title="Details">
@@ -466,16 +471,25 @@ export function BucketForm({ body, patch, refs, isNew }) {
           <Field label="Description" optional><input {...text(body, "description", patch)} /></Field>
         </div>
       </Section>
-      <Section title="Access">
-        <Switch checked={!!body.public} onChange={(v) => patch({ public: v })} label="Public bucket" hint="Anyone with a link may read objects; no signing needed." />
+      <Section title="Access" description="What your application's requests may do. Studio administrators can always manage objects, whatever is set here.">
+        <Switch checked={!!body.public} onChange={(v) => patch({ public: v })} label="Public bucket" hint="Anyone with an object's URL may read it. Uploads, listing and deletes still follow the policies below." />
         <div className="form-grid">
           {!body.public && (
             <Field label="Who may read">
               <PolicyPicker value={body.read_policy} onChange={(read_policy) => patch({ read_policy })} policies={refs.policies} nullLabel="Default" />
             </Field>
           )}
-          <Field label="Who may upload">
+          <Field label="Who may upload new objects">
             <PolicyPicker value={body.write_policy} onChange={(write_policy) => patch({ write_policy })} policies={refs.policies} nullLabel="Default" />
+          </Field>
+          <Field label="Who may list objects" hint="Reading an object does not let someone enumerate the bucket.">
+            <PolicyPicker value={body.list_policy} onChange={(list_policy) => patch({ list_policy })} policies={refs.policies} nullLabel="Same as read" />
+          </Field>
+          <Field label="Who may replace objects">
+            <PolicyPicker value={body.update_policy} onChange={(update_policy) => patch({ update_policy })} policies={refs.policies} nullLabel="Same as upload" />
+          </Field>
+          <Field label="Who may delete objects">
+            <PolicyPicker value={body.delete_policy} onChange={(delete_policy) => patch({ delete_policy })} policies={refs.policies} nullLabel="Same as upload" />
           </Field>
         </div>
       </Section>
@@ -489,7 +503,34 @@ export function BucketForm({ body, patch, refs, isNew }) {
             <span className="addon">MB</span>
           </div>
         </Field>
-        <Switch checked={body.signed_uploads !== false} onChange={(signed_uploads) => patch({ signed_uploads })} label="Signed uploads" hint="Clients upload straight to storage with a short-lived URL." />
+      </Section>
+      <Section title="Delivery" description="How objects are served from your application's gateway.">
+        <Field label="Browser cache" hint="Seconds a browser may reuse an object before asking again. 0 revalidates every time, which is safest when objects are replaced.">
+          <div className="input-group" style={{ maxWidth: 220 }}>
+            <input type="number" min="0" value={body.cache_max_age ?? 0} onChange={(e) => patch({ cache_max_age: Math.max(0, Number(e.target.value) || 0) })} />
+            <span className="addon">seconds</span>
+          </div>
+        </Field>
+      </Section>
+      <Section title="Image transformations" description="Resize, crop and convert images on request, without changing the stored original. Variants are served only to callers who may read the original.">
+        <Switch checked={transforms.enabled !== false} onChange={(enabled) => setTransform({ enabled })} label="Enable transformations" hint="Adds ?width=, ?height=, ?fit=, ?format=, ?quality= and ?rotate= to object URLs." />
+        {transforms.enabled !== false && (
+          <>
+            <Field label="Allowed output formats">
+              <TagInput value={transforms.formats || FORMATS} onChange={(formats) => setTransform({ formats: formats.filter((f) => FORMATS.includes(f)) })} suggestions={FORMATS} placeholder="webp" />
+            </Field>
+            <Switch checked={transforms.auto_format !== false} onChange={(auto_format) => setTransform({ auto_format })} label="Automatic format" hint="?format=auto picks AVIF or WebP when the browser's Accept header allows it." />
+            <div className="form-grid">
+              <Field label="Largest width"><input type="number" min="1" max="8192" value={number("max_width", 4096)} onChange={(e) => setTransform({ max_width: Number(e.target.value) })} /></Field>
+              <Field label="Largest height"><input type="number" min="1" max="8192" value={number("max_height", 4096)} onChange={(e) => setTransform({ max_height: Number(e.target.value) })} /></Field>
+              <Field label="Default quality" hint="1 to 100."><input type="number" min="1" max="100" value={number("quality", 80)} onChange={(e) => setTransform({ quality: Number(e.target.value) })} /></Field>
+              <Field label="Largest output" hint="MB."><input type="number" min="0.1" step="0.5" value={+(number("max_output_bytes", 10 * MB) / MB).toFixed(2)} onChange={(e) => setTransform({ max_output_bytes: Math.round(Number(e.target.value) * MB) })} /></Field>
+              <Field label="Largest source image" hint="MB. Larger originals are not transformed."><input type="number" min="0.1" step="1" value={+(number("max_source_bytes", 25 * MB) / MB).toFixed(2)} onChange={(e) => setTransform({ max_source_bytes: Math.round(Number(e.target.value) * MB) })} /></Field>
+              <Field label="Simultaneous transformations" hint="Per bucket, per server process."><input type="number" min="1" max="16" value={number("max_concurrent", 4)} onChange={(e) => setTransform({ max_concurrent: Number(e.target.value) })} /></Field>
+              <Field label="Time limit" hint="Seconds per transformation."><input type="number" min="1" max="30" value={number("timeout_seconds", 10)} onChange={(e) => setTransform({ timeout_seconds: Number(e.target.value) })} /></Field>
+            </div>
+          </>
+        )}
       </Section>
     </>
   );

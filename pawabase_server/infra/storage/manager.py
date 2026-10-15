@@ -10,15 +10,20 @@ and signed grants all stay Sillo's.
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote
 
 from sillo.storage import Bucket, LocalDriver, MemoryDriver
 from sillo.storage.base import Action, StorageEvent
-from sillo.storage.signing import Signer
+from sillo.storage.errors import PolicyRefused
+from sillo.storage.paths import normalise
+from sillo.storage.signing import SignedGrant, Signer
 
 from pawabase_server.core import envvars
 from pawabase_server.core.telemetry import note
 from pawabase_server.infra.storage.s3 import S3Driver
+from pawabase_server.infra.storage.transform import Variants
 from pawabase_server.policies import PolicyStorage
 
 
@@ -85,6 +90,8 @@ class StorageManager:
         self._drivers: dict[tuple[str, str, str, str], Any] = {}
         self._signers: dict[tuple[str, str, str], Signer] = {}
         self.operations = 0
+        #: Rendered image variants, bounded and per process; the read policy is checked before every lookup.
+        self.variants = Variants()
 
     def _config(self, state: EnvironmentState) -> dict[str, Any]:
         """The environment's storage.
@@ -125,6 +132,21 @@ class StorageManager:
                 config["driver"] = "s3"
         return {key: self.platform.resolve_value(state, value) for key, value in config.items()}
 
+    def public_base(self, state: EnvironmentState) -> str:
+        """The gateway address object URLs are built on: ``<ENV>_PUBLIC_URL`` when the environment has its own hostname, else the platform's."""
+        own = envvars.get(state.env_name, "PUBLIC_URL")
+        return str(own or self.platform.settings.public_url).rstrip("/")
+
+    def object_url(self, state: EnvironmentState, bucket: str, key: str) -> str:
+        """The stable URL of an object on the application gateway. It does not depend on the storage provider."""
+        path = "/".join(
+            (quote(state.env_name, safe=""), quote(bucket, safe=""), quote(key, safe="/"))
+        )
+        return f"{self.public_base(state)}/storage/v1/files/{path}"
+
+    def share_url(self, state: EnvironmentState, token: str) -> str:
+        return f"{self.public_base(state)}/storage/v1/share/{quote(token, safe='')}"
+
     def signer(self, state: EnvironmentState, bucket: str) -> Signer:
         key = (state.env_name, bucket)
         signer = self._signers.get(key)
@@ -132,6 +154,47 @@ class StorageManager:
             secret = f"{self.platform.settings.internal_secret}:storage:{state.env_name}"
             signer = self._signers[key] = Signer(secret, f"{state.env_name}/{bucket}")
         return signer
+
+    def signed_url(
+        self,
+        state: EnvironmentState,
+        bucket: str,
+        key: str,
+        *,
+        method: str = "GET",
+        expires_in: int = 300,
+        content_type: str = "",
+        max_bytes: int = 0,
+        credential: dict[str, Any] | None = None,
+    ) -> str:
+        """Mint a Pawabase URL so every signed transfer still passes through policy, sniffing and limits.
+
+        In particular, never return a driver's native S3 presigned URL here: a direct PUT would let S3 accept bytes Pawabase has not
+        inspected, and S3 presigned URLs cannot enforce an upload-size limit.
+        """
+        held = self.bucket(state, bucket, credential=credential)
+        key = normalise(key)
+        verb = method.upper()
+        action = Action.READ if verb == "GET" else Action.WRITE
+        if not held.policy.signable(action):
+            raise PolicyRefused(action.value, key)
+        grant = SignedGrant(
+            key,
+            verb,
+            time.time() + max(1, min(int(expires_in), 7 * 24 * 3600)),
+            content_type=content_type,
+            max_bytes=max_bytes or held.max_bytes,
+        )
+        token = self.signer(state, bucket).sign(grant)
+        base = self.platform.settings.public_url.rstrip("/")
+        path = "/".join(
+            (
+                quote(state.env_name, safe=""),
+                quote(bucket, safe=""),
+                quote(key, safe="/"),
+            )
+        )
+        return f"{base}/storage/v1/signed/{path}?token={quote(token, safe='')}"
 
     def driver(self, state: EnvironmentState, bucket: str) -> Any:
         config = self._config(state)
@@ -220,9 +283,18 @@ class StorageManager:
         return listener
 
     def bucket(
-        self, state: EnvironmentState, name: str, *, credential: dict[str, Any] | None = None
+        self,
+        state: EnvironmentState,
+        name: str,
+        *,
+        credential: dict[str, Any] | None = None,
+        overwrite: bool = False,
     ) -> Bucket:
-        """A Sillo bucket for this request, with its policy bound to *credential*."""
+        """A Sillo bucket for this request, with its policy bound to *credential*.
+
+        With *overwrite*, a write is answered by the bucket's update policy (replacing an object that exists) instead of its
+        upload policy.
+        """
         model: BucketModel | None = state.buckets.get(name)
         if model is None:
             from sillo.exceptions import HTTPException
@@ -231,9 +303,17 @@ class StorageManager:
         policy = PolicyStorage(
             state.engine,
             read="public" if model.public else (model.read_policy or "authenticated"),
-            write=model.write_policy or "authenticated",
+            write=(
+                (model.update_policy or model.write_policy or "authenticated")
+                if overwrite
+                else (model.write_policy or "authenticated")
+            ),
+            list=model.list_policy,
+            update=model.update_policy,
+            delete=model.delete_policy,
             credential=credential,
             env=state.env_name,
+            signed_reads=model.signed_downloads,
             signed_writes=model.signed_uploads,
         )
         max_bytes = int(

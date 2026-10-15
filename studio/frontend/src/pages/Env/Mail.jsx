@@ -276,7 +276,7 @@ function TemplateEditor({ base, template, onClose, onSaved }) {
         {view === "preview" && (
           <>
             <div className="hint">The HTML as written. <code>{"{{ values }}"}</code> and <code>{"{% logic %}"}</code> appear as typed here; send a test to see them filled in.</div>
-            <iframe title="Template preview" sandbox="" srcDoc={data.html || "<p style='font-family:sans-serif;color:#888'>No HTML body.</p>"} style={{ width: "100%", height: 420, border: "1px solid var(--line)", borderRadius: 12, background: "#fff" }} />
+            <iframe title="Template preview" sandbox="" srcDoc={data.html || "<p style='font-family:sans-serif;color:#888'>No HTML body.</p>"} style={{ width: "100%", height: 420, border: "1px solid var(--line)", borderRadius: "var(--r)", background: "#fff" }} />
           </>
         )}
       </div>

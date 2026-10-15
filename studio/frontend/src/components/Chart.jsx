@@ -7,15 +7,20 @@ import { useEffect, useRef, useState } from "react";
 // data:   [{ t: iso, [key]: number }]
 
 function useWidth() {
+  const [ref, width] = useSize();
+  return [ref, width];
+}
+
+function useSize() {
   const ref = useRef(null);
-  const [width, setWidth] = useState(0);
+  const [size, setSize] = useState([0, 0]);
   useEffect(() => {
     if (!ref.current) return undefined;
-    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    const observer = new ResizeObserver(([entry]) => setSize([entry.contentRect.width, entry.contentRect.height]));
     observer.observe(ref.current);
     return () => observer.disconnect();
   }, []);
-  return [ref, width];
+  return [ref, size[0], size[1]];
 }
 
 function niceMax(value) {
@@ -54,8 +59,11 @@ function smoothPath(points) {
   return d;
 }
 
-export default function Chart({ series, data, height = 220, stepSeconds, format = compact, empty = "No activity in this range yet." }) {
-  const [ref, width] = useWidth();
+/** `height` is pixels, or "fill" to take whatever height the container gives the chart (at least 220). */
+export default function Chart({ series, data, height: wanted = 220, stepSeconds, format = compact, empty = "No activity in this range yet." }) {
+  const fill = wanted === "fill";
+  const [ref, width, measured] = useSize();
+  const height = fill ? Math.max(220, Math.floor(measured) || 220) : wanted;
   const [hover, setHover] = useState(null);
   const pad = { top: 12, right: 8, bottom: 26, left: 40 };
   const innerW = Math.max(0, width - pad.left - pad.right);
@@ -87,7 +95,7 @@ export default function Chart({ series, data, height = 220, stepSeconds, format 
   }
 
   return (
-    <div className="chart" ref={ref} style={{ height }}>
+    <div className={`chart ${fill ? "fill" : ""}`} ref={ref} style={fill ? undefined : { height }}>
       {width > 0 && (
         <svg width={width} height={height} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img">
           {ticks.map((t) => (

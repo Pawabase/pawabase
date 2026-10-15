@@ -188,3 +188,30 @@ class FirewallRule(Model):
     class Meta:
         table = "pb_firewall_rules"
         ordering = ["position", "id"]
+
+
+class ObjectShare(Model):
+    """A temporary link to one object.
+
+    Lookup is by the token's SHA-256; the token itself is kept only sealed with the platform key, for Studio's copy button. ``permissions`` is ``view``, ``download`` or ``both``.
+    A link grants that one object in that one bucket of that one environment, and nothing else.
+    """
+
+    id = ulid_pk()
+    env = fields.CharField(max_length=63, db_index=True)
+    bucket = fields.CharField(max_length=63)
+    key = fields.CharField(max_length=1024)
+    token_hash = fields.CharField(max_length=64, unique=True)
+    #: The token sealed with the platform key, so Studio can show the link again to the person who manages it. Lookup uses the hash.
+    token_ciphertext = fields.TextField(default="")
+    permissions = fields.CharField(max_length=12, default="both")
+    label = fields.CharField(max_length=120, default="")
+    expires_at = fields.DatetimeField()
+    revoked_at = fields.DatetimeField(null=True)
+    created_by = fields.CharField(max_length=120, default="")
+    hits = fields.IntField(default=0)
+    last_used_at = fields.DatetimeField(null=True)
+
+    class Meta:
+        table = "pb_object_shares"
+        ordering = ["-created_at"]

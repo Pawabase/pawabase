@@ -25,8 +25,11 @@ class PolicyStorage:
 
     Args:
         engine: Resolves references.
-        read: Policy reference for reading and listing.
-        write: Policy reference for uploads and deletes.
+        read: Policy reference for reading.
+        write: Policy reference for uploading a new object.
+        list: Policy reference for listing; unset follows ``read``.
+        update: Policy reference for replacing an object that exists; unset follows ``write``.
+        delete: Policy reference for deleting; unset follows ``write``.
         credential: The request's credential context (service keys bypass).
         signed_reads: Whether signed URLs may grant reads.
         signed_writes: Whether signed URLs may grant uploads.
@@ -38,6 +41,9 @@ class PolicyStorage:
         *,
         read: Any = "authenticated",
         write: Any = "authenticated",
+        list: Any = None,
+        update: Any = None,
+        delete: Any = None,
         credential: dict[str, Any] | None = None,
         env: str | None = None,
         signed_reads: bool = True,
@@ -46,7 +52,16 @@ class PolicyStorage:
         self.engine = engine
         self.read_policy = engine.resolve_ref(read)
         self.write_policy = engine.resolve_ref(write)
-        for resolved in (self.read_policy, self.write_policy):
+        self.list_policy = engine.resolve_ref(list) if list is not None else self.read_policy
+        self.update_policy = engine.resolve_ref(update) if update is not None else self.write_policy
+        self.delete_policy = engine.resolve_ref(delete) if delete is not None else self.write_policy
+        for resolved in (
+            self.read_policy,
+            self.write_policy,
+            self.list_policy,
+            self.update_policy,
+            self.delete_policy,
+        ):
             if resolved.handler is not None:
                 raise ValueError("storage policies must be JSON conditions")
         self.credential = credential or {"is_service": False, "role": "anon", "scopes": []}
@@ -58,7 +73,13 @@ class PolicyStorage:
         if self.credential.get("is_service"):
             return True
         name = getattr(action, "value", str(action))
-        policy = self.read_policy if name in ("read", "list", "stat") else self.write_policy
+        policy = {
+            "read": self.read_policy,
+            "stat": self.read_policy,
+            "list": self.list_policy,
+            "update": self.update_policy,
+            "delete": self.delete_policy,
+        }.get(name, self.write_policy)
         context = {
             "auth": policy_auth(user),
             "credential": self.credential,
@@ -66,6 +87,10 @@ class PolicyStorage:
             "object": {"key": key, "segments": key.split("/"), "action": name},
         }
         return evaluate(policy.condition, context)
+
+    def allows_update(self, key: str, user: Any = None) -> bool:
+        """Whether this caller may replace an object that already exists."""
+        return self.allows("update", key, user)
 
     def signable(self, action: Any) -> bool:
         name = getattr(action, "value", str(action))

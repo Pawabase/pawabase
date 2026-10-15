@@ -53,7 +53,7 @@ export function PermissionPicker({ value = [], onChange, known = [], resources =
         <input type="checkbox" checked={value.includes("*")} onChange={() => toggle("*")} />
         <b>*</b> <span className="muted">everything, including permissions added later</span>
       </label>
-      <div style={{ maxHeight: 280, overflow: "auto", border: "1px solid var(--line)", borderRadius: 12 }}>
+      <div style={{ maxHeight: 280, overflow: "auto", border: "1px solid var(--line)", borderRadius: "var(--r)" }}>
         <table className="table" style={{ margin: 0, width: "100%" }}>
           <thead>
             <tr><th style={{ textAlign: "left" }}>Resource</th>{used.map((column) => <th key={column} style={{ textAlign: "center", textTransform: "capitalize" }}>{column}</th>)}<th /></tr>

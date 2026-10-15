@@ -36,6 +36,10 @@ ROUTES: tuple[Upstream, ...] = (
     Upstream("/auth/v1/", "auth"),
     Upstream("/rest/", "data"),
     Upstream("/storage/v1/signed/", "storage", "none"),
+    # Object URLs go in ``<img src>`` and ``<video src>``, which cannot send a key header. The environment is in the path of
+    # ``files``; a share link's token names its own object. Policies and grants are evaluated by the storage routes.
+    Upstream("/storage/v1/files/", "storage", "none"),
+    Upstream("/storage/v1/share/", "storage", "none"),
     Upstream("/storage/v1/", "storage"),
     Upstream("/functions/v1/", "functions"),
     Upstream("/flows/v1/", "flows"),

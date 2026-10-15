@@ -12,12 +12,12 @@ import time
 from typing import Any
 
 from sillo import HttpContext, SilloApp
-from sillo.responses import JSONResponse
+from sillo.responses import JSONResponse, stream
 
 from pawabase_server.core.clients import ServiceError
 from pawabase_server.core.context import PlatformContext
 from studio.scope import body_allowed, narrow_runtime
-from studio.support import Deps, error_response, json_body
+from studio.support import Deps, error_response, failure_response, json_body
 
 #: Bridge targets and the path prefix calls are confined to.
 BRIDGE: dict[str, str] = {
@@ -69,6 +69,11 @@ def outside_free(ctx: HttpContext, env: str) -> bool:
     """Whether *env* may be used by this request: always, unless the session is confined to a project that does not have it."""
     project = ctx.scope.get("studio_project")
     return project is None or env in ctx.scope.get("studio_envs", ())
+
+
+async def _once(chunk: bytes):
+    """Carry bytes that were already read in full as a one-item stream."""
+    yield chunk
 
 
 def register(app: SilloApp, deps: Deps) -> None:
@@ -226,6 +231,98 @@ def register(app: SilloApp, deps: Deps) -> None:
                 else 0,
             }
         )
+
+    def object_guard(ctx: HttpContext, env: str, key: str) -> JSONResponse | None:
+        if not ENV_NAME.fullmatch(env) or not outside_free(ctx, env):
+            return JSONResponse(
+                {"detail": "that environment is not part of your project"}, status_code=403
+            )
+        if not key or key.startswith("/") or ".." in key.split("/"):
+            return JSONResponse({"detail": "bad object key"}, status_code=400)
+        return None
+
+    @app.get("/studio/api/object/{env}/{bucket}/{key:path}", exclude_from_schema=True)
+    async def object_bytes(ctx: HttpContext, env: str, bucket: str, key: str):
+        """Read one stored object as Studio, for previewing or saving it.
+
+        Studio reads with its own service credential, so it never needs a link: the bucket's application policies are about
+        the application's callers, not about the operator who administers the bucket. A ``Range`` header is passed through so
+        video and audio can seek.
+        """
+        if (refusal := object_guard(ctx, env, key)) is not None:
+            return refusal
+        forwarded = {
+            name: ctx.headers[name] for name in ("range", "if-none-match", "if-range", "accept") if name in ctx.headers
+        }
+        try:
+            result = await core.request_raw(
+                "GET",
+                f"/storage/v1/object/{bucket}/{key}",
+                params=dict(ctx.query_params),
+                context=PlatformContext(env=env, role="service", key_id="studio"),
+                headers=forwarded,
+            )
+        except ServiceError as exc:
+            return error_response(exc)
+        except Exception as exc:
+            return failure_response(exc, "storage")
+        if result["status"] >= 400:
+            return JSONResponse(result.get("body"), status_code=result["status"])
+        got = result.get("headers", {})
+        headers = {
+            name: got[name]
+            for name in (
+                "etag",
+                "content-range",
+                "accept-ranges",
+                "content-disposition",
+                "content-encoding",
+                "last-modified",
+            )
+            if name in got
+        }
+        if "content-disposition" not in headers:
+            name = re.sub(r'[\x00-\x1f"\\/]', "_", key.rsplit("/", 1)[-1])
+            headers["content-disposition"] = f'inline; filename="{name}"'
+        headers.update(
+            {
+                "x-content-type-options": "nosniff",
+                "referrer-policy": "no-referrer",
+                "cache-control": "private, max-age=0, must-revalidate",
+            }
+        )
+        if got.get("content-type", "") != "application/pdf":
+            headers["content-security-policy"] = "default-src 'none'; sandbox"
+        return stream(
+            _once(result["content"]),
+            status_code=result["status"],
+            content_type=got.get("content-type", "application/octet-stream"),
+            headers=headers,
+        )
+
+    @app.put("/studio/api/object/{env}/{bucket}/{key:path}", exclude_from_schema=True)
+    async def object_upload(ctx: HttpContext, env: str, bucket: str, key: str):
+        """Upload or replace an object as Studio.
+
+        This is a management operation: it is authorised by the operator's Studio session and the service credential,
+        not by the bucket's application policies, so an administrator can always upload. The bucket's accepted types and size
+        limits still apply, because those protect the data, not the application's callers.
+        """
+        if (refusal := object_guard(ctx, env, key)) is not None:
+            return refusal
+        try:
+            result = await core.request_raw(
+                "PUT",
+                f"/platform/v1/envs/{env}/buckets/{bucket}/object",
+                params={"key": key},
+                content=await ctx.body,
+                headers={"content-type": ctx.headers.get("content-type", "application/octet-stream")},
+            )
+        except ServiceError as exc:
+            return error_response(exc)
+        except Exception as exc:
+            return failure_response(exc, "storage")
+        return JSONResponse(result.get("body"), status_code=result["status"])
 
     async def bridge(ctx: HttpContext, target: str, path: str):
         if target not in BRIDGE:

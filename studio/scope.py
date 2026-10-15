@@ -33,7 +33,7 @@ PROJECT_OPEN = {
 OPEN_PREFIXES = ("/assets/",)
 #: Bridge targets whose paths are ``envs/{env}/…`` (platform, auth) or ``{env}/…`` (the others).
 ENV_UNDER = {"platform": "envs", "auth": "envs"}
-ENV_FIRST = {"realtime", "telemetry", "gateway"}
+ENV_FIRST = {"realtime", "telemetry", "gateway", "object"}
 #: Platform paths that are the same for everyone and carry no tenant data (the flow editor's block catalogue), plus the runtime listing, which
 #: the bridge filters to the project.
 PLATFORM_OPEN = {"blocks", "runtime"}
