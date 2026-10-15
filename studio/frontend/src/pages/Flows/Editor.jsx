@@ -140,7 +140,7 @@ function Editor({ env, flow, blocks }) {
             >
               <Background gap={22} size={1.5} color="var(--line-2)" />
               <Controls />
-              <MiniMap pannable zoomable nodeColor="#cfc4fa" maskColor="rgba(31,27,46,0.12)" />
+              <MiniMap pannable zoomable nodeColor="#3a3649" nodeStrokeColor="#b9abff" maskColor="rgba(8,7,12,0.55)" />
             </ReactFlow>
           </div>
           <aside className="inspector">
@@ -381,7 +381,7 @@ function AvailableVariables({ nodeId, nodes, edges, byKey, focusedField, onInser
               backgroundColor: focusedField ? "var(--accent)" : "var(--bg-2)",
               color: focusedField ? "white" : "var(--text-primary)",
               border: "none",
-              borderRadius: 12,
+              borderRadius: "var(--r)",
               cursor: focusedField ? "pointer" : "default",
               fontSize: 11,
               fontFamily: "monospace",
