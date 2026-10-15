@@ -87,8 +87,8 @@ export const KINDS = {
     description: "Where uploaded files live, and who may read and write them.",
     key: "name",
     columns: ["name", "public"],
-    blank: { name: "", description: "", public: false, read_policy: null, write_policy: "authenticated", accepts: [], max_bytes: 0, signed_uploads: true },
-    template: { name: "avatars", description: "", public: true, read_policy: null, write_policy: "authenticated", accepts: ["image/*"], max_bytes: 5242880, signed_uploads: true },
+    blank: { name: "", description: "", public: false, read_policy: null, write_policy: "authenticated", list_policy: "authenticated", update_policy: null, delete_policy: null, accepts: [], max_bytes: 0, signed_uploads: true, signed_downloads: false, transforms: {}, cache_max_age: 0 },
+    template: { name: "avatars", description: "", public: true, read_policy: null, write_policy: "authenticated", list_policy: "authenticated", update_policy: null, delete_policy: null, accepts: ["image/*"], max_bytes: 5242880, signed_uploads: true, signed_downloads: false, transforms: { enabled: true, formats: ["webp", "jpeg"], max_width: 2048, max_height: 2048 }, cache_max_age: 0 },
   },
   flows: {
     key: "name",
