@@ -49,8 +49,13 @@ async function load(artifact: string): Promise<string[]> {
   return errors;
 }
 
-function specs() {
-  return [...registry.values()].map(({ handler: _handler, ...spec }) => spec);
+function specs(artifact: string) {
+  const root = `file://${artifact}/`;
+  return [...registry.values()].map(({ handler: _handler, location, ...spec }) => ({
+    ...spec,
+    file: location?.url.startsWith(root) ? decodeURIComponent(location.url.slice(root.length)) : null,
+    line: location?.line ?? null,
+  }));
 }
 
 function where(error: unknown, artifact: string) {
@@ -70,7 +75,7 @@ function where(error: unknown, artifact: string) {
 if (Deno.args[0] === "--describe") {
   const artifact = Deno.args[1];
   const errors = await load(artifact);
-  send({ specs: specs(), errors });
+  send({ specs: specs(artifact), errors });
   Deno.exit(0);
 }
 

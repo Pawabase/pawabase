@@ -38,6 +38,8 @@ export type Handler = (ctx: Context) => Promise<unknown> | unknown;
 
 export interface FunctionSpec extends Required<Omit<FunctionOptions, "input_fields">> {
   name: string;
+  /** Where `fn(...)` was called: the file URL and line, for Studio's code view. */
+  location: { url: string; line: number } | null;
   input_fields: Record<string, unknown>[] | null;
   handler: Handler;
 }
@@ -67,6 +69,7 @@ export function fn(name: string, optionsOrHandler: FunctionOptions | Handler, ma
   if (registry.has(name)) throw new Error(`function ${name} is defined twice`);
   registry.set(name, {
     name,
+    location: caller(),
     handler,
     description: options.description ?? "",
     policy: options.policy === undefined ? "authenticated" : options.policy,
@@ -75,6 +78,16 @@ export function fn(name: string, optionsOrHandler: FunctionOptions | Handler, ma
     tags: options.tags ?? [],
   });
   return handler;
+}
+
+/** The file and line that called `fn` (the first stack frame outside this kit). */
+function caller(): { url: string; line: number } | null {
+  const here = import.meta.url;
+  for (const frame of (new Error().stack || "").split("\n").slice(1)) {
+    const match = frame.match(/(file:\/\/[^\s()]+):(\d+):\d+/);
+    if (match && match[1] !== here) return { url: match[1], line: Number(match[2]) };
+  }
+  return null;
 }
 
 // ── values across the boundary (the Python kit's tagged JSON) ─────────────

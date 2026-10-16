@@ -439,7 +439,7 @@ class Deployments:
         token = _loading_project.set(key)
         try:
             for spec in answer.get("specs") or []:
-                handler = _typescript_handler(spec["name"])
+                handler = _typescript_handler(spec["name"], spec.get("file"), spec.get("line"))
                 function(
                     spec["name"],
                     description=str(spec.get("description") or ""),
@@ -600,11 +600,13 @@ class Deployments:
         return problems
 
 
-def _typescript_handler(name: str) -> Any:
+def _typescript_handler(name: str, file: str | None = None, line: int | None = None) -> Any:
     async def handler(ctx: Any) -> Any:
         raise RuntimeError(
             f"{name} is a TypeScript function; it runs in its Deno worker, not in this process"
         )
 
     handler.typescript = True  # type: ignore[attr-defined]
+    #: Where the function is defined in the deployment (``functions/demo.ts``, line), for Studio's code view.
+    handler.source = (file, line)  # type: ignore[attr-defined]
     return handler

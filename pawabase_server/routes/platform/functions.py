@@ -65,7 +65,21 @@ def _problem(error: DeploymentError) -> HTTPException:
     )
 
 
-SOURCE_SUFFIXES = {".py", ".toml", ".txt", ".md", ".json", ".yaml", ".yml", ".cfg", ".ini"}
+SOURCE_SUFFIXES = {
+    ".py",
+    ".ts",
+    ".mts",
+    ".js",
+    ".mjs",
+    ".toml",
+    ".txt",
+    ".md",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".cfg",
+    ".ini",
+}
 MAX_SOURCE_BYTES = 400_000
 
 
