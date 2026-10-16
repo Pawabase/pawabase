@@ -41,6 +41,7 @@ SECTIONS: dict[str, str] = {
     "backups": "Env/Backups",
     "jobs": "Env/Jobs",
     "events": "Env/Events",
+    "webhook-deliveries": "Env/WebhookDeliveries",
     "realtime": "Env/Realtime",
     "observability": "Env/Observability",
     "usage": "Env/Usage",

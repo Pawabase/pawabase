@@ -33,6 +33,7 @@ from pawabase_server.edge.errors import (
     respond,
     respond_json,
 )
+from pawabase_server.edge.firewall import Firewall
 from pawabase_server.edge.headers import request_headers
 from pawabase_server.edge.key_resolver import KeyRejected, KeyResolver
 from pawabase_server.edge.metrics import Latency, new_stats
@@ -100,8 +101,11 @@ class Edge:
         *,
         rate_backend: Any = "memory",
         request_quota: RequestQuota | None = None,
+        firewall: Firewall | None = None,
     ) -> None:
         self.app = app
+        #: The environment firewall (``edge/firewall.py``). Without one, only the rules cached with a key apply (older installs, tests).
+        self.firewall = firewall
         self.settings = settings
         self.resolver = resolver
         self.stats = new_stats()
@@ -161,6 +165,17 @@ class Edge:
             await self._websocket(scope, receive, send, upstream)
         else:
             await self._http(scope, receive, send, upstream)
+
+    def _firewall_env(self, request: Request, context: Any, upstream: Upstream) -> str | None:
+        """The environment whose firewall applies; none for the management plane, which is the operator's, not the public's."""
+        if self.firewall is None or upstream.group == "management":
+            return None
+        return self.firewall.environment_of(request, context, self.served(request.host))
+
+    def _key_rules(self, info: dict[str, Any] | None) -> dict[str, Any]:
+        """The key's settings for :func:`policy.evaluate`. With the environment firewall installed, it decides on rules instead."""
+        info = info or {}
+        return {**info, "firewall": []} if self.firewall is not None else info
 
     def _request(self, scope: dict[str, Any]) -> Request:
         peer = scope.get("client")
@@ -303,6 +318,14 @@ class Edge:
             await respond(send, refusal, request_id)
             return
         scope[IP_SCOPE] = request.client_ip
+        firewall_env = self._firewall_env(request, context, upstream)
+        if (
+            self.firewall is not None
+            and (refusal := await self.firewall.check(request, context, firewall_env)) is not None
+        ):
+            self.stats["refused"] += 1
+            await respond(send, refusal, request_id)
+            return
         if upstream.prefix == "/storage/v1/files/" and self._wrong_host(request):
             await respond_json(send, 404, {"detail": "Not found"})
             return
@@ -311,7 +334,7 @@ class Edge:
             scope[KEY_SCOPE] = context.key_id
             if (
                 refusal := policy.evaluate(
-                    request, context, info or {}, served=self.served(request.host)
+                    request, context, self._key_rules(info), served=self.served(request.host)
                 )
             ) is not None:
                 self.stats["refused"] += 1
@@ -365,6 +388,11 @@ class Edge:
         await self.app(inner, body, guarded_send)
         self.latency.record(upstream.group, (time.perf_counter() - started) * 1000, state["status"])
         self.stats["proxied"] += 1
+        if self.firewall is not None and state["status"] >= 400:
+            try:
+                await self.firewall.observe(firewall_env, request.client_ip, state["status"])
+            except Exception:
+                logger.exception("firewall: counting an error response toward a ban failed")
 
     # ── WebSocket ────────────────────────────────────────────────────────
 
@@ -382,10 +410,22 @@ class Edge:
             return
         scope[IP_SCOPE] = request.client_ip
         if (
+            self.firewall is not None
+            and (
+                refusal := await self.firewall.check(
+                    request, context, self._firewall_env(request, context, upstream)
+                )
+            )
+            is not None
+        ):
+            self.stats["refused"] += 1
+            await close_websocket(send, refusal)
+            return
+        if (
             context is not None
             and (
                 refusal := policy.evaluate(
-                    request, context, info or {}, served=self.served(request.host)
+                    request, context, self._key_rules(info), served=self.served(request.host)
                 )
             )
             is not None

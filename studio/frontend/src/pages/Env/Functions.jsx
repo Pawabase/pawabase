@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
-import Layout from "../../components/Layout";
-import { Badge, Button, Card, Field, Json, JsonInput, Loading, PageHead, Sheet, Status, Table, Tabs, useAction, when } from "../../components/ui";
+import Layout, { sectionNav, useSection } from "../../components/Layout";
+import { Icon } from "../../components/icons";
+import { Badge, Button, Card, Field, Json, JsonInput, Loading, PageHead, PageTabs, Sheet, Status, Table, useAction, when } from "../../components/ui";
 import { envPath, post, useApi } from "../../lib/api";
 
 // ── a small Python highlighter: enough to read a function comfortably ─────────────────────────────────────────────────
@@ -155,27 +156,42 @@ function Invoke({ base, fn }) {
   );
 }
 
-function FunctionDetail({ env, fn, base, branch, onClose, onRun }) {
+/** One function in the page: a header with "Try it" on the right, then tabs for what it is, what it did lately, and its code. */
+function FunctionPanel({ env, fn, base, branch, stats, onRun }) {
   const [tab, setTab] = useState("overview");
+  const [trying, setTrying] = useState(false);
   return (
-    <Sheet
-      title={fn.name}
-      subtitle={fn.description || fn.module}
-      icon="functions"
-      onClose={onClose}
-      footer={<Button onClick={onClose}>Close</Button>}
-    >
-      <Tabs tabs={[{ value: "overview", label: "Overview" }, { value: "code", label: "Code" }, { value: "runs", label: "Runs" }, { value: "test", label: "Test" }]} value={tab} onChange={setTab} />
+    <div>
+      <div className="fn-head">
+        <span className="tile-icon pastel sky" style={{ width: 40, height: 40, display: "grid", placeItems: "center", borderRadius: "var(--r)" }}><Icon name="functions" size={18} /></span>
+        <div className="grow">
+          <h1 className="mono">{fn.name}</h1>
+          <p>{fn.description || fn.module || <code>POST /functions/v1/{fn.name}</code>}</p>
+        </div>
+        <Button variant="primary" onClick={() => setTrying(true)}><Icon name="play" />Try it</Button>
+      </div>
+      <PageTabs
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { value: "overview", label: "Overview" },
+          { value: "runs", label: "Recent runs", count: stats?.total || undefined },
+          { value: "code", label: "Code" },
+        ]}
+      />
       {tab === "overview" && (
         <div className="stack lg">
-          <dl className="fn-facts">
-            <div><dt>Call it</dt><dd><code>POST /functions/v1/{fn.name}</code></dd></div>
-            <div><dt>Who may</dt><dd><code>{JSON.stringify(fn.policy ?? null)}</code></dd></div>
-            <div><dt>Timeout</dt><dd>{fn.timeout ? `${fn.timeout}s` : "default"}</dd></div>
-            <div><dt>Defined in</dt><dd>{fn.file ? <code>{fn.file}{fn.line ? `:${fn.line}` : ""}</code> : <span className="muted">unknown</span>}</dd></div>
-            <div><dt>Served from</dt><dd><Badge>{fn.source}</Badge></dd></div>
-            {fn.tags?.length > 0 && <div><dt>Tags</dt><dd className="row wrap">{fn.tags.map((t) => <Badge key={t}>{t}</Badge>)}</dd></div>}
-          </dl>
+          <Card>
+            <dl className="fn-facts">
+              <div><dt>Call it</dt><dd><code>POST /functions/v1/{fn.name}</code></dd></div>
+              <div><dt>Who may</dt><dd><code>{JSON.stringify(fn.policy ?? null)}</code></dd></div>
+              <div><dt>Timeout</dt><dd>{fn.timeout ? `${fn.timeout}s` : "default"}</dd></div>
+              <div><dt>Defined in</dt><dd>{fn.file ? <code>{fn.file}{fn.line ? `:${fn.line}` : ""}</code> : <span className="muted">unknown</span>}</dd></div>
+              <div><dt>Served from</dt><dd><Badge>{fn.source}</Badge></dd></div>
+              <div><dt>Recent runs</dt><dd>{stats ? <>{stats.total}{stats.failed ? <> · <Badge tone="red">{stats.failed} failed</Badge></> : null}</> : <span className="muted">none</span>}</dd></div>
+              {fn.tags?.length > 0 && <div><dt>Tags</dt><dd className="row wrap">{fn.tags.map((t) => <Badge key={t}>{t}</Badge>)}</dd></div>}
+            </dl>
+          </Card>
           {fn.input_fields?.length > 0 && (
             <Card flush title="Input fields">
               <Table rows={fn.input_fields} columns={[{ label: "Name", render: (f) => <b>{f.name}</b> }, { label: "Type", key: "type" }, { label: "Required", render: (f) => (f.required ? "Yes" : "—") }, { label: "Limits", render: (f) => [f.max_length && `max ${f.max_length}`, f.minimum != null && `min ${f.minimum}`, f.maximum != null && `max ${f.maximum}`].filter(Boolean).join(", ") || "—" }]} />
@@ -183,10 +199,14 @@ function FunctionDetail({ env, fn, base, branch, onClose, onRun }) {
           )}
         </div>
       )}
-      {tab === "code" && <SourceFile env={env} path={fn.file} line={fn.line} branch={branch} />}
-      {tab === "runs" && <RunsTable env={env} fn={fn.name} onOpen={onRun} />}
-      {tab === "test" && <Invoke base={base} fn={fn} />}
-    </Sheet>
+      {tab === "runs" && <Card><RunsTable env={env} fn={fn.name} onOpen={onRun} /></Card>}
+      {tab === "code" && <Card><SourceFile env={env} path={fn.file} line={fn.line} branch={branch} /></Card>}
+      {trying && (
+        <Sheet title={`Try ${fn.name}`} subtitle="Call the function now, with any input and identity" icon="play" tone="sky" onClose={() => setTrying(false)} footer={<Button onClick={() => setTrying(false)}>Close</Button>}>
+          <Invoke base={base} fn={fn} />
+        </Sheet>
+      )}
+    </div>
   );
 }
 
@@ -237,12 +257,13 @@ function Source({ env, branch }) {
   );
 }
 
+const FUNCTION_SECTIONS = ["all", "runs", "deployments", "source"];
+
 export default function Functions({ env }) {
   const base = envPath(env, "/functions");
   const list = useApi(base);
   const runs = useApi(envPath(env, "/function-runs"), { params: { limit: 200 } });
-  const [tab, setTab] = useState("functions");
-  const [detail, setDetail] = useState(null);
+  const [section, setSection] = useSection((value) => FUNCTION_SECTIONS.includes(value) || value.startsWith("fn:"), "all");
   const [openRun, setOpenRun] = useState(null);
   const [query, setQuery] = useState("");
   const [run, busy] = useAction();
@@ -257,29 +278,44 @@ export default function Functions({ env }) {
     return out;
   }, [runs.data]);
 
-  return (
-    <Layout title="Functions">
-      <PageHead
-        title="Functions"
-        description={<>Python in <code>functions/*.py</code>, registered with <code>@function</code>. Call them over HTTP at <code>/functions/v1/&lt;name&gt;</code>, or from routes, flows, schedules and events.</>}
-        actions={<Button disabled={busy} onClick={async () => { if (await run(() => post(`/code/reload`), "Code reloaded")) { list.reload(); runs.reload(); } }}>Reload code</Button>}
-      />
-      <Tabs tabs={[{ value: "functions", label: "Functions" }, { value: "runs", label: "Runs" }, { value: "deployments", label: "Deployments" }, { value: "source", label: "Source" }]} value={tab} onChange={setTab} />
+  const functions = list.data?.data || [];
+  const needle = query.trim().toLowerCase();
+  const shown = functions.filter((f) => !needle || `${f.name} ${f.description || ""} ${f.file || ""}`.toLowerCase().includes(needle));
+  const selected = section.startsWith("fn:") ? functions.find((f) => f.name === section.slice(3)) : null;
+  const reloadAll = () => { list.reload(); runs.reload(); };
 
-      {tab === "functions" && (
-        <Loading state={list}>
-          {(data) => {
-            const needle = query.trim().toLowerCase();
-            const shown = data.data.filter((f) => !needle || `${f.name} ${f.description || ""} ${f.file || ""}`.toLowerCase().includes(needle));
-            return (
+  const subnav = sectionNav("Functions", [
+    { items: [["all", "All functions", list.data ? `${functions.length} loaded` : undefined]] },
+    { title: "Functions", items: shown.map((f) => [`fn:${f.name}`, f.name, f.file || undefined, {
+      mono: true,
+      tag: stats[f.name]?.total ? String(stats[f.name].total) : undefined,
+      flag: stats[f.name]?.failed ? "critical" : undefined,
+      title: f.description || f.name,
+    }]) },
+    { title: "Activity", items: [["runs", "Runs", "Every call, newest first"], ["deployments", "Deployments", "What the CLI shipped"], ["source", "Source files"]] },
+  ], section, setSection, {
+    loading: list.loading && !list.data,
+    search: { value: query, onChange: setQuery, placeholder: "Find a function" },
+  });
+
+  return (
+    <Layout title="Functions" subnav={subnav}>
+      {section === "all" && (
+        <>
+          <PageHead
+            title="Functions"
+            description={<>Python in <code>functions/*.py</code>, registered with <code>@function</code>. Call them over HTTP at <code>/functions/v1/&lt;name&gt;</code>, or from routes, flows, schedules and events.</>}
+            actions={<Button disabled={busy} onClick={async () => { if (await run(() => post(`/code/reload`), "Code reloaded")) reloadAll(); }}>Reload code</Button>}
+          />
+          <Loading state={list}>
+            {(data) => (
               <div className="stack lg">
                 {data.errors?.length > 0 && <div className="alert error"><b>Code failed to load</b><pre>{data.errors.join("\n")}</pre></div>}
-                <div className="row"><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter by name, description or file" style={{ maxWidth: 360 }} /><span className="hint">{shown.length} of {data.data.length}</span></div>
                 <Card flush>
                   <Table
                     rows={shown}
                     empty="No functions loaded. Add a module under functions/ and deploy, or reload."
-                    onRowClick={setDetail}
+                    onRowClick={(f) => setSection(`fn:${f.name}`)}
                     columns={[
                       { label: "Name", render: (f) => <div><b>{f.name}</b>{f.description ? <div className="hint">{f.description}</div> : null}</div> },
                       { label: "File", render: (f) => (f.file ? <code>{f.file}{f.line ? `:${f.line}` : ""}</code> : "—") },
@@ -291,15 +327,16 @@ export default function Functions({ env }) {
                 </Card>
                 <div className="row wrap">{(data.modules || []).map((m) => <Badge key={m}>{m}</Badge>)}{data.router && <Badge tone="blue">routes.py router</Badge>}</div>
               </div>
-            );
-          }}
-        </Loading>
+            )}
+          </Loading>
+        </>
       )}
-      {tab === "runs" && <Card><RunsTable env={env} onOpen={setOpenRun} /></Card>}
-      {tab === "deployments" && <Card flush><Deployments env={env} onChanged={() => { list.reload(); runs.reload(); }} /></Card>}
-      {tab === "source" && <Card><Source env={env} branch="main" /></Card>}
+      {selected && <FunctionPanel key={selected.name} env={env} fn={selected} base={base} branch="main" stats={stats[selected.name]} onRun={setOpenRun} />}
+      {section.startsWith("fn:") && !selected && list.data && <PageHead title="Function not found" description={`No function named ${section.slice(3)} is loaded in this environment.`} />}
+      {section === "runs" && <><PageHead title="Runs" description="Every function call, newest first." /><Card><RunsTable env={env} onOpen={setOpenRun} /></Card></>}
+      {section === "deployments" && <><PageHead title="Deployments" description="What pawabase deploy shipped. Activate an older one to roll back." /><Card flush><Deployments env={env} onChanged={reloadAll} /></Card></>}
+      {section === "source" && <><PageHead title="Source files" description="The code the running deployment was built from." /><Card><Source env={env} branch="main" /></Card></>}
 
-      {detail && <FunctionDetail env={env} fn={detail} base={base} branch="main" onClose={() => setDetail(null)} onRun={setOpenRun} />}
       {openRun && <RunDetail env={env} id={openRun} onClose={() => setOpenRun(null)} />}
     </Layout>
   );

@@ -73,6 +73,17 @@ class FakeApi:
             return {"data": [{"actor": "studio", "action": "environment.created", "env": "main"}]}
         if path == "/platform/v1/blocks":
             return {"data": [{"name": "trigger.http"}]}
+        if path == "/openapi.json":
+            return {
+                "openapi": "3.1.0",
+                "info": {"title": "Pawabase runtime", "version": "1"},
+                "paths": {
+                    "/auth/v1/user": {"get": {"operationId": "auth.user", "summary": "Signed-in user", "responses": {"200": {"description": "User"}}}},
+                    "/functions/v1/{name}": {"post": {"operationId": "functions.invoke", "summary": "Invoke a function", "parameters": [{"name": "name", "in": "path", "required": True, "schema": {"type": "string"}}], "responses": {"200": {"description": "Result"}}}},
+                    "/platform/v1/envs/{env}/events": {"post": {"operationId": "events.emit", "tags": ["events"], "summary": "Emit an event", "parameters": [{"name": "env", "in": "path", "required": True, "schema": {"type": "string"}}], "responses": {"202": {"description": "Accepted"}}}},
+                    "/internal/v1/secrets": {"get": {"operationId": "internal.secrets", "responses": {"200": {"description": "Internal"}}}},
+                },
+            }
         env = path.removeprefix("/platform/v1/envs/").split("/")[0]
         if path.startswith("/platform/v1/envs/") and env not in {
             e["name"] for e in self.environments
@@ -108,6 +119,7 @@ class FakeApi:
         params: Any = None,
         context: Any = None,
         headers: Any = None,
+        content: bytes | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         self.raw_call = {
@@ -117,6 +129,7 @@ class FakeApi:
             "params": params,
             "context": context,
             "headers": headers,
+            "content": content,
         }
         if path.startswith("/storage/v1/object/"):
             return {

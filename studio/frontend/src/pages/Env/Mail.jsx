@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import Layout from "../../components/Layout";
+import Layout, { sectionNav, useSection } from "../../components/Layout";
 import { Stat, StatStrip } from "./observability/kit";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, EmptyState, Field, JsonInput, Loading, Modal, PageHead, Segmented, Sheet, Spinner, Status, Switch, Table, Tile, copyToClipboard, useAction, useToast, when } from "../../components/ui";
@@ -22,7 +22,7 @@ export default function Mail({ env }) {
   const log = useApi(`${base}/mail/log`, { params: { limit: 200 }, interval: 10000 });
   const environment = useApi(base);
   const [filter, setFilter] = useState("all");
-  const [config, setConfig] = useState(false);
+  const [section, setSection] = useSection(["log", "delivery", "templates"]);
   const [test, setTest] = useState(false);
   const [open, setOpen] = useState(null);
 
@@ -33,13 +33,28 @@ export default function Mail({ env }) {
   const shown = filter === "all" ? rows : rows.filter((r) => r.status === filter);
 
   return (
-    <Layout title="Mail">
+    <Layout title="Mail" subnav={sectionNav("Mail", [
+      { title: "Activity", items: [["log", "Sent mail", log.data ? `${rows.length} recent` : undefined]] },
+      { title: "Setup", items: [
+        ["delivery", "Delivery", configured ? `${settingOf("host") || "SMTP"}` : "Not delivering", { flag: setup.data && !configured ? "warn" : undefined }],
+        ["templates", "Templates", "What each message says"],
+      ] },
+    ], section, setSection)}>
+      {section === "delivery" && <>
+        <PageHead title="Delivery" description="The SMTP server this environment sends through, and the address mail comes from." />
+        <Delivery base={base} environment={environment} onSaved={() => { setup.reload(); environment.reload(); }} />
+      </>}
+      {section === "templates" && <>
+        <PageHead title="Templates" description="Subjects and bodies for the mail flows, functions and sign-in send." />
+        <Templates base={base} />
+      </>}
+      {section === "log" && <>
       <PageHead
-        title="Mail"
+        title="Sent mail"
         description="Everything this environment sent, or would have sent. Flows, functions and the sign-in service send mail through the delivery settings and templates configured here."
         actions={<>
           <Button onClick={() => setTest(true)}><Icon name="send" />Send test</Button>
-          <Button variant="primary" onClick={() => setConfig(true)}><Icon name="settings" />Mail setup</Button>
+          <Button variant="primary" onClick={() => setSection("delivery")}><Icon name="settings" />Mail setup</Button>
         </>}
       />
 
@@ -51,7 +66,7 @@ export default function Mail({ env }) {
         ) : (
           <div className="alert warn" style={{ marginBottom: 16 }}>
             <b>{setup.data.configured ? "Delivery is paused, so nothing is sent." : "No mail server is configured, so nothing is delivered."}</b> Messages are recorded below as <i>suppressed</i> so you can see what would have gone out.{" "}
-            <a href="#" onClick={(e) => { e.preventDefault(); setConfig(true); }}>See how mail is set up</a>
+            <a href="#" onClick={(e) => { e.preventDefault(); setSection("delivery"); }}>See how mail is set up</a>
           </div>
         )
       )}
@@ -77,9 +92,10 @@ export default function Mail({ env }) {
         </Loading>
       </Card>
 
+      </>}
+
       {open && <MessageSheet message={open} onClose={() => setOpen(null)} />}
       {test && <TestSheet base={base} onClose={() => setTest(false)} onSent={() => { setTest(false); log.reload(); }} />}
-      {config && <ConfigSheet base={base} environment={environment} onSaved={() => { setup.reload(); environment.reload(); }} onClose={() => setConfig(false)} />}
     </Layout>
   );
 }
@@ -136,25 +152,6 @@ function TestSheet({ base, onClose, onSent }) {
         {result && <Button size="sm" onClick={onSent}>Done</Button>}
       </div>
     </Modal>
-  );
-}
-
-function ConfigSheet({ base, environment, onSaved, onClose }) {
-  const [tab, setTab] = useState("delivery");
-  return (
-    <Sheet
-      title="Mail"
-      subtitle="How this environment delivers mail, and what it says"
-      icon="mail"
-      tone="rose"
-      tabs={[{ value: "delivery", label: "Delivery" }, { value: "templates", label: "Templates" }]}
-      tab={tab}
-      onTab={setTab}
-      onClose={onClose}
-      footer={<Button onClick={onClose}>Done</Button>}
-    >
-      {tab === "delivery" ? <Delivery base={base} environment={environment} onSaved={onSaved} /> : <Templates base={base} />}
-    </Sheet>
   );
 }
 

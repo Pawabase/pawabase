@@ -25,7 +25,7 @@ from tortoise.exceptions import IntegrityError
 from pawabase_server.core import envvars, namespace
 from pawabase_server.core.context import PlatformContext
 from pawabase_server.core.crypto import SecretBox, is_reference, reference_name
-from pawabase_server.core.events import EventBus
+from pawabase_server.core.events import EventBus, PlatformEvent
 from pawabase_server.core.telemetry import note, span
 from pawabase_server.data.source import DataSourcePool
 from pawabase_server.environments.state import EnvironmentCache, EnvironmentState
@@ -45,9 +45,10 @@ from pawabase_server.functions.registry import (
 )
 from pawabase_server.functions.runtime_rpc import Transactions
 from pawabase_server.functions.sandbox import SandboxPool
-from pawabase_server.functions.sandbox.host import Limits
+from pawabase_server.functions.sandbox.host import Limits, resolve_confinement
 from pawabase_server.infra.mail import MailManager
 from pawabase_server.infra.storage.manager import StorageManager
+from pawabase_server.projects.quotas import UsageMeter
 from pawabase_server.settings import Settings
 
 if TYPE_CHECKING:
@@ -103,9 +104,12 @@ class Platform:
                 memory_mb=settings.sandbox_memory_mb,
                 workers=settings.sandbox_workers,
                 idle_seconds=settings.sandbox_idle_seconds,
+                confinement=resolve_confinement(settings.sandbox_confinement),
             )
         )
         self.project_execution = ProjectExecutionLimiter()
+        #: Monthly plan metering (function invocations, flow runs): see ``projects/quotas.py``.
+        self.usage = UsageMeter()
         self.sandbox_transactions = Transactions()
         self.deployments = Deployments(
             settings.deployments_path or Path(settings.code_path) / ".deployments",
@@ -369,6 +373,9 @@ class Platform:
         )
         with span("job", f"dispatch {job.__name__}", queue=queue_name, delay=int(delay or 0)):
             job_id = await self.queue.push(queue_name, payload, delay=int(delay or 0))
+        if kwargs.get("_record"):
+            # A retry of a job already on record: the record follows it; nothing new is created.
+            return job_id
         now = datetime.now(UTC)
         describe = {
             "target": target,
@@ -409,15 +416,37 @@ class Platform:
     ) -> str:
         note("events", name, append=True)
         with span("event", f"emit {name}"):
-            return await self.bus.emit(
-                name,
-                env=state.env_name,
-                payload=payload,
-                actor=actor,
-                request_id=request_id,
-                release_id=state.release_id,
-                api_version=state.api_version,
+            return await self.deliver_event(
+                PlatformEvent(
+                    name=name,
+                    env=state.env_name,
+                    payload=payload,
+                    actor=actor,
+                    source=self.bus.source,
+                    request_id=request_id,
+                    release_id=state.release_id,
+                    api_version=state.api_version,
+                )
             )
+
+    async def deliver_event(self, event: PlatformEvent) -> str:
+        """Hand an event to the event processor durably: as a job on the ``events`` queue.
+
+        The queue holds it until a worker acknowledges it (a worker that dies mid-event leaves it to be taken again), retries a
+        failure with backoff, and settles one that keeps failing as a failed job Studio can replay. Returns the event id.
+        """
+        from pawabase_server.automation.jobs.events import ProcessEventJob
+
+        await self.dispatch(
+            ProcessEventJob,
+            env=event.env,
+            target=event.name,
+            source="event",
+            event=event.to_dict(),
+            request_id=event.request_id,
+        )
+        self.bus.published += 1
+        return event.id
 
     # ── realtime ─────────────────────────────────────────────────────────
 
@@ -448,6 +477,7 @@ class Platform:
             "project_name": self.settings.project_name,
             "auth": config,
             "public_url": self.settings.public_url,
+            "project": {"id": state.project_id, "limits": state.project_limits},
         }
 
     async def realtime_settings(self, env: str) -> dict[str, Any]:
@@ -460,12 +490,15 @@ class Platform:
         channels = list(realtime.get("channels") or [])
         for resource in state.resources.values():
             if resource.realtime:
-                # Resource channels follow the resource's own read policy.
-                read = (resource.operations or {}).get("list") or {}
+                # Anyone may subscribe while the resource can be read at all: the read policy is a row policy (``owner``, a
+                # ``$record`` condition) that has no row to judge at subscription, so it is applied to each change instead, per
+                # subscriber, before it is sent (see ``Realtime._resource_message``).
+                operations = resource.operations or {}
+                readable = any((operations.get(op) or {}).get("enabled") for op in ("get", "list"))
                 channels.append(
                     {
                         "pattern": f"resource:{resource.name}",
-                        "subscribe": read.get("policy") or "authenticated",
+                        "subscribe": "public" if readable else "service",
                         "publish": "service",
                         "presence": False,
                     }

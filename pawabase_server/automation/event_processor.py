@@ -1,7 +1,8 @@
 """The event processor: every platform event, recorded and routed.
 
-It consumes the platform event bus (Sillo events: a durable Redis backlog in
-production, in-process in development). For each event it:
+Every event reaches it as a :class:`ProcessEventJob` on the ``events`` job
+queue, so an event survives a worker crash and a failed routing is retried
+with backoff. For each event it:
 
 1. records it, with its origin, for Studio's event inspector;
 2. finds its consumers: subscriptions, flows whose ``trigger.event`` or
@@ -11,16 +12,20 @@ production, in-process in development). For each event it:
 4. records who consumed it and how that went.
 
 Consumers are queued rather than run inline, so a slow consumer never delays
-the others and each one retries independently.
+the others and each one retries independently. Routing is resumable: the log
+remembers which consumers were already handed their work, a retry serves only
+the rest, and ``routed_at`` marks an event that reached all of them.
 """
 
 from __future__ import annotations
 
 import fnmatch
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 from sillo.exceptions import HTTPException
+from tortoise.exceptions import IntegrityError
 
 from pawabase_server.automation.webhooks import endpoint_matches, queue_deliveries
 from pawabase_server.core.events import PlatformEvent
@@ -65,6 +70,15 @@ def flow_event_entries(state: EnvironmentState, event: PlatformEvent) -> list[tu
     return matches
 
 
+class EventRoutingFailed(RuntimeError):
+    """Some consumer of an event could not be handed its work; the event will be routed again."""
+
+
+def consumer_key(entry: dict[str, Any]) -> str:
+    """What identifies one consumer of one event, so a resumed routing does not serve it twice."""
+    return f"{entry.get('type')}:{entry.get('target')}:{entry.get('node', '')}"
+
+
 class EventProcessor:
     def __init__(self, platform: Platform) -> None:
         self.platform = platform
@@ -74,7 +88,13 @@ class EventProcessor:
         self.platform.bus.subscribe(self.handle)
         return self
 
-    async def handle(self, event: PlatformEvent) -> list[dict[str, Any]]:
+    async def handle(self, event: PlatformEvent, *, strict: bool = False) -> list[dict[str, Any]]:
+        """Record *event* and route it to every consumer, at most once each.
+
+        Resumable: an event already routed in full is skipped; one whose routing was interrupted (a crash, or a consumer that could
+        not be handed its work) is routed again, skipping consumers already served. With ``strict`` a consumer that could not be
+        served raises :class:`EventRoutingFailed`, so the queued job is retried later instead of the failure being swallowed.
+        """
         try:
             state = (
                 await self.platform.state_for_release(event.env, event.release_id)
@@ -84,25 +104,49 @@ class EventProcessor:
         except HTTPException:
             logger.warning("event %s for unknown environment %s", event.name, event.env)
             return []
-        if await EventLog.filter(event_id=event.id).exists():
-            return []  # at-least-once delivery: this one was already handled
-        log = await EventLog.create(
-            event_id=event.id,
-            env=event.env,
-            name=event.name,
-            source=event.source,
-            actor=event.actor,
-            payload=event.payload,
-            request_id=event.request_id,
-            occurred_at=event.occurred_at,
-        )
-        consumers = await self.route(state, event)
+        log = await EventLog.get_or_none(event_id=event.id)
+        if log is not None and log.routed_at is not None:
+            return list(log.consumers or [])  # at-least-once delivery: already handled
+        if log is None:
+            try:
+                log = await EventLog.create(
+                    event_id=event.id,
+                    env=event.env,
+                    name=event.name,
+                    source=event.source,
+                    actor=event.actor,
+                    payload=event.payload,
+                    request_id=event.request_id,
+                    occurred_at=event.occurred_at,
+                )
+            except IntegrityError:
+                log = await EventLog.get(event_id=event.id)  # another worker recorded it first
+        done = {
+            consumer_key(entry): entry
+            for entry in (log.consumers or [])
+            if entry.get("status") in ("queued", "done")
+        }
+        consumers = await self.route(state, event, done=done)
+        failed = [entry for entry in consumers if entry.get("status") == "failed"]
         log.consumers = consumers
-        await log.save(update_fields=["consumers"])
+        if not failed:
+            log.routed_at = datetime.now(UTC)
+        await log.save(update_fields=["consumers", "routed_at"])
         self.processed += 1
+        if failed and strict:
+            raise EventRoutingFailed(
+                f"{len(failed)} consumer(s) of {event.name} could not be served: "
+                + "; ".join(f"{e['type']} {e['target']}: {e.get('error')}" for e in failed[:3])
+            )
         return consumers
 
-    async def route(self, state: EnvironmentState, event: PlatformEvent) -> list[dict[str, Any]]:
+    async def route(
+        self,
+        state: EnvironmentState,
+        event: PlatformEvent,
+        *,
+        done: dict[str, dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
         from pawabase_server.automation.jobs.flows import RunFlowJob
         from pawabase_server.automation.jobs.functions import RunFunctionJob
 
@@ -111,8 +155,16 @@ class EventProcessor:
         event_input = {"event": event.to_dict()}
         condition_context = {"event": event.to_dict()}
 
-        async def attempt(kind: str, target: str, work) -> None:
+        done = done or {}
+
+        async def attempt(kind: str, target: str, work, node: str = "") -> None:
             entry: dict[str, Any] = {"type": kind, "target": target}
+            if node:
+                entry["node"] = node
+            previous = done.get(consumer_key(entry))
+            if previous is not None:
+                consumers.append(previous)  # served by an earlier attempt at this event
+                return
             try:
                 result = await work()
                 entry["status"] = "queued" if kind in ("flow", "function", "webhook") else "done"
@@ -192,6 +244,7 @@ class EventProcessor:
                     release_id=state.release_id,
                     api_version=state.api_version,
                 ),
+                node=node_id,
             )
 
         if any(

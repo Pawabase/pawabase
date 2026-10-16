@@ -19,6 +19,7 @@ dependencies = [
     # The Linux Docker runtime uses these explicitly for the API listeners.
     "uvloop>=0.22; sys_platform != 'win32'",
     "httptools>=0.7",
+    "sqlglot>=30,<31",
 ]
 
 [project.optional-dependencies]

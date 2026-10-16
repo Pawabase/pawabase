@@ -26,6 +26,7 @@ from pawabase_server.core.tokens import derive_env_secret
 from pawabase_server.db.models import AuthUser, Identity, Membership, PasswordHistory
 from pawabase_server.identity import signup_form
 from pawabase_server.identity.environment import AuthConfig
+from pawabase_server.projects import quotas
 
 logger = logging.getLogger("pawabase.accounts")
 
@@ -222,6 +223,7 @@ async def create_account(
         )
     if max_users and await AuthUser.filter(env=config.env, deleted_at=None).count() >= max_users:
         raise HTTPException(status_code=403, detail="the environment user limit has been reached")
+    await quotas.check_users(config, config.env)
     user = AuthUser(
         env=config.env,
         email=email,

@@ -200,12 +200,14 @@ async def test_custom_route_flow_and_event_consumer(acme):
     state = await api.platform.state("development")
     assert await api.platform.cache_get(state, "user:last-paid") == order["id"]
     events = (await api.studio.get(f"{ENV}/events?name=order.paid"))["data"]
-    assert events and events[0]["consumers"][0] == {
+    consumer = events[0]["consumers"][0] if events else {}
+    assert {k: consumer.get(k) for k in ("type", "target", "status")} == {
         "type": "flow",
         "target": "on-order-paid",
         "status": "queued",
-        "ref": events[0]["consumers"][0]["ref"],
     }
+    assert consumer["ref"] and consumer["node"]  # which trigger node of the flow the event entered
+    assert events[0]["routed_at"]
     runs = (await api.studio.get(f"{ENV}/flow-runs"))["data"]
     assert {run["flow"] for run in runs} == {"pay-order", "on-order-paid"}
     graph = (await api.studio.get(f"{ENV}/events-graph"))["data"]

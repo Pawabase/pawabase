@@ -171,23 +171,86 @@ class Domain(Model):
 
 
 class FirewallRule(Model):
-    """An ordered rule the gateway checks before a request reaches anything: the first that matches decides."""
+    """An ordered rule the gateway checks before a request reaches anything (see ``core/firewall.py``)."""
 
     id = ulid_pk()
     env = fields.CharField(max_length=63, db_index=True)
     name = fields.CharField(max_length=120)
     position = fields.IntField(default=0)
-    #: ``allow`` or ``block``.
-    action = fields.CharField(max_length=8, default="block")
+    #: ``allow``, ``block``, ``log`` or ``rate_limit``.
+    action = fields.CharField(max_length=16, default="block")
     enabled = fields.BooleanField(default=True)
-    #: Any of ``ips`` (addresses or CIDRs), ``paths`` (globs), ``methods``, ``user_agents`` (substrings).
-    #: A rule matches when every key it has matches.
+    #: The older shape: any of ``ips``, ``paths``, ``methods``, ``user_agents``. Combined with ``conditions``.
     match = AnyJSONField(default=dict)
+    #: ``[{field, op, value}]``, joined by ``logic`` (``all`` or ``any``).
+    conditions = AnyJSONField(default=list)
+    logic = fields.CharField(max_length=4, default="all")
+    #: ``enforce``, or ``simulate``: evaluated and recorded, never acted on.
+    mode = fields.CharField(max_length=10, default="enforce")
+    #: For ``rate_limit``: ``{requests, window_seconds, by, ban_seconds}``.
+    rate_limit = AnyJSONField(null=True)
+    #: A temporary rule stops applying at this time.
+    expires_at = fields.DatetimeField(null=True)
+    hits = fields.BigIntField(default=0)
+    last_hit_at = fields.DatetimeField(null=True)
     note = fields.TextField(default="")
 
     class Meta:
         table = "pb_firewall_rules"
         ordering = ["position", "id"]
+
+
+class FirewallConfig(Model):
+    """An environment's managed rule sets and automatic bans."""
+
+    env = fields.CharField(max_length=63, primary_key=True)
+    #: ``{set: "off" | "log" | "block"}`` (``core/firewall.py`` ``MANAGED``).
+    managed = AnyJSONField(default=dict)
+    #: ``{enabled, threshold, window_seconds, ban_seconds, statuses, exempt}``.
+    auto_ban = AnyJSONField(default=dict)
+
+    class Meta:
+        table = "pb_firewall_config"
+
+
+class FirewallBan(Model):
+    """An address (or range) refused until ``expires_at`` (or until removed, when it has none)."""
+
+    id = ulid_pk()
+    env = fields.CharField(max_length=63, db_index=True)
+    ip = fields.CharField(max_length=64)
+    #: ``manual``, ``auto`` (too many errors) or ``rate_limit``.
+    source = fields.CharField(max_length=16, default="manual")
+    reason = fields.CharField(max_length=300, default="")
+    expires_at = fields.DatetimeField(null=True)
+    hits = fields.IntField(default=0)
+
+    class Meta:
+        table = "pb_firewall_bans"
+        ordering = ["-created_at"]
+
+
+class FirewallEvent(Model):
+    """One request the firewall acted on or recorded."""
+
+    id = ulid_pk()
+    env = fields.CharField(max_length=63, db_index=True)
+    ip = fields.CharField(max_length=64)
+    method = fields.CharField(max_length=10)
+    path = fields.CharField(max_length=1024)
+    country = fields.CharField(max_length=8, default="")
+    user_agent = fields.CharField(max_length=300, default="")
+    #: ``rule``, ``managed``, ``ban`` or ``rate_limit``.
+    source = fields.CharField(max_length=16)
+    #: ``block``, ``log``, ``rate_limit``, ``ban`` or ``allow``.
+    action = fields.CharField(max_length=16)
+    rule_id = fields.CharField(max_length=26, null=True)
+    rule_name = fields.CharField(max_length=120, default="")
+    simulated = fields.BooleanField(default=False)
+
+    class Meta:
+        table = "pb_firewall_events"
+        ordering = ["-id"]
 
 
 class ObjectShare(Model):
@@ -215,3 +278,14 @@ class ObjectShare(Model):
     class Meta:
         table = "pb_object_shares"
         ordering = ["-created_at"]
+
+
+class Lease(Model):
+    """A named lease one process holds at a time (the scheduler's leadership), renewed before ``expires_at``."""
+
+    name = fields.CharField(max_length=64, primary_key=True)
+    holder = fields.CharField(max_length=200)
+    expires_at = fields.DatetimeField()
+
+    class Meta:
+        table = "pb_leases"

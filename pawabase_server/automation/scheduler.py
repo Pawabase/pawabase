@@ -9,8 +9,12 @@ dropped.
 A firing decides *when*; the work itself is queued (a flow or function job) or
 published (an event), so it survives a scheduler restart.
 
-Run exactly one scheduler. Sillo's scheduler keeps its schedule in memory, and
-two of them would each fire every job.
+Any number of schedulers may run; one leads. Leadership is a database lease
+(``core/leases.py``) renewed with the heartbeat: only the leader fires schedules
+and runs platform housekeeping, and when it stops renewing, another takes over
+within ``LEASE_SECONDS``. A schedule may skip a firing while its previous run is
+still queued or running (``overlap="skip"``), read its cron in a time zone, and
+catch up once on a slot that was missed while no scheduler led (``catch_up``).
 """
 
 from __future__ import annotations
@@ -20,14 +24,15 @@ import logging
 import os
 import socket
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sillo.work.scheduler import CronTrigger, IntervalTrigger, SchedulerManager
 
 from pawabase_server.backup import snapshots
-from pawabase_server.db.models import Environment, Schedule
-from pawabase_server.observability import alarms
+from pawabase_server.core import leases
+from pawabase_server.db.models import Environment, FirewallEvent, JobRun, Schedule
+from pawabase_server.observability import alarms, audit_log
 from pawabase_server.observability import status as status_page
 from pawabase_server.platform import Platform
 
@@ -36,6 +41,8 @@ HEARTBEAT_SECONDS = 10
 logger = logging.getLogger("pawabase.scheduler")
 
 RECONCILE_SECONDS = 15
+LEASE = "scheduler"
+LEASE_SECONDS = 30
 
 
 class PlatformScheduler:
@@ -48,6 +55,8 @@ class PlatformScheduler:
         self._beat_task: asyncio.Task | None = None
         self._name = f"scheduler:{socket.gethostname()}:{os.getpid()}"
         self._running = False
+        #: Whether this process holds the scheduler lease and so fires schedules.
+        self.leader = False
 
     # ── desired state ────────────────────────────────────────────────────
 
@@ -65,6 +74,9 @@ class PlatformScheduler:
                 "target_type": schedule.target_type,
                 "target": schedule.target,
                 "payload": schedule.payload,
+                "timezone": schedule.timezone,
+                "overlap": schedule.overlap,
+                "catch_up": schedule.catch_up,
                 "name": f"{env.name}/{schedule.name}",
             }
             wanted[_key(spec)] = spec
@@ -102,7 +114,7 @@ class PlatformScheduler:
                 continue
             try:
                 trigger = (
-                    CronTrigger(spec["cron"])
+                    CronTrigger(spec["cron"], timezone=spec.get("timezone") or None)
                     if spec.get("cron")
                     else IntervalTrigger(float(spec["every"]))
                 )
@@ -126,13 +138,20 @@ class PlatformScheduler:
 
     # ── firing ───────────────────────────────────────────────────────────
 
-    async def fire(self, spec: dict[str, Any]) -> None:
+    async def fire(self, spec: dict[str, Any], *, manual: bool = False) -> None:
+        """Run one schedule now. A timed firing happens only on the leader; *manual* ("Run now" in Studio) runs wherever it is asked."""
         from pawabase_server.automation.jobs.flows import RunFlowJob
         from pawabase_server.automation.jobs.functions import RunFunctionJob
 
+        if not self.leader and not manual:
+            return  # another scheduler leads and fires this one
         platform = self.platform
         env = spec["env"]
         status = "queued"
+        if not manual and spec.get("overlap") == "skip" and await self._still_running(spec):
+            await self._record(spec, "skipped")
+            logger.info("schedule %s skipped: its previous run is still going", spec["name"])
+            return
         try:
             if spec["kind"] == "flow":
                 await platform.dispatch(
@@ -169,35 +188,97 @@ class PlatformScheduler:
                     auth={"authenticated": False, "kind": "system"},
                 )
             elif spec["target_type"] == "event":
-                await platform.bus.emit(
-                    spec["target"],
-                    env=env,
-                    payload=spec.get("payload"),
-                    actor="scheduler",
+                await platform.emit_event(
+                    env, spec["target"], spec.get("payload"), actor="scheduler"
                 )
                 status = "emitted"
         except Exception:
             logger.exception("schedule %s failed to fire", spec["name"])
             status = "failed"
-        if spec["kind"] == "schedule":
-            schedule = await Schedule.get_or_none(id=spec["id"])
-            if schedule is not None:
-                schedule.last_run_at = datetime.now(UTC)
-                schedule.last_status = status
-                schedule.run_count += 1
-                await schedule.save(update_fields=["last_run_at", "last_status", "run_count"])
+        await self._record(spec, status)
+
+    async def _record(self, spec: dict[str, Any], status: str) -> None:
+        if spec["kind"] != "schedule":
+            return
+        schedule = await Schedule.get_or_none(id=spec["id"])
+        if schedule is not None:
+            schedule.last_run_at = datetime.now(UTC)
+            schedule.last_status = status
+            schedule.run_count += 1
+            await schedule.save(update_fields=["last_run_at", "last_status", "run_count"])
+
+    async def _still_running(self, spec: dict[str, Any]) -> bool:
+        """Whether the job a schedule queued last time is still waiting or running."""
+        if spec.get("target_type") == "event":
+            return False
+        target = spec.get("flow") if spec["kind"] == "flow" else spec.get("target")
+        return await JobRun.filter(
+            env=spec["env"],
+            source="schedule",
+            target=target,
+            status__in=["queued", "active", "retrying"],
+        ).exists()
+
+    async def catch_up(self) -> int:
+        """Fire, once, each ``catch_up`` cron schedule whose last slot passed while no scheduler led. Returns how many fired."""
+        fired = 0
+        now = datetime.now(UTC)
+        for schedule in await Schedule.filter(enabled=True, catch_up=True).select_related(
+            "environment"
+        ):
+            if not schedule.cron or schedule.last_run_at is None:
+                continue
+            try:
+                due = CronTrigger(schedule.cron, timezone=schedule.timezone or None).next_fire(
+                    schedule.last_run_at.timestamp()
+                )
+            except Exception:
+                logger.exception("schedule %s: cannot work out its missed slot", schedule.name)
+                continue
+            if due is None or due >= now.timestamp():
+                continue
+            spec = next(
+                (s for s in (await self.desired()).values() if s.get("id") == schedule.id), None
+            )
+            if spec is not None:
+                logger.info(
+                    "schedule %s missed %s; catching up",
+                    spec["name"],
+                    datetime.fromtimestamp(due, UTC).isoformat(),
+                )
+                await self.fire(spec)
+                fired += 1
+        return fired
+
+    async def lead(self) -> bool:
+        """Take or renew the lease. On becoming leader, catch up on missed slots."""
+        was = self.leader
+        try:
+            self.leader = await leases.acquire(LEASE, self._name, LEASE_SECONDS)
+        except Exception:
+            logger.exception("scheduler lease could not be renewed; not firing until it is")
+            self.leader = False
+        if self.leader and not was:
+            logger.info("%s leads the scheduler", self._name)
+            await self.catch_up()
+        elif was and not self.leader:
+            logger.warning("%s lost the scheduler lease", self._name)
+        return self.leader
 
     # ── lifecycle ────────────────────────────────────────────────────────
 
     #: Platform housekeeping that runs on a timer: name, seconds between runs.
-    TASKS = (("alarms", 60), ("status", 300), ("backups", 120))
+    TASKS = (("alarms", 60), ("status", 300), ("backups", 120), ("retention", 86400))
 
     async def tick(self) -> None:
-        """Run whichever platform tasks are due. A failing task is logged and tried again next time."""
+        """Run whichever platform tasks are due. A failing task is logged and tried again next time. Only the leader runs them."""
+        if not self.leader:
+            return
         runners = {
             "alarms": lambda: alarms.evaluate_all(self.platform),
             "status": lambda: status_page.sample_local(self.platform),
             "backups": lambda: snapshots.run_due(self.platform),
+            "retention": self._retention,
         }
         for name, every in self.TASKS:
             if time.monotonic() - self._last.get(name, -1e9) < every:
@@ -207,6 +288,14 @@ class PlatformScheduler:
                 await runners[name]()
             except Exception:
                 logger.exception("platform task %s failed", name)
+
+    async def _retention(self) -> None:
+        """Purge what is kept for a limited time: audit entries and firewall events."""
+        settings = self.platform.settings
+        await audit_log.purge(settings.audit_retention_days)
+        if settings.firewall_event_retention_days > 0:
+            cutoff = datetime.now(UTC) - timedelta(days=settings.firewall_event_retention_days)
+            await FirewallEvent.filter(created_at__lt=cutoff).delete()
 
     async def _loop(self) -> None:
         while self._running:
@@ -224,6 +313,7 @@ class PlatformScheduler:
 
         started = datetime.now(UTC)
         while self._running:
+            await self.lead()
             stats = self.manager.stats
             try:
                 await upsert(
@@ -232,7 +322,7 @@ class PlatformScheduler:
                     defaults={
                         "kind": "scheduler",
                         "queues": [],
-                        "status": "running",
+                        "status": "running" if self.leader else "standby",
                         "started_at": started,
                         "last_seen": datetime.now(UTC),
                         "processed": stats.runs_total,
@@ -245,6 +335,7 @@ class PlatformScheduler:
 
     async def start(self) -> None:
         self._running = True
+        await self.lead()
         await self.reconcile()
         await self.manager.start()
         self._task = asyncio.create_task(self._loop(), name="pawabase-scheduler-reconcile")
@@ -257,6 +348,14 @@ class PlatformScheduler:
         for task in (self._task, self._beat_task):
             if task is not None:
                 task.cancel()
+        if self.leader:
+            try:
+                await leases.release(LEASE, self._name)
+            except Exception:
+                logger.exception(
+                    "scheduler lease not released; another scheduler takes over when it expires"
+                )
+            self.leader = False
         try:
             await WorkerHeartbeat.filter(name=self._name).update(status="stopped")
         except Exception:
@@ -286,7 +385,10 @@ def _key(spec: dict[str, Any]) -> str:
         str(spec.get("cron")),
         str(spec.get("every")),
     ]
-    parts += [str(spec.get(k)) for k in ("id", "target_type", "target", "flow", "node")]
+    parts += [
+        str(spec.get(k))
+        for k in ("id", "target_type", "target", "flow", "node", "timezone", "overlap", "catch_up")
+    ]
     parts.append(repr(spec.get("payload")))
     return "|".join(parts)
 

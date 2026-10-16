@@ -1,23 +1,24 @@
 import { router } from "@inertiajs/react";
 import { useState } from "react";
-import Layout from "../../components/Layout";
-import { Badge, Button, Card, Field, Json, JsonInput, Loading, Modal, PageHead, Status, Table, Tabs, useAction, when } from "../../components/ui";
+import Layout, { envHref, sectionNav, useSection } from "../../components/Layout";
+import { Badge, Button, Card, Field, Json, JsonInput, Loading, Modal, PageHead, Status, Table, useAction, when } from "../../components/ui";
 import { envPath, get, post, useApi } from "../../lib/api";
 
 export default function Events({ env }) {
   const base = envPath(env);
-  const [tab, setTab] = useState("events");
+  const [tab, setTab] = useSection(["events", "graph", "runs", "mail"]);
   const [detail, setDetail] = useState(null);
   const [emitting, setEmitting] = useState(false);
   return (
-    <Layout title="Events & runs">
+    <Layout title="Events & runs" subnav={sectionNav("Events & runs", [
+      { title: "Events", items: [["events", "Event log", "Everything on the bus"], ["graph", "Event map", "Who consumes what"]] },
+      { title: "What they started", items: [["runs", "Flow runs"], ["webhook-deliveries", "Webhook deliveries", undefined, { href: envHref(env, "webhook-deliveries"), external: true }], ["mail", "Mail sent"]] },
+    ], tab, setTab)}>
       <PageHead title="Events & runs" description="Everything that happened: events on the bus, the flows they started, webhooks delivered and mail sent."
         actions={<Button onClick={() => setEmitting(true)}>Emit test event</Button>} />
-      <Tabs value={tab} onChange={setTab} tabs={[{ value: "events", label: "Events" }, { value: "graph", label: "Event map" }, { value: "runs", label: "Flow runs" }, { value: "deliveries", label: "Webhook deliveries" }, { value: "mail", label: "Mail" }]} />
       {tab === "events" && <EventList base={base} onOpen={async (e) => setDetail(await get(`${base}/events/${e.id}`))} />}
       {tab === "graph" && <Graph base={base} />}
       {tab === "runs" && <Runs base={base} env={env} onOpen={async (r) => setDetail(await get(`${base}/flow-runs/${r.id}`))} />}
-      {tab === "deliveries" && <Deliveries base={base} onOpen={setDetail} />}
       {tab === "mail" && <Mail base={base} />}
       {detail && <Modal wide title="Details" onClose={() => setDetail(null)}><Json value={detail} /></Modal>}
       {emitting && <Emit base={base} onClose={() => setEmitting(false)} />}
@@ -63,22 +64,6 @@ function Runs({ base, env, onOpen }) {
           { label: "Status", render: (r) => <Status value={r.status} /> }, { label: "Trigger", key: "trigger" },
           { label: "Duration", render: (r) => (r.duration_ms != null ? `${Math.round(r.duration_ms)} ms` : "—") },
           { label: "Error", render: (r) => r.error && <span className="error-text">{r.error}</span> }, { label: "When", render: (r) => when(r.created_at) },
-        ]} />}
-      </Loading>
-    </Card>
-  );
-}
-
-function Deliveries({ base, onOpen }) {
-  const deliveries = useApi(`${base}/webhook-deliveries`, { interval: 5000 });
-  const [run] = useAction();
-  return (
-    <Card flush>
-      <Loading state={deliveries} empty="No deliveries yet.">
-        {(data) => <Table rows={data.data} onRowClick={onOpen} columns={[
-          { label: "Endpoint", key: "endpoint" }, { label: "Event", render: (d) => <code>{d.event}</code> }, { label: "Status", render: (d) => <Status value={d.status} /> },
-          { label: "HTTP", key: "response_status" }, { label: "Attempts", key: "attempts" }, { label: "When", render: (d) => when(d.created_at) },
-          { label: "", render: (d) => <Button size="sm" onClick={async (e) => { e.stopPropagation(); if (await run(() => post(`${base}/webhook-deliveries/${d.id}/redeliver`), "Redelivery queued")) deliveries.reload(); }}>Redeliver</Button> },
         ]} />}
       </Loading>
     </Card>

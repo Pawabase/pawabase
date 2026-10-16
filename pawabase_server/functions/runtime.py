@@ -23,7 +23,9 @@ from typing import Any
 
 from sillo.storage import chunks, collect
 
+from pawabase_server.data.console import fetch_read_only
 from pawabase_server.data.inspect import is_read_only
+from pawabase_server.data.isolation import developer_source
 from pawabase_server.data.store import Filter
 from pawabase_server.environments.state import EnvironmentState
 from pawabase_server.flows import BaseRuntime, FlowError, NotAvailable
@@ -31,6 +33,7 @@ from pawabase_server.flows.engine import observable
 from pawabase_server.functions.registry import FunctionContext
 from pawabase_server.platform import Platform
 from pawabase_server.policies.engine import evaluate
+from pawabase_server.projects import quotas
 
 logger = logging.getLogger("pawabase.flow")
 
@@ -74,6 +77,7 @@ class ApiRuntime(BaseRuntime):
     async def resource_create(self, resource, data):
         from pawabase_server.data.resources import after_write
 
+        await quotas.check_database(self.state)
         store = await self.state.store(resource)
         record = await store.create(dict(data))
         await after_write(
@@ -129,26 +133,31 @@ class ApiRuntime(BaseRuntime):
                 status=400,
                 code="write_refused",
             )
-        source = await self.state.source()
+        source = await developer_source(self.platform, self.state)
         return await asyncio.wait_for(
-            source.fetch(sql, list(params or [])), timeout=self.platform.settings.query_timeout
+            self._read_query(source, sql, params), timeout=self.platform.settings.query_timeout
         )
+
+    async def _read_query(self, source, sql, params):
+        return await fetch_read_only(source, sql, list(params or []))
 
     async def db(self):
         """A SQL session on the environment's database (see :class:`pawabase_server.data.session.DbSession`)."""
         from pawabase_server.data.session import DbSession
 
-        return DbSession(await self.state.source(), self.state.specs)
+        return DbSession(await developer_source(self.platform, self.state), self.state.specs)
 
     def transaction(self):
         """``async with runtime.transaction() as db``: one atomic unit of SQL."""
         from pawabase_server.data.session import Transaction
 
-        return Transaction(self.state)
+        return Transaction(self.state, self.platform)
 
     async def db_transaction(self, operations):
         from pawabase_server.data.resources import after_write
 
+        if any(operation.get("op") == "create" for operation in operations):
+            await quotas.check_database(self.state)
         source = await self.state.source()
         results = []
         effects = []

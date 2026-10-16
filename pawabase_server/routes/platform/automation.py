@@ -4,14 +4,23 @@ from __future__ import annotations
 
 import fnmatch
 import inspect
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 from sillo import HttpContext, Router
 from sillo.exceptions import HTTPException
 
 from pawabase_server.automation.event_processor import flow_event_entries
+from pawabase_server.automation.jobs import (
+    ProcessEventJob,
+    PurgeEnvironmentJob,
+    RunFlowJob,
+    RunFunctionJob,
+    SendMailJob,
+)
+from pawabase_server.automation.jobs.webhooks import DeliverWebhookJob
 from pawabase_server.db.models import (
     EventLog,
     FlowRun,
@@ -22,7 +31,9 @@ from pawabase_server.db.models import (
 )
 from pawabase_server.flows import FlowError, default_registry, validate_flow
 from pawabase_server.functions.execution import NotFound, call_function, run_flow
+from pawabase_server.observability import service_metrics
 from pawabase_server.platform import Platform
+from pawabase_server.projects import quotas
 from pawabase_server.routes.common import MANAGE, audit, dump, get_environment, page_params
 
 
@@ -42,6 +53,16 @@ def _source_of(key: str) -> str:
     return "branch" if "@" in key else "deployment" if "/" in key else "mounted"
 
 
+class BulkRedeliver(BaseModel):
+    ids: list[str] = Field(default_factory=list, max_length=500)
+    status: Literal["failed", "retrying", "delivered", "pending"] = "failed"
+    endpoint: str | None = None
+    event: str | None = None
+    since_minutes: int | None = Field(default=None, ge=1, le=60 * 24 * 90)
+    limit: int = Field(default=100, ge=1, le=500)
+    dry_run: bool = False
+
+
 class EmitBody(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     payload: Any = None
@@ -55,6 +76,51 @@ def _caller_auth(ctx: HttpContext) -> dict[str, Any]:
 
 def register(r: Router, platform: Platform) -> None:
     base = "/envs/{env}"
+
+    @r.get(
+        f"{base}/plan-usage",
+        auth=MANAGE,
+        tags=["usage"],
+        summary="The project's plan limits and how much of each is used",
+    )
+    async def plan_usage(ctx: HttpContext, env: str):
+        state = await platform.state(env)
+        return {"project_id": state.project_id, "data": await quotas.usage_report(platform, state)}
+
+    @r.get(
+        f"{base}/service-health",
+        auth=MANAGE,
+        tags=["observability"],
+        summary="Every background service's health, in one shape",
+    )
+    async def service_health(ctx: HttpContext, env: str):
+        await get_environment(env)
+        minutes = max(1, min(int(ctx.query_params.get("minutes") or 60), 7 * 24 * 60))
+        return {"minutes": minutes, "data": await service_metrics.service_health(env, minutes)}
+
+    @r.get(
+        "/retry-policies",
+        auth=MANAGE,
+        tags=["jobs"],
+        summary="How each kind of background work is retried",
+    )
+    async def retry_policies(ctx: HttpContext):
+        """The retry policy of every job the platform runs: attempts and the wait before each retry. A webhook endpoint's own
+        ``max_attempts`` replaces the deliveries' attempt count."""
+        kinds = (
+            ProcessEventJob,
+            RunFlowJob,
+            RunFunctionJob,
+            DeliverWebhookJob,
+            SendMailJob,
+            PurgeEnvironmentJob,
+        )
+        return {
+            "data": [
+                {"job": kind.__name__, "queue": kind.queue, **kind.policy().describe()}
+                for kind in kinds
+            ]
+        }
 
     # ── blocks ───────────────────────────────────────────────────────────
 
@@ -364,8 +430,6 @@ def register(r: Router, platform: Platform) -> None:
     )
     async def redeliver(ctx: HttpContext, env: str, delivery_id: str):
         delivery_id = delivery_id.upper()  # ULIDs are case-insensitive
-        from pawabase_server.automation.jobs.webhooks import DeliverWebhookJob
-
         environment = await get_environment(env)
         delivery = (
             await WebhookDelivery.filter(id=delivery_id, endpoint__environment=environment)
@@ -374,6 +438,14 @@ def register(r: Router, platform: Platform) -> None:
         )
         if delivery is None:
             raise HTTPException(status_code=404, detail="no such delivery")
+        copy_id, job_id = await deliver_again(env, delivery, "studio")
+        await audit(
+            ctx, "webhook.redelivered", env=env, target=delivery_id, details={"copy": copy_id}
+        )
+        return {"delivery_id": copy_id, "job_id": job_id}
+
+    async def deliver_again(env: str, delivery: WebhookDelivery, source: str) -> tuple[str, str]:
+        """A new delivery of the same event to the same endpoint, with the endpoint's full retry budget."""
         copy = await WebhookDelivery.create(
             endpoint=delivery.endpoint,
             event_id=delivery.event_id,
@@ -385,10 +457,52 @@ def register(r: Router, platform: Platform) -> None:
             DeliverWebhookJob,
             env=env,
             target=delivery.endpoint.name,
-            source="studio",
+            source=source,
             delivery_id=copy.id,
+            max_attempts=delivery.endpoint.max_attempts,
         )
-        return {"delivery_id": copy.id, "job_id": job_id}
+        return copy.id, job_id
+
+    @r.post(
+        f"{base}/webhook-deliveries/redeliver",
+        auth=MANAGE,
+        tags=["webhooks"],
+        request_model=BulkRedeliver,
+        summary="Deliver many deliveries again: by id, or every failed one matching a filter",
+    )
+    async def redeliver_many(ctx: HttpContext, env: str, body: BulkRedeliver):
+        environment = await get_environment(env)
+        query = WebhookDelivery.filter(endpoint__environment=environment)
+        if body.ids:
+            query = query.filter(id__in=[i.upper() for i in body.ids])
+        else:
+            query = query.filter(status=body.status)
+            if body.endpoint:
+                query = query.filter(endpoint__name=body.endpoint)
+            if body.event:
+                query = query.filter(event=body.event)
+            if body.since_minutes:
+                query = query.filter(
+                    created_at__gte=datetime.now(UTC) - timedelta(minutes=body.since_minutes)
+                )
+        matched = await query.select_related("endpoint").order_by("id").limit(body.limit)
+        if body.dry_run:
+            return {"matched": len(matched), "queued": 0, "dry_run": True}
+        queued = [await deliver_again(env, delivery, "bulk") for delivery in matched]
+        if queued:
+            await audit(
+                ctx,
+                "webhook.bulk_redelivered",
+                env=env,
+                target="deliveries",
+                details={"count": len(queued), "filter": body.model_dump(exclude={"ids"})},
+            )
+        return {
+            "matched": len(matched),
+            "queued": len(queued),
+            "deliveries": [copy_id for copy_id, _ in queued],
+            "dry_run": False,
+        }
 
     @r.post(
         f"{base}/webhooks/{{name}}/test",
@@ -397,8 +511,6 @@ def register(r: Router, platform: Platform) -> None:
         summary="Send a test event to one endpoint",
     )
     async def test_webhook(ctx: HttpContext, env: str, name: str):
-        from pawabase_server.automation.jobs.webhooks import DeliverWebhookJob
-
         environment = await get_environment(env)
         endpoint = await WebhookEndpoint.get_or_none(environment=environment, name=name)
         if endpoint is None:
@@ -416,6 +528,7 @@ def register(r: Router, platform: Platform) -> None:
             target=name,
             source="studio",
             delivery_id=delivery.id,
+            max_attempts=1,  # a test shows whether the endpoint answers now; it does not retry for days
         )
         return {"delivery_id": delivery.id, "job_id": job_id}
 
@@ -457,6 +570,6 @@ def register(r: Router, platform: Platform) -> None:
             "payload": schedule.payload,
             "name": f"{env}/{schedule.name}",
         }
-        await PlatformScheduler(platform).fire(spec)
+        await PlatformScheduler(platform).fire(spec, manual=True)
         await schedule.refresh_from_db()
         return {"last_status": schedule.last_status, "run_count": schedule.run_count}

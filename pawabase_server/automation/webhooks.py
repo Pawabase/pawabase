@@ -112,6 +112,8 @@ async def queue_deliveries(
     for endpoint in state.webhooks:
         if not endpoint.enabled or not endpoint_matches(endpoint.events, event):
             continue
+        if await WebhookDelivery.filter(endpoint=endpoint, event_id=event_id).exists():
+            continue  # a retried event must not deliver to the same endpoint twice
         delivery = await WebhookDelivery.create(
             endpoint=endpoint, event_id=event_id, event=event, payload=payload, status="pending"
         )
@@ -121,6 +123,7 @@ async def queue_deliveries(
             target=endpoint.name,
             source="webhook",
             delivery_id=delivery.id,
+            max_attempts=endpoint.max_attempts,
             release_id=state.release_id,
             api_version=state.api_version,
         )

@@ -20,11 +20,17 @@ from pawabase_server.core.context import PlatformContext
 from pawabase_server.core.schemas import compile_model
 from pawabase_server.data import ddl, schema
 from pawabase_server.data import inspect as db_inspect
-from pawabase_server.data.inspect import is_read_only
+from pawabase_server.data.console import (
+    fetch_read_only,
+    validate_statement,
+)
+from pawabase_server.data.inspect import is_read_only, removes_data
+from pawabase_server.data.isolation import developer_source
 from pawabase_server.data.resources import after_write, resource_tag
-from pawabase_server.data.sql import SqlError
+from pawabase_server.data.sql import SqlError, decode_value
 from pawabase_server.data.store import Filter, parse_filters, parse_sort
 from pawabase_server.platform import Platform
+from pawabase_server.projects import quotas
 from pawabase_server.routes.common import MANAGE, actor, audit
 
 
@@ -147,6 +153,7 @@ def register(r: Router, platform: Platform) -> None:
     )
     async def import_records(ctx: HttpContext, env: str, name: str, body: ImportBody):
         state = await platform.state(env)
+        await quotas.check_database(state)
         store = await state.store(name)
         model = compile_model(
             f"{name}Import", store.spec.fields, mode="create", registry=state.compiled_schemas
@@ -231,6 +238,7 @@ def register(r: Router, platform: Platform) -> None:
     )
     async def insert(ctx: HttpContext, env: str, name: str):
         state = await platform.state(env)
+        await quotas.check_database(state)
         store = await state.store(name)
         data = await ctx.json
         try:
@@ -408,8 +416,6 @@ def register(r: Router, platform: Platform) -> None:
                 f"SELECT COUNT(*) AS total FROM {_quoted(dialect, table)}{where}", args
             )
             total = int(counted[0]["total"]) if counted else 0
-        from pawabase_server.data.sql import decode_value
-
         return {
             "data": [{k: decode_value(None, v) for k, v in row.items()} for row in rows],
             "limit": limit,
@@ -428,17 +434,20 @@ def register(r: Router, platform: Platform) -> None:
     async def run_query(ctx: HttpContext, env: str, body: QueryBody):
         state = await platform.state(env)
         source = await state.source()
-        read_only = is_read_only(body.sql)
+        validate_statement(body.sql, source.dialect)
+        confined = await developer_source(platform, state)
+        read_only = is_read_only(body.sql, source.dialect)
         if not read_only and not body.allow_write:
             raise HTTPException(
                 status_code=400, detail="this statement writes; set allow_write to run it"
             )
-        from pawabase_server.data.sql import decode_value
-
+        if not read_only and not removes_data(body.sql, source.dialect):
+            # Over the plan's database size, the console can still delete and drop to get back under it.
+            await quotas.check_database(state)
         try:
             if read_only:
                 rows = await asyncio.wait_for(
-                    source.fetch(body.sql, body.params), timeout=platform.settings.query_timeout
+                    fetch_read_only(confined, body.sql, body.params), timeout=platform.settings.query_timeout
                 )
                 result = {
                     "rows": [
@@ -448,7 +457,7 @@ def register(r: Router, platform: Platform) -> None:
                 }
             else:
                 affected = await asyncio.wait_for(
-                    source.execute(body.sql, body.params), timeout=platform.settings.query_timeout
+                    confined.execute(body.sql, body.params), timeout=platform.settings.query_timeout
                 )
                 result = {"rows": [], "affected": affected}
         except TimeoutError as exc:

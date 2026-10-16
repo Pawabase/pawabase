@@ -43,13 +43,22 @@ from pawabase_server.db.models.platform_ops import (
     BackupSchedule,
     BackupSnapshot,
     Domain,
+    FirewallBan,
+    FirewallConfig,
+    FirewallEvent,
     FirewallRule,
+    Lease,
     ObjectShare,
     StatusIncident,
     StatusPage,
     StatusSample,
 )
-from pawabase_server.db.models.projects import AgentOperation, Project, ProjectDatabaseBinding
+from pawabase_server.db.models.projects import (
+    AgentOperation,
+    Project,
+    ProjectDatabaseBinding,
+    UsageCounter,
+)
 from pawabase_server.db.models.releases import (
     ApiVersion,
     Branch,
@@ -75,6 +84,7 @@ __all__ = [
     "AgentOperation",
     "Project",
     "ProjectDatabaseBinding",
+    "UsageCounter",
     "AlarmEvent",
     "AlarmRule",
     "ApiKey",
@@ -93,7 +103,11 @@ __all__ = [
     "EventLog",
     "EventSubscription",
     "FailedJobRecord",
+    "FirewallBan",
+    "FirewallConfig",
+    "FirewallEvent",
     "FirewallRule",
+    "Lease",
     "ObjectShare",
     "Flow",
     "FlowRun",

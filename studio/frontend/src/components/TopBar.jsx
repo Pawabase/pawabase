@@ -257,7 +257,11 @@ export default function TopBar({ runtime, envs, env, section, confined, crumbs =
   return (
     <header className="appbar">
       <button type="button" className="appbar-icon menu-btn" onClick={onMenu} aria-label="Open navigation"><Icon name="menu" size={16} /></button>
-      <Link href="/" className="appbar-brand" title="Pawabase Studio"><LogoMark size={24} /><span className="appbar-wordmark">pawabase</span></Link>
+      <Link href="/" className="appbar-brand" title="Pawabase Studio">
+        <LogoMark size={24} />
+        <span className="appbar-wordmark">pawabase</span>
+        <span className="appbar-studio">Studio</span>
+      </Link>
       <nav className="appbar-context" aria-label="Location">
         <ProjectMenu runtime={runtime} envs={envs} env={env} section={section} confined={confined} />
         {env && <span className="ctx-sep">/</span>}

@@ -20,7 +20,8 @@ from pawabase_server.db.models import AuthUser, Membership, MfaFactor, OneTimeTo
 from pawabase_server.identity import emails as auth_emails
 from pawabase_server.identity import links, rbac
 from pawabase_server.identity.accounts import Accounts
-from pawabase_server.identity.environment import AuthConfig
+from pawabase_server.identity.environment import AuthConfig, load_config
+from pawabase_server.projects import quotas
 
 RECOVERY_CODE_COUNT = 10
 EMAIL_PURPOSE = "mfa_email"
@@ -33,6 +34,7 @@ def _hash(code: str) -> str:
 async def enroll(accounts: Accounts, user: AuthUser, issuer: str) -> dict[str, str]:
     """Start (or restart) authenticator-app enrolment. The factor is unconfirmed until a code is verified."""
     await MfaFactor.filter(user=user, confirmed_at=None).delete()
+    await quotas.check_mfa_factors(await load_config(accounts, user.env), user)
     secret = pyotp.random_base32()
     factor = await MfaFactor.create(
         user=user, kind="totp", secret_ciphertext=accounts.box.seal(secret)
@@ -106,6 +108,7 @@ async def _check_email(user: AuthUser, code: str) -> bool:
 async def enroll_email(accounts: Accounts, config: AuthConfig, user: AuthUser) -> None:
     """Start enrolling email codes: a code goes to the account's address and the factor waits for it."""
     await MfaFactor.filter(user=user, kind="email", confirmed_at=None).delete()
+    await quotas.check_mfa_factors(config, user)
     await MfaFactor.create(user=user, kind="email", secret_ciphertext="")
     await send_email_code(accounts, config, user)
 

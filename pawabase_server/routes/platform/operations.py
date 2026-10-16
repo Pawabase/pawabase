@@ -9,13 +9,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 from sillo import HttpContext, Router, no_content
 from sillo.exceptions import HTTPException
+from sillo.responses import PlainTextResponse
 from sillo.storage import FileNotFound, PolicyRefused, StorageError, UnsafeKey, stream_upload
 from sillo.storage.paths import normalise as held_normalise
 from tortoise.functions import Count
 
 from pawabase_server.db.models import (
     ApiKey,
-    AuditEntry,
     Environment,
     EventLog,
     FailedJobRecord,
@@ -31,6 +31,7 @@ from pawabase_server.db.models import (
 from pawabase_server.environments.configuration import report as configuration_report
 from pawabase_server.infra.storage import shares as object_shares
 from pawabase_server.infra.storage import transform
+from pawabase_server.observability import audit_log as audit_log_store
 from pawabase_server.observability import route_stats
 from pawabase_server.observability.advisor import advise
 from pawabase_server.observability.analytics import DEFAULT_RANGE, environment_analytics
@@ -848,13 +849,40 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.get("/audit", auth=MANAGE, tags=["observability"], summary="Management-plane audit log")
     async def audit_log(ctx: HttpContext):
+        """Filter with ``env``, ``action`` (``webhook.*`` for a service), ``actor``, ``target``, ``since``, ``until``."""
         limit, offset = page_params(ctx)
-        query = AuditEntry.all()
-        if ctx.query_params.get("env"):
-            query = query.filter(env=ctx.query_params["env"])
+        try:
+            query = audit_log_store.query(ctx.query_params)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail=f"since/until must be ISO times: {exc}"
+            ) from exc
         return {
             "data": [dump(row) for row in await query.order_by("-id").offset(offset).limit(limit)]
         }
+
+    @r.get(
+        "/audit/export",
+        auth=MANAGE,
+        tags=["observability"],
+        summary="Download the audit log (JSON lines or CSV)",
+    )
+    async def audit_export(ctx: HttpContext):
+        fmt = ctx.query_params.get("format") or "jsonl"
+        if fmt not in ("jsonl", "csv"):
+            raise HTTPException(status_code=400, detail="format is jsonl or csv")
+        try:
+            body, content_type = await audit_log_store.export(ctx.query_params, fmt)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail=f"since/until must be ISO times: {exc}"
+            ) from exc
+        name = f"pawabase-audit-{datetime.now(UTC):%Y%m%d}.{fmt}"
+        return PlainTextResponse(
+            body,
+            headers={"content-disposition": f'attachment; filename="{name}"'},
+            content_type=content_type,
+        )
 
     @r.get(
         f"{base}/overview",

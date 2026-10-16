@@ -1,26 +1,46 @@
 import { Link } from "@inertiajs/react";
 import { useState } from "react";
-import Layout, { envHref } from "../../components/Layout";
-import { Badge, Button, Card, CopyText, EmptyState, Field, Loading, Modal, PageHead, Switch, Table, Tabs, TagInput, when, useAction } from "../../components/ui";
+import Layout, { envHref, sectionNav, useSection } from "../../components/Layout";
+import { Bans, FirewallEvents, FirewallOverview, FirewallRules, FirewallTester, ManagedRules } from "./firewall/Firewall";
+import { Badge, Button, Card, CopyText, EmptyState, Field, Loading, Modal, PageHead, Switch, Table, TagInput, when, useAction } from "../../components/ui";
 import { del, envPath, patch, post, put, useApi } from "../../lib/api";
 
 const STATUS_TONES = { verified: "green", pending: "yellow", failed: "red" };
 
 export default function Networking({ env }) {
   const base = envPath(env);
-  const [tab, setTab] = useState("domains");
+  const [tab, setTab] = useSection(["domains", "overview", "rules", "managed", "bans", "events", "test"], "overview");
+  const [banning, setBanning] = useState(null);
+  const ban = (ip) => { setBanning(ip); setTab("bans"); };
   return (
-    <Layout title="Networking">
-      <PageHead title="Networking" description="Which addresses this environment answers on, and who is let through to it." />
-      <Tabs value={tab} onChange={setTab} tabs={[{ value: "domains", label: "Domains" }, { value: "firewall", label: "Firewall" }]} />
-      <div className="stack lg" style={{ marginTop: 16 }}>
-        {tab === "domains" ? <Domains base={base} /> : <Firewall base={base} />}
-        <Card title="Other network controls">
-          <p className="muted">
-            Allowed origins (CORS), the secret-key IP allowlist and maintenance mode live in <Link href={envHref(env, "settings")}>Settings</Link>. Each API key can also be limited to IP ranges and routes under <Link href={envHref(env, "keys")}>API keys</Link>.
-          </p>
-        </Card>
-      </div>
+    <Layout title="Networking" subnav={sectionNav("Networking", [
+      { title: "Firewall", items: [
+        ["overview", "Overview", "What it blocked and who"],
+        ["rules", "Rules", "Allow, block, log, rate limit"],
+        ["managed", "Managed rules", "Attack signatures, automatic bans"],
+        ["bans", "IP bans", "Addresses refused now"],
+        ["events", "Events", "Every request it acted on"],
+        ["test", "Test a request", "See what would happen"],
+      ] },
+      { title: "Addresses", items: [["domains", "Custom domains", "Where this environment answers"]] },
+    ], tab, setTab)}>
+      {tab === "overview" && <FirewallOverview base={base} onBan={ban} onSection={setTab} />}
+      {tab === "rules" && <FirewallRules base={base} />}
+      {tab === "managed" && <ManagedRules base={base} />}
+      {tab === "bans" && <Bans base={base} prefill={banning} onPrefilled={() => setBanning(null)} />}
+      {tab === "events" && <FirewallEvents base={base} onBan={ban} />}
+      {tab === "test" && <FirewallTester base={base} />}
+      {tab === "domains" && (
+        <div className="stack lg">
+          <PageHead title="Custom domains" description="Addresses this environment answers on, proved with a DNS record." />
+          <Domains base={base} />
+          <Card title="Other network controls">
+            <p className="muted">
+              Allowed origins (CORS), the secret-key IP allowlist and maintenance mode live in <Link href={envHref(env, "settings")}>Settings</Link>. Each API key can also be limited to IP ranges and routes under <Link href={envHref(env, "keys")}>API keys</Link>.
+            </p>
+          </Card>
+        </div>
+      )}
     </Layout>
   );
 }
@@ -75,85 +95,3 @@ function AddDomain({ base, onClose, onDone }) {
 
 const MATCH_LABELS = { ips: "IPs", paths: "Paths", methods: "Methods", user_agents: "User agents" };
 const summary = (match) => Object.entries(match || {}).map(([k, v]) => `${MATCH_LABELS[k] || k}: ${v.join(", ")}`).join(" · ");
-
-function Firewall({ base }) {
-  const list = useApi(`${base}/firewall`);
-  const [editing, setEditing] = useState(null);
-  const [testing, setTesting] = useState(false);
-  const [run] = useAction();
-  const move = async (rows, index, by) => {
-    const ids = rows.map((r) => r.id);
-    const [item] = ids.splice(index, 1);
-    ids.splice(index + by, 0, item);
-    if (await run(() => put(`${base}/firewall-order`, { ids }))) list.reload();
-  };
-  return (
-    <Card title="Firewall rules" actions={<div className="row"><Button onClick={() => setTesting(true)}>Test a request</Button><Button variant="primary" onClick={() => setEditing({ name: "", action: "block", enabled: true, match: {}, note: "" })}>Add rule</Button></div>} flush>
-      <Loading state={list} empty={<EmptyState icon="policies" title="No firewall rules" action={<Button variant="primary" onClick={() => setEditing({ name: "", action: "block", enabled: true, match: {}, note: "" })}>Add rule</Button>}>Rules run at the gateway before a request reaches anything else. The first rule that matches decides; requests no rule matches go through.</EmptyState>}>
-        {(data) => (
-          <Table
-            rows={data.data}
-            columns={[
-              { label: "#", render: (r) => <span className="faint">{data.data.indexOf(r) + 1}</span> },
-              { label: "Rule", render: (r) => <div><strong>{r.name}</strong>{r.note && <div className="faint small">{r.note}</div>}</div> },
-              { label: "Action", render: (r) => <Badge tone={r.action === "allow" ? "green" : "red"}>{r.action}</Badge> },
-              { label: "When", render: (r) => <span className="muted small">{summary(r.match)}</span> },
-              { label: "On", render: (r) => <Switch checked={r.enabled} onChange={async (enabled) => { if (await run(() => patch(`${base}/firewall/${r.id}`, { enabled }))) list.reload(); }} /> },
-              { label: "", render: (r) => { const i = data.data.indexOf(r); return (
-                <div className="row">
-                  <Button size="sm" disabled={i === 0} onClick={() => move(data.data, i, -1)}>↑</Button>
-                  <Button size="sm" disabled={i === data.data.length - 1} onClick={() => move(data.data, i, 1)}>↓</Button>
-                  <Button size="sm" onClick={() => setEditing(r)}>Edit</Button>
-                  <Button size="sm" variant="danger" onClick={async () => { if (confirm(`Delete "${r.name}"?`) && await run(() => del(`${base}/firewall/${r.id}`), "Deleted")) list.reload(); }}>Delete</Button>
-                </div>
-              ); } },
-            ]}
-          />
-        )}
-      </Loading>
-      <p className="hint" style={{ padding: "12px 16px" }}>Rules apply to requests that carry an API key, and take effect within about 30 seconds.</p>
-      {editing && <RuleSheet base={base} rule={editing} onClose={() => setEditing(null)} onDone={() => { setEditing(null); list.reload(); }} />}
-      {testing && <TestSheet base={base} onClose={() => setTesting(false)} />}
-    </Card>
-  );
-}
-
-function RuleSheet({ base, rule, onClose, onDone }) {
-  const [data, setData] = useState({ ...rule, match: { ips: [], paths: [], methods: [], user_agents: [], ...rule.match } });
-  const [run, busy] = useAction();
-  const set = (key) => (value) => setData({ ...data, match: { ...data.match, [key]: value } });
-  const submit = async () => {
-    const body = { name: data.name, action: data.action, enabled: data.enabled, note: data.note, match: data.match };
-    const ok = await run(() => (rule.id ? patch(`${base}/firewall/${rule.id}`, body) : post(`${base}/firewall`, body)), "Rule saved");
-    if (ok) onDone();
-  };
-  return (
-    <Modal title={rule.id ? "Edit rule" : "Add rule"} onClose={onClose} footer={<Button variant="primary" disabled={busy || !data.name} onClick={submit}>Save</Button>}>
-      <Field label="Name"><input value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} placeholder="Block the admin API from outside the office" /></Field>
-      <Field label="Action"><select value={data.action} onChange={(e) => setData({ ...data, action: e.target.value })}><option value="block">Block</option><option value="allow">Allow (stop checking later rules)</option></select></Field>
-      <p className="hint">A request matches when it fits every box you fill in. Within a box, any one value is enough.</p>
-      <Field label="IP addresses" hint="Addresses or CIDR ranges, like 10.0.0.0/8" optional><TagInput value={data.match.ips} onChange={set("ips")} /></Field>
-      <Field label="Paths" hint="Globs, like /rest/v1/admin/*" optional><TagInput value={data.match.paths} onChange={set("paths")} /></Field>
-      <Field label="Methods" optional><TagInput value={data.match.methods} onChange={set("methods")} suggestions={["GET", "POST", "PUT", "PATCH", "DELETE"]} /></Field>
-      <Field label="User agents" hint="Matches if the header contains the text" optional><TagInput value={data.match.user_agents} onChange={set("user_agents")} /></Field>
-      <Field label="Note" optional><input value={data.note} onChange={(e) => setData({ ...data, note: e.target.value })} /></Field>
-    </Modal>
-  );
-}
-
-function TestSheet({ base, onClose }) {
-  const [probe, setProbe] = useState({ ip: "203.0.113.7", path: "/rest/v1/notes", method: "GET", user_agent: "" });
-  const [result, setResult] = useState(null);
-  const [run, busy] = useAction();
-  return (
-    <Modal title="Test a request" onClose={onClose} footer={<Button variant="primary" disabled={busy || !probe.ip} onClick={async () => { const r = await run(() => post(`${base}/firewall-test`, probe)); if (r && r !== true) setResult(r); }}>Test</Button>}>
-      <div className="grid2">
-        <Field label="From IP"><input value={probe.ip} onChange={(e) => setProbe({ ...probe, ip: e.target.value })} /></Field>
-        <Field label="Method"><input value={probe.method} onChange={(e) => setProbe({ ...probe, method: e.target.value })} /></Field>
-      </div>
-      <Field label="Path"><input value={probe.path} onChange={(e) => setProbe({ ...probe, path: e.target.value })} /></Field>
-      <Field label="User agent" optional><input value={probe.user_agent} onChange={(e) => setProbe({ ...probe, user_agent: e.target.value })} /></Field>
-      {result && <div className={`alert ${result.outcome === "allow" ? "info" : "error"}`}>{result.outcome === "allow" ? "Let through" : "Blocked"}{result.rule ? <> by rule <b>{result.rule.name}</b></> : " — no rule matches this request"}.</div>}
-    </Modal>
-  );
-}

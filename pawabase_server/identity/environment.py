@@ -52,16 +52,28 @@ class AuthConfig:
     directory: dict[str, Any] = field(default_factory=dict)
     #: Character classes a password must contain: ``upper``, ``lower``, ``digit``, ``symbol``.
     password_rules: dict[str, bool] = field(default_factory=dict)
+    #: The project the environment belongs to and its plan limits (users, sessions, second factors: see ``projects/quotas.py``).
+    project_id: str | None = None
+    project_limits: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_api(cls, env: str, payload: dict[str, Any]) -> AuthConfig:
         auth = payload.get("auth") or {}
-        known = set(cls.__dataclass_fields__) - {"env", "project_name", "public_url"}
+        known = set(cls.__dataclass_fields__) - {
+            "env",
+            "project_name",
+            "public_url",
+            "project_id",
+            "project_limits",
+        }
         values = {key: auth[key] for key in known if key in auth and auth[key] is not None}
+        project = payload.get("project") or {}
         return cls(
             env=env,
             project_name=payload.get("project_name", ""),
             public_url=payload.get("public_url", ""),
+            project_id=project.get("id"),
+            project_limits=dict(project.get("limits") or {}),
             **values,
         )
 
@@ -98,16 +110,22 @@ class AuthConfig:
         )
 
     def enabled_providers(self) -> list[str]:
-        def usable(conf: dict[str, Any]) -> bool:
-            if conf.get("type") == "saml":
-                return bool(conf.get("idp_sso_url") and conf.get("idp_cert"))
-            return bool(conf.get("client_id"))
+        return enabled_provider_names(self.providers)
 
-        return sorted(
-            name
-            for name, conf in self.providers.items()
-            if conf.get("enabled", True) and usable(conf)
-        )
+
+def enabled_provider_names(providers: dict[str, dict[str, Any]]) -> list[str]:
+    """The sign-in providers that are switched on and configured enough to use (a client id; for SAML, the IdP's address and cert)."""
+
+    def usable(conf: dict[str, Any]) -> bool:
+        if conf.get("type") == "saml":
+            return bool(conf.get("idp_sso_url") and conf.get("idp_cert"))
+        return bool(conf.get("client_id"))
+
+    return sorted(
+        name
+        for name, conf in (providers or {}).items()
+        if isinstance(conf, dict) and conf.get("enabled", True) and usable(conf)
+    )
 
 
 async def load_config(accounts: Accounts, env: str) -> AuthConfig:

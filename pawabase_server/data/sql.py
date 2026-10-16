@@ -221,6 +221,13 @@ def encode_value(dialect: str, spec: Mapping[str, Any] | None, value: Any) -> An
     if kind in JSON_TYPES:
         return json.dumps(value, default=str)
     if kind == "boolean":
+        if isinstance(value, str):
+            normalized = value.lower()
+            if normalized not in ("true", "false", "1", "0"):
+                raise ValueError("expected true, false, 1 or 0")
+            value = normalized in ("true", "1")
+        elif not isinstance(value, (bool, int)) or value not in (0, 1):
+            raise ValueError("expected a boolean")
         return int(bool(value)) if dialect == "sqlite" else bool(value)
     if kind == "datetime":
         moment = (

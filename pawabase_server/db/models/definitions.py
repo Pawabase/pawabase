@@ -304,6 +304,12 @@ class Schedule(_Definition):
     last_run_at = fields.DatetimeField(null=True)
     last_status = fields.CharField(max_length=20, null=True)
     run_count = fields.IntField(default=0)
+    #: IANA zone a cron expression is read in (``Africa/Lagos``); empty is UTC.
+    timezone = fields.CharField(max_length=64, null=True)
+    #: ``allow``: fire even while the previous run is still queued or running. ``skip``: skip that firing.
+    overlap = fields.CharField(max_length=8, default="allow")
+    #: Fire once on start when a cron slot was missed while no scheduler was running.
+    catch_up = fields.BooleanField(default=False)
 
     class Meta:
         table = "pb_schedules"

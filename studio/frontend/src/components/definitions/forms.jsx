@@ -417,7 +417,7 @@ function ScheduleForm({ body, patch, refs, isNew }) {
   return (
     <>
       <Identity body={body} patch={patch} isNew={isNew} namePlaceholder="nightly_cleanup" />
-      <Section title="When" description="Times are UTC.">
+      <Section title="When" description={body.cron ? `Cron times are read in ${body.timezone || "UTC"}.` : "Runs on a fixed interval."}>
         <Segmented options={[["cron", "On a schedule"], ["interval", "Every…"]]} value={mode} onChange={(m) => patch(m === "cron" ? { cron: body.cron || "0 3 * * *", interval_seconds: null } : { cron: null, interval_seconds: 3600 })} />
         {mode === "cron" ? (
           <>
@@ -445,6 +445,19 @@ function ScheduleForm({ body, patch, refs, isNew }) {
           <JsonInput value={body.payload ?? undefined} rows={4} onChange={(payload) => patch({ payload })} />
         </Field>
         <Enabled body={body} patch={patch} />
+      </Section>
+      <Section title="Behaviour" description="What happens when a run is still going, or when the scheduler was down.">
+        {mode === "cron" && (
+          <Field label="Time zone" optional hint="An IANA zone such as Africa/Lagos or Europe/Berlin. Empty is UTC.">
+            <input className="mono" value={body.timezone || ""} placeholder="UTC" onChange={(e) => patch({ timezone: e.target.value || null })} />
+          </Field>
+        )}
+        <Field label="If the previous run is still going">
+          <Segmented options={[["allow", "Run anyway"], ["skip", "Skip this run"]]} value={body.overlap || "allow"} onChange={(overlap) => patch({ overlap })} />
+        </Field>
+        {mode === "cron" && (
+          <label className="check"><input type="checkbox" checked={Boolean(body.catch_up)} onChange={(e) => patch({ catch_up: e.target.checked })} /> Catch up once on a run missed while the scheduler was down</label>
+        )}
       </Section>
     </>
   );

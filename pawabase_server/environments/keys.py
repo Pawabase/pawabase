@@ -7,7 +7,8 @@ from datetime import datetime
 from sillo.auth.apikey import generate_api_key
 from sillo.exceptions import HTTPException
 
-from pawabase_server.db.models import ApiKey, Environment
+from pawabase_server.db.models import ApiKey, Environment, Project
+from pawabase_server.projects import quotas
 
 
 async def create_key(
@@ -30,6 +31,10 @@ async def create_key(
         raise HTTPException(
             status_code=403, detail="the environment API key limit has been reached"
         )
+    if environment.project_id:
+        project = await Project.get_or_none(id=environment.project_id)
+        if project is not None:
+            await quotas.check_project_count(project, "max_api_keys")
     full, _raw, digest = generate_api_key(prefix="pb_pk" if role == "publishable" else "pb_sk")
     key = await ApiKey.create(
         environment=environment,

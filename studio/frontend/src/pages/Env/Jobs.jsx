@@ -1,11 +1,11 @@
 import { useState } from "react";
-import Layout from "../../components/Layout";
-import { Badge, Button, Card, Json, Loading, Modal, PageHead, Status, Table, Tabs, useAction, when } from "../../components/ui";
+import Layout, { sectionNav, useSection } from "../../components/Layout";
+import { Badge, Button, Card, Json, Loading, Modal, PageHead, Status, Table, useAction, when } from "../../components/ui";
 import { del, envPath, get, post, useApi } from "../../lib/api";
 
 export default function Jobs({ env }) {
   const base = envPath(env);
-  const [tab, setTab] = useState("jobs");
+  const [tab, setTab] = useSection(["jobs", "failed", "health", "retries", "workers"]);
   const [status, setStatus] = useState("");
   const jobs = useApi(`${base}/jobs`, { params: { status, limit: 100 }, interval: 5000 });
   const failed = useApi(tab === "failed" ? `${base}/failed-jobs` : null);
@@ -24,9 +24,12 @@ export default function Jobs({ env }) {
   };
   const open = async (id) => setJob(await get(`${base}/jobs/${id}`));
   return (
-    <Layout title="Jobs & queues">
+    <Layout title="Jobs & queues" subnav={sectionNav("Jobs & queues", [
+      { title: "Work", items: [["jobs", "Jobs", "Every queued and finished job"], ["failed", "Failed", "Gave up after retries"]] },
+      { title: "Health", items: [["health", "Service health", "Failures and waiting work"], ["retries", "Retry policies", "How each kind is retried"]] },
+      { title: "Capacity", items: [["workers", "Workers", "Processes taking jobs"]] },
+    ], tab, setTab)}>
       <PageHead title="Jobs & queues" description="Background work on Sillo's queue: flow runs, function calls, webhook deliveries, mail. Failed jobs retry with backoff, then land here." />
-      <Tabs value={tab} onChange={setTab} tabs={[{ value: "jobs", label: "Jobs" }, { value: "failed", label: "Failed" }, { value: "workers", label: "Workers" }]} />
       {tab === "jobs" && (
         <Card flush actions={<Button size="sm" disabled={busy} onClick={() => replayAll({ status: status || "failed", limit: 500 }, status || "failed")}>Replay all {status || "failed"}</Button>} title={<select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 160 }}><option value="">every status</option>{["queued", "active", "retrying", "succeeded", "failed"].map((s) => <option key={s}>{s}</option>)}</select>}>
           <Loading state={jobs} empty="No jobs.">
@@ -44,6 +47,8 @@ export default function Jobs({ env }) {
           </Loading>
         </Card>
       )}
+      {tab === "health" && <ServiceHealth base={base} />}
+      {tab === "retries" && <RetryPolicies />}
       {tab === "workers" && (
         <Card flush>
           <Loading state={workers} empty="No worker has reported in. Start one with `python -m app.worker`.">
@@ -57,5 +62,44 @@ export default function Jobs({ env }) {
         </Modal>
       )}
     </Layout>
+  );
+}
+
+const fmtWait = (seconds) => (!seconds ? "—" : seconds < 120 ? `${seconds}s` : seconds < 7200 ? `${Math.round(seconds / 60)}m` : `${Math.round(seconds / 3600)}h`);
+
+function ServiceHealth({ base }) {
+  const [minutes, setMinutes] = useState(60);
+  const health = useApi(`${base}/service-health`, { params: { minutes }, interval: 10000 });
+  return (
+    <Card flush title="Every service, the last" actions={<select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} style={{ width: 140 }}>{[[15, "15 minutes"], [60, "hour"], [1440, "day"], [10080, "week"]].map(([m, l]) => <option key={m} value={m}>{l}</option>)}</select>}>
+      <Loading state={health}>
+        {(data) => <Table rows={data.data} columns={[
+          { label: "Service", render: (s) => <b>{s.label}</b> },
+          { label: "Done", key: "total" },
+          { label: "Failed", render: (s) => (s.failed ? <Badge tone="red">{s.failed}</Badge> : "0") },
+          { label: "Failure rate", render: (s) => <span className={s.failure_rate >= 10 ? "danger-text" : ""}>{s.failure_rate}%</span> },
+          { label: "Retrying", key: "retrying" },
+          { label: "Waiting", key: "waiting" },
+          { label: "Oldest waiting", render: (s) => <span className={s.oldest_waiting_seconds > 600 ? "danger-text" : ""}>{fmtWait(s.oldest_waiting_seconds)}</span> },
+        ]} />}
+      </Loading>
+    </Card>
+  );
+}
+
+function RetryPolicies() {
+  const policies = useApi("/retry-policies");
+  return (
+    <Card flush title="How failed work is retried" actions={<span className="hint">Waits are randomised by ±20%. A webhook endpoint's own attempt limit replaces the default.</span>}>
+      <Loading state={policies}>
+        {(data) => <Table rows={data.data} columns={[
+          { label: "Work", render: (p) => <b>{p.job.replace(/Job$/, "").replace(/([a-z])([A-Z])/g, "$1 $2")}</b> },
+          { label: "Queue", render: (p) => <code>{p.queue}</code> },
+          { label: "Attempts", key: "max_attempts" },
+          { label: "Waits before each retry", render: (p) => (p.waits_seconds.length ? p.waits_seconds.map(fmtWait).join(" → ") : "No retries") },
+          { label: "Gives up after", render: (p) => fmtWait(p.total_seconds) },
+        ]} />}
+      </Loading>
+    </Card>
   );
 }

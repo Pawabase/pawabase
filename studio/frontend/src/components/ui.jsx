@@ -187,6 +187,35 @@ export function Tabs({ tabs, value, onChange }) {
   );
 }
 
+/** Tabs across one record's view (a function's overview, runs, code): an underlined row, with room on the right for actions. */
+export function PageTabs({ tabs, value, onChange, actions }) {
+  return (
+    <div className="page-tabs">
+      <div className="page-tabs-list" role="tablist">
+        {tabs.map((t) => (
+          <button key={t.value} type="button" role="tab" aria-selected={value === t.value} className={value === t.value ? "active" : ""} onClick={() => onChange(t.value)}>
+            {t.label}{t.count != null && <span className="page-tabs-count">{t.count}</span>}
+          </button>
+        ))}
+      </div>
+      {actions && <div className="page-tabs-actions">{actions}</div>}
+    </div>
+  );
+}
+
+/** A vertical menu of sections: the secondary sidebar's look, for a sheet or a pane inside a page. ``items``: ``[{ value, label, sub? }]``. */
+export function SideMenu({ items, value, onChange, className = "", label = "Sections" }) {
+  return (
+    <nav className={`side-menu-list ${className}`} aria-label={label}>
+      {items.map((t) => (
+        <button key={t.value} type="button" className={`subnav-item ${value === t.value ? "active" : ""}`} aria-current={value === t.value ? "page" : undefined} onClick={() => onChange(t.value)}>
+          <span className="subnav-text"><span>{t.label}</span>{t.sub && <small>{t.sub}</small>}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 /** Copy text to the clipboard. The async API needs a secure context and a focused page, and
  *  rejects otherwise; fall back to a hidden textarea so a copy button never silently does nothing. */
 export async function copyToClipboard(text) {
@@ -276,8 +305,8 @@ export function useAction() {
   return [run, busy];
 }
 
-/** A right-hand panel for creating and editing things: a header, optional
- *  tabs, a scrolling body of form sections, and a sticky footer. */
+/** A right-hand panel for creating and editing things: a header, an optional
+ *  side menu of sections (``tabs``), a scrolling body of form sections, and a sticky footer. */
 export function Sheet({ title, subtitle, icon, tone = "lavender", tabs, tab, onTab, onClose, footer, children }) {
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
@@ -296,8 +325,14 @@ export function Sheet({ title, subtitle, icon, tone = "lavender", tabs, tab, onT
           </div>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
         </div>
-        {tabs && <div className="sheet-tabs"><Tabs tabs={tabs} value={tab} onChange={onTab} /></div>}
-        <div className="sheet-body">{children}</div>
+        {tabs ? (
+          <div className="sheet-split">
+            <SideMenu className="sheet-nav" items={tabs} value={tab} onChange={onTab} />
+            <div className="sheet-body">{children}</div>
+          </div>
+        ) : (
+          <div className="sheet-body">{children}</div>
+        )}
         {footer && <div className="sheet-foot">{footer}</div>}
       </div>
     </>

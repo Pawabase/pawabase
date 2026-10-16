@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from pawabase_server.data.presentation import public_record
 from pawabase_server.environments.state import EnvironmentState
 from pawabase_server.platform import Platform
 
@@ -40,7 +41,7 @@ async def after_write(
         await platform.emit(
             state,
             f"{resource}.{change}",
-            {"resource": resource, "change": change, "record": record},
+            {"resource": resource, "change": change, "record": public_record(state, definition, record)},
             actor=actor,
             request_id=request_id,
         )

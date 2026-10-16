@@ -4,7 +4,7 @@ import Chart, { compact } from "../../components/Chart";
 import DateRange, { formatDay, rangeParams } from "../../components/DateRange";
 import Layout, { envHref } from "../../components/Layout";
 import { Icon } from "../../components/icons";
-import { Badge, Button, Card, CopyText, IdChip, PageHead, Segmented, Tabs, copyToClipboard, useToast, when } from "../../components/ui";
+import { Badge, Button, Card, CopyText, IdChip, PageHead, Segmented, copyToClipboard, useToast, when } from "../../components/ui";
 import { envPath, get, useApi } from "../../lib/api";
 
 const RANGES = [["1h", "1h"], ["24h", "24h"], ["7d", "7d"], ["30d", "30d"]];
@@ -162,7 +162,7 @@ export default function Overview({ runtime, env, overview }) {
       <section className="ov-grid chart-split">
       <div className="ov-panel chart-panel">
         <div className="chart-top">
-          <Tabs tabs={TABS} value={tab} onChange={setTab} />
+          <Segmented options={TABS.map((t) => [t.value, t.label])} value={tab} onChange={setTab} />
           <span className="muted small">{span} · per {stepName}</span>
         </div>
         {tab === "traffic" && (

@@ -69,6 +69,8 @@ class EventLog(Model):
     request_id = fields.CharField(max_length=64, null=True)
     occurred_at = fields.CharField(max_length=40)
     consumers = AnyJSONField(default=list)
+    #: Set once every consumer has been handed its work. A row without it is resumed by a retry, skipping consumers already served.
+    routed_at = fields.DatetimeField(null=True)
 
     class Meta:
         table = "pb_event_log"
@@ -92,6 +94,8 @@ class WebhookDelivery(Model):
     error = fields.TextField(null=True)
     duration_ms = fields.FloatField(null=True)
     delivered_at = fields.DatetimeField(null=True)
+    #: When the next attempt is scheduled, while the delivery is retrying.
+    next_attempt_at = fields.DatetimeField(null=True)
 
     class Meta:
         table = "pb_webhook_deliveries"

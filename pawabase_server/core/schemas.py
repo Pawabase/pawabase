@@ -23,7 +23,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, create_model
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints, create_model
 
 from pawabase_server.core.ids import ULID_PATTERN
 
@@ -62,6 +62,12 @@ class _Base(BaseModel):
 
 class _ReadBase(BaseModel):
     model_config = ConfigDict(extra="allow", from_attributes=True)
+
+
+def _not_null(value: Any) -> Any:
+    if value is None:
+        raise ValueError("this field may not be null")
+    return value
 
 
 def validate_fields(fields: Sequence[Mapping[str, Any]], *, path: str = "fields") -> None:
@@ -197,9 +203,13 @@ def compile_model(
         annotation = _python_type(spec, name, registry, mode)
         constraints = _constraints(spec)
         required = bool(spec.get("required")) and mode == "create" and "default" not in spec
-        nullable = spec.get("nullable", not required) or mode in ("update", "read", "any")
+        # Omission in PATCH and explicit null are different. A default does
+        # not make a required field nullable either (including Any/JSON).
+        nullable = spec.get("nullable", not spec.get("required", False)) or mode in ("read", "any")
         if nullable:
             annotation = annotation | None  # type: ignore[operator]
+        else:
+            annotation = Annotated[annotation, BeforeValidator(_not_null)]
         if required:
             default: Any = ...
         elif "default" in spec and mode == "create":

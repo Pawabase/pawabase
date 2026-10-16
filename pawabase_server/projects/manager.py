@@ -24,7 +24,7 @@ from pawabase_server.data.source import DataSource, DataSourceError
 from pawabase_server.db.models import Environment, Project, ProjectDatabaseBinding
 from pawabase_server.environments.keys import create_key
 from pawabase_server.environments.state import data_schema_name, project_data_url
-from pawabase_server.projects import refs
+from pawabase_server.projects import quotas, refs
 from pawabase_server.settings import Settings
 
 logger = logging.getLogger("pawabase.projects")
@@ -402,6 +402,7 @@ class ProjectManager:
             problem = envvars.name_problem(key, others)
             if problem:
                 raise ProjectError(problem)
+            await quotas.check_project_count(project, "max_environments")
             schema = schema_for(project.is_default, key, slug, binding.provider)
             if not SCHEMA.match(schema):
                 raise ProjectError("the schema name this would get is not valid")

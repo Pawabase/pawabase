@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from pawabase_server.backup import backups
 from pawabase_server.db.models import BackupSchedule, BackupSnapshot, Environment
+from pawabase_server.projects import quotas
 
 if TYPE_CHECKING:
     from pawabase_server.platform import Platform
@@ -55,6 +56,13 @@ async def take(
     trigger: str = "manual",
 ) -> BackupSnapshot:
     environment = await Environment.get(name=env)
+    state = await platform.state(env)
+    if trigger == "manual":
+        await quotas.check_backups(state)
+    else:
+        oldest = await quotas.oldest_backup_to_replace(state)
+        if oldest is not None:
+            await remove(platform, oldest)
     parts = backups.parse_parts(include)
     stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     snapshot = await BackupSnapshot.create(
