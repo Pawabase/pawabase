@@ -83,3 +83,21 @@ class AgentOperation(Model):
 
     class Meta:
         table = "pb_agent_operations"
+
+
+class UsageCounter(Model):
+    """A project's metered usage, where counting the source on every request would cost too much (see ``projects.quotas``).
+
+    ``period`` is ``YYYY-MM`` for a monthly count (function invocations, flow runs) and empty for a gauge (stored bytes). A row exists
+    only once a quota needed it; until then nothing is written. ``value`` is changed only by atomic increments.
+    """
+
+    id = ulid_pk()
+    project_id = fields.CharField(max_length=64)
+    metric = fields.CharField(max_length=48)
+    period = fields.CharField(max_length=7, default="")
+    value = fields.BigIntField(default=0)
+
+    class Meta:
+        table = "pb_usage_counters"
+        unique_together = (("project_id", "metric", "period"),)

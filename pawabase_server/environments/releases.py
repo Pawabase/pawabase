@@ -152,6 +152,9 @@ DEFINITIONS: dict[str, tuple[type, tuple[str, ...]]] = {
             "last_run_at",
             "last_status",
             "run_count",
+            "timezone",
+            "overlap",
+            "catch_up",
         ),
     ),
 }

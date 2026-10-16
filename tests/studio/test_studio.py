@@ -151,6 +151,85 @@ async def test_the_explorer_uses_an_anonymous_context_and_an_optional_user_token
     assert bad.status_code == 400
 
 
+async def test_the_explorer_catalog_combines_the_compiled_and_runtime_apis(studio):
+    response = await studio.http.get(
+        "/studio/api/explorer/openapi?env=main&version=v1"
+    )
+    assert response.status_code == 200
+    catalog = response.json()
+    assert [item["id"] for item in catalog["documents"]] == ["application", "runtime"]
+    runtime = catalog["documents"][1]["document"]
+    assert "/auth/v1/user" in runtime["paths"]
+    assert "/functions/v1/{name}" in runtime["paths"]
+    assert "/platform/v1/envs/{env}/events" in runtime["paths"]
+    assert "/internal/v1/secrets" not in runtime["paths"]
+
+
+def test_the_explorer_catalog_infers_concrete_environment_endpoints():
+    from studio.bridge import _expand_runtime_paths
+
+    operation = {
+        "post": {
+            "operationId": "invoke",
+            "parameters": [
+                {"name": "name", "in": "path", "required": True, "schema": {"type": "string"}}
+            ],
+        }
+    }
+    paths = {
+        "/functions/v1/{name}": operation,
+        "/flows/v1/{name}": operation,
+        "/hooks/v1/{env}/{slug}": operation,
+        "/storage/v1/object/{bucket}/{key}": {
+            "get": {"operationId": "storage.download"},
+            "put": {"operationId": "storage.upload"},
+            "parameters": [
+                {"name": "bucket", "in": "path", "required": True, "schema": {"type": "string"}},
+                {"name": "key", "in": "path", "required": True, "schema": {"type": "string"}},
+            ],
+        },
+    }
+    expanded = _expand_runtime_paths(
+        paths,
+        "main",
+        {
+            "functions": [{"name": "quote", "description": "Quote an order", "input_fields": [{"name": "items", "type": "integer", "required": True, "example": 2}]}],
+            "flows": [{"name": "checkout", "definition": {"nodes": [{"data": {"block": "trigger.http", "config": {}}}]}}],
+            "hooks": [{"slug": "stripe"}],
+            "buckets": [{"name": "receipts"}],
+        },
+    )
+    assert "/functions/v1/quote" in expanded
+    assert "/flows/v1/checkout" in expanded
+    assert "/hooks/v1/main/stripe" in expanded
+    assert "/storage/v1/object/receipts/{key}" in expanded
+    function = expanded["/functions/v1/quote"]["post"]
+    assert function["requestBody"]["content"]["application/json"]["schema"]["required"] == ["items"]
+    storage = expanded["/storage/v1/object/receipts/{key}"]
+    assert {"post", "put", "head"}.issubset(storage)
+    assert "application/octet-stream" in storage["put"]["requestBody"]["content"]
+
+
+async def test_the_explorer_can_forward_a_raw_or_file_body(studio):
+    response = await studio.http.post(
+        "/studio/api/explorer/request",
+        json={
+            "env": "main",
+            "method": "PUT",
+            "endpoint": "/storage/v1/object/assets/hello.txt",
+            "body": "aGVsbG8=",
+            "body_present": True,
+            "body_encoding": "base64",
+            "content_type": "text/plain",
+        },
+        headers=await studio.csrf(),
+    )
+    assert response.status_code == 200
+    assert studio.api.raw_call["content"] == b"hello"
+    assert studio.api.raw_call["json"] is None
+    assert studio.api.raw_call["headers"]["Content-Type"] == "text/plain"
+
+
 async def test_mutations_need_the_csrf_token(studio):
     """With no sign-in, the CSRF token is what stops another website acting through the developer's browser."""
     response = await studio.http.post(
@@ -206,6 +285,8 @@ async def test_the_explorer_can_call_any_public_endpoint_and_nothing_else(studio
         "/health/v1",
         "/auth/v1/user",
         "/flows/v1/nightly",
+        "/realtime/v1/channels/room/history",
+        "/v1/status",
         "/rest/v1/todos",
     ):
         response = await call(allowed)

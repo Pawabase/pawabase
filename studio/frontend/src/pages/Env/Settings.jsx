@@ -1,6 +1,6 @@
 import { Link, router } from "@inertiajs/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import Layout, { envHref } from "../../components/Layout";
+import Layout, { useSection, envHref } from "../../components/Layout";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, Field, IconButton, KeyValue, Loading, Modal, PageHead, Section, Switch, TagInput, useAction } from "../../components/ui";
 import { PolicyPicker } from "../../components/definitions/PolicyPicker";
@@ -76,7 +76,7 @@ const SETTINGS_SECTIONS = [
 ];
 
 export default function Settings({ env }) {
-  const [active, setActive] = useState("general");
+  const [active, setActive] = useSection(SETTINGS_SECTIONS.map(([key]) => key), "general");
   const path = envPath(env);
   const state = useApi(path);
   const policiesState = useApi(envPath(env, "/policies"));

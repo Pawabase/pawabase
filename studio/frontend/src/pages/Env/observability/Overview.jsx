@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Chart from "../../../components/Chart";
-import { Card, Empty, Loading, Tabs, when } from "../../../components/ui";
+import { Card, Empty, Loading, Segmented, when } from "../../../components/ui";
 import { envPath, get } from "../../../lib/api";
 import JobDetail from "./JobDetail";
 import { ms } from "./shared";
@@ -99,9 +99,7 @@ function Body({ s, services, focus, setFocus, filter, setFilter, showAll, setSho
         </span>
       </div>
 
-      <Tabs tabs={items.map((i) => ({ value: i.key, label: i.label }))} value={active.key} onChange={setFocus} />
-
-      <Card title={active.label} className="chart-card"
+      <Card title={<Segmented options={items.map((i) => [i.key, i.label])} value={active.key} onChange={setFocus} />} className="chart-card"
         actions={<><Legend items={active.lines.map(([, label, color]) => [label, color])} /><button type="button" className="chip" onClick={() => onOpen(active.section)}>Open {active.label.toLowerCase()} →</button></>}>
         <Chart height={230} stepSeconds={s.window.step_seconds} data={active.rows} format={active.format}
           series={active.lines.map(([key, label, color, type]) => ({ key, label, color, type }))} empty={`No ${active.label.toLowerCase()} activity in this window.`} />

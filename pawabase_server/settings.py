@@ -103,6 +103,11 @@ class Settings(Config):
     db_pool_max: int | None = None
     db_statement_cache_size: int | None = None
     query_timeout: float = 15.0
+    #: How developer SQL (the Studio SQL console, a function's ``db``) reaches an environment that shares a Postgres database by
+    #: schema. ``role``: as a login role per environment that can use its own schema and nothing else, so no statement reaches
+    #: another environment or the platform's tables; SQL is refused when that role cannot be made. ``off``: as the platform's own
+    #: user — only for a single-tenant install where everyone with SQL access may read every environment.
+    sql_isolation: Literal["role", "off"] = "role"
 
     # ── storage ──────────────────────────────────────────────────────────
     storage_root: str = "storage/objects"
@@ -148,6 +153,11 @@ class Settings(Config):
     sandbox_workers: int = 4
     #: How long an unused worker is kept before it is stopped.
     sandbox_idle_seconds: int = 300
+    #: What confines a sandbox worker beyond its own process (see ``functions/sandbox/confine.py``): Landlock (filesystem, TCP) and a
+    #: seccomp filter (no sockets, no tracing, no namespaces). ``required``: a worker that cannot be confined runs nothing.
+    #: ``auto`` (default): ``required`` on Linux; on other systems (macOS development) the process boundary only, with a warning.
+    #: ``off``: the process boundary only — for code you trust.
+    sandbox_confinement: Literal["auto", "required", "off"] = "auto"
     #: Comma-separated host names a function's ``http_request`` may reach although they resolve to a private address.
     outbound_allow_hosts: str = ""
     inline_worker: bool = False
@@ -183,6 +193,13 @@ class Settings(Config):
     #: Derives the passwords of managed project databases from their ids, so a job names a database without carrying a password.
     agent_secret_seed: str = ""
     request_retention_days: int = 14
+    #: The header a trusted proxy in front sets to the client's country (``cf-ipcountry`` behind Cloudflare), for firewall rules on
+    #: ``country``. Empty: country is not known. Read only from proxies listed in ``trusted_proxies``.
+    firewall_country_header: str = ""
+    #: Days firewall events are kept.
+    firewall_event_retention_days: int = 14
+    #: Days the management audit log keeps an entry; 0 keeps everything. Purged once a day by the leading scheduler.
+    audit_retention_days: int = 365
     #: How often function and flow run records are written, in seconds. They gather in memory and go to the database in one batch.
     #: ``0`` writes each record before the request returns.
     record_buffer_seconds: float = 0.5

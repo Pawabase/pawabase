@@ -6,7 +6,7 @@ import {
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import Layout, { envHref } from "../../components/Layout";
 import { Icon } from "../../components/icons";
-import { Badge, Button, Field, Json, JsonInput, Tabs, useAction } from "../../components/ui";
+import { Badge, Button, Field, Json, JsonInput, Segmented, useAction } from "../../components/ui";
 import { envPath, post, put } from "../../lib/api";
 
 const CATEGORY_ORDER = ["triggers", "control", "resources", "responses", "auth", "data", "code", "events", "jobs", "mail", "storage", "realtime", "cache", "integrations", "observability"];
@@ -145,10 +145,10 @@ function Editor({ env, flow, blocks }) {
           </div>
           <aside className="inspector">
             <div className="inspector-tabs">
-              <Tabs
+              <Segmented
                 value={panel}
                 onChange={setPanel}
-                tabs={[{ value: "flow", label: "Flow" }, ...(selectedNode ? [{ value: "node", label: "Block" }] : []), ...(!isNew ? [{ value: "run", label: "Run" }] : [])]}
+                options={[["flow", "Flow"], ...(selectedNode ? [["node", "Block"]] : []), ...(!isNew ? [["run", "Run"]] : [])]}
               />
             </div>
             <div className="stack inspector-body">

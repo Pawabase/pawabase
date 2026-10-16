@@ -87,10 +87,15 @@ class DataSource:
                 ) from exc
             schema = credentials.get("schema")
             if schema:
-                # The environment's own schema on a shared Postgres database: made before anything asks for a table in it.
-                await client.execute_script(
-                    f'CREATE SCHEMA IF NOT EXISTS "{str(schema).replace(chr(34), "")}"'
+                # The environment's own schema on a shared Postgres database: made before anything asks for a table in it. Only when
+                # missing: ``IF NOT EXISTS`` still needs CREATE on the database, which an environment's SQL role (data.isolation) lacks.
+                exists = await client.execute_query_dict(
+                    "SELECT 1 FROM pg_namespace WHERE nspname = $1", [str(schema)]
                 )
+                if not exists:
+                    await client.execute_script(
+                        f'CREATE SCHEMA IF NOT EXISTS "{str(schema).replace(chr(34), "")}"'
+                    )
             self.client = client
             self.schema = str(schema) if schema else None
             self.file_path = str(file_path) if file_path and file_path != ":memory:" else None

@@ -15,7 +15,10 @@ from typing import Any
 from sillo.events import EventEmitter
 from sillo.exceptions import HTTPException
 from sillo_wire import Hub, MemoryBacklog
+from sillo_wire.envelope import DeliveryReport, Envelope
 
+from pawabase_server.data.presentation import present_record
+from pawabase_server.projects import quotas
 from pawabase_server.realtime.authorizer import Authorizer
 from pawabase_server.realtime.connection import EXPIRY_WARNING, Connection
 from pawabase_server.realtime.errors import CapacityError, PayloadTooLarge
@@ -52,7 +55,8 @@ class Realtime:
         self.settings = settings
         self.platform = platform
         self.stats = Stats()
-        self.hub = Hub(backlog=MemoryBacklog(capacity_bytes=settings.history_bytes))
+        self.backlog = MemoryBacklog(capacity_bytes=settings.history_bytes)
+        self.hub = Hub(backlog=self.backlog)
         backend = "redis" if settings.redis_url else "memory"
         self.emitter = EventEmitter(
             backend, **({"url": settings.redis_url} if settings.redis_url else {})
@@ -65,6 +69,7 @@ class Realtime:
             self.stats,
             heartbeat_interval=settings.heartbeat_interval,
         )
+        self.fanout.resource_delivery = self._deliver_resource
         self.store = ConfigStore(
             platform.realtime_settings, ttl=settings.config_ttl, stale_ttl=settings.stale_config_ttl
         )
@@ -229,8 +234,31 @@ class Realtime:
             raise PermissionError(
                 f"a connection may join at most {self.settings.max_channels} channels"
             )
+        if channel not in connection.channels:
+            await self._check_channel_quota(connection, channel)
         await self.hub.join(connection.peer, room_name(connection.env, channel))
         connection.channels.setdefault(channel, {})
+
+    async def _check_channel_quota(self, connection: Connection, channel: str) -> None:
+        """Refuse a channel no one in the project has open yet when the plan's ``max_realtime_channels`` are all in use.
+
+        Counted on this instance: with several realtime instances each enforces the limit for the connections it holds.
+        """
+        state = await self.platform.state(connection.env)
+        allowed = quotas.allowance(state.project_limits, "max_realtime_channels")
+        if not allowed or not state.project_id:
+            return
+        project_of: dict[str, str | None] = {connection.env: state.project_id}
+        in_use: set[tuple[str, str]] = set()
+        for other in self.connections.values():
+            if other.env not in project_of:
+                project_of[other.env] = (await self.platform.state(other.env)).project_id
+            if project_of[other.env] == state.project_id:
+                in_use.update((other.env, name) for name in other.channels)
+        if (connection.env, channel) not in in_use and len(in_use) >= allowed:
+            raise PermissionError(
+                quotas.QuotaExceeded("max_realtime_channels", allowed, len(in_use)).message
+            )
 
     async def leave(self, connection: Connection, channel: str) -> None:
         await self.hub.leave(connection.peer, room_name(connection.env, channel))
@@ -250,14 +278,110 @@ class Realtime:
         with contextlib.suppress(Exception):
             await self.hub.disconnect(connection.peer)
 
-    async def history(self, env: str, channel: str, limit: int = 50) -> list[dict[str, Any]]:
+    async def _resource_message(self, env, channel, message, auth, credential, rows=None):
+        """The message as *auth* may see it, or ``None``: the read policy must pass on both the changed row and the row as it is now.
+
+        *rows* caches the current row across the subscribers of one message, so a change costs one read, not one per subscriber.
+        """
+        state = await self.platform.state(env)
+        name = channel.removeprefix("resource:")
+        resource = state.resources.get(name)
+        payload = message.get("payload")
+        if resource is None or not resource.realtime or not isinstance(payload, dict):
+            return None
+        record = payload.get("record")
+        if payload.get("resource") != name or not isinstance(record, dict):
+            return None
+        options = resource.operations or {}
+        read = next(
+            (options[k] for k in ("get", "list") if options.get(k, {}).get("enabled")), None
+        )
+        if not read and not credential.get("is_service"):
+            return None
+        context = {
+            "auth": dict(auth),
+            "credential": dict(credential),
+            "env": env,
+            "settings": state.settings,
+            "record": record,
+            "input": None,
+        }
+        if not await state.engine.check((read or {}).get("policy") or "authenticated", context):
+            return None
+        # History cannot resurrect access revoked by a later ownership change.
+        if payload.get("change") != "deleted":
+            store = await state.store(name)
+            key = record.get(store.spec.primary_key)
+            if rows is not None and key in rows:
+                current = rows[key]
+            else:
+                current = await store.get(key)
+                if rows is not None:
+                    rows[key] = current
+            if current is None or not await state.engine.check(
+                (read or {}).get("policy") or "authenticated", {**context, "record": current}
+            ):
+                return None
+        presented = await present_record(state, resource, record, {**context, "record": None})
+        return {**message, "payload": {**payload, "record": presented}}
+
+    async def _deliver_resource(self, env, channel, message):
+        envelope = Envelope(payload=message, room=room_name(env, channel))
+        await self.backlog.append(envelope)
+        delivered = dropped = failed = 0
+        rows: dict[Any, Any] = {}
+        for connection in list(self.connections.values()):
+            if connection.env != env or channel not in connection.channels:
+                continue
+            try:
+                remaining = connection.expires_in()
+                if remaining is not None and remaining <= 0:
+                    continue
+                await self.authorize(
+                    env,
+                    channel,
+                    "subscribe",
+                    auth=connection.auth,
+                    credential=connection.credential,
+                )
+                visible = await self._resource_message(
+                    env, channel, message, connection.auth, connection.credential, rows
+                )
+                if visible is not None:
+                    if connection.peer.offer(
+                        Envelope(payload=visible, room=envelope.room, seq=envelope.seq)
+                    ):
+                        delivered += 1
+                    else:
+                        dropped += 1
+            except PermissionError:
+                continue
+            except Exception:
+                failed += 1
+                logger.exception("resource message authorization/delivery failed for %s", channel)
+        return DeliveryReport(delivered=delivered, dropped=dropped, failed=failed)
+
+    async def history(
+        self, env: str, channel: str, limit: int = 50, *, auth=None, credential=None
+    ) -> list[dict[str, Any]]:
         limit = max(1, min(limit, self.settings.max_history))
         envelopes = await self.hub.history(room_name(env, channel), limit=limit)
-        return [
+        messages = [
             {**envelope.payload, "seq": envelope.seq}
             for envelope in envelopes
             if isinstance(envelope.payload, dict) and envelope.payload.get("type") == "message"
         ]
+        if channel.startswith("resource:"):
+            if auth is None or credential is None:
+                return []  # no ambient service bypass for raw history readers
+            visible = []
+            rows: dict[Any, Any] = {}
+            for message in messages:
+                item = await self._resource_message(env, channel, message, auth, credential, rows)
+                if item is not None:
+                    visible.append(item)
+            return visible
+        return messages
 
     # ── housekeeping ─────────────────────────────────────────────────────
 

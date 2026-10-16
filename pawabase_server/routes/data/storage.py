@@ -40,6 +40,7 @@ from pawabase_server.infra.storage import shares
 from pawabase_server.infra.storage.delivery import Delivery, error
 from pawabase_server.platform import Platform
 from pawabase_server.policies import credential_context
+from pawabase_server.projects import quotas
 
 ANONYMOUS = {"is_service": False, "role": "anon", "scopes": []}
 SERVICE = {"is_service": True}
@@ -99,8 +100,9 @@ def register(app: Any, platform: Platform) -> None:
 
     def upload_limit(state) -> int:
         """The largest upload this environment accepts: its own MAX_UPLOAD_BYTES, else the platform's."""
-        return platform.limit(
-            state.env_name, "MAX_UPLOAD_BYTES", platform.settings.max_upload_bytes
+        return quotas.upload_cap(
+            state,
+            platform.limit(state.env_name, "MAX_UPLOAD_BYTES", platform.settings.max_upload_bytes),
         )
 
     async def bucket_for(ctx: HttpContext, name: str):

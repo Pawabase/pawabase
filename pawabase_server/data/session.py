@@ -30,6 +30,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from pawabase_server.core.ids import new_ulid
+from pawabase_server.data.isolation import developer_source
 from pawabase_server.data.source import timed
 from pawabase_server.data.sql import (
     JSON_TYPES,
@@ -209,12 +210,18 @@ class DbSession:
 class Transaction:
     """``async with runtime.transaction() as db``: commit on success, roll back on error."""
 
-    def __init__(self, state: Any) -> None:
+    def __init__(self, state: Any, platform: Any = None) -> None:
         self._state = state
+        self._platform = platform
         self._context: Any = None
 
     async def __aenter__(self) -> DbSession:
-        source = await self._state.source()
+        # Developer SQL: on the environment's confined connection when a platform is given (see ``data.isolation``).
+        source = (
+            await developer_source(self._platform, self._state)
+            if self._platform is not None
+            else await self._state.source()
+        )
         self._context = source.transaction()
         client = await self._context.__aenter__()
         return DbSession(source, self._state.specs, client)

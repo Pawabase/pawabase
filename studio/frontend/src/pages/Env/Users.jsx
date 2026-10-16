@@ -1,7 +1,7 @@
 import { useState } from "react";
-import Layout, { envHref } from "../../components/Layout";
+import Layout, { envHref, useSection } from "../../components/Layout";
 import { Icon } from "../../components/icons";
-import { Badge, Button, Card, Field, IconButton, Json, JsonInput, Loading, Modal, PageHead, Section, Segmented, Sheet, Switch, Table, TagInput, Tabs, useAction, when } from "../../components/ui";
+import { Badge, Button, Card, Field, IconButton, Json, JsonInput, Loading, Modal, PageHead, Section, Segmented, Sheet, SideMenu, Switch, Table, TagInput, useAction, when } from "../../components/ui";
 import { PermissionPicker, RolePicker } from "../../components/AccessPickers";
 import { api, del, envPath, patch, post, put, useApi } from "../../lib/api";
 import Domains from "./auth/Domains";
@@ -62,7 +62,7 @@ const AUTH_ABOUT = {
 };
 
 export default function Users({ env }) {
-  const [tab, setTab] = useState("users");
+  const [tab, setTab] = useSection(Object.keys(AUTH_LABELS), "users");
   const base = `/envs/${env}`;
   const subnav = {
     title: "Users & auth",
@@ -720,8 +720,9 @@ function EmailsSection({ value, onChange }) {
   const reset = () => { const next = { ...value }; delete next[kind]; onChange(next); };
   return (
     <Section title="Email templates" description="Subject and body for each auth email. Leave blank to use the built-in default.">
-      <Tabs value={kind} onChange={setKind} tabs={EMAIL_KINDS.map(([v, label]) => ({ value: v, label }))} />
-      <div style={{ marginTop: 12 }}>
+      <div className="split-pane">
+      <SideMenu label="Emails" items={EMAIL_KINDS.map(([v, label]) => ({ value: v, label, sub: value[v] ? "Customised" : undefined }))} value={kind} onChange={setKind} />
+      <div>
         <Field label="Subject" hint={`Default: “${meta[2]}”. Placeholders: {project} {email} {link}${kind === "invite" ? " {organization} {role}" : ""}.`}>
           <input value={override.subject || ""} onChange={(e) => set({ subject: e.target.value })} placeholder={meta[2]} />
         </Field>
@@ -731,6 +732,7 @@ function EmailsSection({ value, onChange }) {
         {(override.subject || override.text) && (
           <Button size="sm" onClick={reset}>Reset to default</Button>
         )}
+      </div>
       </div>
     </Section>
   );

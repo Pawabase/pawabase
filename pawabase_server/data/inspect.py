@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
+from sqlglot import exp, parse
+from sqlglot.errors import SqlglotError
+
 from pawabase_server.data.source import DataSource
 from pawabase_server.data.sql import check_identifier
+
+# sqlglot logs a warning each time it keeps a statement it cannot model (``EXPLAIN``, ``SHOW``) as a command; that is expected here.
+logging.getLogger("sqlglot").setLevel(logging.ERROR)
 
 
 async def list_tables(source: DataSource) -> list[str]:
@@ -187,31 +194,46 @@ async def describe_table(source: DataSource, table: str) -> dict[str, Any]:
     }
 
 
-READ_ONLY_PREFIXES = ("select", "with", "explain", "pragma", "show", "describe")
+#: Statements that only describe (``EXPLAIN``, ``SHOW``), which sqlglot keeps as an opaque command. They take the read path, where
+#: the database itself refuses a write (``EXPLAIN ANALYZE DELETE`` included), so the keyword is enough to route them.
+DESCRIBING_COMMANDS = {"EXPLAIN", "SHOW"}
 
 
-def is_read_only(sql: str) -> bool:
-    """A conservative check that a statement only reads.
+def parse_one_statement(sql: str, dialect: str | None = None) -> exp.Expression | None:
+    """The single statement *sql* holds, or ``None`` when it does not parse or holds more than one.
 
-    Used to keep ``db.query`` blocks and Studio's read mode honest. Multiple
-    statements are refused outright.
+    MySQL's driver placeholder ``%s`` is not SQL sqlglot reads; for classifying, it stands for a ``?`` (the text run is unchanged).
     """
-    stripped = sql.strip().rstrip(";").strip()
-    if ";" in stripped:
+    text = sql.replace("%s", "?") if dialect == "mysql" else sql
+    try:
+        statements = [node for node in parse(text, read=dialect) if node is not None]
+    except SqlglotError:
+        return None
+    return statements[0] if len(statements) == 1 else None
+
+
+def describes(node: exp.Expression) -> bool:
+    """``EXPLAIN …``, ``SHOW …``, ``DESCRIBE t`` or a ``PRAGMA``: statements that report rather than change (enforced at execution)."""
+    if isinstance(node, (exp.Describe, exp.Pragma, exp.Show)):
+        return True
+    return isinstance(node, exp.Command) and str(node.this).upper() in DESCRIBING_COMMANDS
+
+
+def removes_data(sql: str, dialect: str | None = None) -> bool:
+    """``DELETE``, ``DROP`` or ``TRUNCATE``: a write that only takes data away (allowed past a database-size limit)."""
+    node = parse_one_statement(sql, dialect)
+    return isinstance(node, (exp.Delete, exp.Drop, exp.TruncateTable))
+
+
+def is_read_only(sql: str, dialect: str | None = None) -> bool:
+    """Classify a single query AST; execution still requires database enforcement."""
+    node = parse_one_statement(sql, dialect)
+    if node is None:
         return False
-    lowered = stripped.lower()
-    if not lowered.startswith(READ_ONLY_PREFIXES):
+    if describes(node):
+        return True
+    if not isinstance(node, exp.Query):
         return False
-    forbidden = (
-        " insert ",
-        " update ",
-        " delete ",
-        " drop ",
-        " alter ",
-        " create ",
-        " truncate ",
-        " grant ",
-        " attach ",
+    return not any(
+        isinstance(item, (exp.DML, exp.DDL, exp.Into, exp.Lock, exp.Command)) for item in node.walk()
     )
-    padded = f" {lowered} "
-    return not any(word in padded for word in forbidden)

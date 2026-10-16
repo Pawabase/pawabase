@@ -146,6 +146,10 @@ async def test_the_bridge_and_the_explorer_refuse_other_environments_and_infra_w
         "/studio/api/explorer/request", json={"env": "other-prod", "path": "/orders"}, headers=csrf
     )
     assert explored.status_code == 403 and "not part of your project" in explored.json()["detail"]
+    catalog = await confined.http.get(
+        "/studio/api/explorer/openapi?env=other-prod&version=v1"
+    )
+    assert catalog.status_code == 403 and "not part of your project" in catalog.json()["detail"]
     signed = await confined.http.post(
         "/studio/api/explorer/sign-in",
         json={"env": "other-prod", "email": "a@b.c", "password": "x"},

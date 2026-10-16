@@ -24,6 +24,7 @@ from pawabase.functions import FunctionContext, FunctionError, get_exact, load_c
 from pawabase.runtime import RemoteRuntime
 
 from pawabase_server.core.failures import report
+from pawabase_server.functions.sandbox.confine import ConfinementUnavailable, confine
 
 try:
     import resource
@@ -152,6 +153,7 @@ async def invoke(
         branch=loaded["branch"],
     )
     reply: dict[str, Any] = {"t": "done", "id": number}
+    cpu_budget(spec.timeout)
     try:
         reply.update(
             outcome="ok",
@@ -184,9 +186,36 @@ async def invoke(
     channel.send(reply)
 
 
+def cpu_budget(seconds: float | None) -> None:
+    """Let the next call use *seconds* of CPU time on top of what the worker has used; past it the kernel sends ``SIGXCPU``.
+
+    The wall-clock timeout cannot see CPU spent on other threads; this can. Only the soft limit moves, so it can be raised again.
+    """
+    if resource is None or not seconds:
+        return
+    usage = resource.getrusage(resource.RUSAGE_SELF)
+    used = usage.ru_utime + usage.ru_stime
+    _, hard = resource.getrlimit(resource.RLIMIT_CPU)
+    soft = int(used + seconds) + 1
+    if hard != resource.RLIM_INFINITY:
+        soft = min(soft, hard)
+    resource.setrlimit(resource.RLIMIT_CPU, (soft, hard))
+
+
 def load(message: dict[str, Any]) -> dict[str, Any]:
     apply_limits(message.get("limits") or {})
     libraries = [Path(p) for p in message.get("libs") or []]
+    mode = message.get("confinement") or "off"
+    confinement = (
+        confine(
+            mode,
+            artifact=Path(message["artifact"]),
+            libs=libraries,
+            tmp=Path(os.environ.get("TMPDIR") or "/tmp"),
+        )
+        if mode != "off"
+        else {"mode": "off"}
+    )
     for library in reversed(
         libraries
     ):  # for good, not only while importing: a function may import lazily
@@ -201,6 +230,7 @@ def load(message: dict[str, Any]) -> dict[str, Any]:
         "artifact": message["artifact"],
         "functions": code.functions,
         "errors": code.errors,
+        "confinement": confinement,
     }
 
 
@@ -223,8 +253,16 @@ async def serve() -> None:
             try:
                 loaded = load(message)
                 channel.send(
-                    {"t": "ready", "functions": loaded["functions"], "errors": loaded["errors"]}
+                    {
+                        "t": "ready",
+                        "functions": loaded["functions"],
+                        "errors": loaded["errors"],
+                        "confinement": loaded["confinement"],
+                    }
                 )
+            except ConfinementUnavailable as exc:
+                # Nothing of the deployment was imported: the host refuses to run it here.
+                channel.send({"t": "ready", "functions": [], "errors": [], "unconfined": str(exc)})
             except Exception as exc:  # noqa: BLE001
                 channel.send(
                     {"t": "ready", "functions": [], "errors": [f"{type(exc).__name__}: {exc}"]}

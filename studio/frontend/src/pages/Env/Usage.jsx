@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import Layout from "../../components/Layout";
 import { Badge, Card, Loading, PageHead } from "../../components/ui";
-import { useApi } from "../../lib/api";
+import { envPath, useApi } from "../../lib/api";
 
 const number = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
 const fmt = (value) => number(value).toLocaleString();
@@ -16,6 +16,15 @@ const reset = (seconds) => {
   const value = number(seconds);
   if (!value) return "Usage refreshes automatically";
   return value >= 86400 ? `Resets in ${Math.ceil(value / 86400)} days` : `Resets in ${Math.ceil(value / 3600)} hours`;
+};
+
+/** Entitlement label → the plan limit it shows, for matching usage. */
+const LIMIT_KEYS = {
+  "New users / month": "max_users_per_month", "Active users": "max_active_users", "API keys": "max_api_keys", "Auth providers": "max_auth_providers",
+  "Sessions per user": "max_auth_sessions_per_user", "MFA factors / user": "max_mfa_factors_per_user", "Flow runs / month": "max_flow_runs_per_month",
+  "Scheduled jobs": "max_scheduled_jobs", "Function invocations / month": "max_function_invocations_per_month", "Function deployments": "max_function_deployments",
+  Storage: "max_storage_bytes", Database: "max_database_bytes", "Largest upload": "max_upload_bytes", Backups: "max_backups",
+  Environments: "max_environments", "Realtime channels": "max_realtime_channels", "Outbound webhooks": "max_webhooks", "Inbound hooks": "max_inbound_hooks",
 };
 
 function Meter({ id, label, used, limit, detail, selected, onSelect }) {
@@ -34,12 +43,21 @@ function Policy({ label, value, suffix, description }) {
   return <div className="usage-policy"><span>{label}</span><strong>{enabled ? `${fmt(value)}${suffix}` : "Unlimited"}</strong><small>{description}</small></div>;
 }
 
-function Entitlement({ label, value, format = fmt }) {
-  return <div className="usage-entitlement"><span>{label}</span><strong>{number(value) ? format(value) : "Unlimited"}</strong></div>;
+function Entitlement({ label, value, used, format = fmt }) {
+  const limited = number(value) > 0;
+  const percent = limited && used != null ? Math.min(100, Math.round((number(used) / number(value)) * 100)) : null;
+  const state = percent >= 90 ? "danger" : percent >= 70 ? "warn" : "good";
+  return <div className="usage-entitlement">
+    <span>{label}</span>
+    <strong>{limited ? (used != null ? <>{format(used)} <small className="muted">of {format(value)}</small></> : format(value)) : "Unlimited"}</strong>
+    {percent != null && <div className="usage-track" title={`${percent}% used`}><i className={state} style={{ width: `${percent}%` }} /></div>}
+  </div>;
 }
 
-export default function Usage() {
+export default function Usage({ env }) {
   const projectUsage = useApi("/usage", { service: "project", interval: 15000 });
+  const planUsage = useApi(env ? envPath(env, "/plan-usage") : null, { interval: 30000 });
+  const usedOf = Object.fromEntries((planUsage.data?.data || []).map((row) => [row.limit, row.used]));
   const [activeMetric, setActiveMetric] = useState("day");
   const [category, setCategory] = useState("All");
   const project = projectUsage.data?.project || {};
@@ -65,7 +83,7 @@ export default function Usage() {
     ["Data", "Largest upload", limits.max_upload_bytes, bytes], ["Data", "Backups", limits.max_backups],
     ["Infrastructure", "Environments", limits.max_environments], ["Infrastructure", "Realtime channels", limits.max_realtime_channels],
     ["Infrastructure", "Outbound webhooks", limits.max_webhooks], ["Infrastructure", "Inbound hooks", limits.max_inbound_hooks],
-  ].map(([group, label, value, format]) => ({ group, label, value, format })), [limits]);
+  ].map(([group, label, value, format]) => ({ group, label, value, format, key: LIMIT_KEYS[label], used: usedOf[LIMIT_KEYS[label]] })), [limits, usedOf]);
   const visibleEntitlements = category === "All" ? entitlements : entitlements.filter((item) => item.group === category);
 
   return <Layout title="Usage & limits" crumbs={["Usage & limits"]}>
@@ -95,7 +113,7 @@ export default function Usage() {
           {["All", "Access", "Automation", "Data", "Infrastructure"].map((item) => <button key={item} type="button" role="tab" aria-selected={category === item} className={category === item ? "active" : ""} onClick={() => setCategory(item)}>{item}</button>)}
         </div>
         <div className="usage-entitlement-grid">
-          {visibleEntitlements.map((item) => <Entitlement key={item.label} label={item.label} value={item.value} format={item.format} />)}
+          {visibleEntitlements.map((item) => <Entitlement key={item.label} label={item.label} value={item.value} used={item.used} format={item.format} />)}
         </div>
       </Card>
     </div>}</Loading>

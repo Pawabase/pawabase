@@ -22,7 +22,9 @@ from pawabase_server.db.models import ApiKey, Environment, Project, ProjectDatab
 from pawabase_server.environments import blueprints, env_settings
 from pawabase_server.environments.keys import create_key
 from pawabase_server.identity import directory, hosted, legal, signup_form
+from pawabase_server.identity.environment import enabled_provider_names
 from pawabase_server.platform import Platform
+from pawabase_server.projects import quotas
 from pawabase_server.projects.manager import attach_to_default_project
 from pawabase_server.projects.manager import view as project_view
 from pawabase_server.routes.common import (
@@ -203,6 +205,9 @@ def register(r: Router, platform: Platform) -> None:
             raise HTTPException(
                 status_code=403, detail="the installation environment limit has been reached"
             )
+        default = await Project.get_or_none(is_default=True)
+        if default is not None:
+            await quotas.check_project_count(default, "max_environments", extra)
 
     def key_limit(env: str) -> int:
         return platform.limit(
@@ -543,6 +548,12 @@ def register(r: Router, platform: Platform) -> None:
             if section in updates and updates[section] is not None:
                 merged = {**(getattr(environment, section) or {}), **updates[section]}
                 setattr(environment, section, {k: v for k, v in merged.items() if v is not None})
+        if "auth" in updates:
+            # Counted as saved: the plan limits sign-in providers that are on and usable.
+            quotas.check_auth_providers(
+                (await platform.state(env)).project_limits,
+                enabled_provider_names((environment.auth or {}).get("providers") or {}),
+            )
         if updates.get("is_default"):
             await Environment.all().update(is_default=False)
             environment.is_default = True

@@ -46,6 +46,7 @@ from pawabase_server.flows import validate_flow
 from pawabase_server.infra.storage import transform as storage_transform
 from pawabase_server.platform import Platform
 from pawabase_server.policies import PolicyEngine, PolicyError, validate_condition
+from pawabase_server.projects import quotas
 from pawabase_server.routes.common import (
     MANAGE,
     NAME_PATTERN,
@@ -212,6 +213,9 @@ class ScheduleBody(BaseModel):
     target: str = Field(min_length=1)
     payload: Any = None
     enabled: bool = True
+    timezone: str | None = None
+    overlap: Literal["allow", "skip"] = "allow"
+    catch_up: bool = False
 
 
 # ── validation ───────────────────────────────────────────────────────────────
@@ -426,9 +430,11 @@ async def validate_schedule(platform, env, body: ScheduleBody) -> dict[str, Any]
         from sillo.work.scheduler import CronTrigger
 
         try:
-            CronTrigger(body.cron)
+            CronTrigger(body.cron, timezone=body.timezone or None)
         except Exception as exc:
             raise _invalid(f"cron: {exc}") from exc
+    elif body.timezone:
+        raise _invalid("timezone applies to a cron schedule")
     return body.model_dump()
 
 
@@ -490,6 +496,7 @@ KINDS: list[dict[str, Any]] = [
         "body": WebhookBody,
         "validate": validate_webhook,
         "view": secret_free,
+        "limit": "max_webhooks",
     },
     {
         "path": "inbound-hooks",
@@ -498,8 +505,15 @@ KINDS: list[dict[str, Any]] = [
         "validate": validate_inbound,
         "view": secret_free,
         "key": "slug",
+        "limit": "max_inbound_hooks",
     },
-    {"path": "schedules", "model": Schedule, "body": ScheduleBody, "validate": validate_schedule},
+    {
+        "path": "schedules",
+        "model": Schedule,
+        "body": ScheduleBody,
+        "validate": validate_schedule,
+        "limit": "max_scheduled_jobs",
+    },
 ]
 
 
@@ -627,6 +641,8 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
             return created({**draft_view(environment, row), **reveal})
         if await model.filter(environment=environment, **natural).exists():
             raise HTTPException(status_code=409, detail=f"{path[:-1]} already exists")
+        if kind.get("limit"):
+            await quotas.check_count(await platform.state(env), kind["limit"])
         item = await model.create(environment=environment, **data)
         await changed(ctx, environment, f"{path}.created", str(getattr(item, key_field)))
         return created({**view(item), **reveal})

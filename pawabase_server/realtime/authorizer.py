@@ -60,6 +60,8 @@ class Authorizer:
         rule = config.rule_for(channel)
         if credential.get("is_service"):
             return rule
+        if action == "publish" and channel.startswith("resource:"):
+            raise PermissionError("resource change channels are server-published")
         if not rule.permits(channel, auth):
             self.stats.bump("denied", env=env)
             raise PermissionError("this channel belongs to someone else")

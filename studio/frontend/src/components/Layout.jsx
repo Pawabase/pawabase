@@ -21,13 +21,69 @@ export function dataSubnav(env, active) {
   };
 }
 
+/** The part of a page shown now, kept in ``?section=`` so a reload, a shared link and Back return to it. */
+export function useSection(keys, fallback = Array.isArray(keys) ? keys[0] : undefined) {
+  // ``keys`` is the list of sections, or a test for pages whose sections are their own records (``fn:checkout``).
+  const valid = Array.isArray(keys) ? (value) => keys.includes(value) : keys;
+  const read = () => {
+    const value = new URLSearchParams(window.location.search).get("section");
+    return value && valid(value) ? value : fallback;
+  };
+  const [section, setSection] = useState(read);
+  useEffect(() => {
+    const back = () => setSection(read());
+    window.addEventListener("popstate", back);
+    return () => window.removeEventListener("popstate", back);
+  // keys are a constant list per page
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const choose = (next) => {
+    setSection(next);
+    const target = new URL(window.location.href);
+    if (next === fallback) target.searchParams.delete("section");
+    else target.searchParams.set("section", next);
+    window.history.pushState(window.history.state, "", `${target.pathname}${target.search}`);
+  };
+  return [section, choose];
+}
+
+/** A secondary sidebar listing a page's sections: ``groups`` is ``[{ title?, items: [[key, label, sub?, extra?], …] }]``. */
+export function sectionNav(title, groups, active, onSelect, extra = {}) {
+  return {
+    title,
+    groups: groups.map((group) => ({
+      title: group.title,
+      items: group.items.map(([key, label, sub, more]) => ({ key, label, sub, ...(more || {}) })),
+    })),
+    active,
+    onSelect,
+    ...extra,
+  };
+}
+
+/** The pages under Webhooks: what goes out, what came of it, and what comes in. */
+export const WEBHOOK_PAGES = [["webhooks", "Endpoints", "Outbound: events sent to your URLs"], ["webhook-deliveries", "Deliveries", "Every attempt, with retries"], ["inbound-hooks", "Inbound hooks", "URLs other services call"]];
+
+/** The secondary navigation shared by every Webhooks page. */
+export function webhooksSubnav(env, active) {
+  return {
+    title: "Webhooks",
+    groups: [
+      { title: "Outbound", items: WEBHOOK_PAGES.slice(0, 2).map(([key, label, sub]) => ({ key, label, sub, href: envHref(env, key) })) },
+      { title: "Inbound", items: WEBHOOK_PAGES.slice(2).map(([key, label, sub]) => ({ key, label, sub, href: envHref(env, key) })) },
+      { items: [{ key: "events", label: "Events & runs", href: envHref(env, "events"), external: true }] },
+    ],
+    active,
+  };
+}
+
 export const ENV_NAV = [
   { title: "Build", items: [
     ["overview", "Overview"], ["data", "Data", "tables", "database"], ["policies", "Policies"], ["routes", "Routes"], ["explorer", "API Explorer"], ["functions", "Functions"],
   ] },
   { title: "Automate", items: [
     ["flows", "Flows"], ["subscriptions", "Event subscriptions"], ["schedules", "Schedules"],
-    ["webhooks", "Webhooks"], ["inbound-hooks", "Inbound hooks"],
+    ["webhooks", "Webhooks"],
   ] },
   { title: "Services", items: [["users", "Users & auth"], ["mail", "Mail"], ["storage", "Storage"], ["realtime", "Realtime"], ["networking", "Networking"], ["status", "Status page"]] },
   { title: "Operate", items: [
@@ -197,6 +253,48 @@ function SidebarControl({ mode, onChange }) {
   );
 }
 
+/** Folders in the secondary sidebar: ``tree`` is ``[{ key, title, icon?, folders?: [{ key, title, items }], items? }]``.
+ *  A folder opens on click; the one holding the active item, and every folder while searching, opens on its own. */
+function SubNavTree({ tree, active, forceOpen, row }) {
+  const [open, setOpen] = useState(() => new Set());
+  const holds = (node) => (node.items || []).some((item) => item.key === active) || (node.folders || []).some(holds);
+  useEffect(() => {
+    if (!active) return;
+    setOpen((current) => {
+      const next = new Set(current);
+      for (const node of tree) {
+        if (holds(node)) next.add(node.key);
+        for (const folder of node.folders || []) if (holds(folder)) next.add(folder.key);
+      }
+      return next;
+    });
+  // reopen when the active item changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+  const toggle = (key) => setOpen((current) => { const next = new Set(current); next.has(key) ? next.delete(key) : next.add(key); return next; });
+  const count = (node) => (node.items || []).length + (node.folders || []).reduce((sum, folder) => sum + count(folder), 0);
+  const folder = (node, depth) => {
+    const isOpen = forceOpen || open.has(node.key);
+    return (
+      <div key={node.key} className={`subnav-folder depth-${depth} ${isOpen ? "open" : ""}`}>
+        <button type="button" className="subnav-folder-head" aria-expanded={isOpen} onClick={() => toggle(node.key)}>
+          <Icon name="chevronRight" size={13} className="subnav-chevron" />
+          {node.icon && <Icon name={node.icon} size={14} className="faint" />}
+          <span className="grow">{node.title}</span>
+          <span className="subnav-count">{count(node)}</span>
+        </button>
+        {isOpen && (
+          <div className="subnav-folder-body">
+            {(node.folders || []).map((child) => folder(child, depth + 1))}
+            {(node.items || []).map(row)}
+          </div>
+        )}
+      </div>
+    );
+  };
+  return <div className="subnav-tree">{tree.map((node) => folder(node, 0))}</div>;
+}
+
 /** A second column of navigation for a section with parts of its own; the main sidebar folds to an icon rail while it is open. */
 function SubNav({ subnav, backHref }) {
   const row = (item) => {
@@ -232,8 +330,10 @@ function SubNav({ subnav, backHref }) {
       )}
       <nav className="subnav-list">
         {subnav.loading && <p className="subnav-empty">Loading…</p>}
-        {!subnav.loading && subnav.groups.every((group) => group.items.length === 0) && <p className="subnav-empty">{subnav.empty || "Nothing here yet."}</p>}
-        {subnav.groups.map((group, index) => group.items.length > 0 && (
+        {subnav.tree && !subnav.loading && subnav.tree.length === 0 && <p className="subnav-empty">{subnav.empty || "Nothing here yet."}</p>}
+        {subnav.tree && <SubNavTree tree={subnav.tree} active={subnav.active} forceOpen={subnav.expandAll} row={row} />}
+        {!subnav.tree && !subnav.loading && subnav.groups.every((group) => group.items.length === 0) && <p className="subnav-empty">{subnav.empty || "Nothing here yet."}</p>}
+        {!subnav.tree && subnav.groups.map((group, index) => group.items.length > 0 && (
           <div key={group.title || index} className="subnav-group">
             {group.title && <div className="nav-title">{group.title}</div>}
             {group.items.map(row)}
@@ -290,7 +390,7 @@ export default function Layout({ title, crumbs = [], children, full, subnav, flo
                   <div className="nav-title">{group.title}</div>
                   <div className="nav-items">
                     {group.items.map(([key, label, to, icon]) => (
-                      <Link key={key} data-tour={`nav-${key}`} href={envHref(env, to || key)} className={section === key || (key === "data" && DATA_PAGES.some(([page]) => page === section)) ? "active" : ""} title={label}>
+                      <Link key={key} data-tour={`nav-${key}`} href={envHref(env, to || key)} className={section === key || (key === "data" && DATA_PAGES.some(([page]) => page === section)) || (key === "webhooks" && WEBHOOK_PAGES.some(([page]) => page === section)) ? "active" : ""} title={label}>
                         <Icon name={icon || key} size={16} /><span className="label">{label}</span>
                       </Link>
                     ))}

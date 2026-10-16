@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import shutil
+import signal
 import sys
 import tempfile
 import time
@@ -50,6 +51,20 @@ STDERR_LINES = 20
 REAP_SECONDS = 30.0
 
 
+def resolve_confinement(setting: str) -> str:
+    """``required`` or ``off`` from the setting: ``auto`` requires confinement where it exists (Linux) and warns where it cannot."""
+    if setting != "auto":
+        return setting
+    if sys.platform == "linux":
+        return "required"
+    logger.warning(
+        "function sandbox: %s has no Landlock or seccomp; functions run in worker processes without filesystem or network "
+        "confinement. Run Pawabase on Linux for confined functions.",
+        sys.platform,
+    )
+    return "off"
+
+
 class SandboxFailure(Exception):
     """A sandboxed function failed in a way it did not choose (it raised, or its process stopped). ``failure`` says what and where."""
 
@@ -66,8 +81,10 @@ class Limits:
     workers: int = 4
     idle_seconds: int = 300
     start_seconds: int = 30
+    #: ``required`` or ``off`` (see :func:`resolve_confinement`).
+    confinement: str = "off"
 
-    def for_worker(self) -> dict[str, int]:
+    def for_worker(self) -> dict[str, Any]:
         return {"memory_mb": self.memory_mb, "files": self.files, "file_mb": self.file_mb}
 
 
@@ -88,6 +105,8 @@ class Worker:
         self.stderr: deque[str] = deque(maxlen=STDERR_LINES)
         self._drain: asyncio.Task | None = None
         self._tmp = Path(tempfile.mkdtemp(prefix="pawabase-sandbox-"))
+        #: What the worker reported confining itself with (see ``confine.confine``).
+        self.confinement: dict[str, Any] = {}
 
     @property
     def alive(self) -> bool:
@@ -101,6 +120,8 @@ class Worker:
             "PYTHONDONTWRITEBYTECODE": "1",
             "PYTHONUNBUFFERED": "1",
             "LANG": "C.UTF-8",
+            # glibc reserves 64 MB of address space per thread arena; under the address-space limit that stops threads early.
+            "MALLOC_ARENA_MAX": "2",
             "TMPDIR": str(self._tmp),
             "HOME": str(self._tmp),
         }
@@ -117,6 +138,8 @@ class Worker:
             cwd=str(API_ROOT),
             env=self._environment(),
             limit=MAX_MESSAGE,
+            # Its own process group: nothing it signals as a group reaches the server.
+            start_new_session=True,
         )
         self._drain = asyncio.create_task(self._drain_stderr())
         await self.send(
@@ -128,6 +151,7 @@ class Worker:
                 "env": env,
                 "branch": branch,
                 "limits": self.limits.for_worker(),
+                "confinement": self.limits.confinement,
             }
         )
         try:
@@ -141,8 +165,19 @@ class Worker:
                     hint="Check the deployment's libraries and that it imports without errors.",
                 )
             ) from exc
+        if ready.get("unconfined"):
+            await self.kill()
+            raise SandboxFailure(
+                Failure(
+                    "SandboxConfinementUnavailable",
+                    f"the function process could not be confined: {ready['unconfined']}",
+                    hint="Functions run only confined on this server (PAWABASE_SANDBOX_CONFINEMENT). Use a Linux kernel with "
+                    "Landlock (5.13+) and seccomp, or set PAWABASE_SANDBOX_CONFINEMENT=off for code you trust.",
+                )
+            )
         self.functions = set(ready.get("functions") or [])
         self.errors = list(ready.get("errors") or [])
+        self.confinement = ready.get("confinement") or {}
 
     async def _drain_stderr(self) -> None:
         assert self.process is not None and self.process.stderr is not None
@@ -289,6 +324,12 @@ class SandboxPool:
     def _crashed(self, worker: Worker) -> Failure:
         code = worker.process.returncode if worker.process is not None else None
         tail = f" ({worker.stderr[-1][:200]})" if worker.stderr else ""
+        if code == -signal.SIGXCPU:
+            return Failure(
+                "CpuLimitExceeded",
+                "the function used more CPU time than its limit and was stopped",
+                hint="A call may use as much CPU time as its timeout allows. Move heavy work to a job, or raise the timeout.",
+            )
         return Failure(
             "SandboxCrashed",
             f"the function's process stopped (exit code {code}){tail}",

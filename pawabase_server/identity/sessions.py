@@ -29,6 +29,7 @@ from pawabase_server.identity import devices, links, mfa, rbac, signup_form
 from pawabase_server.identity.accounts import Accounts, user_view
 from pawabase_server.identity.clientinfo import client_info
 from pawabase_server.identity.environment import AuthConfig
+from pawabase_server.projects import quotas
 
 
 async def log_event(
@@ -179,6 +180,8 @@ async def start_session(
                 "methods": mfa.methods_offered(config),
             },
         )
+    # A user's first sign-in of the month counts against the plan's monthly active users.
+    await quotas.check_monthly_user(config, user)
     pair = await user.issue_token_pair(
         secret=accounts.refresh_secret(config.env),
         access_expires=timedelta(seconds=config.access_ttl),
@@ -195,10 +198,16 @@ async def start_session(
         ip=ip,
         user_agent=agent,
     )
-    if config.max_sessions > 0:
-        # Over the limit, the oldest sessions end so the new one can start.
+    plan_sessions = quotas.allowance(config.project_limits, "max_auth_sessions_per_user")
+    most = (
+        min(n for n in (config.max_sessions, plan_sessions) if n > 0)
+        if (config.max_sessions > 0 or plan_sessions > 0)
+        else 0
+    )
+    if most > 0:
+        # Over the limit (the environment's, or the project plan's when smaller), the oldest sessions end so the new one can start.
         active = await SessionInfo.filter(user=user, revoked_at=None).order_by("created_at")
-        for old in active[: max(0, len(active) - config.max_sessions)]:
+        for old in active[: max(0, len(active) - most)]:
             await revoke_session(user, old.family)
     from pawabase_server.identity.accounts import record_success
 

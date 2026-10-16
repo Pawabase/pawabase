@@ -50,6 +50,12 @@ class FakePlatform:
             raise Unavailable("unavailable")
         return self.realtime
 
+    async def state(self, env: str) -> Any:
+        """An environment outside any project: no plan limits apply."""
+        from types import SimpleNamespace
+
+        return SimpleNamespace(env_name=env, project_id=None, project_limits={})
+
     async def emit_event(self, env: str, name: str, payload: Any, *, actor: Any = None) -> str:
         self.events.append({"env": env, "name": name, "payload": payload, "actor": actor})
         return "e"

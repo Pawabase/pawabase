@@ -50,6 +50,7 @@ class Fanout:
         self.stats = stats
         self.instance = instance
         self.heartbeat_interval = heartbeat_interval
+        self.resource_delivery = None
         self._beat: asyncio.Task[None] | None = None
         self.channel = scoped(FANOUT_CHANNEL)
         self.emitter.on(self.channel, self._receive)
@@ -136,7 +137,14 @@ class Fanout:
             self.stats.bump("presence_diffs", env=env)
             await self.hub.broadcast(room, message)
             return
-        report = await self.hub.broadcast(room, message)
+        if channel.startswith("resource:"):
+            # Resource records must never enter the unconditional room broadcast.
+            if self.resource_delivery is None:
+                logger.error("resource delivery authorization is not configured")
+                return
+            report = await self.resource_delivery(env, channel, message)
+        else:
+            report = await self.hub.broadcast(room, message)
         self.stats.delivery(
             env,
             channel,

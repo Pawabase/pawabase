@@ -25,6 +25,7 @@ from pawabase_server.core.telemetry import note
 from pawabase_server.infra.storage.s3 import S3Driver
 from pawabase_server.infra.storage.transform import Variants
 from pawabase_server.policies import PolicyStorage
+from pawabase_server.projects import quotas
 
 
 class MimePatterns(tuple):
@@ -269,10 +270,10 @@ class StorageManager:
             note("storage", f"{event.action.value}:{event.bucket}/{event.key}", append=True)
             name = EVENT_NAMES.get(event.action)
             if name and event.outcome == "ok":
-                await self.platform.bus.emit(
+                await self.platform.emit_event(
+                    env,
                     name,
-                    env=env,
-                    payload={
+                    {
                         "bucket": event.bucket,
                         "key": event.key,
                         "size": event.size,
@@ -316,20 +317,26 @@ class StorageManager:
             signed_reads=model.signed_downloads,
             signed_writes=model.signed_uploads,
         )
-        max_bytes = int(
-            model.max_bytes
-            or self.platform.limit(
-                state.env_name, "MAX_UPLOAD_BYTES", self.platform.settings.max_upload_bytes
-            )
+        max_bytes = quotas.upload_cap(
+            state,
+            int(
+                model.max_bytes
+                or self.platform.limit(
+                    state.env_name, "MAX_UPLOAD_BYTES", self.platform.settings.max_upload_bytes
+                )
+            ),
         )
         driver = self.driver(state, name)
-        # Sillo buckets name themselves in storage events; keep the Pawabase name.
-        return Bucket(
+        # Sillo buckets name themselves in storage events; keep the Pawabase name. Metered: every write and delete moves the
+        # project's stored-bytes gauge, and a write past the plan's storage is refused (projects/quotas.py).
+        return quotas.MeteredBucket(
             name,
             driver,
             policy=policy,
             max_bytes=max_bytes,
             accepts=MimePatterns(model.accepts or ()),
+            platform=self.platform,
+            state=state,
         )
 
     async def close(self) -> None:

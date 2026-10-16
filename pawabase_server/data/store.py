@@ -211,7 +211,10 @@ class ResourceStore:
         return self.table.field(name)
 
     def _encode(self, column: str, value: Any) -> Any:
-        return encode_value(self.source.dialect, self.spec.field_map.get(column), value)
+        try:
+            return encode_value(self.source.dialect, self.spec.field_map.get(column), value)
+        except (ValueError, TypeError, OverflowError) as exc:
+            raise SqlError(f"invalid value for field {column!r}") from exc
 
     def _criterion(self, item: Filter):
         column = self._column(item.column)
@@ -323,6 +326,13 @@ class ResourceStore:
         unknown = set(data) - set(self.spec.field_map)
         if unknown:
             raise SqlError(f"unknown fields: {', '.join(sorted(unknown))}")
+        for name, value in data.items():
+            spec = self.spec.field_map[name]
+            if value is None and not spec.get("nullable", not spec.get("required", False)):
+                raise PawabaseError(
+                    f"Field {name!r} may not be null.", status=422, code="invalid_field",
+                    details={"field": name},
+                )
         return {key: self._encode(key, value) for key, value in data.items()}
 
     async def create(self, data: Mapping[str, Any], *, client: Any = None) -> dict[str, Any]:
@@ -412,7 +422,10 @@ class ResourceStore:
         )
         sql, params = query.get_parameterized_sql()
         runner = client or self.source.client
-        count, _ = await timed(runner, "execute_query", sql, params)
+        try:
+            count, _ = await timed(runner, "execute_query", sql, params)
+        except IntegrityError as exc:
+            raise constraint_error(exc) from exc
         return bool(count)
 
 

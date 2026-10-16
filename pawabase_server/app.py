@@ -42,6 +42,7 @@ from pawabase_server.db.database import (
 )
 from pawabase_server.db.models import Environment
 from pawabase_server.edge import Edge
+from pawabase_server.edge.firewall import Firewall
 from pawabase_server.edge.key_resolver import KeyResolver, lookup_key
 from pawabase_server.edge.networking import DomainSync
 from pawabase_server.edge.quotas import RequestQuota
@@ -223,7 +224,14 @@ def create_public(app: SilloApp, settings: Settings | None = None) -> Any:
         reservation=settings.request_quota_reservation,
         redis_url=settings.redis_url,
     )
-    edge = Edge(app, settings, resolver, rate_backend=rate_backend, request_quota=quota)
+    firewall = Firewall(
+        redis_url=settings.redis_url,
+        country_header=settings.firewall_country_header,
+        run=lambda work: record.ensure_context(None, work),
+    )
+    edge = Edge(
+        app, settings, resolver, rate_backend=rate_backend, request_quota=quota, firewall=firewall
+    )
 
     realtime = app.state["realtime"]
 
@@ -245,16 +253,19 @@ def create_public(app: SilloApp, settings: Settings | None = None) -> Any:
     app.state["request_quota"] = quota
     app.state["status_prober"] = prober
     app.state["domain_sync"] = domains
+    app.state["firewall"] = firewall
     app.state["health"] = health
 
     @app.on_startup
     async def begin() -> None:
         prober.start()
         domains.start()
+        firewall.start()
 
     async def end() -> None:
         await prober.stop()
         await domains.stop()
+        await firewall.stop()
         await edge.close()
 
     app.shutdown_handlers.insert(0, end)

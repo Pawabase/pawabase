@@ -36,7 +36,7 @@ from pawabase_server.core.ids import is_ulid
 from pawabase_server.core.ratelimit import rate_limit_middleware
 from pawabase_server.core.schemas import compile_model
 from pawabase_server.core.telemetry import note
-from pawabase_server.core.transformers import apply_transformer
+from pawabase_server.data.presentation import present_record
 from pawabase_server.data.resources import after_write, resource_tag
 from pawabase_server.data.store import (
     MAX_PAGE_SIZE,
@@ -46,6 +46,7 @@ from pawabase_server.data.store import (
     parse_sort,
 )
 from pawabase_server.policies import build_policy_context
+from pawabase_server.projects import quotas
 
 if TYPE_CHECKING:
     from sillo import SilloApp
@@ -94,12 +95,7 @@ def _request_id(ctx: HttpContext) -> str | None:
 
 
 async def _present(state: EnvironmentState, resource: Any, ctx: HttpContext, data: Any) -> Any:
-    if resource.transformer:
-        context = build_policy_context(ctx)
-        return await apply_transformer(
-            data, resource.transformer, context=context, registry=state.transformers
-        )
-    return data
+    return await present_record(state, resource, data, build_policy_context(ctx))
 
 
 async def _readable(
@@ -118,14 +114,14 @@ async def _readable(
         settings = operation_settings(target, "get") or operation_settings(target, "list")
     if settings is None:
         # No public read of the target at all: only service credentials see it.
-        return items if _is_service(ctx) else []
+        return await _present(state, target, ctx, items) if target and _is_service(ctx) else []
     policy = settings.get("policy") or DEFAULT_POLICY
     kept = [
         item
         for item in items
         if await state.engine.check(policy, build_policy_context(ctx, record=item))
     ]
-    if kept and target.transformer:
+    if kept:
         kept = await _present(state, target, ctx, kept)
     return kept
 
@@ -249,7 +245,8 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
                 sort=parse_sort(sort, spec),
                 limit=per_page,
                 offset=(page - 1) * per_page,
-                select=columns,
+                # Policies and expansions may need columns omitted by select.
+                select=None,
             )
             if plan.residual is not None:
                 context = build_policy_context(ctx)
@@ -267,6 +264,12 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
                     rows,
                     [name.strip() for name in expand.split(",") if name.strip()],
                 )
+            if columns:
+                # Validate projection even for an empty result set.
+                for column in columns:
+                    store._column(column)
+                expanded = {name.strip() for name in (expand or "").split(",")}
+                rows = [{k: v for k, v in row.items() if k in columns or k in expanded} for row in rows]
             body = {
                 "data": await _present(state, resource, ctx, rows),
                 "page": page,
@@ -369,6 +372,7 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
             )
             if not decision:
                 raise HTTPException(status_code=403, detail=decision.reason)
+            await quotas.check_database(state)
             store = await state.store(resource.name)
             record = await store.create(data)
             await after_write(

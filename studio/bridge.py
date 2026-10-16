@@ -6,6 +6,9 @@ and Studio forwards that call, confined to one path prefix per target, as itself
 
 from __future__ import annotations
 
+import asyncio
+import base64
+import copy
 import json
 import re
 import time
@@ -35,13 +38,16 @@ PUBLIC_PREFIXES = (
     "/flows/v1/",
     "/auth/v1/",
     "/storage/v1/",
+    "/files/v1/",
+    "/realtime/v1/",
     "/health/v1",
+    "/v1/status",
     "/docs/v1/",
     "/hooks/v1/",
 )
 ENV_NAME = re.compile(r"[a-z][a-z0-9_-]{0,62}")
 API_VERSION = re.compile(r"v[1-9][0-9]*")
-EXPLORER_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
+EXPLORER_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}
 #: Headers the explorer may not set: they would let a request borrow another identity or reach another host.
 BLOCKED_HEADERS = {
     "apikey",
@@ -76,8 +82,249 @@ async def _once(chunk: bytes):
     yield chunk
 
 
+def _without_path_parameters(path_item: dict[str, Any], names: set[str]) -> dict[str, Any]:
+    """Copy an OpenAPI path item after concrete values replaced placeholders."""
+    result = copy.deepcopy(path_item)
+    for value in [result, *(item for item in result.values() if isinstance(item, dict))]:
+        if "parameters" in value:
+            value["parameters"] = [
+                parameter
+                for parameter in value.get("parameters", [])
+                if not (
+                    isinstance(parameter, dict)
+                    and parameter.get("in") == "path"
+                    and parameter.get("name") in names
+                )
+            ]
+    return result
+
+
+def _function_body(path_item: dict[str, Any], function: dict[str, Any]) -> None:
+    """Document a deployed function's declared input fields on its concrete operation."""
+    fields = function.get("input_fields") or []
+    if not fields:
+        return
+    properties: dict[str, Any] = {}
+    required: list[str] = []
+    for field in fields:
+        if not isinstance(field, dict) or not field.get("name"):
+            continue
+        name = str(field["name"])
+        schema = {
+            key: value
+            for key, value in field.items()
+            if key not in {"name", "required", "read_only", "write_only"}
+        }
+        properties[name] = schema
+        if field.get("required"):
+            required.append(name)
+    body_schema: dict[str, Any] = {"type": "object", "properties": properties}
+    if required:
+        body_schema["required"] = required
+    for operation in path_item.values():
+        if isinstance(operation, dict) and operation.get("operationId"):
+            operation["summary"] = function.get("description") or f"Invoke {function['name']}"
+            operation["requestBody"] = {
+                "required": bool(required),
+                "content": {"application/json": {"schema": body_schema}},
+            }
+            operation["x-pawabase-inferred"] = "function"
+
+
+def _document_manual_bodies(path: str, path_item: dict[str, Any]) -> None:
+    """Fill the intentional OpenAPI gaps for handlers that parse streams or arbitrary JSON."""
+    if path.startswith(("/flows/v1/", "/hooks/v1/")):
+        operation = path_item.get("post")
+        if isinstance(operation, dict) and "requestBody" not in operation:
+            operation["requestBody"] = {
+                "required": False,
+                "content": {
+                    "application/json": {
+                        "schema": {"type": "object", "additionalProperties": True},
+                        "example": {},
+                    }
+                },
+            }
+    if path.startswith("/storage/v1/object/") and isinstance(path_item.get("put"), dict):
+        upload = path_item["put"]
+        upload.setdefault(
+            "requestBody",
+            {
+                "required": True,
+                "content": {
+                    "application/octet-stream": {
+                        "schema": {"type": "string", "format": "binary"}
+                    },
+                    "multipart/form-data": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {"file": {"type": "string", "format": "binary"}},
+                            "required": ["file"],
+                        }
+                    },
+                },
+            },
+        )
+        if "post" not in path_item:
+            path_item["post"] = copy.deepcopy(upload)
+            path_item["post"]["summary"] = "Upload an object (multipart or raw body)"
+    if (
+        path.startswith(("/storage/v1/object/", "/storage/v1/files/", "/storage/v1/share/"))
+        and isinstance(path_item.get("get"), dict)
+        and "head" not in path_item
+    ):
+        path_item["head"] = copy.deepcopy(path_item["get"])
+        path_item["head"]["summary"] = "Read response headers"
+
+
+def _expand_runtime_paths(
+    paths: dict[str, Any], env: str, definitions: dict[str, list[dict[str, Any]]]
+) -> dict[str, Any]:
+    """Turn name templates into the concrete endpoints present in one environment."""
+    expanded: dict[str, Any] = {}
+    functions = definitions.get("functions", [])
+    flows = definitions.get("flows", [])
+    hooks = definitions.get("hooks", [])
+    buckets = definitions.get("buckets", [])
+    for path, path_item in paths.items():
+        variants: list[tuple[str, dict[str, Any]]] = []
+        if path == "/functions/v1/{name}" and functions:
+            for function in functions:
+                name = str(function.get("name") or "")
+                if name:
+                    item = _without_path_parameters(path_item, {"name"})
+                    _function_body(item, function)
+                    variants.append((path.replace("{name}", name), item))
+        elif path == "/flows/v1/{name}" and flows:
+            for flow in flows:
+                definition = flow.get("definition") or {}
+                direct = any(
+                    (node.get("data") or {}).get("block") == "trigger.http"
+                    and not ((node.get("data") or {}).get("config") or {}).get("path")
+                    for node in definition.get("nodes", [])
+                )
+                if direct and flow.get("name"):
+                    variants.append(
+                        (
+                            path.replace("{name}", str(flow["name"])),
+                            _without_path_parameters(path_item, {"name"}),
+                        )
+                    )
+        elif path == "/hooks/v1/{env}/{slug}" and hooks:
+            for hook in hooks:
+                if hook.get("slug"):
+                    concrete = path.replace("{env}", env).replace("{slug}", str(hook["slug"]))
+                    variants.append((concrete, _without_path_parameters(path_item, {"env", "slug"})))
+        elif "{bucket}" in path and path.startswith("/storage/v1/") and buckets:
+            for bucket in buckets:
+                if bucket.get("name"):
+                    variants.append(
+                        (
+                            path.replace("{bucket}", str(bucket["name"])),
+                            _without_path_parameters(path_item, {"bucket"}),
+                        )
+                    )
+        if variants:
+            for concrete, item in variants:
+                _document_manual_bodies(concrete, item)
+                expanded[concrete] = item
+        else:
+            _document_manual_bodies(path, path_item)
+            expanded[path] = path_item
+    return expanded
+
+
+#: Management sections a person's own environment has but that reach into another (copying, previews): never listed.
+CROSS_ENVIRONMENT = {"promote", "previews"}
+
+
+def _for_the_application(path: str) -> bool:
+    """Whether the explorer lists *path*: the public data plane, and management of *this* environment only.
+
+    Installation-wide routes (other environments, workers, the runtime agent, projects, the audit log) are the operator's, not the
+    application developer's, and internal service routes are implementation details; neither is listed.
+    """
+    if path.startswith("/internal/"):
+        return False
+    if path.startswith(("/platform/", "/admin/")):
+        segments = [s for s in path.split("/") if s]
+        if "envs" not in segments or segments.index("envs") + 1 >= len(segments):
+            return False
+        if segments[segments.index("envs") + 1] != "{env}":
+            return False
+        return not CROSS_ENVIRONMENT.intersection(segments)
+    return True
+
+
 def register(app: SilloApp, deps: Deps) -> None:
     core = deps.core
+
+    @app.get("/studio/api/explorer/openapi", exclude_from_schema=True)
+    async def explorer_openapi(ctx: HttpContext):
+        """Return every documented API surface alongside the compiled app API.
+
+        The runtime document describes auth, functions, flows, storage,
+        realtime and the management plane.  The environment document is built
+        separately because resources and custom routes are compiled per
+        environment and per released API version.
+        """
+        env = str(ctx.query_params.get("env") or "")
+        version = str(ctx.query_params.get("version") or "v1")
+        if not ENV_NAME.fullmatch(env):
+            return JSONResponse({"detail": "invalid environment"}, status_code=400)
+        if not outside_free(ctx, env):
+            return JSONResponse(
+                {"detail": "that environment is not part of your project"}, status_code=403
+            )
+        if not API_VERSION.fullmatch(version):
+            return JSONResponse({"detail": "invalid API version"}, status_code=400)
+        try:
+            application = await core.request(
+                "GET", f"/platform/v1/envs/{env}/openapi", params={"version": version}
+            )
+            runtime = await core.request("GET", "/openapi.json")
+        except ServiceError as exc:
+            return error_response(exc)
+        # Internal service routes are implementation details, not endpoints an
+        # application developer can call. Platform and admin routes remain in
+        # the catalog: Studio executes those through its already-scoped bridge.
+        public_paths = {
+            path: item
+            for path, item in (runtime.get("paths") or {}).items()
+            if _for_the_application(path)
+        }
+        definition_paths = {
+            "functions": f"/platform/v1/envs/{env}/functions",
+            "flows": f"/platform/v1/envs/{env}/flows",
+            "hooks": f"/platform/v1/envs/{env}/inbound-hooks",
+            "buckets": f"/platform/v1/envs/{env}/buckets",
+        }
+
+        async def definitions(path: str) -> list[dict[str, Any]]:
+            try:
+                answer = await core.request("GET", path)
+                return answer.get("data", []) if isinstance(answer, dict) else []
+            except ServiceError:
+                # The catalog is still useful if one optional definition source
+                # is temporarily unavailable.
+                return []
+
+        values = await asyncio.gather(*(definitions(path) for path in definition_paths.values()))
+        inferred = dict(zip(definition_paths, values, strict=True))
+        public_paths = _expand_runtime_paths(public_paths, env, inferred)
+        runtime = {**runtime, "paths": public_paths}
+        return JSONResponse(
+            {
+                "openapi": "3.1.0",
+                "environment": env,
+                "version": version,
+                "inferred": {name: len(rows) for name, rows in inferred.items()},
+                "documents": [
+                    {"id": "application", "title": "Application API", "document": application},
+                    {"id": "runtime", "title": "Platform APIs", "document": runtime},
+                ],
+            }
+        )
 
     @app.get("/studio/api/project/usage", exclude_from_schema=True)
     async def project_usage(ctx: HttpContext):
@@ -197,13 +444,29 @@ def register(app: SilloApp, deps: Deps) -> None:
         if access_token:
             forwarded["Authorization"] = f"Bearer {access_token}"
         query = body.get("query") if isinstance(body.get("query"), dict) else None
-        payload = body.get("body") if method in {"POST", "PUT", "PATCH", "DELETE"} else None
+        payload = body.get("body")
+        body_present = bool(body.get("body_present")) or (
+            method in {"POST", "PUT", "PATCH", "DELETE"} and "body" in body
+        )
+        content_type = str(body.get("content_type") or "application/json")
+        raw_content = None
+        json_payload = payload if body_present and "json" in content_type.lower() else None
+        if body_present and json_payload is None:
+            try:
+                if body.get("body_encoding") == "base64":
+                    raw_content = base64.b64decode(str(payload or ""), validate=True)
+                else:
+                    raw_content = str(payload or "").encode()
+            except (ValueError, TypeError):
+                return JSONResponse({"detail": "invalid encoded request body"}, status_code=400)
+            forwarded.setdefault("Content-Type", content_type)
         started = time.perf_counter()
         try:
             result = await core.request_raw(
                 method,
                 target_path,
-                json=payload,
+                json=json_payload,
+                content=raw_content,
                 params=query,
                 context=PlatformContext(env=env, role="anon", key_id="studio-explorer"),
                 headers=forwarded,

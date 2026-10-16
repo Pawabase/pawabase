@@ -23,12 +23,21 @@ from pawabase_server.functions.execution_limits import ExecutionLimitExceeded
 from pawabase_server.functions.registry import MAIN, FunctionError
 from pawabase_server.functions.runtime import ApiRuntime, function_context
 from pawabase_server.platform import Platform, json_safe
+from pawabase_server.projects import quotas
 
 logger = logging.getLogger("pawabase.execution")
 
 
 class NotFound(LookupError):
     pass
+
+
+async def metered(platform: Platform, state: EnvironmentState, limit: str) -> None:
+    """Count one run against the project's monthly plan, as a :class:`FlowError` the caller already knows how to answer."""
+    try:
+        await platform.usage.consume(state, limit)
+    except quotas.QuotaExceeded as exc:
+        raise FlowError(exc.message, status=exc.status, code=exc.code, details=exc.details) from exc
 
 
 async def run_flow(
@@ -51,6 +60,7 @@ async def run_flow(
         raise NotFound(f"no flow {name!r}")
     if not flow.enabled:
         raise FlowError(f"flow {name!r} is disabled", status=409, code="disabled")
+    await metered(platform, state, "max_flow_runs_per_month")
     runtime = ApiRuntime(platform, state, auth=auth, request_id=request_id, depth=depth)
     run = FlowRun(
         flow.definition,
@@ -136,6 +146,7 @@ async def call_function(
                 code="invalid",
                 details=json.loads(exc.json(include_url=False)),
             ) from exc
+    await metered(platform, state, "max_function_invocations_per_month")
     runtime = ApiRuntime(
         platform, state, auth=auth, request_id=request_id, depth=depth, branch=branch
     )
