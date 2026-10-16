@@ -40,6 +40,8 @@ ENV PYTHONUNBUFFERED=1 \
     PAWABASE_DEPLOYMENTS_PATH=/data/deployments \
     PAWABASE_CODE_PATH=/code
 COPY --from=build /opt/venv /opt/venv
+# Deno runs TypeScript functions (functions/sandbox/typescript.py): one binary, copied from the official image.
+COPY --from=denoland/deno:bin-2.1.4 /deno /usr/local/bin/deno
 # Both packages run from source (Studio's built front end sits inside its own), so there is no wheel to rebuild or to leave files out of.
 COPY pawabase_server /app/pawabase_server
 COPY studio /app/studio

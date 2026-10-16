@@ -41,10 +41,13 @@ from pawabase.functions import module_prefix
 from pawabase_server.functions.registry import (
     MAIN,
     ProjectCode,
+    _loading_project,
     clear_functions,
     deployment_key,
+    function,
     load_code_dir,
 )
+from pawabase_server.functions.sandbox import typescript
 
 logger = logging.getLogger("pawabase.deployments")
 
@@ -178,6 +181,8 @@ class Deployments:
         self.install_timeout = install_timeout
         self.binary_only = binary_only
         self._seen: dict[str, _Seen] = {}
+        #: ``required`` or ``off``: how a TypeScript deployment is confined while it is described (the sandbox's own setting).
+        self.confinement = "off"
 
     # ── where things are ────────────────────────────────────────────────
 
@@ -189,6 +194,10 @@ class Deployments:
 
     def archive(self, env: str, branch: str, deployment_id: str) -> Path:
         return self.folder(env, branch) / "archives" / f"{deployment_id}.tar.gz"
+
+    def language(self, env: str, branch: str = MAIN) -> str:
+        """``python`` or ``typescript``: what the live deployment of *env*/*branch* is written in."""
+        return (self.stamp(env, branch) or {}).get("language") or typescript.PYTHON
 
     def stamp(self, env: str, branch: str = MAIN) -> dict[str, Any] | None:
         try:
@@ -387,6 +396,16 @@ class Deployments:
             del sys.modules[name]
         stamp = self.stamp(env, branch)
         current = self.current(env, branch)
+        if (stamp or {}).get("language") == typescript.TYPESCRIPT:
+            code = self._load_typescript(key, current)
+            seen.checked_at, seen.loaded_id, seen.code = (
+                time.monotonic(),
+                (stamp or {}).get("id"),
+                code,
+            )
+            if code.errors:
+                logger.warning("deployment %s has errors: %s", key, code.errors)
+            return code
         # Forget modules an earlier artifact imported from its own files, but never the installed libraries: a C extension cannot be imported twice.
         owners = (
             [entry for entry in self.root.iterdir() if entry.is_dir() and entry.name != PACKAGES]
@@ -404,6 +423,52 @@ class Deployments:
         if code.errors:
             logger.warning("deployment %s has errors: %s", key, code.errors)
         return code
+
+    def _load_typescript(self, key: str, current: Path) -> ProjectCode:
+        """Ask a confined Deno what the deployment defines, and register each function here so routing and policies see it.
+
+        The handlers registered here are stand-ins: a TypeScript function always runs in its own Deno worker, never in this process.
+        """
+        try:
+            answer = typescript.describe(
+                current, environment=self.worker_environment(), confinement=self.confinement
+            )
+        except typescript.RuntimeUnavailable as exc:
+            return ProjectCode(project=key, errors=[str(exc)])
+        code = ProjectCode(project=key, errors=list(answer.get("errors") or []))
+        token = _loading_project.set(key)
+        try:
+            for spec in answer.get("specs") or []:
+                handler = _typescript_handler(spec["name"])
+                function(
+                    spec["name"],
+                    description=str(spec.get("description") or ""),
+                    policy=spec.get("policy", "authenticated"),
+                    input_fields=spec.get("input_fields"),
+                    timeout=float(spec.get("timeout") or 30),
+                    tags=tuple(spec.get("tags") or ()),
+                )(handler)
+                code.functions.append(spec["name"])
+        except (ValueError, TypeError) as exc:
+            code.errors.append(f"A function definition was refused: {exc}")
+        finally:
+            _loading_project.reset(token)
+        return code
+
+    @staticmethod
+    def worker_environment() -> dict[str, str]:
+        """What a worker or describe process starts with: no secrets, no database address."""
+        return {
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "PYTHONPATH": os.pathsep.join(p for p in sys.path if p),
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "LANG": "C.UTF-8",
+            **(
+                {"PAWABASE_DENO_PATH": os.environ["PAWABASE_DENO_PATH"]}
+                if os.environ.get("PAWABASE_DENO_PATH")
+                else {}
+            ),
+        }
 
     # ── installing ──────────────────────────────────────────────────────
 
@@ -425,10 +490,20 @@ class Deployments:
         current = folder / "current"
         try:
             files = unpack(archive, staging)
-            problems = self._check(staging)
+            language = typescript.language_of(
+                [p.relative_to(staging).as_posix() for p in staging.rglob("*") if p.is_file()]
+            )
+            if language == "mixed":
+                raise DeploymentError(
+                    "A deployment is one language.",
+                    [
+                        "functions/ holds both .py and .ts files: deploy either Python or TypeScript functions."
+                    ],
+                )
+            problems = self._check(staging, language or typescript.PYTHON)
             if problems:
                 raise DeploymentError("The bundle was refused.", problems)
-            packages = self.prepare(archive)
+            packages = self.prepare(archive) if language != typescript.TYPESCRIPT else None
             (staging / STAMP).write_text(
                 json.dumps(
                     {
@@ -436,6 +511,7 @@ class Deployments:
                         "checksum": checksum,
                         "files": files,
                         "packages": packages,
+                        "language": language or typescript.PYTHON,
                         "activated_at": time.time(),
                     }
                 )
@@ -497,8 +573,16 @@ class Deployments:
         return True
 
     @staticmethod
-    def _check(directory: Path) -> list[str]:
+    def _check(directory: Path, language: str = "python") -> list[str]:
         problems: list[str] = []
+        if language == typescript.TYPESCRIPT:
+            if not any(p.suffix in typescript.SOURCES for p in (directory / "functions").glob("*")):
+                problems.append("The bundle must contain functions/*.ts.")
+            if (directory / "functions" / "requirements.txt").exists():
+                problems.append(
+                    "functions/requirements.txt is for Python; a TypeScript deployment carries its own code."
+                )
+            return problems
         if not any((directory / "functions").glob("*.py")):
             problems.append("The bundle must contain functions/*.py.")
         for name in PROJECT_LEVEL:
@@ -514,3 +598,13 @@ class Deployments:
             except UnicodeDecodeError:
                 problems.append(f"{source.relative_to(directory)} is not UTF-8 text.")
         return problems
+
+
+def _typescript_handler(name: str) -> Any:
+    async def handler(ctx: Any) -> Any:
+        raise RuntimeError(
+            f"{name} is a TypeScript function; it runs in its Deno worker, not in this process"
+        )
+
+    handler.typescript = True  # type: ignore[attr-defined]
+    return handler

@@ -39,6 +39,7 @@ from pawabase_server.functions.runtime_rpc import (
     serve_call,
     serve_db,
 )
+from pawabase_server.functions.sandbox import typescript
 
 logger = logging.getLogger("pawabase.sandbox")
 
@@ -92,9 +93,16 @@ class Worker:
     """One worker process, running one deployment."""
 
     def __init__(
-        self, key: tuple[str, str, str], artifact: Path, libs: list[Path], limits: Limits
+        self,
+        key: tuple[str, str, str],
+        artifact: Path,
+        libs: list[Path],
+        limits: Limits,
+        language: str = typescript.PYTHON,
     ) -> None:
         self.key = key
+        #: ``python`` or ``typescript``: which worker program runs this deployment.
+        self.language = language
         self.artifact = artifact
         self.libs = libs
         self.limits = limits
@@ -128,10 +136,19 @@ class Worker:
 
     async def start(self) -> None:
         env, branch, _ = self.key
+        command = (
+            typescript.launcher(
+                "serve",
+                self.artifact,
+                self._tmp,
+                memory_mb=self.limits.memory_mb,
+                confinement=self.limits.confinement,
+            )
+            if self.language == typescript.TYPESCRIPT
+            else [sys.executable, "-m", "pawabase_server.functions.sandbox.worker"]
+        )
         self.process = await asyncio.create_subprocess_exec(
-            sys.executable,
-            "-m",
-            "pawabase_server.functions.sandbox.worker",
+            *command,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -381,7 +398,11 @@ class SandboxPool:
                 return worker
             await self._drop(worker)
         worker = Worker(
-            key, deployments.current(env, branch), deployments.libraries(env, branch), self.limits
+            key,
+            deployments.current(env, branch),
+            deployments.libraries(env, branch),
+            self.limits,
+            deployments.language(env, branch),
         )
         self.all.add(worker)
         self.started += 1
