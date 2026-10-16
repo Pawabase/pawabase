@@ -58,8 +58,21 @@ async def running(tmp_path):
     from studio.app import create_studio
     from studio.config import StudioSettings
 
+    frontend = tmp_path / "studio-frontend"
+    dist = frontend / "dist"
+    (dist / ".vite").mkdir(parents=True)
+    (dist / "assets").mkdir()
+    (dist / ".vite" / "manifest.json").write_text(
+        '{"src/main.jsx": {"file": "assets/main-abc.js", "css": ["assets/main-abc.css"]}}'
+    )
+    (dist / "assets" / "main-abc.js").write_text("console.log('studio')")
     studio_app = create_studio(
-        StudioSettings(_env_file=None, app_env="testing", internal_secret=settings.internal_secret),
+        StudioSettings(
+            _env_file=None,
+            app_env="testing",
+            internal_secret=settings.internal_secret,
+            frontend_dir=str(frontend),
+        ),
         client=ServiceClient(
             "http://server", secret=settings.internal_secret, issuer="studio", app=server.app
         ),

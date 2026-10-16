@@ -3,7 +3,7 @@
 A deployment is one language: Python (``functions/*.py``) or TypeScript (``functions/*.ts``). A TypeScript worker is started through
 :mod:`pawabase_server.functions.sandbox.deno_launch`, which applies the sandbox's limits and Landlock/seccomp confinement to itself and then
 becomes Deno (both survive ``exec``). Deno adds its own layer: no network, no environment, no subprocesses, and reading only the deployment
-and the kit. Functions import the kit as ``"pawabase"`` (``deno/pawabase.ts``).
+and the kit. Functions import the kit as ``"@pawabase/functions"`` or ``"pawabase"`` (``deno/pawabase.ts``).
 
 Imports are local files only (``--no-remote``): a deployment carries its own code; ``npm:`` and URL imports are not fetched on the server.
 """
@@ -23,6 +23,8 @@ from typing import Any
 PYTHON = "python"
 TYPESCRIPT = "typescript"
 SOURCES = (".ts", ".mts", ".js", ".mjs")
+#: What a function imports the kit as: the npm package name, and the short name the server always accepted.
+KIT_SPECIFIERS = ("@pawabase/functions", "pawabase")
 KIT = Path(__file__).resolve().parent / "deno"
 DESCRIBE_SECONDS = 30
 
@@ -55,7 +57,7 @@ def language_of(names: Sequence[str]) -> str | None:
 def deno_command(mode: str, artifact: Path, tmp: Path, memory_mb: int) -> list[str]:
     """The Deno command line for *mode* (``serve`` or ``describe``)."""
     import_map = tmp / "import_map.json"
-    import_map.write_text(json.dumps({"imports": {"pawabase": (KIT / "pawabase.ts").as_uri()}}))
+    import_map.write_text(json.dumps({"imports": {name: (KIT / "pawabase.ts").as_uri() for name in KIT_SPECIFIERS}}))
     command = [
         deno_path(),
         "run",

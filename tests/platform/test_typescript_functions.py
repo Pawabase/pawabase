@@ -11,7 +11,7 @@ import pytest
 
 from pawabase_server.core.clients import ServiceError
 from pawabase_server.db.models import FunctionRun
-from pawabase_server.functions.sandbox.typescript import language_of
+from pawabase_server.functions.sandbox.typescript import KIT_SPECIFIERS, language_of
 
 ENV = "/platform/v1/envs/development"
 deno = pytest.mark.skipif(not shutil.which("deno"), reason="needs Deno")
@@ -93,6 +93,19 @@ def test_a_bundle_is_one_language():
     assert language_of(["functions/a.ts", "functions/types.d.ts"]) == "typescript"
     assert language_of(["functions/a.py", "functions/b.ts"]) == "mixed"
     assert language_of(["README.md"]) is None
+
+
+def test_the_kit_is_importable_by_its_npm_name_and_by_its_short_name():
+    assert KIT_SPECIFIERS == ("@pawabase/functions", "pawabase")
+
+
+@deno
+async def test_a_function_imports_the_kit_as_the_npm_package(api):
+    source = 'import { fn } from "@pawabase/functions";\nexport const hi = fn("npm.hi", { policy: "public" }, async () => ({ ok: true }));\n'
+    deployed = await api.studio.post(f"{ENV}/function-deployments", json={"archive": archive({"functions/hi.ts": source})})
+    assert [f["name"] for f in deployed["functions"]] == ["npm.hi"]
+    assert (await call(api, "npm.hi"))["result"] == {"ok": True}
+    await api.platform.sandboxes.close()
 
 
 async def test_a_mixed_bundle_is_refused(api):

@@ -140,8 +140,11 @@ class Session:
         await self._ack(message, channel=channel)
         if message.since is not None:
             for item in await self.realtime.history(
-                connection.env, channel, limit=max(1, rule.history),
-                auth=connection.auth, credential=connection.credential,
+                connection.env,
+                channel,
+                limit=max(1, rule.history),
+                auth=connection.auth,
+                credential=connection.credential,
             ):
                 if item["seq"] > message.since:
                     await self.peer.send(item)
@@ -215,7 +218,13 @@ class Session:
                 "type": "history",
                 "ref": message.ref,
                 "channel": channel,
-                "messages": await self.realtime.history(connection.env, channel, limit, auth=connection.auth, credential=connection.credential),
+                "messages": await self.realtime.history(
+                    connection.env,
+                    channel,
+                    limit,
+                    auth=connection.auth,
+                    credential=connection.credential,
+                ),
             }
         )
 

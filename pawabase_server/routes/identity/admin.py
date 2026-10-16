@@ -112,8 +112,18 @@ class RestoreBody(BaseModel):
     dry_run: bool = False
 
 
-def register(r: Router, accounts: Accounts) -> None:
-    base = "/envs/{env}"
+def register(
+    r: Router,
+    accounts: Accounts,
+    *,
+    gate: Any = SERVICE_ONLY,
+    prefix: str = "/envs/{env}",
+    tag: str = "admin",
+    internal: bool = True,
+) -> None:
+    """The user-administration routes. ``gate`` decides who may call them: other services (``SERVICE_ONLY``, mounted at ``/admin/v1``, never public)
+    or an environment's secret key (``MANAGE``, mounted under the management plane); ``internal`` adds the routes meant only for other services."""
+    base = prefix
 
     async def user_or_404(env: str, user_id: Any) -> AuthUser:
         user = await get_user(env, user_id)
@@ -123,7 +133,7 @@ def register(r: Router, accounts: Accounts) -> None:
 
     # ── users ────────────────────────────────────────────────────────────
 
-    @r.get(f"{base}/users", auth=SERVICE_ONLY, tags=["admin"], summary="Search users")
+    @r.get(f"{base}/users", auth=gate, tags=[tag], summary="Search users")
     async def users(ctx: HttpContext, env: str):
         q = ctx.query_params
         limit = max(1, min(int(q.get("limit", 50)), 200))
@@ -163,8 +173,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.delete(
         f"{base}",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         summary="Permanently purge one environment's identities",
     )
     async def purge_environment(ctx: HttpContext, env: str):
@@ -178,8 +188,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.post(
         f"{base}/users",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         request_model=AdminUserCreate,
         summary="Create a user",
     )
@@ -207,15 +217,15 @@ def register(r: Router, accounts: Accounts) -> None:
         )
         return created(await user_view(user, admin=True))
 
-    @r.get(f"{base}/users/{{user_id}}", auth=SERVICE_ONLY, tags=["admin"], summary="One user")
+    @r.get(f"{base}/users/{{user_id}}", auth=gate, tags=[tag], summary="One user")
     async def get_one(ctx: HttpContext, env: str, user_id: str):
         user = await user_or_404(env, user_id)
         return {**await user_view(user, admin=True), "sessions": await list_sessions(user)}
 
     @r.patch(
         f"{base}/users/{{user_id}}",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         request_model=AdminUserUpdate,
         summary="Update, disable, verify or unlock a user",
     )
@@ -254,9 +264,7 @@ def register(r: Router, accounts: Accounts) -> None:
             )
         return await user_view(user, admin=True)
 
-    @r.delete(
-        f"{base}/users/{{user_id}}", auth=SERVICE_ONLY, tags=["admin"], summary="Delete a user"
-    )
+    @r.delete(f"{base}/users/{{user_id}}", auth=gate, tags=[tag], summary="Delete a user")
     async def delete(ctx: HttpContext, env: str, user_id: str):
         user = await user_or_404(env, user_id)
         await revoke_all(user)
@@ -273,8 +281,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.post(
         f"{base}/users/{{user_id}}/sessions/revoke",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         summary="Sign a user out everywhere",
     )
     async def sign_out(ctx: HttpContext, env: str, user_id: str):
@@ -283,8 +291,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.delete(
         f"{base}/users/{{user_id}}/sessions/{{session_id}}",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         summary="End one session",
     )
     async def end_session(ctx: HttpContext, env: str, user_id: str, session_id: str):
@@ -295,8 +303,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.post(
         f"{base}/users/{{user_id}}/mfa/reset",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         summary="Remove a user's second factors",
     )
     async def reset_mfa(ctx: HttpContext, env: str, user_id: str):
@@ -307,8 +315,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.get(
         f"{base}/users/{{user_id}}/history",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         summary="A user's sign-in history",
     )
     async def user_history(ctx: HttpContext, env: str, user_id: str):
@@ -318,8 +326,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.post(
         f"{base}/users/{{user_id}}/permissions",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         request_model=GrantBody,
         summary="Grant permissions directly",
     )
@@ -330,8 +338,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.delete(
         f"{base}/users/{{user_id}}/permissions",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         request_model=GrantBody,
         summary="Revoke direct permissions",
     )
@@ -342,9 +350,7 @@ def register(r: Router, accounts: Accounts) -> None:
 
     # ── roles and permissions ────────────────────────────────────────────
 
-    @r.get(
-        f"{base}/roles", auth=SERVICE_ONLY, tags=["admin"], summary="Roles with their permissions"
-    )
+    @r.get(f"{base}/roles", auth=gate, tags=[tag], summary="Roles with their permissions")
     async def roles(ctx: HttpContext, env: str):
         return {
             "data": await rbac.list_roles(env),
@@ -353,8 +359,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.put(
         f"{base}/roles",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         request_model=RoleBody,
         summary="Create or replace a role",
     )
@@ -364,7 +370,7 @@ def register(r: Router, accounts: Accounts) -> None:
         )
         return next(role for role in await rbac.list_roles(env) if role["name"] == body.name)
 
-    @r.delete(f"{base}/roles/{{name}}", auth=SERVICE_ONLY, tags=["admin"], summary="Delete a role")
+    @r.delete(f"{base}/roles/{{name}}", auth=gate, tags=[tag], summary="Delete a role")
     async def delete_role(ctx: HttpContext, env: str, name: str):
         if not await rbac.delete_role(env, name):
             raise HTTPException(status_code=404, detail="no such role")
@@ -374,8 +380,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.get(
         f"{base}/backup",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         summary="Every role, user (with password hashes), and organization",
     )
     async def export_backup(ctx: HttpContext, env: str):
@@ -383,8 +389,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.post(
         f"{base}/restore",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         request_model=RestoreBody,
         summary="Apply the identities of a backup",
     )
@@ -398,7 +404,7 @@ def register(r: Router, accounts: Accounts) -> None:
 
     # ── organizations ────────────────────────────────────────────────────
 
-    @r.get(f"{base}/orgs", auth=SERVICE_ONLY, tags=["admin"], summary="All organizations")
+    @r.get(f"{base}/orgs", auth=gate, tags=[tag], summary="All organizations")
     async def orgs(ctx: HttpContext, env: str):
         rows = (
             await Organization.filter(env=env)
@@ -420,8 +426,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.get(
         f"{base}/orgs/{{slug}}",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         summary="One organization with members and teams",
     )
     async def org(ctx: HttpContext, env: str, slug: str):
@@ -464,8 +470,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.post(
         f"{base}/orgs",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         request_model=AdminOrgCreate,
         summary="Create an organization, optionally with an owner",
     )
@@ -488,8 +494,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.patch(
         f"{base}/orgs/{{slug}}",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         request_model=AdminOrgUpdate,
         summary="Rename an organization or change its metadata",
     )
@@ -504,8 +510,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.delete(
         f"{base}/orgs/{{slug}}",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         summary="Delete an organization with its memberships, teams and invitations",
     )
     async def delete_org(ctx: HttpContext, env: str, slug: str):
@@ -516,8 +522,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.post(
         f"{base}/orgs/{{slug}}/members",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         request_model=AdminMemberAdd,
         summary="Add an existing user to an organization",
     )
@@ -532,8 +538,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.patch(
         f"{base}/orgs/{{slug}}/members/{{user_id}}",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         request_model=AdminMemberRole,
         summary="Change a member's role",
     )
@@ -553,8 +559,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.delete(
         f"{base}/orgs/{{slug}}/members/{{user_id}}",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         summary="Remove a member from an organization",
     )
     async def remove_member(ctx: HttpContext, env: str, slug: str, user_id: str):
@@ -571,8 +577,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.get(
         f"{base}/sessions",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         summary="Active sessions of every user in the environment",
     )
     async def all_sessions(ctx: HttpContext, env: str):
@@ -615,8 +621,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.delete(
         f"{base}/sessions/{{family}}",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         summary="End one session of any user",
     )
     async def end_any_session(ctx: HttpContext, env: str, family: str):
@@ -627,8 +633,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.get(
         f"{base}/invitations",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         summary="Pending invitations across every organization",
     )
     async def pending_invitations(ctx: HttpContext, env: str):
@@ -659,8 +665,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.post(
         f"{base}/orgs/{{slug}}/invitations",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         request_model=AdminInvite,
         summary="Invite someone to an organization by email",
     )
@@ -690,8 +696,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.post(
         f"{base}/invitations/{{invitation_id}}/resend",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         request_model=AdminResend,
         summary="Email a pending invitation again with a fresh link",
     )
@@ -713,8 +719,8 @@ def register(r: Router, accounts: Accounts) -> None:
 
     @r.delete(
         f"{base}/invitations/{{invitation_id}}",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         summary="Revoke a pending invitation",
     )
     async def revoke_invitation(ctx: HttpContext, env: str, invitation_id: str):
@@ -727,7 +733,7 @@ def register(r: Router, accounts: Accounts) -> None:
 
     # ── activity ─────────────────────────────────────────────────────────
 
-    @r.get(f"{base}/events", auth=SERVICE_ONLY, tags=["admin"], summary="Authentication events")
+    @r.get(f"{base}/events", auth=gate, tags=[tag], summary="Authentication events")
     async def events(ctx: HttpContext, env: str):
         q = ctx.query_params
         query = LoginEvent.filter(env=env)
@@ -738,7 +744,7 @@ def register(r: Router, accounts: Accounts) -> None:
         rows = await query.order_by("-id").limit(min(int(q.get("limit", 100)), 500))
         return {"data": [_event(e) for e in rows]}
 
-    @r.get(f"{base}/stats", auth=SERVICE_ONLY, tags=["admin"], summary="Identity statistics")
+    @r.get(f"{base}/stats", auth=gate, tags=[tag], summary="Identity statistics")
     async def stats(ctx: HttpContext, env: str):
         day = datetime.now(UTC) - timedelta(days=1)
         users = AuthUser.filter(env=env, deleted_at=None)
@@ -762,18 +768,19 @@ def register(r: Router, accounts: Accounts) -> None:
         }
 
     # ── for other services: the environment comes from the context header ──
+    if internal:
 
-    @r.get(
-        "/users/{user_id}",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
-        summary="One user of the calling context's environment",
-    )
-    async def context_user(ctx: HttpContext, user_id: str):
-        from pawabase_server.core.context import require_context
+        @r.get(
+            "/users/{user_id}",
+            auth=gate,
+            tags=[tag],
+            summary="One user of the calling context's environment",
+        )
+        async def context_user(ctx: HttpContext, user_id: str):
+            from pawabase_server.core.context import require_context
 
-        context = require_context(ctx)
-        return await user_view(await user_or_404(context.env, user_id), admin=True)
+            context = require_context(ctx)
+            return await user_view(await user_or_404(context.env, user_id), admin=True)
 
 
 def _event(e: LoginEvent) -> dict[str, Any]:

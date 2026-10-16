@@ -66,7 +66,9 @@ class PawabaseJob(Job):
     @classmethod
     def policy(cls) -> RetryPolicy:
         """The class's retry policy (``core/retry.py``): ``tries`` attempts, ``backoff`` doubling, capped at ``max_backoff``."""
-        return RetryPolicy(max(1, int(cls.tries)), base=float(cls.backoff or 1), max_delay=cls.max_backoff)
+        return RetryPolicy(
+            max(1, int(cls.tries)), base=float(cls.backoff or 1), max_delay=cls.max_backoff
+        )
 
     def retry_policy(self) -> RetryPolicy:
         """This job's policy; a subclass may make it depend on the job (a webhook endpoint's attempt limit)."""
@@ -109,7 +111,9 @@ class PawabaseJob(Job):
                 try:
                     await self._schedule_retry(error, started)
                     return None
-                except Exception:  # the queue itself is unavailable: settle, so the failure is at least recorded
+                except (
+                    Exception
+                ):  # the queue itself is unavailable: settle, so the failure is at least recorded
                     pass
             await self._track(
                 status="failed",

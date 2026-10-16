@@ -194,6 +194,15 @@ class Worker:
             )
         self.functions = set(ready.get("functions") or [])
         self.errors = list(ready.get("errors") or [])
+        if self.errors and not self.functions:
+            await self.kill()
+            raise SandboxFailure(
+                Failure(
+                    "DeploymentDidNotLoad",
+                    f"the deployment loaded no functions: {self.errors[0]}",
+                    hint="Fix the first error (see Studio -> Functions) and deploy again.",
+                )
+            )
         self.confinement = ready.get("confinement") or {}
 
     async def _drain_stderr(self) -> None:

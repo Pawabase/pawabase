@@ -1,7 +1,7 @@
 /**
- * The Pawabase function kit for TypeScript: what a deployed `functions/*.ts` imports as `"pawabase"`.
+ * The Pawabase function kit for TypeScript: what a deployed `functions/*.ts` imports as `"@pawabase/functions"` (the platform also accepts the short name `"pawabase"`).
  *
- *   import { fn, FunctionError } from "pawabase";
+ *   import { fn, FunctionError } from "@pawabase/functions";
  *
  *   export const create = fn("orders.create", { policy: "authenticated" }, async (ctx) => {
  *     return await ctx.runtime.resourceCreate("orders", ctx.input);
@@ -124,11 +124,12 @@ export type Call = (method: string, args: unknown[], kwargs: Record<string, unkn
 
 /** `ctx.runtime`: one method per platform capability. `call` reaches any runtime method by its Python name. */
 export class Runtime {
-  #call: Call;
-  constructor(call: Call) {
+  #call: Call | undefined;
+  constructor(call?: Call) {
     this.#call = call;
   }
-  call(method: string, args: unknown[] = [], kwargs: Record<string, unknown> = {}) {
+  call(method: string, args: unknown[] = [], kwargs: Record<string, unknown> = {}): Promise<unknown> {
+    if (!this.#call) return Promise.reject(new Error("this runtime has no connection to a platform"));
     return this.#call(method, args, kwargs);
   }
   // data

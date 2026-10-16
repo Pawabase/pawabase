@@ -99,8 +99,18 @@ def register(r: Router, accounts: Accounts) -> None:
         return no_content()
 
 
-def register_admin(r: Router, accounts: Accounts) -> None:
-    base = "/envs/{env}"
+def register_admin(
+    r: Router,
+    accounts: Accounts,
+    *,
+    gate: Any = SERVICE_ONLY,
+    prefix: str = "/envs/{env}",
+    tag: str = "admin",
+    internal: bool = True,
+) -> None:
+    """The user-administration routes. ``gate`` decides who may call them: other services (``SERVICE_ONLY``, mounted at ``/admin/v1``, never public)
+    or an environment's secret key (``MANAGE``, mounted under the management plane); ``internal`` adds the routes meant only for other services."""
+    base = prefix
 
     async def user_or_404(env: str, user_id: str):
         user = await get_user(env, user_id)
@@ -110,9 +120,9 @@ def register_admin(r: Router, accounts: Accounts) -> None:
 
     @r.post(
         f"{base}/hosted-source",
-        auth=SERVICE_ONLY,
+        auth=gate,
         request_model=SourceRequest,
-        tags=["admin"],
+        tags=[tag],
         summary="The HTML a hosted page is served as, for the branding being edited",
     )
     async def hosted_source(ctx: HttpContext, env: str, body: SourceRequest):
@@ -142,7 +152,7 @@ def register_admin(r: Router, accounts: Accounts) -> None:
         )
         return {"page": body.page, "html": document, "live": body.page in hosted.PAGES}
 
-    @r.get(f"{base}/api-keys", auth=SERVICE_ONLY, tags=["admin"], summary="Every user API key")
+    @r.get(f"{base}/api-keys", auth=gate, tags=[tag], summary="Every user API key")
     async def all_keys(ctx: HttpContext, env: str):
         limit = max(1, min(int(ctx.query_params.get("limit", 100)), 500))
         rows = (
@@ -152,8 +162,8 @@ def register_admin(r: Router, accounts: Accounts) -> None:
 
     @r.delete(
         f"{base}/api-keys/{{key_id}}",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         summary="Revoke a user's key",
     )
     async def revoke(ctx: HttpContext, env: str, key_id: str):
@@ -166,8 +176,8 @@ def register_admin(r: Router, accounts: Accounts) -> None:
 
     @r.get(
         f"{base}/users/{{user_id}}/api-keys",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         summary="One user's API keys",
     )
     async def keys_of(ctx: HttpContext, env: str, user_id: str):
@@ -177,8 +187,8 @@ def register_admin(r: Router, accounts: Accounts) -> None:
 
     @r.get(
         f"{base}/users/{{user_id}}/devices",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         summary="One user's devices",
     )
     async def devices_of(ctx: HttpContext, env: str, user_id: str):
@@ -188,8 +198,8 @@ def register_admin(r: Router, accounts: Accounts) -> None:
 
     @r.delete(
         f"{base}/users/{{user_id}}/devices/{{device_id}}",
-        auth=SERVICE_ONLY,
-        tags=["admin"],
+        auth=gate,
+        tags=[tag],
         summary="Forget one of a user's devices",
     )
     async def forget(ctx: HttpContext, env: str, user_id: str, device_id: str):
@@ -201,7 +211,7 @@ def register_admin(r: Router, accounts: Accounts) -> None:
             raise HTTPException(status_code=404, detail="no such device")
         return no_content()
 
-    @r.get(f"{base}/devices", auth=SERVICE_ONLY, tags=["admin"], summary="Recent devices")
+    @r.get(f"{base}/devices", auth=gate, tags=[tag], summary="Recent devices")
     async def recent_devices(ctx: HttpContext, env: str):
         limit = max(1, min(int(ctx.query_params.get("limit", 100)), 500))
         rows = (

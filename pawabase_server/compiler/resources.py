@@ -269,7 +269,9 @@ def register_resource(app: SilloApp, state: EnvironmentState, resource: Any) -> 
                 for column in columns:
                     store._column(column)
                 expanded = {name.strip() for name in (expand or "").split(",")}
-                rows = [{k: v for k, v in row.items() if k in columns or k in expanded} for row in rows]
+                rows = [
+                    {k: v for k, v in row.items() if k in columns or k in expanded} for row in rows
+                ]
             body = {
                 "data": await _present(state, resource, ctx, rows),
                 "page": page,
