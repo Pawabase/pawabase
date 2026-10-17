@@ -60,11 +60,21 @@ function Objects({ base, bucket, env, onEdit }) {
     objects.reload();
   };
   const up = () => setPrefix(prefix.split("/").slice(0, -2).join("/") + (prefix.split("/").length > 2 ? "/" : ""));
+  const newFolder = async () => {
+    const name = (window.prompt("Folder name") || "").trim().replace(/^\/+|\/+$/g, "");
+    if (!name) return;
+    if (await run(() => post(`${base}/${bucket.name}/folders`, { prefix: `${prefix}${name}` }), `Created ${name}/`)) objects.reload();
+  };
+  const removeFolder = async (key) => {
+    const name = key.replace(/\/+$/, "");
+    if (confirm(`Delete the folder ${name}/? It must be empty.`) && await run(() => del(`${base}/${bucket.name}/folders/${name}`), "Folder deleted")) objects.reload();
+  };
   return (
     <Card flush title={<span>{bucket.name} <span className="faint" style={{ fontWeight: 400 }}>/{prefix}</span></span>} actions={<>
-      {prefix && <Button size="sm" onClick={up}>Up</Button>}
-      <label className="btn sm primary" style={{ opacity: busy ? 0.55 : 1 }}>Upload<input type="file" hidden onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; if (f) upload(f); }} /></label>
-      <Button size="sm" onClick={onEdit}>Settings</Button>
+      {prefix && <Button size="sm" onClick={up}><Icon name="arrowUp" size={14} /> Up</Button>}
+      <Button size="sm" onClick={newFolder}><Icon name="plus" size={14} /> New folder</Button>
+      <label className="btn sm primary" style={{ opacity: busy ? 0.55 : 1 }}><Icon name="upload" size={14} /> Upload<input type="file" hidden onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; if (f) upload(f); }} /></label>
+      <Button size="sm" onClick={onEdit}><Icon name="settings" size={14} /> Settings</Button>
     </>}>
       <Loading state={objects}>
         {(data) => (
@@ -77,6 +87,7 @@ function Objects({ base, bucket, env, onEdit }) {
               { label: "Type", render: (o) => (o.folder ? "" : o.content_type) },
               { label: "Size", render: (o) => (o.folder ? "" : bytes(o.size)) },
               { label: "Modified", render: (o) => (o.folder || !o.modified ? "" : when(new Date(o.modified * 1000).toISOString())) },
+              { label: "", render: (o) => o.folder && <Button size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); removeFolder(o.key); }}><Icon name="trash" size={14} /> Delete</Button> },
             ]}
           />
         )}
