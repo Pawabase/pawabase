@@ -1,4 +1,35 @@
-// A small line-icon set on a 24-unit grid. Each icon is a list of shapes:
+import {
+  Activity, Add, ArchiveBox, ArrowDown2, ArrowRight2, ArrowSwapHorizontal, ArrowSwapVertical, ArrowUp2,
+  Book1, Building, Calendar, Category, Chart, ChartSquare, CloseCircle, Code, Code1, Data,
+  Diagram, DirectboxSend, DocumentCode2, DocumentText, Copy, Eye, Export, Flash, Folder, Global, Hierarchy3,
+  Home2, Import, Key, Layer, LayoutMaximize, Link21, Lock, Login, Logout, MagicStar, Map, Maximize3,
+  Maximize4, Menu, Message, MessageQuestion, Monitor, Moon, Notification, People, Play, Profile2User,
+  Refresh2, RouteSquare, SearchNormal1, Send2, Setting2, ShieldTick, Status, Sun1, TableDocument,
+  TickCircle, Timer1, Trash, User, Wifi,
+} from "iconsax-react";
+
+// Pawabase uses Iconsax's filled Bulk variant for shared product controls.
+// Flow blocks remain custom because their marks communicate block semantics.
+const BULK_ICONS = {
+  overview: Home2, database: Data, resources: TableDocument, schemas: DocumentCode2,
+  transformers: ArrowSwapHorizontal, policies: ShieldTick, routes: RouteSquare, gitBranch: Hierarchy3,
+  explorer: Map, functions: Code, flows: Diagram, flowBlock: Diagram, subscriptions: Notification,
+  schedules: Calendar, webhooks: Send2, "inbound-hooks": DirectboxSend, "mail-templates": Message,
+  users: Profile2User, storage: Folder, realtime: Wifi, jobs: Layer, events: Activity,
+  observability: ChartSquare, backups: ArchiveBox, releases: Layer, keys: Key, secrets: Lock,
+  settings: Setting2, org: Building, team: People, mail: Message, projects: Category, audit: DocumentText,
+  buckets: Folder, terminal: Monitor, panelLeft: LayoutMaximize, panelHover: LayoutMaximize,
+  panelClosed: LayoutMaximize, maximize: Maximize4, minimize: Maximize3, plus: Add, x: CloseCircle,
+  trash: Trash, chevronDown: ArrowDown2, chevronUp: ArrowUp2, chevronRight: ArrowRight2,
+  sun: Sun1, moon: Moon, logout: Logout, external: Export, code: Code1, send: Send2, clock: Timer1,
+  upload: Import, copy: Copy, check: TickCircle, menu: Menu, bolt: Flash, layers: Layer,
+  play: Play, eye: Eye, braces: Code1, link: Link21, search: SearchNormal1, arrowUp: ArrowUp2,
+  arrowDown: ArrowDown2, pulse: Activity, status: Status, usage: Chart, networking: Global,
+  enter: Login, chevronsUpDown: ArrowSwapVertical, bell: Notification, refresh: Refresh2,
+  book: Book1, help: MessageQuestion, sparkle: MagicStar,
+};
+
+// A small line-icon fallback set on a 24-unit grid. Each icon is a list of shapes:
 // "c cx cy r" a circle, "r x y w h rx" a rect, "e cx cy rx ry" an ellipse,
 // anything else a path.
 
@@ -169,6 +200,8 @@ function shape(spec, i) {
 }
 
 export function Icon({ name, size, className = "", style }) {
+  const BulkIcon = BULK_ICONS[name];
+  if (BulkIcon) return <BulkIcon size={size || 18} color="currentColor" variant="Bulk" className={`icon ${className}`} style={style} aria-hidden />;
   const shapes = SHAPES[name] || (name?.startsWith("block:") ? SHAPES.flowBlock : SHAPES.layers);
   return (
     <svg
