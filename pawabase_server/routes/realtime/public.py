@@ -90,8 +90,15 @@ def register(app: SilloApp, realtime: Realtime) -> None:
         except PermissionError as exc:
             raise refusal(exc) from exc
         limit = max(1, min(limit_from(ctx), rule.history or 1))
-        return {"channel": channel, "messages": await realtime.history(
-            context.env, channel, limit, auth=policy_auth(ctx.scope.get("user")), credential=credential_context(ctx)
-        )}
+        return {
+            "channel": channel,
+            "messages": await realtime.history(
+                context.env,
+                channel,
+                limit,
+                auth=policy_auth(ctx.scope.get("user")),
+                credential=credential_context(ctx),
+            ),
+        }
 
     app.mount_router(router)

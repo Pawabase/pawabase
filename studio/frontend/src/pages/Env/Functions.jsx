@@ -43,8 +43,35 @@ function highlight(source) {
   });
 }
 
+// ── TypeScript / JavaScript: keywords, strings (incl. templates), comments, numbers ─────────────────────────────────────
+const TS_KEYWORDS = new Set("import export from as const let var function return if else for of in while do switch case default break continue try catch finally throw new class extends async await typeof instanceof type interface enum implements public private readonly yield delete void".split(" "));
+const TS_CONSTANTS = new Set(["true", "false", "null", "undefined", "this", "ctx"]);
+const TS_TOKEN = /(\/\/.*$)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_.]*\b)|([A-Za-z_$][\w$]*)|(\s+|.)/g;
+
+function highlightTs(source) {
+  return source.split("\n").map((text) => {
+    const parts = [];
+    TS_TOKEN.lastIndex = 0;
+    let match;
+    while ((match = TS_TOKEN.exec(text)) !== null) {
+      const [token, comment, string, number, word] = match;
+      if (comment) parts.push(["com", token]);
+      else if (string) parts.push(["str", token]);
+      else if (number) parts.push(["num", token]);
+      else if (word) parts.push([TS_KEYWORDS.has(word) ? "kw" : TS_CONSTANTS.has(word) ? "const" : "id", token]);
+      else parts.push(["plain", token]);
+    }
+    return parts;
+  });
+}
+
+const languageOf = (path) => (/\.py$/.test(path) ? "python" : /\.(ts|mts|js|mjs)$/.test(path) ? "typescript" : "text");
+
 function CodeView({ content, line, language = "python" }) {
-  const rows = useMemo(() => (language === "python" ? highlight(content) : content.split("\n").map((text) => [["plain", text]])), [content, language]);
+  const rows = useMemo(
+    () => (language === "python" ? highlight(content) : language === "typescript" ? highlightTs(content) : content.split("\n").map((text) => [["plain", text]])),
+    [content, language],
+  );
   return (
     <div className="codeview" role="region" aria-label="Source code">
       {rows.map((parts, index) => (
@@ -65,7 +92,7 @@ function SourceFile({ env, path, line, branch }) {
       {(data) => (
         <div className="stack sm">
           <div className="row spread"><code>{data.path}</code><span className="hint">{data.lines} lines · {(data.size / 1024).toFixed(1)} KB</span></div>
-          <CodeView content={data.content} line={line} language={data.path.endsWith(".py") ? "python" : "text"} />
+          <CodeView content={data.content} line={line} language={languageOf(data.path)} />
         </div>
       )}
     </Loading>

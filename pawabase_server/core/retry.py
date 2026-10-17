@@ -33,7 +33,9 @@ class RetryPolicy:
         return wait * random.uniform(1 - self.jitter, 1 + self.jitter) if self.jitter else wait
 
     def with_attempts(self, max_attempts: int) -> RetryPolicy:
-        return RetryPolicy(max(1, max_attempts), self.base, self.max_delay, self.jitter, self.schedule)
+        return RetryPolicy(
+            max(1, max_attempts), self.base, self.max_delay, self.jitter, self.schedule
+        )
 
     def describe(self) -> dict[str, Any]:
         """What the policy does, for people: the attempts and the wait before each retry."""

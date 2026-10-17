@@ -78,10 +78,50 @@ class FakeApi:
                 "openapi": "3.1.0",
                 "info": {"title": "Pawabase runtime", "version": "1"},
                 "paths": {
-                    "/auth/v1/user": {"get": {"operationId": "auth.user", "summary": "Signed-in user", "responses": {"200": {"description": "User"}}}},
-                    "/functions/v1/{name}": {"post": {"operationId": "functions.invoke", "summary": "Invoke a function", "parameters": [{"name": "name", "in": "path", "required": True, "schema": {"type": "string"}}], "responses": {"200": {"description": "Result"}}}},
-                    "/platform/v1/envs/{env}/events": {"post": {"operationId": "events.emit", "tags": ["events"], "summary": "Emit an event", "parameters": [{"name": "env", "in": "path", "required": True, "schema": {"type": "string"}}], "responses": {"202": {"description": "Accepted"}}}},
-                    "/internal/v1/secrets": {"get": {"operationId": "internal.secrets", "responses": {"200": {"description": "Internal"}}}},
+                    "/auth/v1/user": {
+                        "get": {
+                            "operationId": "auth.user",
+                            "summary": "Signed-in user",
+                            "responses": {"200": {"description": "User"}},
+                        }
+                    },
+                    "/functions/v1/{name}": {
+                        "post": {
+                            "operationId": "functions.invoke",
+                            "summary": "Invoke a function",
+                            "parameters": [
+                                {
+                                    "name": "name",
+                                    "in": "path",
+                                    "required": True,
+                                    "schema": {"type": "string"},
+                                }
+                            ],
+                            "responses": {"200": {"description": "Result"}},
+                        }
+                    },
+                    "/platform/v1/envs/{env}/events": {
+                        "post": {
+                            "operationId": "events.emit",
+                            "tags": ["events"],
+                            "summary": "Emit an event",
+                            "parameters": [
+                                {
+                                    "name": "env",
+                                    "in": "path",
+                                    "required": True,
+                                    "schema": {"type": "string"},
+                                }
+                            ],
+                            "responses": {"202": {"description": "Accepted"}},
+                        }
+                    },
+                    "/internal/v1/secrets": {
+                        "get": {
+                            "operationId": "internal.secrets",
+                            "responses": {"200": {"description": "Internal"}},
+                        }
+                    },
                 },
             }
         env = path.removeprefix("/platform/v1/envs/").split("/")[0]

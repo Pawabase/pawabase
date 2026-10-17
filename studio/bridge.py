@@ -152,9 +152,7 @@ def _document_manual_bodies(path: str, path_item: dict[str, Any]) -> None:
             {
                 "required": True,
                 "content": {
-                    "application/octet-stream": {
-                        "schema": {"type": "string", "format": "binary"}
-                    },
+                    "application/octet-stream": {"schema": {"type": "string", "format": "binary"}},
                     "multipart/form-data": {
                         "schema": {
                             "type": "object",
@@ -214,7 +212,9 @@ def _expand_runtime_paths(
             for hook in hooks:
                 if hook.get("slug"):
                     concrete = path.replace("{env}", env).replace("{slug}", str(hook["slug"]))
-                    variants.append((concrete, _without_path_parameters(path_item, {"env", "slug"})))
+                    variants.append(
+                        (concrete, _without_path_parameters(path_item, {"env", "slug"}))
+                    )
         elif "{bucket}" in path and path.startswith("/storage/v1/") and buckets:
             for bucket in buckets:
                 if bucket.get("name"):
@@ -515,7 +515,9 @@ def register(app: SilloApp, deps: Deps) -> None:
         if (refusal := object_guard(ctx, env, key)) is not None:
             return refusal
         forwarded = {
-            name: ctx.headers[name] for name in ("range", "if-none-match", "if-range", "accept") if name in ctx.headers
+            name: ctx.headers[name]
+            for name in ("range", "if-none-match", "if-range", "accept")
+            if name in ctx.headers
         }
         try:
             result = await core.request_raw(
@@ -579,7 +581,9 @@ def register(app: SilloApp, deps: Deps) -> None:
                 f"/platform/v1/envs/{env}/buckets/{bucket}/object",
                 params={"key": key},
                 content=await ctx.body,
-                headers={"content-type": ctx.headers.get("content-type", "application/octet-stream")},
+                headers={
+                    "content-type": ctx.headers.get("content-type", "application/octet-stream")
+                },
             )
         except ServiceError as exc:
             return error_response(exc)

@@ -482,9 +482,7 @@ async def test_signed_storage_stays_behind_pawabase_and_enforces_bucket_rules(ac
 
     # Disabled means disabled for both application callers and Studio, with a useful status instead of a 500.
     assert (
-        await api.http.post(
-            "/storage/v1/sign/audio/song.mp3", json={"method": "PUT"}, headers=ada
-        )
+        await api.http.post("/storage/v1/sign/audio/song.mp3", json={"method": "PUT"}, headers=ada)
     ).status_code == 403
     from pawabase_server.core.clients import ServiceError
 

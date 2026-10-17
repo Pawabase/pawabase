@@ -142,7 +142,9 @@ def apply_landlock(
             try:
                 if not os.path.isdir(path):
                     rights &= FILE_RIGHTS
-                rule = ctypes.create_string_buffer(struct.pack("=Qi", rights & handled, fd), 12)  # landlock_path_beneath_attr, packed
+                rule = ctypes.create_string_buffer(
+                    struct.pack("=Qi", rights & handled, fd), 12
+                )  # landlock_path_beneath_attr, packed
                 _syscall(
                     SYS_LANDLOCK_ADD_RULE,
                     ctypes.c_int(ruleset),

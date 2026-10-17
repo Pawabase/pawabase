@@ -41,7 +41,11 @@ async def after_write(
         await platform.emit(
             state,
             f"{resource}.{change}",
-            {"resource": resource, "change": change, "record": public_record(state, definition, record)},
+            {
+                "resource": resource,
+                "change": change,
+                "record": public_record(state, definition, record),
+            },
             actor=actor,
             request_id=request_id,
         )

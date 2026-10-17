@@ -40,14 +40,18 @@ def role_name(schema: str) -> str:
 
 
 def role_password(master_key: str, schema: str) -> str:
-    return hmac.new(master_key.encode(), f"pawabase:sql-role:{schema}".encode(), hashlib.sha256).hexdigest()
+    return hmac.new(
+        master_key.encode(), f"pawabase:sql-role:{schema}".encode(), hashlib.sha256
+    ).hexdigest()
 
 
 def role_url(url: str, role: str, password: str) -> str:
     """*url* with its credentials replaced by the role's."""
     parts = urlsplit(url)
     host = parts.netloc.rsplit("@", 1)[-1]
-    return urlunsplit(parts._replace(netloc=f"{quote(role, safe='')}:{quote(password, safe='')}@{host}"))
+    return urlunsplit(
+        parts._replace(netloc=f"{quote(role, safe='')}:{quote(password, safe='')}@{host}")
+    )
 
 
 def _ident(name: str) -> str:
@@ -106,7 +110,11 @@ async def developer_source(platform: Any, state: Any) -> DataSource:
     isolation is off; otherwise the schema's own role (see the module docstring).
     """
     source = await state.source()
-    if source.dialect != "postgres" or not source.schema or platform.settings.sql_isolation == "off":
+    if (
+        source.dialect != "postgres"
+        or not source.schema
+        or platform.settings.sql_isolation == "off"
+    ):
         return source
     role = role_name(source.schema)
     password = role_password(platform.settings.master_key, source.schema)
@@ -128,4 +136,6 @@ async def developer_source(platform: Any, state: Any) -> DataSource:
     else:
         # Tables made since (a new resource): hand them over too. One catalogue query.
         await adopt_tables(source, role)
-    return await platform.sources.get(role_url(source.url, role, password), alias=f"{state.env_name}:sql")
+    return await platform.sources.get(
+        role_url(source.url, role, password), alias=f"{state.env_name}:sql"
+    )

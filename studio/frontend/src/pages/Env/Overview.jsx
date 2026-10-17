@@ -144,6 +144,14 @@ export default function Overview({ runtime, env, overview }) {
         }
       />
 
+      {overview.problems?.length > 0 && (
+        <div className="alert warn">
+          <b>Definitions with problems</b>
+          <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{overview.problems.map((x, i) => <li key={i}>{typeof x === "string" ? x : JSON.stringify(x)}</li>)}</ul>
+        </div>
+      )}
+
+      <div className="ov-board">
       <div className="metrics">
         <Metric label={`Requests, ${span}`} value={compact(s.requests)} sub={`${(s.error_rate ?? 0).toFixed(s.error_rate >= 10 ? 0 : 1)}% server errors`} href={envHref(env, "observability")} bad={s.error_rate >= 5} />
         <Metric label="Average latency" value={s.avg_latency_ms != null ? `${compact(s.avg_latency_ms)} ms` : "—"} sub="across gateway requests" href={envHref(env, "observability")} />
@@ -151,13 +159,6 @@ export default function Overview({ runtime, env, overview }) {
         <Metric label="Jobs, 24h" value={compact(day.jobs)} sub={day.job_failures ? `${compact(day.job_failures)} failed` : "none failed"} href={envHref(env, "jobs")} bad={day.job_failures > 0} />
         <Metric label="Events, 24h" value={compact(day.events)} sub={`${compact(day.mail)} emails`} href={envHref(env, "events")} />
       </div>
-
-      {overview.problems?.length > 0 && (
-        <div className="alert warn">
-          <b>Definitions with problems</b>
-          <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{overview.problems.map((x, i) => <li key={i}>{typeof x === "string" ? x : JSON.stringify(x)}</li>)}</ul>
-        </div>
-      )}
 
       <section className="ov-grid chart-split">
       <div className="ov-panel chart-panel">
@@ -206,6 +207,7 @@ export default function Overview({ runtime, env, overview }) {
       </div>
       <RecentRequests env={env} />
       </section>
+      </div>
 
       <section className="ov-grid three">
         <div className="ov-panel">

@@ -216,6 +216,13 @@ def load(message: dict[str, Any]) -> dict[str, Any]:
         if mode != "off"
         else {"mode": "off"}
     )
+    try:
+        os.listdir(message["artifact"])  # confinement can deny the folder it was told to allow; say so, instead of loading nothing
+    except OSError as exc:
+        raise RuntimeError(
+            f"the deployment at {message['artifact']} cannot be read from the sandbox ({exc.strerror}). "
+            "Landlock cannot confine paths on some filesystems (a macOS bind mount in Docker): keep PAWABASE_DEPLOYMENTS_PATH on a volume."
+        ) from exc
     for library in reversed(
         libraries
     ):  # for good, not only while importing: a function may import lazily

@@ -40,6 +40,8 @@ x-pawabase: &pawabase
     PAWABASE_REDIS_URL: redis://redis:6379/0
     PAWABASE_STORAGE_ROOT: /data/objects
     PAWABASE_CODE_PATH: /app/code
+    # Not under /app: that is a bind mount from the host, and Landlock cannot confine paths on it, so sandboxed functions would load nothing.
+    PAWABASE_DEPLOYMENTS_PATH: /data/deployments
     PAWABASE_PROJECT_NAME: ${PAWABASE_PROJECT_NAME:-Pawabase}
     PAWABASE_OUTBOUND_ALLOW_HOSTS: ${PAWABASE_OUTBOUND_ALLOW_HOSTS:-}
     # File storage: the bundled MinIO unless .env points these at your own S3-compatible service.

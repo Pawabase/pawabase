@@ -152,9 +152,7 @@ async def test_the_explorer_uses_an_anonymous_context_and_an_optional_user_token
 
 
 async def test_the_explorer_catalog_combines_the_compiled_and_runtime_apis(studio):
-    response = await studio.http.get(
-        "/studio/api/explorer/openapi?env=main&version=v1"
-    )
+    response = await studio.http.get("/studio/api/explorer/openapi?env=main&version=v1")
     assert response.status_code == 200
     catalog = response.json()
     assert [item["id"] for item in catalog["documents"]] == ["application", "runtime"]
@@ -193,8 +191,21 @@ def test_the_explorer_catalog_infers_concrete_environment_endpoints():
         paths,
         "main",
         {
-            "functions": [{"name": "quote", "description": "Quote an order", "input_fields": [{"name": "items", "type": "integer", "required": True, "example": 2}]}],
-            "flows": [{"name": "checkout", "definition": {"nodes": [{"data": {"block": "trigger.http", "config": {}}}]}}],
+            "functions": [
+                {
+                    "name": "quote",
+                    "description": "Quote an order",
+                    "input_fields": [
+                        {"name": "items", "type": "integer", "required": True, "example": 2}
+                    ],
+                }
+            ],
+            "flows": [
+                {
+                    "name": "checkout",
+                    "definition": {"nodes": [{"data": {"block": "trigger.http", "config": {}}}]},
+                }
+            ],
             "hooks": [{"slug": "stripe"}],
             "buckets": [{"name": "receipts"}],
         },
@@ -324,7 +335,9 @@ async def test_a_stored_object_comes_back_as_itself_for_preview_and_download(stu
 
     # The environment has to be one this session may name, and the key has to stay inside the bucket.
     assert (await studio.http.get("/studio/api/object/Bad/avatars/x.png")).status_code == 403
-    assert (await studio.http.get("/studio/api/object/main/avatars/%2E%2E/secret")).status_code == 400
+    assert (
+        await studio.http.get("/studio/api/object/main/avatars/%2E%2E/secret")
+    ).status_code == 400
 
     async def missing(method, path, **kwargs):
         return {"status": 404, "headers": {}, "body": {"detail": "no such object"}, "content": b""}

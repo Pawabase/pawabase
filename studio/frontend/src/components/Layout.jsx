@@ -296,7 +296,7 @@ function SubNavTree({ tree, active, forceOpen, row }) {
 }
 
 /** A second column of navigation for a section with parts of its own; the main sidebar folds to an icon rail while it is open. */
-function SubNav({ subnav, backHref }) {
+function SubNav({ subnav, backHref, showHeader = true }) {
   const row = (item) => {
     const body = (
       <>
@@ -318,10 +318,10 @@ function SubNav({ subnav, backHref }) {
   };
   return (
     <aside className={`subnav ${subnav.wide ? "wide" : ""}`} aria-label={subnav.title}>
-      <div className="subnav-head">
+      {showHeader && <div className="subnav-head">
         <b>{subnav.title}</b>
         {subnav.action && <button type="button" className="subnav-action" onClick={subnav.action.onClick} title={subnav.action.label} aria-label={subnav.action.label}><Icon name="plus" size={16} /></button>}
-      </div>
+      </div>}
       {subnav.search && (
         <div className="subnav-search">
           <Icon name="search" size={14} />
@@ -411,15 +411,23 @@ export default function Layout({ title, crumbs = [], children, full, subnav, flo
           </nav>
         </aside>
         </div>
-        {subnav && <SubNav subnav={subnav} backHref={env ? envHref(env, "overview") : "/"} />}
-        {navOpen && <div className="sheet-overlay" style={{ zIndex: 39 }} onClick={() => setNavOpen(false)} />}
-        <div className="main-col">
-        <main className={`main ${flowPage ? "flow-main" : ""}`}>
-          <div className={`content ${full ? "full" : ""} ${flowPage ? "flow-content" : ""}`}>
-            {children}
+        <div className={`workspace ${subnav ? "has-secondary" : ""}`}>
+          {subnav && <nav className="secondary-bar" aria-label={`${subnav.title} section navigation`}>
+            <b>{subnav.title}</b>
+            {subnav.action && <button type="button" className="subnav-action" onClick={subnav.action.onClick} title={subnav.action.label} aria-label={subnav.action.label}><Icon name="plus" size={16} /></button>}
+          </nav>}
+          <div className="workspace-body">
+            {subnav && <SubNav subnav={subnav} backHref={env ? envHref(env, "overview") : "/"} showHeader={false} />}
+            {navOpen && <div className="sheet-overlay" style={{ zIndex: 39 }} onClick={() => setNavOpen(false)} />}
+            <div className="main-col">
+              <main className={`main ${flowPage ? "flow-main" : ""}`}>
+                <div className={`content ${full ? "full" : ""} ${flowPage ? "flow-content" : ""}`}>
+                  {children}
+                </div>
+              </main>
+              <Console env={env} />
+            </div>
           </div>
-        </main>
-        <Console env={env} />
         </div>
        </div>
         {newEnv && <NewEnvironment envs={envs || []} onClose={() => setNewEnv(false)} onDone={(created) => router.visit(envHref(created, "overview"))} />}

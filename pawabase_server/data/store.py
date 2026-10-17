@@ -330,7 +330,9 @@ class ResourceStore:
             spec = self.spec.field_map[name]
             if value is None and not spec.get("nullable", not spec.get("required", False)):
                 raise PawabaseError(
-                    f"Field {name!r} may not be null.", status=422, code="invalid_field",
+                    f"Field {name!r} may not be null.",
+                    status=422,
+                    code="invalid_field",
                     details={"field": name},
                 )
         return {key: self._encode(key, value) for key, value in data.items()}
