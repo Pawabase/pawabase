@@ -1,6 +1,7 @@
 import { Link } from "@inertiajs/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import Layout, { dataSubnav, envHref } from "../../components/Layout";
+import Layout, { envHref } from "../../components/Layout";
+import { tablesHref, useDataSubnav } from "../../components/DataNav";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, EmptyState, Loading, PageHead, useAction } from "../../components/ui";
 import { CARD, buildGraph, layout, neighbours, route } from "../../lib/topology";
@@ -106,7 +107,7 @@ function Detail({ node, graph, env, onClose, onDeclare, busy }) {
         {spec.events === false ? <Badge>no events</Badge> : <Badge>emits events</Badge>}
         {spec.cache_ttl ? <Badge>cache {spec.cache_ttl}s</Badge> : null}
       </div>
-      <Link href={envHref(env, node.kind === "schema" ? "schemas" : "resources")} className="btn">Open in {node.kind === "schema" ? "Schemas" : "Resources"}</Link>
+      <Link href={node.kind === "schema" ? envHref(env, "schemas") : tablesHref(env, spec.table || node.name)} className="btn">Open in {node.kind === "schema" ? "Schemas" : "Tables"}</Link>
     </aside>
   );
 }
@@ -114,6 +115,7 @@ function Detail({ node, graph, env, onClose, onDeclare, busy }) {
 export default function Topology({ env }) {
   const resources = useApi(envPath(env, "/resources"), { params: { limit: 500 } });
   const schemas = useApi(envPath(env, "/schemas"), { params: { limit: 500 } });
+  const { subnav } = useDataSubnav(env, "topology");
   const [hover, setHover] = useState(null);
   const [selected, setSelected] = useState(null);
   const [zoom, setZoom] = useState(1);
@@ -160,7 +162,7 @@ export default function Topology({ env }) {
   const empty = graph && graph.nodes.size === 0;
 
   return (
-    <Layout title="Topology" subnav={dataSubnav(env, "topology")}>
+    <Layout title="Topology" subnav={subnav}>
       <PageHead
         title="Topology"
         description="How your data fits together: resources as tables, the relations between them, and the schemas they use. Point at one to see what it touches."
@@ -180,8 +182,8 @@ export default function Topology({ env }) {
       <Loading state={resources}>
         {() => !graph ? null : empty ? (
           <Card>
-            <EmptyState icon="resources" title="Nothing to draw yet" action={<Link href={envHref(env, "resources")} className="btn primary">Create a resource</Link>}>
-              Define resources and relate them to each other, and their shape appears here.
+            <EmptyState icon="resources" title="Nothing to draw yet" action={<Link href={envHref(env, "tables")} className="btn primary">Create a table</Link>}>
+              Define a table's fields and API, relate it to others, and its shape appears here.
             </EmptyState>
           </Card>
         ) : (

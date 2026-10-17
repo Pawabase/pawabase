@@ -16,7 +16,6 @@ DEFINITION_KINDS = (
     "schemas",
     "transformers",
     "policies",
-    "resources",
     "routes",
     "subscriptions",
     "webhooks",

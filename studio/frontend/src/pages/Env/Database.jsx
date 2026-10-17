@@ -1,6 +1,7 @@
 import { router } from "@inertiajs/react";
 import { useState } from "react";
-import Layout, { dataSubnav } from "../../components/Layout";
+import Layout from "../../components/Layout";
+import { useDataSubnav } from "../../components/DataNav";
 import SqlBuilder from "../../components/SqlBuilder";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, Loading, PageHead, Table, formatCell, truncate, useAction } from "../../components/ui";
@@ -10,6 +11,7 @@ import { envPath, get, post, useApi } from "../../lib/api";
 export default function Database({ env }) {
   const base = envPath(env, "/database");
   const overview = useApi(base);
+  const { subnav } = useDataSubnav(env, "database");
   const [run, busy] = useAction();
   const [result, setResult] = useState(null);
   // Every resource gets its table (or the columns it gained). The same call the resource editor's "Create / migrate table" makes, for all of them at once.
@@ -33,10 +35,10 @@ export default function Database({ env }) {
     if (done && done !== true) { setResult(done); overview.reload(); }
   };
   return (
-    <Layout title="SQL" subnav={dataSubnav(env, "database")}>
+    <Layout title="SQL" subnav={subnav}>
       <PageHead
         title="SQL"
-        description="Run queries against the environment's database. Browse a resource's records from Resources. Bring your own database with a database URL in Settings."
+        description="Run queries against the environment's database. Browse a table's rows in the Table editor. Bring your own database with a database URL in Settings."
         actions={<Button disabled={busy} onClick={syncTables}><Icon name="database" />{busy ? "Working…" : "Create tables"}</Button>}
       />
       {result && (
@@ -151,11 +153,10 @@ function SqlConsole({ env, base, tables, dialect }) {
           <p>{warning.message}</p>
           <ol>{warning.steps.map((step) => <li key={step}>{step}</li>)}</ol>
           {warning.action && (
-            <Button size="sm" onClick={() => router.visit(
-              warning.action.type === "import"
-                ? `/envs/${env}/resources?import=1`
-                : `/envs/${env}/resources?resource=${encodeURIComponent(warning.action.resource)}&tab=schema`,
-            )}>{warning.action.label}</Button>
+            <Button size="sm" onClick={() => {
+              const table = warning.action.table || (warning.action.type === "import" ? null : warning.action.resource);
+              router.visit(table ? `/envs/${env}/tables?table=${encodeURIComponent(table)}&tab=schema` : `/envs/${env}/tables`);
+            }}>{warning.action.label}</Button>
           )}
         </div>
       ))}
