@@ -118,6 +118,7 @@ class Platform:
             install_timeout=settings.function_install_timeout,
             binary_only=settings.function_install_binary_only,
         )
+        self.deployments.confinement = self.sandboxes.limits.confinement
         self.app: Any = None
         self.app: Any = None
         self.started_at = datetime.now(UTC)
@@ -290,6 +291,8 @@ class Platform:
         """
         if "/" not in spec.project:
             return False
+        if getattr(getattr(spec, "handler", None), "typescript", False):
+            return True  # a TypeScript function only ever runs in its Deno worker
         mode = self.env_setting(state, "FUNCTION_ISOLATION", self.settings.function_isolation)
         return str(mode).strip().lower() == "process"
 

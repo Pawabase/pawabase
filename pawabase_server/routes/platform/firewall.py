@@ -374,6 +374,7 @@ def register(r: Router, platform: Platform) -> None:
         rows = await FirewallEvent.filter(env=env, created_at__gte=since).values(
             "ip", "path", "rule_name", "action", "source", "country", "created_at", "simulated"
         )
+
         def top(key: str, n: int = 10) -> list[dict[str, Any]]:
             counts = Counter(r[key] for r in rows if r[key])
             return [{"value": v, "count": c} for v, c in counts.most_common(n)]

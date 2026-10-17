@@ -39,7 +39,9 @@ class DeliverWebhookJob(PawabaseJob):
 
     def retry_policy(self) -> RetryPolicy:
         """The endpoint's attempt limit (1–10, default 5), on the long webhook schedule."""
-        return self.policy().with_attempts(min(int(self.params.get("max_attempts") or self.tries), 10))
+        return self.policy().with_attempts(
+            min(int(self.params.get("max_attempts") or self.tries), 10)
+        )
 
     async def retrying(self, next_attempt: int, delay: float, error: str) -> None:
         await WebhookDelivery.filter(id=self.params["delivery_id"]).update(

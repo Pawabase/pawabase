@@ -305,9 +305,9 @@ export function useAction() {
   return [run, busy];
 }
 
-/** A right-hand panel for creating and editing things: a header, an optional
- *  side menu of sections (``tabs``), a scrolling body of form sections, and a sticky footer. */
-export function Sheet({ title, subtitle, icon, tone = "lavender", tabs, tab, onTab, onClose, footer, children }) {
+/** A right-hand panel for creating and editing things: a header, optional
+ *  side or top tabs, a scrolling body of form sections, and a sticky footer. */
+export function Sheet({ title, subtitle, icon, tone = "lavender", tabs, tab, onTab, tabsPlacement = "side", onClose, footer, children }) {
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -325,7 +325,8 @@ export function Sheet({ title, subtitle, icon, tone = "lavender", tabs, tab, onT
           </div>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
         </div>
-        {tabs ? (
+        {tabs && tabsPlacement === "top" && <PageTabs tabs={tabs} value={tab} onChange={onTab} />}
+        {tabs && tabsPlacement === "side" ? (
           <div className="sheet-split">
             <SideMenu className="sheet-nav" items={tabs} value={tab} onChange={onTab} />
             <div className="sheet-body">{children}</div>

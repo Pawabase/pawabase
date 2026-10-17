@@ -235,5 +235,6 @@ def is_read_only(sql: str, dialect: str | None = None) -> bool:
     if not isinstance(node, exp.Query):
         return False
     return not any(
-        isinstance(item, (exp.DML, exp.DDL, exp.Into, exp.Lock, exp.Command)) for item in node.walk()
+        isinstance(item, (exp.DML, exp.DDL, exp.Into, exp.Lock, exp.Command))
+        for item in node.walk()
     )

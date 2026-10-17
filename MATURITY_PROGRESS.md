@@ -84,6 +84,13 @@ Branch: `feat/platform-maturity`. Audit: `~/sillo.build/pawabase-audit/`. This f
 - Events batched to `pb_firewall_events` (retention `PAWABASE_FIREWALL_EVENT_RETENTION_DAYS`, 14); stats with timeline and top addresses/paths/rules/countries; step-by-step request tester.
 - Verified live: a keyless SQL-injection request was refused at the gateway and recorded. Full suite 744 passed.
 
+## TypeScript functions, user administration and the SDKs (2026-10-16)
+
+- **TypeScript functions** run in a Deno worker confined by Landlock + seccomp and then Deno permissions (`functions/sandbox/{typescript,deno_launch,confine}.py`, `deno/{pawabase,worker}.ts`); one language per project. Functions import the kit as `"@pawabase/functions"` or `"pawabase"` (same module). Confinement tests need the Linux image.
+- **User administration through the gateway.** `/admin/v1` is blocked publicly, so a customer's secret key could not administer its users. The identity admin and directory routes are now also mounted at `/platform/v1/envs/{env}/auth/…` behind the same `MANAGE` gate (own environment only); the internal `SERVICE_ONLY` mount is unchanged. `tests/platform/test_user_admin_routes.py` (3).
+- **SDKs, written by hand and split into packages** (separate repos, branch `feat/sdk-split`): Python `pawabase` (client, `pb.manage`, `pb.admin`, realtime) and `pawabase-functions` (kit, CLI, emulator) share one `pawabase/` namespace; JS `@pawabase/client` (+ `/manage`, `/admin` subpath imports) and `@pawabase/functions` (kit, `/testing`, `pawabase-functions` CLI). Tests: Python client 43 + 5 live-gated, Python functions 57, JS client suite green, JS functions 24. The TypeScript kit file in the npm package is identical to `deno/pawabase.ts` here; **keep them in sync**.
+- Not verified: the SDK live suites (`PAWABASE_LIVE_*`) were not run against the Docker stack after the user-admin routes landed (needs a rebuilt `pawabase` image); `pawabase-functions deploy` has been tested against a fake gateway and its bundle read back with Python's `tarfile`, not yet deployed to a running gateway.
+
 ## Tests executed
 
 | Suite | Result |

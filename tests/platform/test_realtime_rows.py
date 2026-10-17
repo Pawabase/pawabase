@@ -117,4 +117,3 @@ async def test_clients_cannot_publish_on_resource_channels(notes):
         await api.platform.realtime.authorize(
             "development", "resource:notes", "publish", auth=ada.auth, credential=ada.credential
         )
-

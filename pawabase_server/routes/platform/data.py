@@ -447,7 +447,8 @@ def register(r: Router, platform: Platform) -> None:
         try:
             if read_only:
                 rows = await asyncio.wait_for(
-                    fetch_read_only(confined, body.sql, body.params), timeout=platform.settings.query_timeout
+                    fetch_read_only(confined, body.sql, body.params),
+                    timeout=platform.settings.query_timeout,
                 )
                 result = {
                     "rows": [

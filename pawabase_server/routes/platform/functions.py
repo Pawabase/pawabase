@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import io
+import tarfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -23,6 +25,7 @@ from pawabase_server.core.ids import new_ulid
 from pawabase_server.db.models import Environment, FunctionDeployment, FunctionRun
 from pawabase_server.functions.deployments import DeploymentError
 from pawabase_server.functions.registry import MAIN
+from pawabase_server.functions.sandbox import typescript
 from pawabase_server.platform import Platform
 from pawabase_server.routes.common import (
     MANAGE,
@@ -62,7 +65,21 @@ def _problem(error: DeploymentError) -> HTTPException:
     )
 
 
-SOURCE_SUFFIXES = {".py", ".toml", ".txt", ".md", ".json", ".yaml", ".yml", ".cfg", ".ini"}
+SOURCE_SUFFIXES = {
+    ".py",
+    ".ts",
+    ".mts",
+    ".js",
+    ".mjs",
+    ".toml",
+    ".txt",
+    ".md",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".cfg",
+    ".ini",
+}
 MAX_SOURCE_BYTES = 400_000
 
 
@@ -116,10 +133,40 @@ def register(r: Router, platform: Platform) -> None:
             "",
             datetime.now(UTC),
         )
-        deployment.manifest = {**(deployment.manifest or {}), "functions": code.functions}
+        deployment.manifest = {
+            **(deployment.manifest or {}),
+            "functions": code.functions,
+            "language": platform.deployments.language(env, deployment.branch),
+        }
         await deployment.save(update_fields=["status", "error", "activated_at", "manifest"])
         platform.envs.forget(env)
         return deployment
+
+    async def enforce_one_language(environment: Environment, raw: bytes) -> None:
+        """A project's functions are one language: refuse a bundle in another one than the project's live deployments."""
+        try:
+            with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as bundle:
+                language = typescript.language_of(
+                    [m.name.lstrip("./") for m in bundle.getmembers() if m.isfile()]
+                )
+        except tarfile.TarError:
+            return  # installing reports a bad archive with its own message
+        if language in (None, "mixed"):
+            return  # installing refuses these with the reason
+        scope = (
+            FunctionDeployment.filter(
+                environment__project_id=environment.project_id, status="active"
+            )
+            if environment.project_id
+            else FunctionDeployment.filter(environment_id=environment.id, status="active")
+        )
+        for row in await scope.select_related("environment"):
+            existing = (row.manifest or {}).get("language") or typescript.PYTHON
+            if existing != language:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"This project's functions are {existing.title()} (live in {row.environment.name}); a project's functions are one language.",
+                )
 
     async def enforce_deployment_limit(environment: Environment, branch: str) -> None:
         """Reserve an active function-deployment slot for a new branch.
@@ -191,6 +238,7 @@ def register(r: Router, platform: Platform) -> None:
         if len(raw) > platform.limit(env, "MAX_UPLOAD_BYTES", platform.settings.max_upload_bytes):
             raise HTTPException(status_code=413, detail="archive exceeds the upload limit")
         await enforce_deployment_limit(environment, body.branch)
+        await enforce_one_language(environment, raw)
         deployment = await FunctionDeployment.create(
             id=new_ulid(),
             environment=environment,

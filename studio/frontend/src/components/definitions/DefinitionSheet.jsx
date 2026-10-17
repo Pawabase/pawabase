@@ -47,6 +47,7 @@ export function DefinitionSheet({ kind, env, editing, onClose, onSave, onDelete,
       tabs={tabs.length > 1 ? tabs : undefined}
       tab={tab}
       onTab={setTab}
+      tabsPlacement={kind === "resources" ? "top" : "side"}
       onClose={() => onClose(undefined)}
       footer={
         <>

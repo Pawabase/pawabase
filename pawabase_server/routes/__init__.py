@@ -18,6 +18,7 @@ from sillo import Router, SilloApp
 from pawabase_server.identity.accounts import Accounts
 from pawabase_server.platform import Platform
 from pawabase_server.realtime import Realtime
+from pawabase_server.routes.common import MANAGE
 
 
 def register_routes(
@@ -26,6 +27,8 @@ def register_routes(
     from pawabase_server.routes import identity, public
     from pawabase_server.routes import realtime as realtime_routes
     from pawabase_server.routes.data import hooks, invoke, storage
+    from pawabase_server.routes.identity import admin as identity_admin
+    from pawabase_server.routes.identity import directory as identity_directory
     from pawabase_server.routes.platform import (
         agent,
         automation,
@@ -63,6 +66,17 @@ def register_routes(
         status,
     ):
         module.register(management, platform)
+    # Your users, administered with the environment's secret key: the same routes as ``/admin/v1`` (which only other services reach), under
+    # the management plane's own authorization. ``/platform/v1/envs/{env}/auth/users``, ``…/orgs``, ``…/roles``, ``…/sessions``…
+    for register in (identity_admin.register, identity_directory.register_admin):
+        register(
+            management,
+            accounts,
+            gate=MANAGE,
+            prefix="/envs/{env}/auth",
+            tag="user administration",
+            internal=False,
+        )
     app.mount_router(management)
 
     storage.register(app, platform)

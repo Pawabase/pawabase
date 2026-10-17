@@ -222,7 +222,9 @@ async def test_realtime_channels_in_use_follow_the_plan(api):
 
 async def test_plan_usage_reports_each_limit(api):
     await plan(api, max_webhooks=3, max_function_invocations_per_month=100, daily_request_limit=10)
-    await api.studio.post(f"{ENV}/webhooks", json={"name": "a", "url": "https://example.com/h", "events": ["*"]})
+    await api.studio.post(
+        f"{ENV}/webhooks", json={"name": "a", "url": "https://example.com/h", "events": ["*"]}
+    )
     report = {row["limit"]: row for row in (await api.studio.get(f"{ENV}/plan-usage"))["data"]}
     assert report["max_webhooks"]["used"] == 1 and report["max_webhooks"]["percent"] == 33.3
     assert report["max_function_invocations_per_month"]["used"] == 0

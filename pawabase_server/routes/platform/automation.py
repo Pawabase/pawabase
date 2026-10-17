@@ -237,6 +237,10 @@ def register(r: Router, platform: Platform) -> None:
         ]
 
         def where(handler: Any) -> dict[str, Any]:
+            if getattr(handler, "typescript", False):
+                # A TypeScript function's location comes from its own runtime (functions/sandbox/deno).
+                file, line = getattr(handler, "source", (None, None))
+                return {"file": file, "line": line}
             try:
                 file = Path(inspect.getsourcefile(handler) or "").resolve()
                 line = inspect.getsourcelines(handler)[1]
