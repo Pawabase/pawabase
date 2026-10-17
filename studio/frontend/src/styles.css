@@ -1732,6 +1732,9 @@ th::first-letter { text-transform: uppercase; }
 .pop-search:focus-within { border-color: var(--brand); }
 .pop-search input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; box-shadow: none !important; font-size: 13px; }
 .pop-list { display: flex; flex-direction: column; gap: 1px; padding: 2px 6px 6px; overflow-y: auto; min-height: 0; }
+/* Project and environment options belong to the popover surface itself. The
+   listbox role is semantic here, not a second floating menu. */
+.popover .pop-list[role="listbox"] { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .pop-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 6px 8px; border: 0; border-radius: var(--r-xs); background: none; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
 .pop-item:hover, .pop-item:focus-visible { background: var(--hover); outline: none; }
 .pop-item.current { background: var(--press); }
@@ -2051,6 +2054,9 @@ kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; 
 
 /* API Explorer: where requests go, groups to pick from, a group's endpoints. */
 .ex-context { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+/* API context is the first row in the workbench. Give it the same inset as
+   the endpoint header so it never sits flush against the secondary bar. */
+.shell .content > .ex-context { margin: 0; padding: 18px var(--gutter) 16px; border-bottom: 1px solid var(--line); }
 .ex-context-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r); font-size: 12.5px; color: var(--muted); background: var(--surface); }
 .ex-context-chip b { color: var(--text); font-weight: 650; }
 .ex-context-chip select { height: 22px; padding: 0 6px; font-size: 12.5px; border: 0; background: transparent; color: var(--text); font-weight: 650; }
@@ -2150,3 +2156,42 @@ kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; 
 .ov-board .recent-requests .ov-panel-head.pad { padding: 0 18px; border-bottom-color: var(--line-2); }
 @media (max-width: 1100px) { .ov-board > .ov-grid.chart-split > .chart-panel { border-right: 0; border-bottom: 1px solid var(--line-2); } }
 .ov-board, .ov-board * { box-shadow: none; }
+
+/* Iconsax Bulk companion layer: rounded, layered controls give the filled icon
+   set enough visual weight without making the workspace feel decorative. */
+:root {
+  --r: 10px;
+  --r-xs: 7px;
+  --r-sm: var(--r); --r-md: 14px; --r-lg: 18px; --r-xl: 22px;
+  --control: 34px;
+  --control-sm: 30px;
+  --hover: color-mix(in srgb, var(--text) 6%, transparent);
+  --press: color-mix(in srgb, var(--brand) 19%, transparent);
+  --head-bg: color-mix(in srgb, var(--surface) 82%, var(--canvas));
+}
+.appbar, .secondary-bar { background: color-mix(in srgb, var(--canvas) 94%, var(--surface)); }
+.appbar-icon, .icon-btn { border-radius: calc(var(--r) - 1px); }
+.appbar-icon:hover, .icon-btn:hover { background: var(--brand-soft); color: var(--brand-strong); }
+.nav a, .subnav-item, .subnav-list button, .subnav-folder-head { border-radius: var(--r); }
+.nav a.active, .subnav-item.active, .subnav-list button.active {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 22%, transparent);
+}
+.nav a.active .icon, .subnav-item.active .icon { color: var(--brand); }
+.card { border-radius: var(--r-md); background: color-mix(in srgb, var(--surface) 58%, var(--canvas)); }
+.card.sunken { background: var(--head-bg); }
+.tile .tile-icon, .empty-state .tile-icon {
+  width: 34px; height: 34px; border: 0; border-radius: 11px;
+  background: var(--brand-soft); color: var(--brand-strong);
+}
+.btn, input, select, textarea, .appbar-btn, .subnav-action, .side-collapse { border-radius: var(--r); }
+.btn.primary {
+  background: linear-gradient(135deg, var(--brand-strong), var(--brand));
+  border-color: transparent;
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--brand) 24%, transparent);
+}
+.btn.primary:hover { filter: brightness(1.08); }
+.segmented, .obs-pills { border-radius: calc(var(--r) + 1px); background: var(--sunken); padding: 2px; }
+.segmented button, .obs-pill { border: 0; border-radius: 7px; }
+.segmented button.active, .obs-pill.active { background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, .16) !important; }
