@@ -25,10 +25,12 @@ from pawabase_server.core.principal import ANONYMOUS_POLICY_CONTEXT
 from pawabase_server.core.ids import new_ulid
 from pawabase_server.db.models import Environment, FunctionDeployment, FunctionRun
 from pawabase_server.functions.deployments import DeploymentError
+from pawabase_server.functions import limits as limits_module
 from pawabase_server.functions.registry import MAIN
 from pawabase_server.functions.runtime import ApiRuntime
 from pawabase_server.functions.sandbox import typescript
 from pawabase_server.functions.service.grants import Grant, new_invocation_id
+from pawabase_server.functions.service import watchdog
 from pawabase_server.functions.service.runtime import HttpRequest, variables_version
 from pawabase_server.platform import Platform
 from pawabase_server.routes.common import (
@@ -587,6 +589,7 @@ def register(r: Router, platform: Platform) -> None:
             kind="http",
             deployment_id=spec.deployment_id,
         )
+        request.limits = await platform.run_limits(state, spec, kind="http")
         runtime = ApiRuntime(platform, state, auth=auth, request_id=request.request_id, branch=spec.branch)
         started = datetime.now(UTC)
         reply = await platform.functions.http(spec, request, runtime=runtime, grant=grant)
@@ -617,4 +620,35 @@ def register(r: Router, platform: Platform) -> None:
             "duration_ms": round((datetime.now(UTC) - started).total_seconds() * 1000, 2),
             "invocation": invocation,
             "caller": auth,
+        }
+
+    # ── resource limits (read-only: they are the project's) ─────────────
+
+    @r.get(f"{base}/function-limits", auth=MANAGE, tags=["functions"], summary="What every function run may use")
+    async def function_limits(ctx: HttpContext, env: str):
+        """The resource limits every run of each function gets, from the project's limits (else the installation's defaults), and
+        where each value came from. They are set when the project is created and changed by whoever operates the installation
+        (Pawabase Cloud, or ``pawabase-server projects limits set``); this API only shows them."""
+        _manage_scope(ctx)
+        state = await platform.state(env)
+        rows = []
+        for kind, specs in (("call", platform.function_specs(env)), ("http", platform.http_functions(env))):
+            for spec in specs:
+                effective = await platform.run_limits(state, spec, kind=kind)
+                running = platform.function_gates.in_use(env, spec.name)
+                rows.append(
+                    {
+                        "function": spec.name,
+                        "kind": kind,
+                        "limits": effective.as_dict(),
+                        "running": {"now": running[0], "limit": running[1]} if running else None,
+                    }
+                )
+        project = {key: state.project_limits.get(key) for key in limits_module.PROJECT_KEYS.values() if state.project_limits.get(key)}
+        defaults, maximums = limits_module.installation(platform.settings, kind="call")
+        return {
+            "data": rows,
+            "project": project,
+            "installation": {"defaults": defaults, "maximums": maximums},
+            "enforced": {"cpu_and_memory": watchdog.supported(), "timeout": True, "concurrency": True},
         }

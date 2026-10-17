@@ -59,6 +59,13 @@ LIMIT_FIELDS = frozenset(
         "max_inbound_hooks",
         "max_function_concurrency",
         "max_queued_jobs",
+        # What one function run may use (``functions/limits.py``); unset fields take the installation's defaults.
+        "max_function_timeout_seconds",
+        "max_function_memory_mb",
+        "max_function_cpu_seconds",
+        "max_concurrent_runs_per_function",
+        "max_function_body_mb",
+        "max_function_workers",
     }
 )
 

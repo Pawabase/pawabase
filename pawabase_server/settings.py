@@ -199,6 +199,18 @@ class Settings(Config):
     functions_background_seconds: int = 300
     #: Heap limit of an HTTP function worker, in MB (a function's ``config.memory`` may lower it).
     functions_memory_mb: int = 512
+    #: Resource limits every run gets (``functions/limits.py``). A function chooses its own in code (``memory``, ``cpu``, ``timeout``,
+    #: ``concurrency``) or an operator overrides them per environment; these are the defaults when nothing is chosen and the ceilings
+    #: nothing may exceed. The project's plan may lower the ceilings (``max_function_memory_mb``, ``max_function_cpu_seconds``,
+    #: ``max_function_timeout_seconds``).
+    function_default_timeout_seconds: int = 30
+    function_default_memory_mb: int = 512
+    function_max_memory_mb: int = 2048
+    #: CPU seconds one run may use. ``0`` as a default means "as long as its timeout".
+    function_default_cpu_seconds: float = 0
+    function_max_cpu_seconds: float = 300
+    #: The largest request body an HTTP function accepts, in MB (a function's ``maxBody`` may lower it).
+    functions_max_body_mb: int = 50
     #: Outbound requests one invocation may make, and how many bytes it may receive from them.
     functions_fetch_limit: int = 200
     functions_fetch_max_bytes: int = 64 * 1024 * 1024

@@ -91,6 +91,15 @@ Branch: `feat/platform-maturity`. Audit: `~/sillo.build/pawabase-audit/`. This f
 - **SDKs, written by hand and split into packages** (separate repos, branch `feat/sdk-split`): Python `pawabase` (client, `pb.manage`, `pb.admin`, realtime) and `pawabase-functions` (kit, CLI, emulator) share one `pawabase/` namespace; JS `@pawabase/client` (+ `/manage`, `/admin` subpath imports) and `@pawabase/functions` (kit, `/testing`, `pawabase-functions` CLI). Tests: Python client 43 + 5 live-gated, Python functions 57, JS client suite green, JS functions 24. The TypeScript kit file in the npm package is identical to `deno/pawabase.ts` here; **keep them in sync**.
 - Not verified: the SDK live suites (`PAWABASE_LIVE_*`) were not run against the Docker stack after the user-admin routes landed (needs a rebuilt `pawabase` image); `pawabase-functions deploy` has been tested against a fake gateway and its bundle read back with Python's `tarfile`, not yet deployed to a running gateway.
 
+## Function resource limits (2026-10-17)
+
+Every run of every function is held to its **project's** limits (noisy-neighbour guard). `functions/limits.py`, `functions/service/watchdog.py`; migration `0028_function_limits`.
+- Project limit fields (set at creation, changed by the operator or Pawabase Cloud via the agent / `pawabase-server project limits set`; **not** from Studio or code): `max_function_timeout_seconds`, `max_function_memory_mb`, `max_function_cpu_seconds`, `max_concurrent_runs_per_function`, `max_function_body_mb`, `max_function_workers`. Unset → installation defaults; never above installation maximums (`PAWABASE_FUNCTION_DEFAULT_*`, `_MAX_*`). A function's own `timeout` may only shorten the project's; `config.memory`/`cpu`/`maxBody`/`maxConcurrent` are refused at deploy.
+- Enforcement: timeout (server + runtime); memory and CPU by a watchdog reading `/proc` of the worker (fn(): per call, killed on breach; HTTP: memory per worker, CPU as an event-loop stall detected by a 1s heartbeat); runs at once per function (server, 429 after a short wait); body size (413 before the function runs); workers per HTTP function (pool). Python workers keep an address-space backstop; Deno gets the memory as its heap.
+- Runs record `limits` (with each value's source), `cpu_ms`, `memory_peak_mb`, `limit_hit`. `GET …/function-limits` and Studio's Limits tab are read-only.
+- Pawabase Cloud plans carry the six limits (Free → Business) and forward them to projects.
+- Tests: 13 in `test_function_limits.py` (CPU, memory, stall, body, concurrency, timeout enforced on Linux). Not enforced on macOS (no `/proc`): timeout and concurrency only.
+
 ## Functions runtime: HTTP functions and the runtime service (2026-10-17)
 
 Supabase-style functions as a service of its own. `functions/service/` (engine, pools, grants, bridge, egress, service app, gateway), `functions/http_functions.py`, `functions/http_dispatch.py`, `functions/vendor.py`, `deno/http_worker.ts`, `deno/http_support.ts`, kit `serve()`/`getContext()`/`sse()`; migration `0027_http_functions`.

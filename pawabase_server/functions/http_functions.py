@@ -72,7 +72,6 @@ class HttpFunctionConfig:
     #: ``public``, ``key``, ``user``, ``service``, or a policy reference.
     auth: Any = AUTH_KEY
     timeout: int = DEFAULT_TIMEOUT
-    memory: int | None = None
     warm: int = 0
     concurrency: int | None = None
     cors: Cors | None = None
@@ -84,7 +83,6 @@ class HttpFunctionConfig:
             "description": self.description,
             "auth": self.auth,
             "timeout": self.timeout,
-            "memory": self.memory,
             "warm": self.warm,
             "concurrency": self.concurrency,
             "cors": None
@@ -109,7 +107,6 @@ def config_from_dict(data: dict[str, Any]) -> HttpFunctionConfig:
         description=str(data.get("description") or ""),
         auth=data.get("auth", AUTH_KEY),
         timeout=int(data.get("timeout") or DEFAULT_TIMEOUT),
-        memory=int(data["memory"]) if data.get("memory") else None,
         warm=int(data.get("warm") or 0),
         concurrency=int(data["concurrency"]) if data.get("concurrency") else None,
         cors=None
@@ -255,9 +252,12 @@ def parse_config(
         raw = {}
     if not isinstance(raw, dict):
         return HttpFunctionConfig(), ["config must be an object"]
-    known = {"description", "auth", "timeout", "memory", "warm", "concurrency", "cors", "methods", "tags", "verify_jwt", "verifyJwt"}
+    known = {
+        "description", "auth", "timeout", "warm", "concurrency", "cors", "methods", "tags", "verify_jwt", "verifyJwt",
+    }
+    resource_keys = {"memory", "cpu", "maxBody", "maxConcurrent"}
     for key in raw:
-        if key not in known:
+        if key not in known and key not in resource_keys:
             problems.append(f"config.{key} is not a setting (known: {', '.join(sorted(known - {'verify_jwt', 'verifyJwt'}))})")
     auth: Any = raw.get("auth", AUTH_KEY)
     # Supabase's switch, accepted so a function moved from there keeps its meaning.
@@ -268,7 +268,9 @@ def parse_config(
         problems.append("config.auth must be 'public', 'key', 'user', 'service', a policy name or a condition")
         auth = AUTH_KEY
     timeout = _number(raw.get("timeout"), "config.timeout", problems, low=1, high=max_timeout)
-    memory = _number(raw.get("memory"), "config.memory", problems, low=32, high=max_memory)
+    for chosen in ("memory", "cpu", "maxBody", "maxConcurrent"):
+        if chosen in raw:
+            problems.append(f"config.{chosen}: resource limits are the project's, not a function's (its timeout may only be shorter)")
     warm = _number(raw.get("warm"), "config.warm", problems, low=0, high=MAX_WARM)
     concurrency = _number(raw.get("concurrency"), "config.concurrency", problems, low=1, high=max_concurrency)
     methods = frozenset(m.upper() for m in _strings(raw.get("methods"), "config.methods", problems)) or METHODS
@@ -283,7 +285,6 @@ def parse_config(
         description=description[:500],
         auth=auth,
         timeout=int(timeout) if timeout is not None else min(DEFAULT_TIMEOUT, max_timeout),
-        memory=int(memory) if memory is not None else None,
         warm=int(warm or 0),
         concurrency=int(concurrency) if concurrency is not None else None,
         cors=parse_cors(raw.get("cors"), problems),

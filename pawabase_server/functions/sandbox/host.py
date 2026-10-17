@@ -22,7 +22,7 @@ import sys
 import tempfile
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +35,7 @@ from pawabase_server.functions.registry import FunctionError, deployment_key
 from pawabase_server.functions.runtime_rpc import METHODS
 from pawabase_server.functions.sandbox import typescript
 from pawabase_server.functions.service.bridge import failure_reply
+from pawabase_server.functions.service.watchdog import Watch
 
 logger = logging.getLogger("pawabase.sandbox")
 
@@ -59,6 +60,15 @@ def resolve_confinement(setting: str) -> str:
         sys.platform,
     )
     return "off"
+
+
+class LimitExceeded(Exception):
+    """A run went over one of its resource limits and was stopped. ``limit`` names it (``cpu``, ``memory``…)."""
+
+    def __init__(self, limit: str, failure: Failure) -> None:
+        super().__init__(failure.summary)
+        self.limit = limit
+        self.failure = failure
 
 
 class SandboxFailure(Exception):
@@ -133,7 +143,7 @@ class Worker:
         }
 
     async def start(self) -> None:
-        env, branch, _ = self.key
+        env, branch = self.key[0], self.key[1]
         command = (
             typescript.launcher(
                 "serve",
@@ -301,8 +311,13 @@ class SandboxPool:
         function: str,
         context: Any,
         bridge: Any,
+        limits: Any = None,
+        usage: dict[str, Any] | None = None,
     ) -> Any:
-        """Run *function* of the deployment live for *env*/*branch* and return what it returned (or raise what it raised)."""
+        """Run *function* of the deployment live for *env*/*branch* and return what it returned (or raise what it raised).
+
+        What the call used (``cpu_ms``, ``memory_peak_mb``) is written into *usage* when one is given.
+        """
         done = await self.run_raw(
             deployments,
             env=env,
@@ -310,9 +325,17 @@ class SandboxPool:
             function=function,
             invocation=invocation_of(context, function),
             bridge=bridge,
+            limits=limits,
         )
+        return self.finish(done, context, usage)
+
+    @classmethod
+    def finish(cls, done: dict[str, Any], context: Any, usage: dict[str, Any] | None) -> Any:
+        """A ``done`` message, wherever it was run: its logs go to *context*, its usage to *usage*, then its result or failure."""
         context.logs.extend(decode(done.get("logs") or []))
-        return self._result(done)
+        if usage is not None:
+            usage.update(done.get("usage") or {})
+        return cls._result(done)
 
     async def run_raw(
         self,
@@ -323,27 +346,50 @@ class SandboxPool:
         function: str,
         invocation: dict[str, Any],
         bridge: Any,
+        limits: Any = None,
     ) -> dict[str, Any]:
-        """Run one invocation and return the worker's ``done`` message as it is (what the runtime service sends back to the server)."""
+        """Run one invocation and return the worker's ``done`` message as it is (what the runtime service sends back to the server).
+
+        *limits* (a :class:`~pawabase_server.functions.limits.RunLimits`) choose the worker's memory class and are enforced on the call:
+        the worker is watched while it runs and stopped the moment it uses more CPU time or memory than they allow. ``done`` then
+        carries ``usage`` (``cpu_ms``, ``memory_peak_mb``) and, when a limit stopped it, ``limit_hit``.
+        """
         stamp = deployments.stamp(env, branch)
         if stamp is None:
             raise FunctionError(f"no deployment for {env!r}", status=404, code="not_found")
-        key = (env, branch, stamp["id"])
+        memory = int(limits.memory) if limits is not None else self.limits.memory_mb
+        # Workers are shared only by calls with the same memory limit: it is applied when the process starts.
+        key = (env, branch, stamp["id"], memory)
         await self._retire_stale(env, branch, stamp["id"])
         slot = self._slots.setdefault(key, asyncio.Semaphore(self.limits.workers))
         async with slot:
-            worker = await self._take(key, deployments, env, branch)
+            worker = await self._take(key, deployments, env, branch, memory=memory)
+            assert worker.process is not None
+            watch = Watch(
+                worker.process.pid,
+                cpu_seconds=limits.cpu if limits is not None else None,
+                memory_mb=limits.memory if limits is not None else None,
+            )
             try:
-                done = await worker.run({**invocation, "id": 1, "function": function}, bridge)
+                async with watch:
+                    done = await worker.run({**invocation, "id": 1, "function": function}, bridge)
             except EOFError:
                 await self._drop(worker)  # first: it waits for the process, whose exit code says why it stopped
+                if watch.hit is not None:
+                    return {
+                        "outcome": "limit",
+                        "limit": watch.hit,
+                        "message": f"the function was stopped: {watch.reason}",
+                        "usage": watch.usage(),
+                    }
                 crash = self._crashed(worker)
-                return {"outcome": "crashed", "kind": crash.kind, "message": crash.message, "hint": crash.hint}
+                return {"outcome": "crashed", "kind": crash.kind, "message": crash.message, "hint": crash.hint, "usage": watch.usage()}
             except BaseException:  # a timeout or cancellation: the process may be stuck, so it does not get another call
                 await self._drop(worker)
                 raise
             worker.last_used = time.monotonic()
             self.idle.setdefault(key, []).append(worker)
+        done["usage"] = watch.usage()
         return done
 
     def _crashed(self, worker: Worker) -> Failure:
@@ -377,6 +423,16 @@ class SandboxPool:
             )
         if outcome == "http":
             raise HTTPException(status_code=int(done["status"]), detail=decode(done.get("detail")))
+        if outcome == "limit":
+            limit = done.get("limit") or "limit"
+            raise LimitExceeded(
+                limit,
+                Failure(
+                    {"cpu": "CpuLimitExceeded", "memory": "MemoryLimitExceeded"}.get(limit, "LimitExceeded"),
+                    done.get("message") or "",
+                    hint=f"Raise the function's {limit} limit (in its code, or in Studio for this environment), or do less per call.",
+                ),
+            )
         if outcome == "crashed":
             raise SandboxFailure(
                 Failure(done.get("kind") or "SandboxCrashed", done.get("message") or "", hint=done.get("hint"))
@@ -402,19 +458,28 @@ class SandboxPool:
         )
 
     async def _take(
-        self, key: tuple[str, str, str], deployments: Any, env: str, branch: str
+        self, key: tuple[Any, ...], deployments: Any, env: str, branch: str, *, memory: int | None = None
     ) -> Worker:
         while self.idle.get(key):
             worker = self.idle[key].pop()
             if worker.alive:
                 return worker
             await self._drop(worker)
+        language = deployments.language(env, branch)
+        limits = self.limits
+        if memory:
+            # Deno: the heap limit is the run's memory. Python: the address-space backstop stays generous (an interpreter reserves far
+            # more address space than it uses); the resident limit itself is enforced by the watchdog.
+            limits = replace(
+                self.limits,
+                memory_mb=memory if language == typescript.TYPESCRIPT else max(self.limits.memory_mb, memory * 4),
+            )
         worker = Worker(
             key,
             deployments.current(env, branch),
             deployments.libraries(env, branch),
-            self.limits,
-            deployments.language(env, branch),
+            limits,
+            language,
             deployments.vendor_cache(env, branch) if hasattr(deployments, "vendor_cache") else None,
         )
         self.all.add(worker)

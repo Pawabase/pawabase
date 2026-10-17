@@ -40,6 +40,10 @@ class RunReport:
     response_bytes: int = 0
     background_ms: float | None = None
     fetches: int = 0
+    limits: dict[str, Any] | None = None
+    cpu_ms: float | None = None
+    memory_peak_mb: float | None = None
+    limit_hit: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -82,4 +86,8 @@ class RunReport:
             response_bytes=self.response_bytes,
             background_ms=self.background_ms,
             fetches=self.fetches,
+            limits=self.limits,
+            cpu_ms=self.cpu_ms,
+            memory_peak_mb=self.memory_peak_mb,
+            limit_hit=self.limit_hit,
         )

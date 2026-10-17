@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from pawabase_server.functions.http_functions import HttpFunctionSpec
+from pawabase_server.functions.limits import RunLimits
 from pawabase_server.functions.sandbox.host import Limits, SandboxFailure, SandboxPool, resolve_confinement
 from pawabase_server.functions.service.bridge import Bridge
 from pawabase_server.functions.service.egress import Budget, Egress
@@ -104,6 +105,8 @@ class HttpRequest:
     client_ip: str | None = None
     #: The secrets version the server knows is current (``None``: ask the source).
     variables_version: str | None = None
+    #: The limits this request runs under (resolved by the server); ``None`` takes the function's config and the installation's.
+    limits: RunLimits | None = None
 
 
 @dataclass
@@ -170,11 +173,24 @@ class FunctionsRuntime:
     # ── fn() functions ───────────────────────────────────────────────────
 
     async def invoke_call(
-        self, *, env: str, branch: str, function: str, invocation: dict[str, Any], bridge: Bridge
+        self,
+        *,
+        env: str,
+        branch: str,
+        function: str,
+        invocation: dict[str, Any],
+        bridge: Bridge,
+        limits: RunLimits | None = None,
     ) -> dict[str, Any]:
-        """Run one ``fn()`` call and return the worker's ``done`` message."""
+        """Run one ``fn()`` call under *limits* and return the worker's ``done`` message (with ``usage``)."""
         return await self.sandboxes.run_raw(
-            self.deployments, env=env, branch=branch, function=function, invocation=invocation, bridge=bridge
+            self.deployments,
+            env=env,
+            branch=branch,
+            function=function,
+            invocation=invocation,
+            bridge=bridge,
+            limits=limits,
         )
 
     # ── HTTP functions ───────────────────────────────────────────────────
@@ -189,11 +205,12 @@ class FunctionsRuntime:
             "PAWABASE_REGION": getattr(self.settings, "region", "") or "",
         }
 
-    async def worker_spec(self, spec: HttpFunctionSpec, *, variables_version: str | None = None) -> WorkerSpec:
+    async def worker_spec(
+        self, spec: HttpFunctionSpec, *, variables_version: str | None = None, limits: RunLimits | None = None
+    ) -> WorkerSpec:
         version, secrets = await self.variables.variables(spec.env, version=variables_version)
         values = {name: value for name, value in secrets.items() if name not in BUILTINS}
         values.update(self.builtins(spec))
-        ceiling = self.settings.functions_memory_mb
         config = spec.config
         return WorkerSpec(
             env=spec.env,
@@ -203,7 +220,9 @@ class FunctionsRuntime:
             artifact=self.deployments.current(spec.env, spec.branch),
             deployment_id=spec.deployment_id,
             vendor_cache=self.deployments.vendor_cache(spec.env, spec.branch),
-            memory_mb=min(config.memory or ceiling, ceiling),
+            memory_mb=limits.memory if limits is not None else self.settings.function_default_memory_mb,
+            max_workers=limits.workers if limits is not None else self.settings.functions_max_workers,
+            stall_seconds=limits.cpu if limits is not None else 0.0,
             concurrency=config.concurrency or self.settings.functions_worker_concurrency,
             network=self.settings.functions_network,
             confinement=self.confinement,
@@ -222,7 +241,8 @@ class FunctionsRuntime:
     async def serve_http(self, spec: HttpFunctionSpec, request: HttpRequest, bridge: Bridge) -> HttpReply:
         """Answer *request* with *spec*'s function. The reply's body must be iterated (or closed) by the caller."""
         started = time.monotonic()
-        timeout = self._timeout(spec)
+        limits = request.limits
+        timeout = float(limits.timeout) if limits is not None else self._timeout(spec)
         deadline = started + timeout
         report = RunReport(
             invocation=request.invocation,
@@ -236,9 +256,10 @@ class FunctionsRuntime:
             status="failed",
             status_code=None,
             duration_ms=0.0,
+            limits=limits.as_dict() if limits is not None else None,
         )
         try:
-            worker_spec = await self.worker_spec(spec, variables_version=request.variables_version)
+            worker_spec = await self.worker_spec(spec, variables_version=request.variables_version, limits=limits)
             if spec.config.warm:
                 self.http.keep_warm(worker_spec, spec.config.warm)
             worker, cold = await self.http.acquire(worker_spec)
@@ -287,6 +308,7 @@ class FunctionsRuntime:
         except TimeoutError:
             await worker.abort(exchange, f"the function did not answer within {timeout:g}s")
             self.http.stats_for(group).timeouts += 1
+            report.limit_hit = "timeout"
             self._complete(report, exchange, worker, started, bridge, budget, error=f"timed out after {timeout:g}s")
             return error_reply(504, "function_timeout", f"The function did not answer within {timeout:g} seconds.")
         except HandlerFailed as exc:
@@ -300,6 +322,11 @@ class FunctionsRuntime:
             )
         except WorkerCrashed as exc:
             self._complete(report, exchange, worker, started, bridge, budget, error=str(exc))
+            if worker.limit_hit:
+                report.limit_hit = worker.limit_hit
+                return error_reply(
+                    500, f"{worker.limit_hit}_limit_exceeded", str(exc), {"limit": worker.limit_hit}
+                )
             return error_reply(502, "function_crashed", str(exc))
         report.status_code = status
         cleaned = [(k, v) for k, v in response_headers if k.lower() not in HIDDEN_RESPONSE_HEADERS]
@@ -337,12 +364,14 @@ class FunctionsRuntime:
                 yield chunk
         except TimeoutError:
             error = f"the response was still streaming after {timeout:g}s and was cut off"
+            report.limit_hit = "timeout"
             await worker.abort(exchange, error)
             self.http.stats_for(HttpPool.group_of(worker.spec)).timeouts += 1
         except HandlerFailed as exc:
             error = exc.failure.line()
         except WorkerCrashed as exc:
             error = str(exc)
+            report.limit_hit = report.limit_hit or worker.limit_hit
         except (asyncio.CancelledError, GeneratorExit):
             if not exchange.finished.is_set():
                 await worker.abort(exchange, "the caller went away")
@@ -420,6 +449,9 @@ class FunctionsRuntime:
         report.response_bytes = exchange.response_bytes
         report.background_ms = exchange.background_ms
         report.fetches = budget.used_requests
+        report.cpu_ms = exchange.cpu_ms
+        report.memory_peak_mb = round(exchange.memory_peak_mb, 2) if exchange.memory_peak_mb is not None else None
+        report.limit_hit = report.limit_hit or (worker.limit_hit if exchange.error is not None else None)
         self.http.stats_for(HttpPool.group_of(worker.spec)).record(
             report.duration_ms, failed=report.status == "failed", error=report.error
         )

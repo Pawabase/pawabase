@@ -5,7 +5,9 @@ authority as running the server. It calls the project manager directly; nothing 
 
     project create NAME [--slug S] [--id ID]
     project list | show REF | update REF --name N | delete REF
-    project limits show REF | set REF [--daily-requests N] [--monthly-requests N] [--rate-limit N] [--rate-window N] [--max-active-connections N] [--reset]
+    project limits show REF | set REF [--daily-requests N] [--monthly-requests N] [--rate-limit N] [--rate-window N] [--max-active-connections N]
+                                      [--max-function-timeout-seconds N] [--max-function-memory-mb N] [--max-function-cpu-seconds N]
+                                      [--max-concurrent-runs-per-function N] [--max-function-body-mb N] [--max-function-workers N] [--reset]
     project db bind REF (--database-url-env VAR | --database-url URL) [--mode M] [--rebind] [--no-test]
     project db test REF | project db rotate REF (--database-url-env VAR | --database-url URL)
     project init                  make the default project and attach existing environments (what start-up does)
@@ -22,6 +24,17 @@ from typing import Any
 from pawabase_server.db.database import database
 from pawabase_server.projects.manager import ProjectError, ProjectManager, ensure_default_project
 from pawabase_server.settings import Settings
+
+
+#: The project limits that hold every function run (``functions/limits.py``).
+FUNCTION_LIMITS = (
+    "max_function_timeout_seconds",
+    "max_function_memory_mb",
+    "max_function_cpu_seconds",
+    "max_concurrent_runs_per_function",
+    "max_function_body_mb",
+    "max_function_workers",
+)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -51,6 +64,9 @@ def parser() -> argparse.ArgumentParser:
     lset.add_argument("--rate-limit", type=int)
     lset.add_argument("--rate-window", type=int)
     lset.add_argument("--max-active-connections", type=int)
+    # What every function run of the project may use (functions/limits.py); 0 returns a limit to the installation's default.
+    for field in FUNCTION_LIMITS:
+        lset.add_argument("--" + field.replace("_", "-"), type=int, dest=field)
     lset.add_argument("--reset", action="store_true")
     pcmd.add_parser("init")
     db = pcmd.add_parser("db")
@@ -106,6 +122,7 @@ async def execute(args: argparse.Namespace, manager: ProjectManager, settings: S
                     "rate_limit": args.rate_limit,
                     "rate_window": args.rate_window,
                     "max_active_connections": args.max_active_connections,
+                    **{field: getattr(args, field) for field in FUNCTION_LIMITS},
                 }.items()
                 if value is not None
             }

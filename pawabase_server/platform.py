@@ -47,6 +47,7 @@ from pawabase_server.functions.runtime_rpc import Transactions
 from pawabase_server.functions.sandbox import SandboxPool
 from pawabase_server.functions.sandbox.host import Limits, resolve_confinement
 from pawabase_server.functions.http_functions import HttpFunctionSpec
+from pawabase_server.functions.limits import FunctionGates, RunLimits, resolve, timeout_of
 from pawabase_server.functions.service.gateway import gateway_for
 from pawabase_server.infra.mail import MailManager
 from pawabase_server.infra.storage.manager import StorageManager
@@ -131,6 +132,8 @@ class Platform:
         self.deployments.confinement = self.sandboxes.limits.confinement
         #: Where functions run: this process, or the runtime service at ``PAWABASE_FUNCTIONS_RUNTIME_URL``.
         self.functions = gateway_for(self)
+        #: Per-function concurrency (the project's ``max_concurrent_runs_per_function``, ``functions/limits.py``).
+        self.function_gates = FunctionGates()
         self.app: Any = None
         self.app: Any = None
         self.started_at = datetime.now(UTC)
@@ -254,6 +257,10 @@ class Platform:
         if branch and branch != MAIN:
             self.deployments.ensure_loaded(env, branch)
         return resolve_function(env, branch, name)
+
+    async def run_limits(self, state: EnvironmentState, spec: Any, *, kind: str) -> RunLimits:
+        """The limits a run of *spec* gets: its project's (else the installation's defaults), with the timeout its code asks for if shorter."""
+        return resolve(self.settings, kind=kind, project=state.project_limits, timeout=timeout_of(spec))
 
     def http_function(self, env: str, name: str, branch: str | None = None) -> HttpFunctionSpec | None:
         """The HTTP function *name* as *branch* of *env* sees it (``functions/<name>/index.ts`` of a TypeScript deployment)."""

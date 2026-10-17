@@ -22,7 +22,6 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Protocol
 
 import httpx
-from pawabase.codec import decode
 
 from pawabase_server.core.tokens import issue_service_token
 from pawabase_server.functions.http_functions import HttpFunctionSpec
@@ -50,7 +49,16 @@ GRANT_HEADER = "x-pawabase-grant"
 
 class FunctionsGateway(Protocol):
     async def call(
-        self, *, env: str, branch: str, function: str, context: Any, runtime: ApiRuntime, grant: grants.Grant
+        self,
+        *,
+        env: str,
+        branch: str,
+        function: str,
+        context: Any,
+        runtime: ApiRuntime,
+        grant: grants.Grant,
+        limits: Any = None,
+        usage: dict[str, Any] | None = None,
     ) -> Any: ...
 
     async def http(
@@ -94,10 +102,17 @@ class EmbeddedFunctions:
     async def _record(self, report: RunReport) -> None:
         await self.platform.records.add(report.to_record())
 
-    async def call(self, *, env, branch, function, context, runtime, grant):
+    async def call(self, *, env, branch, function, context, runtime, grant, limits=None, usage=None):
         bridge = LocalBridge(runtime, self.platform.sandbox_transactions)
         return await self.engine.sandboxes.invoke(
-            self.platform.deployments, env=env, branch=branch, function=function, context=context, bridge=bridge
+            self.platform.deployments,
+            env=env,
+            branch=branch,
+            function=function,
+            context=context,
+            bridge=bridge,
+            limits=limits,
+            usage=usage,
         )
 
     async def http(self, spec, request, *, runtime, grant):
@@ -138,9 +153,9 @@ class RemoteFunctions:
     def _grant(self, grant: grants.Grant, seconds: float) -> str:
         return grants.issue(self.platform.settings.internal_secret, grant, seconds=seconds)
 
-    async def call(self, *, env, branch, function, context, runtime, grant):
+    async def call(self, *, env, branch, function, context, runtime, grant, limits=None, usage=None):
         spec = self.platform.function_spec(env, function, branch)
-        seconds = float(getattr(spec, "timeout", 30) or 30)
+        seconds = float(limits.timeout if limits is not None else (getattr(spec, "timeout", 30) or 30))
         try:
             response = await self.client.post(
                 "/v1/call",
@@ -150,6 +165,7 @@ class RemoteFunctions:
                     "function": function,
                     "invocation": invocation_of(context, function),
                     "grant": self._grant(grant, seconds),
+                    "limits": limits.as_dict() if limits is not None else None,
                 },
                 headers=self._token(),
                 timeout=httpx.Timeout(10.0, read=seconds + 30.0),
@@ -158,9 +174,7 @@ class RemoteFunctions:
             raise RuntimeServiceUnavailable(str(exc)) from exc
         if response.status_code >= 400:
             raise RuntimeServiceUnavailable(f"the functions runtime answered {response.status_code}: {response.text[:300]}")
-        done = response.json()
-        context.logs.extend(decode(done.get("logs") or []))
-        return SandboxPool._result(done)
+        return SandboxPool.finish(response.json(), context, usage)
 
     async def http(self, spec, request, *, runtime, grant):
         seconds = float(spec.config.timeout)
@@ -176,6 +190,7 @@ class RemoteFunctions:
             "project": request.project,
             "client_ip": request.client_ip,
             "variables_version": request.variables_version,
+            "limits": request.limits.as_dict() if request.limits is not None else None,
             "body": request.body is not None,
         }
         headers = {

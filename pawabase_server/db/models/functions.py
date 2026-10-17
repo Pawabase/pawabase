@@ -65,7 +65,10 @@ class FunctionRun(Model):
     response_bytes = fields.BigIntField(null=True)
     background_ms = fields.FloatField(null=True)
     fetches = fields.IntField(null=True)
+    #: The limits this run had (``functions/limits.py``), and what it used of them.
+    limits = AnyJSONField(null=True)
+    cpu_ms = fields.FloatField(null=True)
+    memory_peak_mb = fields.FloatField(null=True)
+    #: Which limit stopped it, when one did: ``timeout``, ``memory``, ``cpu``, ``concurrency``, ``max_body``.
+    limit_hit = fields.CharField(max_length=16, null=True)
 
-    class Meta:
-        table = "pb_function_runs"
-        ordering = ["-created_at"]

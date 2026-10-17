@@ -116,9 +116,17 @@ function RunDetail({ env, id, onClose }) {
               {r.cold_start ? <Badge tone="blue">cold start</Badge> : null}
               {r.background_ms != null && <Badge>waitUntil {Math.round(r.background_ms)} ms</Badge>}
               {r.fetches ? <Badge>{r.fetches} fetch{r.fetches === 1 ? "" : "es"}</Badge> : null}
+              {r.cpu_ms != null && <Badge>CPU {Math.round(r.cpu_ms)} ms</Badge>}
+              {r.memory_peak_mb != null && <Badge>memory {Math.round(r.memory_peak_mb)} MB</Badge>}
+              {r.limit_hit && <Badge tone="red">stopped: {r.limit_hit} limit</Badge>}
               <span className="hint">{when(r.created_at)}</span>
             </div>
             {r.error && <div className="alert error"><pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{r.error}</pre></div>}
+            {r.limits && (
+              <Field label="Limits of this run">
+                <div className="row wrap">{["timeout", "memory", "cpu", "concurrency", "max_body", "workers"].filter((k) => r.limits[k] != null).map((k) => <Badge key={k} tone={r.limit_hit === k ? "red" : undefined}>{k} {r.limits[k]}{({ timeout: "s", memory: " MB", cpu: "s", max_body: " MB" })[k] || ""}</Badge>)}</div>
+              </Field>
+            )}
             <Field label="Input"><Json value={r.input ?? null} /></Field>
             <Field label="Output"><Json value={r.output ?? null} /></Field>
             <Field label={`Log (${(r.logs || []).length})`}>
@@ -163,6 +171,7 @@ function RunsTable({ env, fn, onOpen }) {
               { label: "Request", render: (r) => (r.kind === "http" ? <code>{r.method} {r.path}</code> : <Badge>{r.trigger}</Badge>) },
               { label: "Status", render: (r) => <span className="row">{<Status value={r.status} />}{r.status_code ? <Badge tone={r.status_code >= 500 ? "red" : r.status_code >= 400 ? "amber" : undefined}>{r.status_code}</Badge> : null}{r.cold_start ? <Badge tone="blue">cold</Badge> : null}</span> },
               { label: "Duration", render: (r) => (r.duration_ms != null ? `${Math.round(r.duration_ms)} ms` : "—") },
+              { label: "CPU / memory", render: (r) => (r.cpu_ms != null || r.memory_peak_mb != null ? `${r.cpu_ms != null ? `${Math.round(r.cpu_ms)} ms` : "—"} / ${r.memory_peak_mb != null ? `${Math.round(r.memory_peak_mb)} MB` : "—"}` : "—") },
               { label: "Error", render: (r) => (r.error ? <span className="truncate" title={r.error}>{String(r.error).split("\n")[0].slice(0, 70)}</span> : "—") },
             ]}
           />
@@ -293,6 +302,47 @@ function HttpStats({ env, fn }) {
   );
 }
 
+const LIMITS = [
+  { key: "timeout", label: "Timeout", unit: "s", hint: "Wall-clock time a run may take." },
+  { key: "memory", label: "Memory", unit: "MB", hint: "What the run's worker may hold." },
+  { key: "cpu", label: "CPU", unit: "s", hint: "CPU time per run. HTTP functions: the longest it may compute without yielding." },
+  { key: "concurrency", label: "Runs at once", unit: "", hint: "Runs of this function at once in this environment." },
+  { key: "max_body", label: "Request body", unit: "MB", hint: "HTTP functions only." },
+  { key: "workers", label: "Workers", unit: "", hint: "Workers this HTTP function may run at once." },
+];
+const SOURCE_LABEL = { project: "project", default: "installation default", code: "shorter timeout in code", installation: "installation maximum" };
+
+/** What every run of the function may use. Read-only: limits are the project's, set by whoever operates the installation. */
+function FunctionLimits({ env, fn }) {
+  const all = useApi(envPath(env, "/function-limits"));
+  return (
+    <Loading state={all}>
+      {(data) => {
+        const row = data.data.find((r) => r.function === fn.name);
+        if (!row) return <p className="muted">This function is not loaded.</p>;
+        const shown = LIMITS.filter((l) => row.kind === "http" || !["max_body", "workers"].includes(l.key));
+        return (
+          <div className="stack lg">
+            <p className="hint">Every run of every function is held to these limits, so no project can starve another. They are this project's limits, set when it was created and changed by whoever operates this installation; they cannot be changed here.</p>
+            {!data.enforced.cpu_and_memory && <div className="alert">This server cannot measure CPU and memory (it is not Linux): only the timeout and runs at once are enforced here.</div>}
+            <Card flush title="Every run gets">
+              <Table
+                rows={shown}
+                columns={[
+                  { label: "Limit", render: (l) => <div><b>{l.label}</b><div className="hint">{l.hint}</div></div> },
+                  { label: "Value", render: (l) => <b>{l.key === "concurrency" && row.limits[l.key] === 0 ? "no limit of its own" : `${row.limits[l.key]}${l.unit ? ` ${l.unit}` : ""}`}</b> },
+                  { label: "Set by", render: (l) => <Badge tone={row.limits.sources[l.key] === "project" ? "blue" : undefined}>{SOURCE_LABEL[row.limits.sources[l.key]] || row.limits.sources[l.key]}</Badge> },
+                ]}
+              />
+            </Card>
+            {row.running && <p className="hint">Running now: {row.running.now} of {row.running.limit} allowed at once.</p>}
+          </div>
+        );
+      }}
+    </Loading>
+  );
+}
+
 /** One function in the page: a header with "Try it" on the right, then tabs for what it is, what it did lately, and its code. */
 function FunctionPanel({ env, fn, base, branch, stats, onRun }) {
   const [tab, setTab] = useState("overview");
@@ -314,6 +364,7 @@ function FunctionPanel({ env, fn, base, branch, stats, onRun }) {
           { value: "overview", label: "Overview" },
           { value: "runs", label: "Recent runs", count: stats?.total || undefined },
           ...(fn.kind === "http" ? [{ value: "runtime", label: "Performance" }] : []),
+          { value: "limits", label: "Limits" },
           { value: "code", label: "Code" },
         ]}
       />
@@ -327,7 +378,7 @@ function FunctionPanel({ env, fn, base, branch, stats, onRun }) {
                   {fn.public_url && <div><dt>Without a key</dt><dd><code>{fn.public_url}</code></dd></div>}
                   <div><dt>Who may</dt><dd><Badge tone={fn.config?.auth === "public" ? "amber" : undefined}>{typeof fn.config?.auth === "string" ? fn.config.auth : JSON.stringify(fn.config?.auth)}</Badge></dd></div>
                   <div><dt>Written with</dt><dd>{fn.style === "deno" ? <code>Deno.serve</code> : <code>serve()</code>}</dd></div>
-                  <div><dt>Workers</dt><dd>{fn.config?.warm ? `${fn.config.warm} kept warm` : "started on demand"}{fn.config?.concurrency ? ` · ${fn.config.concurrency} requests each` : ""}{fn.config?.memory ? ` · ${fn.config.memory} MB` : ""}</dd></div>
+                  <div><dt>Workers</dt><dd>{fn.config?.warm ? `${fn.config.warm} kept warm` : "started on demand"}{fn.config?.concurrency ? ` · ${fn.config.concurrency} requests each` : ""}</dd></div>
                   {fn.config?.cors && <div><dt>Origins</dt><dd><code>{Array.isArray(fn.config.cors.origins) ? fn.config.cors.origins.join(", ") : fn.config.cors.origins}</code></dd></div>}
                 </>
               ) : (
@@ -352,6 +403,7 @@ function FunctionPanel({ env, fn, base, branch, stats, onRun }) {
       )}
       {tab === "runs" && <Card><RunsTable env={env} fn={fn.name} onOpen={onRun} /></Card>}
       {tab === "runtime" && fn.kind === "http" && <HttpStats env={env} fn={fn} />}
+      {tab === "limits" && <FunctionLimits env={env} fn={fn} />}
       {tab === "code" && <Card><SourceFile env={env} path={fn.file} line={fn.line} branch={branch} /></Card>}
       {trying && (
         <Sheet title={`Try ${fn.name}`} subtitle={fn.kind === "http" ? "Send it a request, as any user" : "Call the function now, with any input and identity"} icon="play" tone="sky" onClose={() => setTrying(false)} footer={<Button onClick={() => setTrying(false)}>Close</Button>}>

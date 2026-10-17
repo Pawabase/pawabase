@@ -148,6 +148,10 @@ class HttpPool:
                     spec.deployment_id,
                 )
 
+    def _ceiling(self, spec: WorkerSpec) -> int:
+        """Workers *spec*'s function may run: its project's limit, never more than the installation's."""
+        return min(spec.max_workers, self.max_workers) if spec.max_workers > 0 else self.max_workers
+
     def notify(self, group: Group) -> None:
         """Room may have opened on *group*: wake the requests waiting for it."""
         condition = self._conditions.get(group)
@@ -185,7 +189,7 @@ class HttpPool:
                 if ready:
                     return min(ready, key=lambda w: w.active), False
                 running = len(self._current(group, spec)) + self.starting.get(group, 0)
-                if running < self.max_workers:
+                if running < self._ceiling(spec):
                     self.starting[group] = self.starting.get(group, 0) + 1
                     break
                 remaining = deadline - time.monotonic()
@@ -240,7 +244,7 @@ class HttpPool:
         group = self.group_of(spec)
         self._retire_others(group, spec)
         self._ensure_reaper()
-        while len(self._current(group, spec)) + self.starting.get(group, 0) < min(count, self.max_workers):
+        while len(self._current(group, spec)) + self.starting.get(group, 0) < min(count, self._ceiling(spec)):
             self.starting[group] = self.starting.get(group, 0) + 1
             try:
                 await self._start(spec)

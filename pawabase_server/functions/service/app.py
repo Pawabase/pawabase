@@ -33,6 +33,7 @@ import httpx
 from pawabase_server.core.tokens import TokenInvalid, issue_service_token, verify_service_token
 from pawabase_server.functions.deployments import Deployments
 from pawabase_server.functions.http_functions import HttpFunctionSpec
+from pawabase_server.functions.limits import RunLimits
 from pawabase_server.functions.service import grants
 from pawabase_server.functions.service.bridge import RemoteBridge
 from pawabase_server.functions.service.gateway import GRANT_HEADER, META_HEADER, SERVICE_AUDIENCE
@@ -226,8 +227,14 @@ class RuntimeService:
         grant = self._grant(body.get("grant"), env=env, function=function)
         bridge = RemoteBridge(self.api, body["grant"], token=self._api_token)
         try:
+            limits = RunLimits(**{k: v for k, v in (body.get("limits") or {}).items() if k != "sources"}) if body.get("limits") else None
             done = await self.engine.invoke_call(
-                env=grant.env, branch=branch, function=function, invocation=body.get("invocation") or {}, bridge=bridge
+                env=grant.env,
+                branch=branch,
+                function=function,
+                invocation=body.get("invocation") or {},
+                bridge=bridge,
+                limits=limits,
             )
         except Exception as exc:  # noqa: BLE001 - the server turns this into the caller's error
             failure = getattr(exc, "failure", None)
@@ -284,6 +291,7 @@ class RuntimeService:
             project=str(meta.get("project") or ""),
             client_ip=meta.get("client_ip"),
             variables_version=meta.get("variables_version"),
+            limits=RunLimits(**{k: v for k, v in meta["limits"].items() if k != "sources"}) if meta.get("limits") else None,
         )
         self.grants[request.invocation] = token or ""
         bridge = RemoteBridge(self.api, token or "", token=self._api_token)

@@ -33,6 +33,7 @@ from pawabase_server.core.failures import Failure, Where
 from pawabase_server.functions.sandbox import typescript
 from pawabase_server.functions.sandbox.host import SandboxFailure
 from pawabase_server.functions.service.bridge import Bridge, failure_reply
+from pawabase_server.functions.service import watchdog
 from pawabase_server.functions.service.egress import Budget, Egress, EgressRefused
 
 logger = logging.getLogger("pawabase.functions")
@@ -75,10 +76,15 @@ class WorkerSpec:
     #: Changes when the secrets do, so workers started with old values are replaced.
     variables_version: str = ""
     start_seconds: float = 30.0
+    #: The longest the worker may compute without yielding while it has requests (the project's ``cpu`` limit); ``0``: not watched.
+    stall_seconds: float = 0.0
+    #: Workers this function may run at once (the project's ``max_function_workers``); not part of the key: it changes no worker.
+    max_workers: int = 0
 
     @property
-    def key(self) -> tuple[str, str, str, str | None, str]:
-        return (self.env, self.branch, self.function, self.deployment_id, self.variables_version)
+    def key(self) -> tuple[Any, ...]:
+        # Memory and the stall limit are applied when the process starts: a changed limit needs new workers.
+        return (self.env, self.branch, self.function, self.deployment_id, self.variables_version, self.memory_mb, self.stall_seconds)
 
 
 @dataclass
@@ -104,6 +110,11 @@ class Exchange:
     status: int | None = None
     error: Failure | None = None
     aborted: str | None = None
+    #: CPU time the worker used while this was its only request (``None`` when it shared the worker, or where it cannot be measured).
+    cpu_ms: float | None = None
+    memory_peak_mb: float | None = None
+    shared: bool = False
+    cpu_start: float | None = None
 
     def __post_init__(self) -> None:
         self.background_done.set()  # nothing handed to waitUntil yet
@@ -131,7 +142,12 @@ class HttpWorker:
         self._write_lock = asyncio.Lock()
         self._reader: asyncio.Task | None = None
         self._drain: asyncio.Task | None = None
+        self._monitor: asyncio.Task | None = None
         self._dead = False
+        self.last_heard = time.monotonic()
+        #: The limit that stopped this worker (``memory`` or ``cpu``), and why.
+        self.limit_hit: str | None = None
+        self.limit_reason: str | None = None
 
     # ── state ────────────────────────────────────────────────────────────
 
@@ -256,7 +272,10 @@ class HttpWorker:
                 Failure("DeploymentDidNotLoad", f"the function did not load: {errors[0]}", hint="Fix it and deploy again.")
             )
         self.ready_info = ready
+        self.last_heard = time.monotonic()
         self._reader = asyncio.create_task(self._read_loop())
+        if watchdog.supported() or self.spec.stall_seconds:
+            self._monitor = asyncio.create_task(self._watch())
 
     async def _await_ready(self) -> dict[str, Any]:
         while True:
@@ -297,7 +316,9 @@ class HttpWorker:
             self._reader.cancel()
         if self._drain is not None:
             self._drain.cancel()
-        self._fail_all(WorkerCrashed("the worker was stopped"))
+        if self._monitor is not None and self._monitor is not asyncio.current_task():
+            self._monitor.cancel()
+        self._fail_all(WorkerCrashed(self.limit_reason or "the worker was stopped"))
         shutil.rmtree(self._tmp, ignore_errors=True)
 
     # ── the pipes ────────────────────────────────────────────────────────
@@ -334,6 +355,7 @@ class HttpWorker:
         try:
             while True:
                 message = await self._read()
+                self.last_heard = time.monotonic()
                 self._dispatch(message)
         except (EOFError, asyncio.IncompleteReadError, ValueError):
             pass
@@ -353,6 +375,8 @@ class HttpWorker:
         await self.kill()
 
     def _exit_reason(self, code: int | None) -> str:
+        if self.limit_reason:
+            return self.limit_reason
         tail = f" ({self.stderr[-1][:200]})" if self.stderr else ""
         if code is not None and code < 0 and -code == signal.SIGKILL:
             return f"the worker was stopped (it may have run out of memory: the limit is {self.spec.memory_mb} MB){tail}"
@@ -372,6 +396,62 @@ class HttpWorker:
             ex.background = 0
             ex.background_done.set()
         self.exchanges.clear()
+
+    # ── limits ───────────────────────────────────────────────────────────
+
+    async def _watch(self) -> None:
+        """Stop the worker when it holds more memory than its limit, or computes past its stall limit while serving."""
+        stall = self.spec.stall_seconds
+        try:
+            while not self._dead:
+                await asyncio.sleep(0.25)
+                usage = watchdog.read(self.process.pid) if self.process is not None else None
+                if usage is not None:
+                    for ex in self.exchanges.values():
+                        if not ex.finished.is_set() or not ex.background_done.is_set():
+                            ex.memory_peak_mb = max(ex.memory_peak_mb or 0.0, usage.rss_mb)
+                    if self.spec.memory_mb and usage.rss_mb > self.spec.memory_mb:
+                        await self._stop_for(
+                            "memory", f"the function's worker used more than its {self.spec.memory_mb} MB memory limit"
+                        )
+                        return
+                busy = any(not ex.finished.is_set() for ex in self.exchanges.values())
+                # The worker reports every second; silence while it has requests means its event loop is blocked.
+                if stall and busy and time.monotonic() - self.last_heard > max(stall, 1.5):
+                    await self._stop_for(
+                        "cpu", f"the function computed for more than {stall:g}s without yielding (its cpu limit)"
+                    )
+                    return
+        except asyncio.CancelledError:
+            return
+
+    async def _stop_for(self, limit: str, reason: str) -> None:
+        logger.warning("worker %s of %s/%s stopped: %s", self.id, self.spec.env, self.spec.function, reason)
+        self.limit_hit, self.limit_reason = limit, reason
+        for ex in self.exchanges.values():
+            if ex.error is None and (not ex.finished.is_set() or not ex.background_done.is_set()):
+                ex.error = Failure(
+                    {"cpu": "CpuLimitExceeded", "memory": "MemoryLimitExceeded"}.get(limit, "LimitExceeded"), reason
+                )
+        await self.kill()
+
+    def _usage_start(self, ex: Exchange) -> None:
+        active = [other for other in self.exchanges.values() if other is not ex and not other.finished.is_set()]
+        for other in active:
+            other.shared = True
+        ex.shared = bool(active)
+        usage = watchdog.read(self.process.pid) if self.process is not None else None
+        ex.cpu_start = usage.cpu_seconds if usage else None
+        if usage:
+            ex.memory_peak_mb = usage.rss_mb
+
+    def _usage_end(self, ex: Exchange) -> None:
+        if ex.cpu_start is None or ex.shared or self.process is None:
+            return
+        usage = watchdog.read(self.process.pid)
+        if usage is not None:
+            ex.cpu_ms = round(max(0.0, usage.cpu_seconds - ex.cpu_start) * 1000, 2)
+            ex.memory_peak_mb = max(ex.memory_peak_mb or 0.0, usage.rss_mb)
 
     # ── what the worker says ─────────────────────────────────────────────
 
@@ -446,6 +526,7 @@ class HttpWorker:
 
     def _finish(self, ex: Exchange) -> None:
         if not ex.finished.is_set():
+            self._usage_end(ex)
             ex.finished.set()
             self.served += 1
             self.last_used = time.monotonic()
@@ -584,6 +665,7 @@ class HttpWorker:
         """Send a request to the worker. Its body is streamed as it arrives; await ``exchange.head`` for the response's start."""
         ex = Exchange(id=secrets.token_hex(8), method=method, path=path, bridge=bridge, budget=budget)
         self.exchanges[ex.id] = ex
+        self._usage_start(ex)
         self.last_used = time.monotonic()
         await self._send(
             {

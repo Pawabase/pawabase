@@ -385,7 +385,7 @@ async function init(message: any) {
 setInterval(() => {
   const memory = Deno.memoryUsage();
   send({ t: "stats", heap: memory.heapUsed, rss: memory.rss, active: active.size });
-}, 5000);
+}, 1000); // also the heartbeat: silence while serving means the event loop is blocked (the cpu limit)
 
 // ── the loop ─────────────────────────────────────────────────────────────
 

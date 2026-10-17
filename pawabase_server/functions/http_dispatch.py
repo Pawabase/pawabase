@@ -40,6 +40,7 @@ from pawabase_server.functions.http_functions import (
     AUTH_USER,
     HttpFunctionSpec,
 )
+from pawabase_server.functions.limits import ConcurrencyLimitReached
 from pawabase_server.functions.registry import MAIN
 from pawabase_server.functions.runtime import ApiRuntime
 from pawabase_server.functions.service.grants import Grant, new_invocation_id
@@ -216,6 +217,17 @@ class HttpFunctionDispatcher:
         if refusal is not None:
             await _send_json(send, *refusal)
             return
+        limits = await platform.run_limits(state, spec, kind="http")
+        max_body = limits.max_body * 1024 * 1024
+        try:
+            declared = int(headers.get("content-length") or 0)
+        except ValueError:
+            declared = 0
+        if max_body and declared > max_body:
+            await _send_json(
+                send, 413, "payload_too_large", f"{spec.name} accepts at most {limits.max_body} MB.", {"limit": limits.max_body}
+            )
+            return
         try:
             await metered(platform, state, "max_function_invocations_per_month")
         except FlowError as exc:
@@ -241,13 +253,14 @@ class HttpFunctionDispatcher:
             url=self._public_url(scope, headers),
             path=rest,
             headers=[(k.decode("latin-1"), v.decode("latin-1")) for k, v in scope.get("headers", [])],
-            body=self._body(receive) if self._has_body(method, headers) else None,
+            body=self._body(receive, max_body) if self._has_body(method, headers) else None,
             invocation=invocation,
             request_id=request_id,
             auth=auth,
             project=str(state.project_id or ""),
             client_ip=(scope.get("client") or (None,))[0],
             variables_version=variables_version(dict(state.secret_values)),
+            limits=limits,
         )
         async with contextlib.AsyncExitStack() as stack:
             try:
@@ -258,6 +271,16 @@ class HttpFunctionDispatcher:
                         max_queued=int(state.project_limits.get("max_queued_jobs") or 0),
                     )
                 )
+                await stack.enter_async_context(
+                    platform.function_gates.slot(
+                        spec.env, spec.name, limits.concurrency, wait=platform.settings.functions_queue_seconds
+                    )
+                )
+            except ConcurrencyLimitReached as exc:
+                await _send_json(
+                    send, 429, "too_many_runs", str(exc), {"limit": exc.limit}, headers=[(b"retry-after", b"1")]
+                )
+                return
             except Exception as exc:  # noqa: BLE001 - the plan's concurrency limit, in the platform's error shape
                 await _send_json(send, getattr(exc, "status", 429), getattr(exc, "code", "too_many_invocations"), str(exc))
                 return
@@ -276,12 +299,17 @@ class HttpFunctionDispatcher:
             return False
 
     @staticmethod
-    async def _body(receive: Any) -> AsyncIterator[bytes]:
+    async def _body(receive: Any, limit: int = 0) -> AsyncIterator[bytes]:
+        """The request body as it arrives; one that runs past *limit* bytes is broken off (the function sees an aborted body)."""
+        received = 0
         while True:
             message = await receive()
             if message["type"] == "http.disconnect":
                 raise ConnectionResetError("the caller went away while sending the body")
             chunk = message.get("body", b"")
+            received += len(chunk)
+            if limit and received > limit:
+                raise ValueError(f"the request body is larger than the function's {limit // (1024 * 1024)} MB limit")
             if chunk:
                 yield chunk
             if not message.get("more_body", False):
