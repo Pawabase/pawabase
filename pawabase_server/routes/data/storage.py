@@ -36,7 +36,7 @@ from sillo.storage.paths import normalise
 from pawabase_server.core.context import require_context
 from pawabase_server.core.principal import Principal
 from pawabase_server.core.tokens import TokenInvalid, verify_user_token
-from pawabase_server.infra.storage import shares
+from pawabase_server.infra.storage import folders, shares
 from pawabase_server.infra.storage.delivery import Delivery, error
 from pawabase_server.platform import Platform
 from pawabase_server.policies import credential_context
@@ -188,6 +188,8 @@ def register(app: Any, platform: Platform) -> None:
     async def download(ctx: HttpContext, bucket: str, key: str):
         state, held = await bucket_for(ctx, bucket)
         context = require_context(ctx)
+        if folders.is_marker(key):
+            return error(404, "Not found")
         return await read(
             ctx,
             state,
@@ -215,6 +217,8 @@ def register(app: Any, platform: Platform) -> None:
         except HTTPException:
             return error(404, "Not found")
         if bucket not in state.buckets:
+            return error(404, "Not found")
+        if folders.is_marker(key):
             return error(404, "Not found")
         user = None
         header = ctx.headers.get("authorization") or ""
@@ -379,6 +383,7 @@ def register(app: Any, platform: Platform) -> None:
                     "url": storage.object_url(state, bucket, f.key),
                 }
                 for f in page.files
+                if not folders.is_marker(f.key)
             ],
             "prefixes": list(page.prefixes),
             "cursor": page.cursor,
@@ -389,6 +394,8 @@ def register(app: Any, platform: Platform) -> None:
     @r.post("/sign/{bucket}/{key:path}", request_model=SignRequest, summary="Create a signed URL")
     async def sign(ctx: HttpContext, bucket: str, key: str, body: SignRequest):
         state, held = await bucket_for(ctx, bucket)
+        if folders.is_marker(key):
+            raise HTTPException(status_code=404, detail="Not found")
         action = Action.READ if body.method == "GET" else Action.WRITE
         if not held.policy.allows(action, key, _user(ctx)):
             raise HTTPException(status_code=403, detail="you may not grant access you do not have")
