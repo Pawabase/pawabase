@@ -27,7 +27,7 @@ from pawabase_server.data.console import (
 from pawabase_server.data.inspect import is_read_only, removes_data
 from pawabase_server.data.isolation import developer_source
 from pawabase_server.data.resources import after_write, resource_tag
-from pawabase_server.data.sql import SqlError, decode_value
+from pawabase_server.data.sql import SqlError, decode_value, drop_table_sql
 from pawabase_server.data.store import Filter, parse_filters, parse_sort
 from pawabase_server.platform import Platform
 from pawabase_server.projects import quotas
@@ -423,6 +423,31 @@ def register(r: Router, platform: Platform) -> None:
             # Set when a filter applies: how many rows match it.
             "total": total,
         }
+
+    @r.delete(
+        f"{base}/database/tables/{{table}}",
+        auth=MANAGE,
+        tags=["database"],
+        summary="Drop a table",
+    )
+    async def drop_table(ctx: HttpContext, env: str, table: str):
+        state = await platform.state(env)
+        source = await state.source()
+        if table.startswith(schema.INTERNAL_TABLE_PREFIXES):
+            raise HTTPException(status_code=403, detail=f"table {table!r} is managed by Pawabase")
+        if table not in await db_inspect.list_tables(source):
+            raise HTTPException(status_code=404, detail=f"no table {table!r}")
+        managed = {spec.table: name for name, spec in state.specs.items()}
+        if (resource := managed.get(table)) is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"table {table!r} backs resource {resource!r}; delete that definition first",
+            )
+        confined = await developer_source(platform, state)
+        await confined.execute(drop_table_sql(source.dialect, table))
+        await audit(ctx, "database.table_dropped", env=env, target=table)
+        await platform.cache_invalidate(state, [f"resource:{name}" for name in state.specs])
+        return no_content()
 
     @r.post(
         f"{base}/database/query",
