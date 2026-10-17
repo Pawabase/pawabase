@@ -23,7 +23,7 @@ export default function Storage({ env }) {
     loading: buckets.loading,
     empty: "No buckets yet. Create one with the + button.",
     action: { label: "New bucket", onClick: () => setEditing({ isNew: true, body: KINDS.buckets.blank }) },
-    groups: [{ title: "Buckets", items: list.map((b) => ({ key: b.name, label: b.name, tag: b.public ? "public" : undefined })) }],
+    groups: [{ title: "Buckets", items: list.map((b) => ({ key: b.name, label: b.name, icon: "buckets", tag: b.public ? "public" : undefined })) }],
     active: bucket?.name,
     onSelect: (name) => setBucket(list.find((b) => b.name === name) || null),
   };

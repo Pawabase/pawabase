@@ -25,14 +25,14 @@ import Transfer from "./auth/Transfer";
 
 // The secondary sidebar, in the order a person sets an environment's auth up.
 const AUTH_GROUPS = [
-  { items: [["users", "Users"], ["orgs", "Organizations"], ["invitations", "Invitations"], ["roles", "Roles"]] },
-  { title: "Sign-in", items: [["signin", "Sign-in & registration"], ["attributes", "Attributes"], ["providers", "Social providers"], ["federation", "Company sign-in"], ["oauth", "OAuth servers"]] },
-  { title: "Security", items: [["passwords", "Password policy"], ["mfa", "Multi-factor"], ["recovery", "Account recovery"], ["devices", "Devices"], ["sessions", "Sessions"], ["protection", "Attack protection"], ["restrictions", "Restrictions"], ["domains", "Domains"]] },
-  { title: "Developers", items: [["apikeys", "User API keys"]] },
-  { title: "Look & feel", items: [["screens", "Screens"], ["legal", "Legal"], ["emails", "Email templates"]] },
-  { title: "Records", items: [["events", "Sign-in activity"], ["transfer", "Import & export"], ["config", "Configuration"]] },
+  { items: [["users", "Users", "users"], ["orgs", "Organizations", "org"], ["invitations", "Invitations", "send"], ["roles", "Roles", "policies"]] },
+  { title: "Sign-in", items: [["signin", "Sign-in & registration", "enter"], ["attributes", "Attributes", "braces"], ["providers", "Social providers", "external"], ["federation", "Company sign-in", "org"], ["oauth", "OAuth servers", "link"]] },
+  { title: "Security", items: [["passwords", "Password policy", "secrets"], ["mfa", "Multi-factor", "keys"], ["recovery", "Account recovery", "refresh"], ["devices", "Devices", "terminal"], ["sessions", "Sessions", "clock"], ["protection", "Attack protection", "policies"], ["restrictions", "Restrictions", "audit"], ["domains", "Domains", "link"]] },
+  { title: "Developers", items: [["apikeys", "User API keys", "keys"]] },
+  { title: "Look & feel", items: [["screens", "Screens", "panelLeft"], ["legal", "Legal", "book"], ["emails", "Email templates", "mail-templates"]] },
+  { title: "Records", items: [["events", "Sign-in activity", "events"], ["transfer", "Import & export", "upload"], ["config", "Configuration", "settings"]] },
 ];
-const AUTH_PARTS = AUTH_GROUPS.flatMap((group) => group.items);
+const AUTH_PARTS = AUTH_GROUPS.flatMap((group) => group.items.map(([key, label]) => [key, label]));
 const AUTH_LABELS = Object.fromEntries(AUTH_PARTS);
 const AUTH_ABOUT = {
   users: "Everyone who has signed up to this environment. Open a person to manage their profile, security and access.",
@@ -67,8 +67,8 @@ export default function Users({ env }) {
   const subnav = {
     title: "Users & auth",
     groups: [
-      ...AUTH_GROUPS.map((group) => ({ title: group.title, items: group.items.map(([key, label]) => ({ key, label })) })),
-      { items: [{ key: "policies", label: "Policies", href: envHref(env, "policies"), external: true }] },
+      ...AUTH_GROUPS.map((group) => ({ title: group.title, items: group.items.map(([key, label, icon]) => ({ key, label, icon })) })),
+      { pinned: true, items: [{ key: "policies", label: "Policies", icon: "policies", href: envHref(env, "policies"), external: true }] },
     ],
     active: tab,
     onSelect: setTab,

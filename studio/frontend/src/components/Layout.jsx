@@ -9,17 +9,8 @@ import { Icon } from "./icons";
 import { Badge, Button, Field, Loading, Sheet, Status, Table, ToastProvider, useAction, when } from "./ui";
 import { envPath, post, useApi } from "../lib/api";
 
-/** The pages that live under Data, in the order the secondary navigation lists them. */
-export const DATA_PAGES = [["tables", "Table editor"], ["resources", "Resources"], ["topology", "Topology"], ["schemas", "Schemas"], ["transformers", "Transformers"], ["database", "SQL"]];
-
-/** The secondary navigation shared by every Data page. */
-export function dataSubnav(env, active) {
-  return {
-    title: "Data",
-    groups: [{ items: DATA_PAGES.map(([key, label]) => ({ key, label, href: envHref(env, key) })) }],
-    active,
-  };
-}
+/** The sections that live under Data, for highlighting the top-level nav icon (the secondary sidebar itself comes from DataNav's useDataSubnav; kept in sync with its DATA_TOOLS by hand to avoid a circular import). */
+const DATA_SECTIONS = ["tables", "database", "schemas", "transformers", "topology"];
 
 /** The part of a page shown now, kept in ``?section=`` so a reload, a shared link and Back return to it. */
 export function useSection(keys, fallback = Array.isArray(keys) ? keys[0] : undefined) {
@@ -69,9 +60,9 @@ export function webhooksSubnav(env, active) {
   return {
     title: "Webhooks",
     groups: [
-      { title: "Outbound", items: WEBHOOK_PAGES.slice(0, 2).map(([key, label, sub]) => ({ key, label, sub, href: envHref(env, key) })) },
-      { title: "Inbound", items: WEBHOOK_PAGES.slice(2).map(([key, label, sub]) => ({ key, label, sub, href: envHref(env, key) })) },
-      { items: [{ key: "events", label: "Events & runs", href: envHref(env, "events"), external: true }] },
+      { title: "Outbound", items: WEBHOOK_PAGES.slice(0, 2).map(([key, label]) => ({ key, label, icon: key === "webhook-deliveries" ? "webhooks" : key, href: envHref(env, key) })) },
+      { title: "Inbound", items: WEBHOOK_PAGES.slice(2).map(([key, label]) => ({ key, label, icon: key, href: envHref(env, key) })) },
+      { pinned: true, items: [{ key: "events", label: "Events & runs", icon: "events", href: envHref(env, "events"), external: true }] },
     ],
     active,
   };
@@ -300,10 +291,10 @@ function SubNav({ subnav, backHref, showHeader = true }) {
   const row = (item) => {
     const body = (
       <>
+        {item.icon && <Icon name={item.icon} size={15} className="subnav-icon" />}
         {item.badge && <span className={`subnav-badge ${item.badgeTone || ""}`}>{item.badge}</span>}
         <span className="subnav-text">
           <span className={item.mono ? "mono" : ""}>{item.label}</span>
-          {item.sub && <small>{item.sub}</small>}
         </span>
         {item.tag && <span className="subnav-tag">{item.tag}</span>}
         {item.flag && <i className={`obs-dot ${item.flag}`} />}
@@ -333,7 +324,7 @@ function SubNav({ subnav, backHref, showHeader = true }) {
         {subnav.tree && !subnav.loading && subnav.tree.length === 0 && <p className="subnav-empty">{subnav.empty || "Nothing here yet."}</p>}
         {subnav.tree && <SubNavTree tree={subnav.tree} active={subnav.active} forceOpen={subnav.expandAll} row={row} />}
         {!subnav.tree && !subnav.loading && subnav.groups.every((group) => group.items.length === 0) && <p className="subnav-empty">{subnav.empty || "Nothing here yet."}</p>}
-        {!subnav.tree && subnav.groups.map((group, index) => group.items.length > 0 && (
+        {!subnav.tree && subnav.groups.filter((g) => !g.pinned).map((group, index) => group.items.length > 0 && (
           <div key={group.title || index} className="subnav-group">
             {group.title && <div className="nav-title">{group.title}</div>}
             {group.items.map(row)}
@@ -341,6 +332,12 @@ function SubNav({ subnav, backHref, showHeader = true }) {
         ))}
       </nav>
       {subnav.note && <div className="subnav-note">{subnav.note}</div>}
+      {!subnav.tree && subnav.groups.filter((g) => g.pinned && g.items.length > 0).map((group, index) => (
+        <div key={group.title || `pinned-${index}`} className="subnav-pinned">
+          {group.title && <div className="nav-title">{group.title}</div>}
+          {group.items.map(row)}
+        </div>
+      ))}
       <Link href={backHref} className="subnav-foot"><Icon name="chevronRight" size={14} className="rotate-180" /> Overview</Link>
     </aside>
   );
@@ -390,7 +387,7 @@ export default function Layout({ title, crumbs = [], children, full, subnav, flo
                   <div className="nav-title">{group.title}</div>
                   <div className="nav-items">
                     {group.items.map(([key, label, to, icon]) => (
-                      <Link key={key} data-tour={`nav-${key}`} href={envHref(env, to || key)} className={section === key || (key === "data" && DATA_PAGES.some(([page]) => page === section)) || (key === "webhooks" && WEBHOOK_PAGES.some(([page]) => page === section)) ? "active" : ""} title={label}>
+                      <Link key={key} data-tour={`nav-${key}`} href={envHref(env, to || key)} className={section === key || (key === "data" && DATA_SECTIONS.includes(section)) || (key === "webhooks" && WEBHOOK_PAGES.some(([page]) => page === section)) ? "active" : ""} title={label}>
                         <Icon name={icon || key} size={16} /><span className="label">{label}</span>
                       </Link>
                     ))}

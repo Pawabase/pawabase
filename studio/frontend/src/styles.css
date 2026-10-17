@@ -999,6 +999,10 @@ html, body { background: var(--canvas); }
 .subnav-list button.active::before { content: ""; position: absolute; left: -12px; top: 7px; bottom: 7px; width: 3px; border-radius: 0 var(--r-xs) var(--r-xs) 0; background: var(--brand); }
 .subnav-foot { height: var(--dock); box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 22px; border-top: 1px solid var(--line-2); color: var(--muted); font-size: 12.5px; font-weight: 600; }
 .subnav-foot:hover { color: var(--text); }
+/* A group that stays put at the bottom of the sidebar (e.g. Data's tools) while the rest of the list scrolls above it. */
+.subnav-pinned { flex-shrink: 0; padding: 6px 12px 10px; border-top: 1px solid var(--line-2); }
+.subnav-icon { flex-shrink: 0; color: var(--faint); }
+.subnav-item.active .subnav-icon { color: var(--brand-strong); }
 .has-sub .sidebar { border-right: 1px solid var(--line-2); }
 @media (max-width: 980px) { .subnav { display: none; } }
 .ov-lists { margin-top: 14px; display: block; }
@@ -1923,6 +1927,8 @@ kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; 
 .tbl-icon:hover { background: var(--hover); color: var(--text); }
 .tbl-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .tbl-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 48px; flex-shrink: 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tbl-identity { display: flex; align-items: center; gap: 8px; min-width: 0; height: 40px; flex-shrink: 0; padding: 0 16px; }
+.tbl-identity + .page-tabs { margin: 0 16px 0; padding-top: 0; border-bottom: 1px solid var(--line); }
 .tbl-title { font-size: 13.5px; }
 .tbl-chip { display: inline-flex; gap: 4px; align-items: center; height: 22px; padding: 0 8px; border: 1px solid var(--line-2); border-radius: var(--r-xs); color: var(--muted); font-size: 11.5px; }
 .tbl-chip:hover { color: var(--text); background: var(--hover); }

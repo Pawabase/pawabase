@@ -65,14 +65,14 @@ function diff(original, draft) {
 }
 
 const SETTINGS_SECTIONS = [
-  ["general", "General", "Name, timezone, currency, language"],
-  ["access", "API & access", "Docs, CORS and secret-key IPs"],
-  ["maintenance", "Maintenance", "Pause the public API"],
-  ["realtime", "Realtime", "Channel and policy rules"],
-  ["infrastructure", "Infrastructure", "Database, storage, mail"],
-  ["limits", "Limits", "Installation quotas"],
-  ["custom", "Custom values", "Your own $settings"],
-  ["advanced", "Advanced", "Export, import, delete"],
+  ["general", "General", "settings"],
+  ["access", "API & access", "keys"],
+  ["maintenance", "Maintenance", "clock"],
+  ["realtime", "Realtime", "realtime"],
+  ["infrastructure", "Infrastructure", "database"],
+  ["limits", "Limits", "observability"],
+  ["custom", "Custom values", "braces"],
+  ["advanced", "Advanced", "terminal"],
 ];
 
 export default function Settings({ env }) {
@@ -84,7 +84,7 @@ export default function Settings({ env }) {
   const configuration = useApi(`${path}/configuration`);
   const policyNames = (policiesState.data?.data || []).map((p) => p.name);
   return (
-    <Layout title="Settings" subnav={{ title: "Settings", groups: [{ items: SETTINGS_SECTIONS.map(([key, label, sub]) => ({ key, label, sub })) }], active, onSelect: setActive }}>
+    <Layout title="Settings" subnav={{ title: "Settings", groups: [{ items: SETTINGS_SECTIONS.map(([key, label, icon]) => ({ key, label, icon })) }], active, onSelect: setActive }}>
       <PageHead title={SETTINGS_SECTIONS.find(([key]) => key === active)?.[1] || "Settings"} description={`Behaviour, access and defaults for the ${env} environment. Infrastructure and limits come from environment variables, not from here.`} />
       <Loading state={state}>
         {(data) => <SettingsBody active={active} key={data.version + ":" + JSON.stringify(data.settings)} env={env} path={path} data={data} usage={usage.data} configuration={configuration.data} policyNames={policyNames} reload={state.reload} />}
