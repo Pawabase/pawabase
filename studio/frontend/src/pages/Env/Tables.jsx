@@ -1,9 +1,12 @@
-import { Link } from "@inertiajs/react";
 import { useEffect, useMemo, useState } from "react";
-import Layout, { DATA_PAGES, envHref } from "../../components/Layout";
+import Layout from "../../components/Layout";
+import { useDataSubnav } from "../../components/DataNav";
 import { Icon } from "../../components/icons";
-import { Button, Popover, Sheet, Spinner, copyToClipboard, useToast } from "../../components/ui";
-import { envPath, useApi } from "../../lib/api";
+import { Badge, Button, PageTabs, Popover, Sheet, Spinner, copyToClipboard, useAction, useToast } from "../../components/ui";
+import { HistoryPanel, IndexesPanel, SchemaPanel } from "../../components/SchemaPanels";
+import { DefinitionSheet } from "../../components/definitions/DefinitionSheet";
+import { editable } from "../../lib/kinds";
+import { del, envPath, get, post, put, useApi } from "../../lib/api";
 
 /**
  * The table editor: browse the environment's database like a spreadsheet. Tables open as tabs (kept per
@@ -31,27 +34,46 @@ function writeTabs(env, open, active) {
 
 export default function Tables({ env }) {
   const base = envPath(env, "/database");
-  const overview = useApi(base);
-  const tables = overview.data?.tables || [];
-  const [search, setSearch] = useState("");
   const [tabs, setTabs] = useState(() => {
     const saved = readTabs(env);
     const wanted = new URLSearchParams(window.location.search).get("table");
     if (wanted && !saved.open.includes(wanted)) saved.open = [...saved.open, wanted];
     return { open: saved.open, active: wanted || saved.active || saved.open[0] || null };
   });
+  // ?table=x&tab=schema (a link from the SQL page or Topology) opens that one table straight to its Schema tab.
+  const [deepLink] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return { table: params.get("table"), tab: params.get("tab") || "data" };
+  });
+  const { subnav: dataSubnav, tables, loading, reload } = useDataSubnav(env, tabs.active);
   const [expanded, setExpanded] = useState(false);
+  const open = (name) => setTabs((current) => ({ open: current.open.includes(name) ? current.open : [...current.open, name], active: name }));
+  const close = (name) => setTabs((current) => {
+    const at = current.open.indexOf(name);
+    const rest = current.open.filter((n) => n !== name);
+    const active = current.active === name ? rest[Math.min(at, rest.length - 1)] || null : current.active;
+    return { open: rest, active };
+  });
+  const subnav = {
+    ...dataSubnav,
+    title: "Table editor",
+    onSelect: open,
+    groups: [
+      { ...dataSubnav.groups[0], items: dataSubnav.groups[0].items.map(({ href, ...item }) => item) },
+      dataSubnav.groups[1],
+    ],
+  };
 
   // Forget tabs whose table no longer exists.
   useEffect(() => {
-    if (!overview.data) return;
+    if (loading) return;
     const names = new Set(tables.map((t) => t.name));
     setTabs((current) => {
       const open = current.open.filter((name) => names.has(name));
       const active = names.has(current.active) ? current.active : open[0] || null;
       return open.length === current.open.length && active === current.active ? current : { open, active };
     });
-  }, [overview.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     writeTabs(env, tabs.open, tabs.active);
@@ -68,28 +90,6 @@ export default function Tables({ env }) {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [expanded]);
-
-  const open = (name) => setTabs((current) => ({ open: current.open.includes(name) ? current.open : [...current.open, name], active: name }));
-  const close = (name) => setTabs((current) => {
-    const at = current.open.indexOf(name);
-    const rest = current.open.filter((n) => n !== name);
-    const active = current.active === name ? rest[Math.min(at, rest.length - 1)] || null : current.active;
-    return { open: rest, active };
-  });
-
-  const shown = tables.filter((t) => t.name.toLowerCase().includes(search.toLowerCase().trim()));
-  const subnav = {
-    title: "Table editor",
-    loading: overview.loading,
-    empty: "This database has no tables yet. Create them from Resources or the SQL page.",
-    search: { value: search, onChange: setSearch, placeholder: "Search tables…" },
-    groups: [
-      { title: "Data", items: DATA_PAGES.filter(([key]) => key !== "tables").map(([key, label]) => ({ key: `page:${key}`, label, href: envHref(env, key) })) },
-      { title: `Tables · ${tables.length}`, items: shown.map((t) => ({ key: t.name, label: t.name, mono: true, tag: t.resource ? "resource" : undefined })) },
-    ],
-    active: tabs.active,
-    onSelect: open,
-  };
 
   return (
     <Layout title="Table editor" subnav={subnav} full>
@@ -108,9 +108,9 @@ export default function Tables({ env }) {
           </button>
         </div>
         {tabs.active ? (
-          <TableTab key={tabs.active} env={env} base={base} table={tabs.active} resource={tables.find((t) => t.name === tabs.active)?.resource} />
+          <TableTab key={tabs.active} env={env} base={base} table={tabs.active} resource={tables.find((t) => t.name === tabs.active)?.resource} initialView={tabs.active === deepLink.table ? deepLink.tab : "data"} onTablesChanged={reload} onClose={() => { reload(); close(tabs.active); }} />
         ) : (
-          <Welcome tables={tables} loading={overview.loading} onPick={open} />
+          <Welcome tables={tables} loading={loading} onPick={open} />
         )}
       </div>
     </Layout>
@@ -176,12 +176,49 @@ function display(value) {
   return { text: String(value), kind: "text" };
 }
 
-function TableTab({ env, base, table, resource }) {
+const VIEWS = [
+  ["data", "Data", "database"],
+  ["schema", "Schema", "schemas"],
+  ["history", "History", "clock"],
+  ["settings", "Settings", "settings"],
+];
+
+function TableTab({ env, base, table, resource, initialView = "data", onTablesChanged, onClose }) {
+  const [view, setView] = useState(initialView);
+  const info = useApi(`${base}/tables/${table}`);
+  const columns = info.data?.columns || [];
+  return (
+    <div className="tbl-body">
+      <div className="tbl-identity">
+        <b className="mono tbl-title">{table}</b>
+        <span className="faint small">{info.data ? `${(info.data.rows ?? 0).toLocaleString()} rows · ${columns.length} columns` : "…"}</span>
+        {resource && <Badge tone="brand">resource <b>{resource}</b></Badge>}
+      </div>
+      <PageTabs
+        tabs={VIEWS.map(([value, label, icon]) => ({ value, label: <><Icon name={icon} size={14} />{label}</> }))}
+        value={view}
+        onChange={setView}
+      />
+      {view === "data" && <DataView env={env} base={base} table={table} columns={columns} info={info} />}
+      {view === "schema" && (
+        resource
+          ? <ResourceSchema env={env} resource={resource} onRowsChanged={info.reload} onTablesChanged={onTablesChanged} />
+          : <UnclaimedSchema env={env} table={table} columns={columns} onClaimed={() => onTablesChanged?.()} />
+      )}
+      {view === "history" && (resource
+        ? <div style={{ padding: 16 }}><HistoryPanel env={env} name={resource} onChanged={info.reload} /></div>
+        : <div className="tbl-state">No resource defined for this table yet — define one from the Schema tab to track changes.</div>
+      )}
+      {view === "settings" && <TableSettings env={env} table={table} resource={resource} onDeleted={onClose} onDisabled={onTablesChanged} />}
+    </div>
+  );
+}
+
+function DataView({ env, base, table, columns, info }) {
   const [page, setPage] = useState({ offset: 0, size: 100 });
   const [sort, setSort] = useState(null); // [column, "asc" | "desc"]
   const [filter, setFilter] = useState(null); // { column, op, value }
   const [row, setRow] = useState(null);
-  const info = useApi(`${base}/tables/${table}`);
   const params = {
     limit: page.size,
     offset: page.offset,
@@ -189,7 +226,6 @@ function TableTab({ env, base, table, resource }) {
     ...(filter ? { filter_column: filter.column, filter_op: filter.op, filter_value: filter.value } : {}),
   };
   const rows = useApi(`${base}/tables/${table}/rows`, { params });
-  const columns = info.data?.columns || [];
   const data = rows.data?.data || [];
   const total = filter ? rows.data?.total : info.data?.rows;
   const names = columns.length ? columns.map((c) => c.name) : Object.keys(data[0] || {});
@@ -200,13 +236,9 @@ function TableTab({ env, base, table, resource }) {
   };
   const last = page.offset + data.length;
   return (
-    <div className="tbl-body">
+    <>
       <div className="tbl-toolbar">
-        <div className="row" style={{ gap: 8, minWidth: 0 }}>
-          <b className="mono tbl-title">{table}</b>
-          <span className="faint small">{info.data ? `${(info.data.rows ?? 0).toLocaleString()} rows · ${columns.length} columns` : "…"}</span>
-          {resource && <Link className="tbl-chip" href={`${envHref(env, "resources")}?resource=${encodeURIComponent(resource)}`} title="Edit the resource behind this table">resource <b>{resource}</b></Link>}
-        </div>
+        <span className="grow" />
         <div className="row" style={{ gap: 6 }}>
           <FilterButton columns={names} filter={filter} onApply={(next) => { setFilter(next); setPage((p) => ({ ...p, offset: 0 })); }} />
           <SortButton columns={names} sort={sort} onApply={(next) => { setSort(next); setPage((p) => ({ ...p, offset: 0 })); }} />
@@ -271,6 +303,141 @@ function TableTab({ env, base, table, resource }) {
       </div>
 
       {row && <RowSheet table={table} row={row} columns={names} types={types} onClose={() => setRow(null)} />}
+    </>
+  );
+}
+
+/** A resource-backed table's Schema tab: the definition itself (fields, access, relations, behaviour), the live
+ *  table's indexes, and what's waiting to be applied — reusing the editor and panels built for this, just opened
+ *  from the table instead of a separate Resources page. */
+function ResourceSchema({ env, resource, onRowsChanged, onTablesChanged }) {
+  const path = envPath(env, `/resources/${resource}`);
+  const item = useApi(path);
+  const [editing, setEditing] = useState(false);
+  if (!item.data) return <div className="tbl-state"><Spinner /></div>;
+  return (
+    <div className="stack" style={{ padding: 16 }}>
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <span className="muted">Fields, access and relations for <b className="mono">{resource}</b>.</span>
+        <Button size="sm" variant="primary" onClick={() => setEditing(true)}>Edit definition</Button>
+      </div>
+      <SchemaPanel env={env} name={resource} onChanged={() => { item.reload(); onRowsChanged?.(); }} onAdopted={() => item.reload()} />
+      <IndexesPanel env={env} name={resource} onChanged={item.reload} />
+      {editing && (
+        <DefinitionSheet
+          kind="resources"
+          env={env}
+          editing={{ isNew: false, key: resource, body: editable(item.data) }}
+          onSave={(body) => put(path, body)}
+          onDelete={() => del(path)}
+          onClose={(result) => {
+            setEditing(false);
+            if (result === undefined) return;
+            item.reload();
+            onRowsChanged?.();
+            if (result === null) onTablesChanged?.(); // the resource (and its tab's data) is gone
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** A plain SQL table with no resource yet: its raw columns, and a way to define one from them. */
+function UnclaimedSchema({ env, table, columns, onClaimed }) {
+  const suggestion = useApi(envPath(env, "/schema/tables"));
+  const [run, busy] = useAction();
+  const [name, setName] = useState(table);
+  const found = (suggestion.data?.data || []).find((t) => t.table === table);
+  const claim = async () => {
+    const definition = found.definition;
+    const result = await run(async () => {
+      await post(envPath(env, "/resources"), {
+        name,
+        table,
+        primary_key: definition.primary_key,
+        id_type: definition.id_type,
+        timestamps: definition.timestamps,
+        fields: definition.fields_,
+        operations: {},
+      });
+      return post(envPath(env, `/resources/${name}/schema/acknowledge`), { note: `Imported from the existing table ${table}` });
+    }, `${name} is now a resource`);
+    if (result) onClaimed(name);
+  };
+  return (
+    <div className="stack" style={{ padding: 16 }}>
+      <p className="muted">This table has no resource definition, so it has no REST API, access control or schema history — just the raw columns below.</p>
+      <div className="row wrap" style={{ gap: 6 }}>
+        {columns.map((c) => <Badge key={c.name}>{c.name} · {String(c.type).toLowerCase()}</Badge>)}
+      </div>
+      {suggestion.loading ? <Spinner /> : found ? (
+        <div className="stack sm">
+          <label className="row small muted" style={{ gap: 6 }}>Resource name
+            <input className="mono" value={name} onChange={(e) => setName(e.target.value)} style={{ width: 200 }} />
+          </label>
+          {found.problem && <div className="alert warn">{found.problem}</div>}
+          {found.skipped.length > 0 && <span className="hint">Left out (not usable as field names): {found.skipped.join(", ")}</span>}
+          <div className="row"><Button variant="primary" disabled={busy || !name.trim()} onClick={claim}><Icon name="database" size={14} />Define a resource</Button></div>
+        </div>
+      ) : <span className="hint">Reload the Schema tab once the table has finished loading to define a resource from it.</span>}
+    </div>
+  );
+}
+
+/** Settings: pause the resource's REST API without touching its data, or remove the table for good. */
+function TableSettings({ env, table, resource, onDeleted, onDisabled }) {
+  const [run, busy] = useAction();
+  const [confirming, setConfirming] = useState(false);
+  const [typed, setTyped] = useState("");
+  const disable = async () => {
+    const path = envPath(env, `/resources/${resource}`);
+    const result = await run(async () => {
+      const current = await get(path);
+      const operations = Object.fromEntries(Object.entries(current.operations || {}).map(([op, setting]) => [op, { ...setting, enabled: false }]));
+      return put(path, { ...editable(current), operations });
+    }, "The resource's REST API is now off. Fields, history and the table are untouched.");
+    if (result) onDisabled?.();
+  };
+  const dropTable = async () => {
+    const result = await run(async () => {
+      if (resource) await del(envPath(env, `/resources/${resource}`));
+      await del(envPath(env, `/database/tables/${table}`));
+    }, `${table} is gone`);
+    if (result) onDeleted?.();
+  };
+  return (
+    <div className="stack" style={{ padding: 16, maxWidth: 560 }}>
+      {resource && (
+        <div className="card" style={{ padding: 14 }}>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <div>
+              <b>Disable the API</b>
+              <p className="muted">Turns off every operation on <span className="mono">{resource}</span> (list, get, create, update, delete). The table, its rows and its fields are not touched — this can be turned back on from the Schema tab.</p>
+            </div>
+            <Button disabled={busy} onClick={disable}>Disable</Button>
+          </div>
+        </div>
+      )}
+      <div className="card" style={{ padding: 14, borderColor: "var(--danger)" }}>
+        <b>Delete table</b>
+        <p className="muted">
+          {resource
+            ? <>Deletes the <span className="mono">{resource}</span> resource definition, then drops the <span className="mono">{table}</span> table itself. All of its rows are gone. This cannot be undone.</>
+            : <>Drops the <span className="mono">{table}</span> table and all of its rows. This cannot be undone.</>}
+        </p>
+        {confirming ? (
+          <div className="stack sm">
+            <label className="row small muted" style={{ gap: 6 }}>Type {table} to confirm
+              <input className="mono" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={table} />
+            </label>
+            <div className="row">
+              <Button onClick={() => { setConfirming(false); setTyped(""); }}>Cancel</Button>
+              <Button variant="danger" disabled={busy || typed !== table} onClick={dropTable}>Delete table</Button>
+            </div>
+          </div>
+        ) : <div className="row"><Button variant="danger" onClick={() => setConfirming(true)}><Icon name="trash" size={14} />Delete table</Button></div>}
+      </div>
     </div>
   );
 }
