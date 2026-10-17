@@ -120,6 +120,7 @@ function ObjectPanel({ base, env, bucket, objectKey, onClose }) {
       tabs={[{ value: "overview", label: "Overview" }, { value: "sharing", label: "Sharing" }, { value: "transform", label: "Transform" }, { value: "metadata", label: "Metadata" }]}
       tab={tab}
       onTab={setTab}
+      tabsPlacement="top"
       onClose={close}
     >
       <Loading state={details}>

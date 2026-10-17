@@ -111,6 +111,11 @@ function RunDetail({ env, id, onClose }) {
               <Badge>{r.function}</Badge>
               <Badge>{r.trigger}</Badge>
               {r.duration_ms != null && <Badge>{Math.round(r.duration_ms)} ms</Badge>}
+              {r.kind === "http" && <Badge>{r.method} {r.path}</Badge>}
+              {r.status_code ? <Badge tone={r.status_code >= 500 ? "red" : undefined}>HTTP {r.status_code}</Badge> : null}
+              {r.cold_start ? <Badge tone="blue">cold start</Badge> : null}
+              {r.background_ms != null && <Badge>waitUntil {Math.round(r.background_ms)} ms</Badge>}
+              {r.fetches ? <Badge>{r.fetches} fetch{r.fetches === 1 ? "" : "es"}</Badge> : null}
               <span className="hint">{when(r.created_at)}</span>
             </div>
             {r.error && <div className="alert error"><pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{r.error}</pre></div>}
@@ -155,8 +160,8 @@ function RunsTable({ env, fn, onOpen }) {
             columns={[
               { label: "When", render: (r) => when(r.created_at) },
               ...(fn ? [] : [{ label: "Function", render: (r) => <b>{r.function}</b> }]),
-              { label: "Trigger", render: (r) => <Badge>{r.trigger}</Badge> },
-              { label: "Status", render: (r) => <Status value={r.status} /> },
+              { label: "Request", render: (r) => (r.kind === "http" ? <code>{r.method} {r.path}</code> : <Badge>{r.trigger}</Badge>) },
+              { label: "Status", render: (r) => <span className="row">{<Status value={r.status} />}{r.status_code ? <Badge tone={r.status_code >= 500 ? "red" : r.status_code >= 400 ? "amber" : undefined}>{r.status_code}</Badge> : null}{r.cold_start ? <Badge tone="blue">cold</Badge> : null}</span> },
               { label: "Duration", render: (r) => (r.duration_ms != null ? `${Math.round(r.duration_ms)} ms` : "—") },
               { label: "Error", render: (r) => (r.error ? <span className="truncate" title={r.error}>{String(r.error).split("\n")[0].slice(0, 70)}</span> : "—") },
             ]}
@@ -183,6 +188,111 @@ function Invoke({ base, fn }) {
   );
 }
 
+const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
+
+/** "Try it" for an HTTP function: a real request with a method, a path, headers and a body, as any user. */
+function TryHttp({ env, fn }) {
+  const allowed = (fn.config?.methods || METHODS).filter((m) => m !== "OPTIONS");
+  const [method, setMethod] = useState(allowed.includes("POST") ? "POST" : allowed[0] || "GET");
+  const [path, setPath] = useState("/");
+  const [headers, setHeaders] = useState({ "content-type": "application/json" });
+  const [body, setBody] = useState("{}");
+  const [asUser, setAsUser] = useState(null);
+  const [result, setResult] = useState(null);
+  const [run, busy] = useAction();
+  const send = async () => {
+    const r = await run(() => post(envPath(env, `/http-functions/${fn.name}/request`), {
+      method, path, headers, body: ["GET", "HEAD"].includes(method) ? null : body, as_user: asUser || undefined,
+    }));
+    if (r) setResult(r);
+  };
+  let pretty = result?.body;
+  if (result && !result.body_base64) { try { pretty = JSON.stringify(JSON.parse(result.body), null, 2); } catch { /* not JSON */ } }
+  return (
+    <div className="stack">
+      <div className="row">
+        <select value={method} onChange={(e) => setMethod(e.target.value)} style={{ width: 120 }} aria-label="Method">
+          {allowed.map((m) => <option key={m}>{m}</option>)}
+        </select>
+        <span className="mono muted">/functions/v1/{fn.name}</span>
+        <input className="grow mono" value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path?query=1" aria-label="Path" />
+      </div>
+      <Field label="Headers"><JsonInput value={headers} onChange={setHeaders} rows={3} /></Field>
+      {!["GET", "HEAD"].includes(method) && (
+        <Field label="Body"><textarea className="mono" rows={7} value={body} onChange={(e) => setBody(e.target.value)} /></Field>
+      )}
+      <Field label="As user (optional)" hint={'An auth context such as {"authenticated": true, "user_id": "42"}; anonymous when empty. The function\'s own auth setting is not applied here.'}>
+        <JsonInput value={asUser ?? undefined} onChange={setAsUser} rows={3} />
+      </Field>
+      <div><Button variant="primary" disabled={busy} onClick={send}><Icon name="play" />Send</Button></div>
+      {result && (
+        <div className="stack">
+          <div className="row wrap">
+            <Badge tone={result.status >= 500 ? "red" : result.status >= 400 ? "amber" : "green"}>HTTP {result.status}</Badge>
+            <Badge>{Math.round(result.duration_ms)} ms</Badge>
+            {result.cold_start && <Badge tone="blue">cold start</Badge>}
+            {result.truncated && <Badge tone="amber">first 1 MB shown</Badge>}
+          </div>
+          <Field label="Response headers">
+            <div className="logview">{result.headers.map(([k, v], i) => <div key={i}><b>{k}</b> <code>{v}</code></div>)}</div>
+          </Field>
+          <Field label={result.body_base64 ? "Body (base64: not text)" : "Body"}><pre className="codeview" style={{ whiteSpace: "pre-wrap", maxHeight: 360, overflow: "auto" }}>{pretty || <span className="muted">empty</span>}</pre></Field>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** What an HTTP function did lately, from its runs, and the workers running it now. */
+function HttpStats({ env, fn }) {
+  const detail = useApi(envPath(env, `/http-functions/${fn.name}`), { interval: 10000 });
+  const runtime = useApi(envPath(env, "/functions-runtime"), { interval: 10000 });
+  const mine = (runtime.data?.http?.functions || []).find((f) => f.function === fn.name);
+  const [run, busy] = useAction();
+  return (
+    <div className="stack lg">
+      <Loading state={detail}>
+        {(d) => (
+          <Card title={`Last ${d.stats.hours} hours`}>
+            <dl className="fn-facts">
+              <div><dt>Requests</dt><dd>{d.stats.requests}</dd></div>
+              <div><dt>Failed</dt><dd>{d.stats.failed ? <Badge tone="red">{d.stats.failed}</Badge> : 0}</dd></div>
+              <div><dt>Latency p50 / p95 / p99</dt><dd>{["p50", "p95", "p99"].map((k) => (d.stats.latency_ms[k] != null ? `${Math.round(d.stats.latency_ms[k])} ms` : "—")).join(" / ")}</dd></div>
+              <div><dt>Cold starts</dt><dd>{d.stats.cold_starts}</dd></div>
+              <div><dt>Status codes</dt><dd className="row wrap">{Object.entries(d.stats.status_codes).map(([k, v]) => <Badge key={k} tone={k === "5xx" ? "red" : k === "4xx" ? "amber" : undefined}>{k}: {v}</Badge>)}</dd></div>
+            </dl>
+          </Card>
+        )}
+      </Loading>
+      <Card
+        flush
+        title="Workers"
+        actions={<Button disabled={busy} onClick={async () => { if (await run(() => post(envPath(env, "/functions-runtime/restart"), { function: fn.name }), "Workers draining")) runtime.reload(); }}>Restart</Button>}
+      >
+        <Loading state={runtime}>
+          {(rt) => (
+            <>
+              <p className="hint" style={{ padding: "8px 16px" }}>Runtime: {rt.mode === "service" ? <>service at <code>{rt.url}</code>{rt.reachable === false ? <Badge tone="red">unreachable</Badge> : null}</> : "inside the server"} · confinement {rt.confinement} · network {rt.network}</p>
+              <Table
+                rows={mine?.workers || []}
+                empty={`No worker is running ${fn.name} right now; the next request starts one${fn.config?.warm ? " (warm workers are being started)" : ""}.`}
+                columns={[
+                  { label: "Worker", render: (w) => <code>{w.id}</code> },
+                  { label: "State", render: (w) => (w.draining ? <Badge tone="amber">draining</Badge> : w.alive ? <Badge tone="green">serving</Badge> : <Badge tone="red">stopped</Badge>) },
+                  { label: "In flight", render: (w) => `${w.active} / ${w.concurrency}` },
+                  { label: "Served", render: (w) => `${w.served}${w.failed ? ` (${w.failed} failed)` : ""}` },
+                  { label: "Heap", render: (w) => (w.heap_bytes ? `${Math.round(w.heap_bytes / 1048576)} / ${w.memory_mb} MB` : "—") },
+                  { label: "Idle", render: (w) => `${Math.round(w.idle_seconds)}s` },
+                ]}
+              />
+            </>
+          )}
+        </Loading>
+      </Card>
+    </div>
+  );
+}
+
 /** One function in the page: a header with "Try it" on the right, then tabs for what it is, what it did lately, and its code. */
 function FunctionPanel({ env, fn, base, branch, stats, onRun }) {
   const [tab, setTab] = useState("overview");
@@ -193,7 +303,7 @@ function FunctionPanel({ env, fn, base, branch, stats, onRun }) {
         <span className="tile-icon pastel sky" style={{ width: 40, height: 40, display: "grid", placeItems: "center", borderRadius: "var(--r)" }}><Icon name="functions" size={18} /></span>
         <div className="grow">
           <h1 className="mono">{fn.name}</h1>
-          <p>{fn.description || fn.module || <code>POST /functions/v1/{fn.name}</code>}</p>
+          <p>{fn.description || fn.module || <code>{fn.kind === "http" ? `ANY /functions/v1/${fn.name}/*` : `POST /functions/v1/${fn.name}`}</code>}</p>
         </div>
         <Button variant="primary" onClick={() => setTrying(true)}><Icon name="play" />Try it</Button>
       </div>
@@ -203,6 +313,7 @@ function FunctionPanel({ env, fn, base, branch, stats, onRun }) {
         tabs={[
           { value: "overview", label: "Overview" },
           { value: "runs", label: "Recent runs", count: stats?.total || undefined },
+          ...(fn.kind === "http" ? [{ value: "runtime", label: "Performance" }] : []),
           { value: "code", label: "Code" },
         ]}
       />
@@ -210,8 +321,21 @@ function FunctionPanel({ env, fn, base, branch, stats, onRun }) {
         <div className="stack lg">
           <Card>
             <dl className="fn-facts">
-              <div><dt>Call it</dt><dd><code>POST /functions/v1/{fn.name}</code></dd></div>
-              <div><dt>Who may</dt><dd><code>{JSON.stringify(fn.policy ?? null)}</code></dd></div>
+              {fn.kind === "http" ? (
+                <>
+                  <div><dt>Call it</dt><dd><code>{(fn.config?.methods || []).filter((m) => m !== "OPTIONS").join(" ")} {fn.url}</code></dd></div>
+                  {fn.public_url && <div><dt>Without a key</dt><dd><code>{fn.public_url}</code></dd></div>}
+                  <div><dt>Who may</dt><dd><Badge tone={fn.config?.auth === "public" ? "amber" : undefined}>{typeof fn.config?.auth === "string" ? fn.config.auth : JSON.stringify(fn.config?.auth)}</Badge></dd></div>
+                  <div><dt>Written with</dt><dd>{fn.style === "deno" ? <code>Deno.serve</code> : <code>serve()</code>}</dd></div>
+                  <div><dt>Workers</dt><dd>{fn.config?.warm ? `${fn.config.warm} kept warm` : "started on demand"}{fn.config?.concurrency ? ` · ${fn.config.concurrency} requests each` : ""}{fn.config?.memory ? ` · ${fn.config.memory} MB` : ""}</dd></div>
+                  {fn.config?.cors && <div><dt>Origins</dt><dd><code>{Array.isArray(fn.config.cors.origins) ? fn.config.cors.origins.join(", ") : fn.config.cors.origins}</code></dd></div>}
+                </>
+              ) : (
+                <>
+                  <div><dt>Call it</dt><dd><code>POST /functions/v1/{fn.name}</code></dd></div>
+                  <div><dt>Who may</dt><dd><code>{JSON.stringify(fn.policy ?? null)}</code></dd></div>
+                </>
+              )}
               <div><dt>Timeout</dt><dd>{fn.timeout ? `${fn.timeout}s` : "default"}</dd></div>
               <div><dt>Defined in</dt><dd>{fn.file ? <code>{fn.file}{fn.line ? `:${fn.line}` : ""}</code> : <span className="muted">unknown</span>}</dd></div>
               <div><dt>Served from</dt><dd><Badge>{fn.source}</Badge></dd></div>
@@ -227,10 +351,11 @@ function FunctionPanel({ env, fn, base, branch, stats, onRun }) {
         </div>
       )}
       {tab === "runs" && <Card><RunsTable env={env} fn={fn.name} onOpen={onRun} /></Card>}
+      {tab === "runtime" && fn.kind === "http" && <HttpStats env={env} fn={fn} />}
       {tab === "code" && <Card><SourceFile env={env} path={fn.file} line={fn.line} branch={branch} /></Card>}
       {trying && (
-        <Sheet title={`Try ${fn.name}`} subtitle="Call the function now, with any input and identity" icon="play" tone="sky" onClose={() => setTrying(false)} footer={<Button onClick={() => setTrying(false)}>Close</Button>}>
-          <Invoke base={base} fn={fn} />
+        <Sheet title={`Try ${fn.name}`} subtitle={fn.kind === "http" ? "Send it a request, as any user" : "Call the function now, with any input and identity"} icon="play" tone="sky" onClose={() => setTrying(false)} footer={<Button onClick={() => setTrying(false)}>Close</Button>}>
+          {fn.kind === "http" ? <TryHttp env={env} fn={fn} /> : <Invoke base={base} fn={fn} />}
         </Sheet>
       )}
     </div>
@@ -315,7 +440,7 @@ export default function Functions({ env }) {
     { items: [["all", "All functions", list.data ? `${functions.length} loaded` : undefined]] },
     { title: "Functions", items: shown.map((f) => [`fn:${f.name}`, f.name, f.file || undefined, {
       mono: true,
-      tag: stats[f.name]?.total ? String(stats[f.name].total) : undefined,
+      tag: stats[f.name]?.total ? String(stats[f.name].total) : f.kind === "http" ? "HTTP" : undefined,
       flag: stats[f.name]?.failed ? "critical" : undefined,
       title: f.description || f.name,
     }]) },
@@ -331,7 +456,7 @@ export default function Functions({ env }) {
         <>
           <PageHead
             title="Functions"
-            description={<>Python in <code>functions/*.py</code>, registered with <code>@function</code>. Call them over HTTP at <code>/functions/v1/&lt;name&gt;</code>, or from routes, flows, schedules and events.</>}
+            description={<>HTTP functions in <code>functions/&lt;name&gt;/index.ts</code> answer any request at <code>/functions/v1/&lt;name&gt;/…</code>; <code>fn()</code> and <code>@function</code> functions take JSON at <code>POST /functions/v1/&lt;name&gt;</code> and are called from routes, flows, schedules and events too.</>}
             actions={<Button disabled={busy} onClick={async () => { if (await run(() => post(`/code/reload`), "Code reloaded")) reloadAll(); }}>Reload code</Button>}
           />
           <Loading state={list}>
@@ -345,8 +470,9 @@ export default function Functions({ env }) {
                     onRowClick={(f) => setSection(`fn:${f.name}`)}
                     columns={[
                       { label: "Name", render: (f) => <div><b>{f.name}</b>{f.description ? <div className="hint">{f.description}</div> : null}</div> },
+                      { label: "Kind", render: (f) => (f.kind === "http" ? <Badge tone="blue">HTTP</Badge> : <Badge>fn()</Badge>) },
                       { label: "File", render: (f) => (f.file ? <code>{f.file}{f.line ? `:${f.line}` : ""}</code> : "—") },
-                      { label: "Policy", render: (f) => <code>{typeof f.policy === "string" ? f.policy : JSON.stringify(f.policy ?? null)}</code> },
+                      { label: "Who may", render: (f) => <code>{typeof f.policy === "string" ? f.policy : JSON.stringify(f.policy ?? null)}</code> },
                       { label: "Timeout", render: (f) => (f.timeout ? `${f.timeout}s` : "—") },
                       { label: "Recent runs", render: (f) => { const s = stats[f.name]; return s ? <span>{s.total}{s.failed ? <Badge tone="red">{s.failed} failed</Badge> : null}</span> : <span className="muted">none</span>; } },
                     ]}
