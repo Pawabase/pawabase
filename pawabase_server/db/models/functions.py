@@ -54,6 +54,17 @@ class FunctionRun(Model):
     duration_ms = fields.FloatField(null=True)
     request_id = fields.CharField(max_length=128, null=True)
     job_id = fields.CharField(max_length=128, null=True)
+    #: ``call`` (an fn() function) or ``http`` (an HTTP function); ``None`` on runs recorded before HTTP functions existed.
+    kind = fields.CharField(max_length=8, null=True)
+    method = fields.CharField(max_length=10, null=True)
+    path = fields.CharField(max_length=512, null=True)
+    status_code = fields.IntField(null=True)
+    cold_start = fields.BooleanField(null=True)
+    worker = fields.CharField(max_length=32, null=True)
+    request_bytes = fields.BigIntField(null=True)
+    response_bytes = fields.BigIntField(null=True)
+    background_ms = fields.FloatField(null=True)
+    fetches = fields.IntField(null=True)
 
     class Meta:
         table = "pb_function_runs"

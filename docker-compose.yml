@@ -39,6 +39,11 @@ x-pawabase: &pawabase
     # A deployment's functions/requirements.txt is installed when it is deployed, so a function needing a library never means
     # rebuilding the image. Set to false to refuse deployments that ask for packages.
     PAWABASE_FUNCTION_INSTALL: ${PAWABASE_FUNCTION_INSTALL:-true}
+    # Functions run in the `functions` service below. Empty runs them inside the server instead (one container less, no isolation
+    # of the runtime from the server's credentials).
+    PAWABASE_FUNCTIONS_RUNTIME_URL: ${PAWABASE_FUNCTIONS_RUNTIME_URL-http://functions:8100}
+    # guarded (default): a function's fetch() goes through the platform's outbound guard. direct: workers open their own connections.
+    PAWABASE_FUNCTIONS_NETWORK: ${PAWABASE_FUNCTIONS_NETWORK:-guarded}
   volumes:
     - data:/data
     - ./code:/code:ro
@@ -72,6 +77,34 @@ services:
       disable: true
     depends_on:
       pawabase: { condition: service_healthy }
+
+  # The functions runtime: runs deployed functions (Deno and Python workers) for the server, on the internal network only. It has no
+  # database or Redis credentials and keeps no secrets: a function's secrets come from the server when its workers start, and what a
+  # function does on the platform the server does with the invocation's grant. Scale it with `--scale functions=N` behind a load balancer
+  # only together with a shared deployments volume; one instance serves many functions and requests at once.
+  functions:
+    image: ${PAWABASE_IMAGE:-pawabase:local}
+    command: ["functions"]
+    init: true
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PAWABASE_APP_ENV: ${PAWABASE_APP_ENV:-production}
+      PAWABASE_FUNCTIONS_RUNTIME_HOST: 0.0.0.0
+      PAWABASE_FUNCTIONS_API_URL: http://pawabase:8001
+      PAWABASE_OUTBOUND_ALLOW_HOSTS: ${PAWABASE_OUTBOUND_ALLOW_HOSTS:-}
+      PAWABASE_FUNCTIONS_NETWORK: ${PAWABASE_FUNCTIONS_NETWORK:-guarded}
+      PAWABASE_FUNCTION_INSTALL: ${PAWABASE_FUNCTION_INSTALL:-true}
+    volumes:
+      # The deployments the server activates (it unpacks and vendors them; this service only reads them, and restores Python
+      # libraries a lost volume no longer has).
+      - data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # The control plane: a service of its own, managing the server over its internal listener (never published) with service tokens.
   # It has no sign-in unless PAWABASE_STUDIO_USERNAME/PASSWORD or PAWABASE_STUDIO_ACCESS_SECRET is set, so it is published on localhost only.

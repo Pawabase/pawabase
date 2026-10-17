@@ -22,6 +22,7 @@ from pawabase_server.flows import FlowError, FlowRun
 from pawabase_server.functions.execution_limits import ExecutionLimitExceeded
 from pawabase_server.functions.registry import MAIN, FunctionError
 from pawabase_server.functions.runtime import ApiRuntime, function_context
+from pawabase_server.functions.service.grants import Grant, new_invocation_id
 from pawabase_server.platform import Platform, json_safe
 from pawabase_server.projects import quotas
 
@@ -163,14 +164,23 @@ async def call_function(
                 nested=depth > 0,
             ):
                 work = (
-                    platform.sandboxes.invoke(
-                        platform.deployments,
+                    platform.functions.call(
                         env=owner[0],
                         branch=owner[1],
                         function=name,
                         context=context,
                         runtime=runtime,
-                        transactions=platform.sandbox_transactions,
+                        grant=Grant(
+                            env=state.env_name,
+                            branch=branch or MAIN,
+                            function=name,
+                            invocation=new_invocation_id(),
+                            auth=dict(auth or {}),
+                            request_id=request_id,
+                            depth=depth,
+                            kind="call",
+                            deployment_id=_deployment_of(platform, spec),
+                        ),
                     )
                     if owner is not None
                     else spec.handler(context)
@@ -215,6 +225,7 @@ async def call_function(
                     logs=json_safe([*context.logs, *runtime.logs]),
                     duration_ms=round((time.perf_counter() - started) * 1000, 3),
                     request_id=request_id,
+                    kind="call",
                 )
             )
         except Exception:

@@ -41,6 +41,8 @@ ROUTES: tuple[Upstream, ...] = (
     Upstream("/storage/v1/files/", "storage", "none"),
     Upstream("/storage/v1/share/", "storage", "none"),
     Upstream("/storage/v1/", "storage"),
+    # HTTP functions whose config says ``auth: "public"`` (webhooks from other services): no key; the environment is in the path.
+    Upstream("/functions/v1/public/", "functions", "none"),
     Upstream("/functions/v1/", "functions"),
     Upstream("/flows/v1/", "flows"),
     Upstream("/hooks/v1/", "hooks", "none"),

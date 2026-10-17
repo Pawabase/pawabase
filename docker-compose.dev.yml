@@ -42,6 +42,10 @@ x-pawabase: &pawabase
     PAWABASE_CODE_PATH: /app/code
     # Not under /app: that is a bind mount from the host, and Landlock cannot confine paths on it, so sandboxed functions would load nothing.
     PAWABASE_DEPLOYMENTS_PATH: /data/deployments
+    # Functions run in the `functions` service; set it empty to run them inside the server.
+    PAWABASE_FUNCTIONS_RUNTIME_URL: ${PAWABASE_FUNCTIONS_RUNTIME_URL-http://functions:8100}
+    PAWABASE_FUNCTIONS_API_URL: http://pawabase:8001
+    PAWABASE_FUNCTIONS_RUNTIME_HOST: 0.0.0.0
     PAWABASE_PROJECT_NAME: ${PAWABASE_PROJECT_NAME:-Pawabase}
     PAWABASE_OUTBOUND_ALLOW_HOSTS: ${PAWABASE_OUTBOUND_ALLOW_HOSTS:-}
     # File storage: the bundled MinIO unless .env points these at your own S3-compatible service.
@@ -92,6 +96,18 @@ services:
     command: ["watchfiles", "--filter", "python", "python -m pawabase_server scheduler", "/app/pawabase_server"]
     healthcheck:
       disable: true
+    depends_on:
+      pawabase: { condition: service_healthy }
+
+  # The functions runtime service (see docker-compose.yml). Reloads when the platform's Python changes.
+  functions:
+    <<: *pawabase
+    command: ["watchfiles", "--filter", "python", "python -m pawabase_server.functions.service", "/app/pawabase_server"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     depends_on:
       pawabase: { condition: service_healthy }
 

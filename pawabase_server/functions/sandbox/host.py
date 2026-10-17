@@ -32,14 +32,9 @@ from sillo.exceptions import HTTPException
 from pawabase_server.core.failures import Failure, Where
 from pawabase_server.flows import FlowError
 from pawabase_server.functions.registry import FunctionError, deployment_key
-from pawabase_server.functions.runtime_rpc import (
-    METHODS,
-    Transactions,
-    failure_payload,
-    serve_call,
-    serve_db,
-)
+from pawabase_server.functions.runtime_rpc import METHODS
 from pawabase_server.functions.sandbox import typescript
+from pawabase_server.functions.service.bridge import failure_reply
 
 logger = logging.getLogger("pawabase.sandbox")
 
@@ -99,8 +94,11 @@ class Worker:
         libs: list[Path],
         limits: Limits,
         language: str = typescript.PYTHON,
+        cache: Path | None = None,
     ) -> None:
         self.key = key
+        #: The deployment's vendored npm/jsr/URL modules (TypeScript), or ``None``.
+        self.cache = cache
         #: ``python`` or ``typescript``: which worker program runs this deployment.
         self.language = language
         self.artifact = artifact
@@ -143,6 +141,7 @@ class Worker:
                 self._tmp,
                 memory_mb=self.limits.memory_mb,
                 confinement=self.limits.confinement,
+                cache=self.cache,
             )
             if self.language == typescript.TYPESCRIPT
             else [sys.executable, "-m", "pawabase_server.functions.sandbox.worker"]
@@ -235,11 +234,8 @@ class Worker:
             self._drain.cancel()
         shutil.rmtree(self._tmp, ignore_errors=True)
 
-    async def run(
-        self, invocation: dict[str, Any], runtime: Any, transactions: Transactions
-    ) -> dict[str, Any]:
-        """Send one invocation and serve the worker's runtime calls until it reports ``done``."""
-        owned: set[str] = set()
+    async def run(self, invocation: dict[str, Any], bridge: Any) -> dict[str, Any]:
+        """Send one invocation and answer the worker's runtime calls through *bridge* until it reports ``done``."""
         serving: set[asyncio.Task] = set()
         try:
             await self.send({"t": "invoke", **invocation})
@@ -247,51 +243,42 @@ class Worker:
                 message = await self.read()
                 if message["t"] == "done":
                     return message
-                task = asyncio.create_task(self._serve(message, runtime, transactions, owned))
+                task = asyncio.create_task(self._serve(message, bridge))
                 serving.add(task)
                 task.add_done_callback(serving.discard)
         finally:
             for task in serving:
                 task.cancel()
-            for tx in list(owned):  # whatever the call left open is not committed
-                with contextlib.suppress(Exception):
-                    await transactions.finish(tx, commit=False)
+            with contextlib.suppress(Exception):
+                await bridge.close()  # whatever the call left open is not committed
 
-    async def _serve(
-        self, message: dict[str, Any], runtime: Any, transactions: Transactions, owned: set[str]
-    ) -> None:
+    async def _serve(self, message: dict[str, Any], bridge: Any) -> None:
         kind, number = message["t"], message["id"]
         try:
             if kind == "call":
-                body: dict[str, Any] = {
-                    "result": await serve_call(
-                        runtime,
-                        message["method"],
-                        message.get("args") or [],
-                        message.get("kwargs") or {},
-                        allowed=ALLOWED,
-                    )
-                }
+                body = await bridge.call(
+                    message["method"], message.get("args") or [], message.get("kwargs") or {}
+                )
             else:
-                fields = message.get("fields") or {}
-                op = message["op"]
-                if op != "begin" and fields.get("tx") not in owned and fields.get("tx") is not None:
-                    raise FlowError(
-                        "That transaction belongs to another call.",
-                        status=409,
-                        code="no_transaction",
-                    )
-                body = await serve_db(runtime, transactions, op, fields)
-                if op == "begin":
-                    owned.add(body["tx"])
-                elif op in ("commit", "rollback"):
-                    owned.discard(fields.get("tx"))
+                body = await bridge.db(message["op"], message.get("fields") or {})
             reply: dict[str, Any] = {"t": "reply", "id": number, "ok": True, "body": body}
         except Exception as exc:  # noqa: BLE001 - the function is told what failed, typed
-            status, payload = failure_payload(exc)
+            status, payload = failure_reply(exc)
             reply = {"t": "reply", "id": number, "ok": False, "status": status, "body": payload}
         with contextlib.suppress(Exception):
             await self.send(reply)
+
+
+def invocation_of(context: Any, function: str) -> dict[str, Any]:
+    """The ``invoke`` message for *function* called with *context* (a ``FunctionContext``)."""
+    return {
+        "function": function,
+        "input": encode(context.input),
+        "auth": context.auth,
+        "project": context.project,
+        "trigger": context.trigger,
+        "request": encode(context.request),
+    }
 
 
 class SandboxPool:
@@ -313,10 +300,31 @@ class SandboxPool:
         branch: str,
         function: str,
         context: Any,
-        runtime: Any,
-        transactions: Transactions,
+        bridge: Any,
     ) -> Any:
         """Run *function* of the deployment live for *env*/*branch* and return what it returned (or raise what it raised)."""
+        done = await self.run_raw(
+            deployments,
+            env=env,
+            branch=branch,
+            function=function,
+            invocation=invocation_of(context, function),
+            bridge=bridge,
+        )
+        context.logs.extend(decode(done.get("logs") or []))
+        return self._result(done)
+
+    async def run_raw(
+        self,
+        deployments: Any,
+        *,
+        env: str,
+        branch: str,
+        function: str,
+        invocation: dict[str, Any],
+        bridge: Any,
+    ) -> dict[str, Any]:
+        """Run one invocation and return the worker's ``done`` message as it is (what the runtime service sends back to the server)."""
         stamp = deployments.stamp(env, branch)
         if stamp is None:
             raise FunctionError(f"no deployment for {env!r}", status=404, code="not_found")
@@ -325,27 +333,18 @@ class SandboxPool:
         slot = self._slots.setdefault(key, asyncio.Semaphore(self.limits.workers))
         async with slot:
             worker = await self._take(key, deployments, env, branch)
-            invocation = {
-                "id": 1,
-                "function": function,
-                "input": encode(context.input),
-                "auth": context.auth,
-                "project": context.project,
-                "trigger": context.trigger,
-                "request": encode(context.request),
-            }
             try:
-                done = await worker.run(invocation, runtime, transactions)
-            except EOFError as exc:
-                await self._drop(worker)
-                raise SandboxFailure(self._crashed(worker)) from exc
+                done = await worker.run({**invocation, "id": 1, "function": function}, bridge)
+            except EOFError:
+                await self._drop(worker)  # first: it waits for the process, whose exit code says why it stopped
+                crash = self._crashed(worker)
+                return {"outcome": "crashed", "kind": crash.kind, "message": crash.message, "hint": crash.hint}
             except BaseException:  # a timeout or cancellation: the process may be stuck, so it does not get another call
                 await self._drop(worker)
                 raise
             worker.last_used = time.monotonic()
             self.idle.setdefault(key, []).append(worker)
-        context.logs.extend(decode(done.get("logs") or []))
-        return self._result(done)
+        return done
 
     def _crashed(self, worker: Worker) -> Failure:
         code = worker.process.returncode if worker.process is not None else None
@@ -378,6 +377,10 @@ class SandboxPool:
             )
         if outcome == "http":
             raise HTTPException(status_code=int(done["status"]), detail=decode(done.get("detail")))
+        if outcome == "crashed":
+            raise SandboxFailure(
+                Failure(done.get("kind") or "SandboxCrashed", done.get("message") or "", hint=done.get("hint"))
+            )
         if outcome == "missing":
             raise SandboxFailure(
                 Failure(
@@ -412,6 +415,7 @@ class SandboxPool:
             deployments.libraries(env, branch),
             self.limits,
             deployments.language(env, branch),
+            deployments.vendor_cache(env, branch) if hasattr(deployments, "vendor_cache") else None,
         )
         self.all.add(worker)
         self.started += 1

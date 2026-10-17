@@ -174,6 +174,41 @@ class Settings(Config):
     #: customer-controlled code, with the API's privileges.
     function_install_binary_only: bool = False
 
+    # ── the functions runtime (``functions/service``) ────────────────────
+    #: Where the functions runtime service listens (``http://functions:8100``). Empty: the runtime runs inside this process, which is
+    #: what a single-process installation and the tests use. With a URL, this server forwards every invocation there.
+    functions_runtime_url: str = ""
+    #: How the runtime service reaches this server's internal listener for ``ctx.runtime`` calls and run reports
+    #: (``http://pawabase:8001``). Only the service reads it.
+    functions_api_url: str = "http://127.0.0.1:8001"
+    #: Where the runtime service listens when it runs on its own (``python -m pawabase_server.functions.service``).
+    functions_runtime_host: str = "127.0.0.1"
+    functions_runtime_port: int = 8100
+    #: ``guarded`` (default): a function's ``fetch()`` is made by the runtime through the outbound guard (no private addresses, no
+    #: DNS rebinding) and the worker itself has no sockets. ``direct``: the worker may open its own connections (raw TCP database
+    #: drivers); the filesystem and syscall confinement still apply. Only for code you trust with your network.
+    functions_network: Literal["guarded", "direct"] = "guarded"
+    #: Requests one HTTP function worker serves at once; the next request starts another worker, up to ``functions_max_workers``.
+    functions_worker_concurrency: int = 32
+    #: Most workers one HTTP function may run at once; beyond that requests wait (``functions_queue_seconds``) and then get 503.
+    functions_max_workers: int = 8
+    functions_queue_seconds: float = 10.0
+    #: The longest a request to an HTTP function may run (a function's ``config.timeout`` may lower it, never raise it).
+    functions_max_timeout_seconds: int = 400
+    #: How long work handed to ``waitUntil`` may continue after the response.
+    functions_background_seconds: int = 300
+    #: Heap limit of an HTTP function worker, in MB (a function's ``config.memory`` may lower it).
+    functions_memory_mb: int = 512
+    #: Outbound requests one invocation may make, and how many bytes it may receive from them.
+    functions_fetch_limit: int = 200
+    functions_fetch_max_bytes: int = 64 * 1024 * 1024
+    #: Resolve ``npm:``, ``jsr:`` and URL imports when a TypeScript deployment is activated, and run it from that copy only. ``None``
+    #: follows ``function_install`` (on, except in production unless enabled).
+    function_vendor: bool | None = None
+    #: The Deno registry mirrors to vendor from (empty: npm and jsr themselves).
+    function_npm_registry: str = ""
+    function_vendor_timeout: int = 300
+
     # ── projects ─────────────────────────────────────────────────────────
     #: The project a fresh installation starts with, and the one environments from before projects existed are attached to.
     default_project: str = "default"
@@ -268,6 +303,16 @@ class Settings(Config):
         return (
             self.app_env != "production" if self.function_install is None else self.function_install
         )
+
+    @property
+    def function_vendor_enabled(self) -> bool:
+        """Whether a TypeScript deployment's remote imports are fetched when it is activated (see ``functions/vendor.py``)."""
+        return self.function_install_enabled if self.function_vendor is None else self.function_vendor
+
+    @property
+    def functions_runtime_remote(self) -> bool:
+        """Whether functions run in the separate runtime service rather than in this process."""
+        return bool(self.functions_runtime_url.strip())
 
     def tuned(self, url: str) -> str:
         """*url* with this deployment's pool settings applied (Postgres only)."""

@@ -9,6 +9,23 @@
  *
  * It mirrors the Python kit: a name, a policy, an input, `auth`, and `ctx.runtime` for data, events, secrets, storage and outbound HTTP —
  * every runtime call goes back to the platform, which answers it with the caller's identity (this process has no network of its own).
+ *
+ * **HTTP functions** are the other kind, written the way Supabase Edge Functions are: one folder per function, `functions/<name>/index.ts`,
+ * answering any method and any sub-path of `/functions/v1/<name>/…` with a standard `Response`:
+ *
+ *   import { serve } from "@pawabase/functions";
+ *
+ *   export const config = { auth: "user", timeout: 60, cors: true };
+ *
+ *   serve(async (req, ctx) => {
+ *     const { name } = await req.json();
+ *     ctx.waitUntil(ctx.runtime.emit("greeted", { name }));
+ *     return Response.json({ message: `Hello ${name}`, user: ctx.auth.user_id });
+ *   });
+ *
+ * `Deno.serve(handler)` works too, unchanged (`getContext(req)` then gives the same `ctx`). Secrets are environment variables
+ * (`Deno.env.get("STRIPE_KEY")`), `fetch()` goes out through the platform's guard, and `EdgeRuntime.waitUntil(promise)` is available for
+ * code written for Supabase.
  */
 
 export type Policy = string | Record<string, unknown> | null;
@@ -176,4 +193,148 @@ export class Runtime {
   }
 }
 
-export { registry };
+// ── HTTP functions ────────────────────────────────────────────────────────
+
+/** Who may call an HTTP function. */
+export type HttpAuth =
+  /** Anyone, without an API key: `/functions/v1/public/<env>/<name>` (webhooks from other services). */
+  | "public"
+  /** Any valid API key of the environment, signed in or not (the default, like Supabase's `verify_jwt` with the anon key). */
+  | "key"
+  /** A signed-in user (an access token in `Authorization: Bearer …`). */
+  | "user"
+  /** A secret key only (server-to-server). */
+  | "service"
+  /** Any other policy name or condition, evaluated like a resource policy. */
+  | string
+  | Record<string, unknown>;
+
+export interface CorsConfig {
+  /** Allowed origins; `"*"` for any (the default when `cors: true`). */
+  origins?: string[] | "*";
+  methods?: string[];
+  headers?: string[];
+  exposeHeaders?: string[];
+  credentials?: boolean;
+  maxAge?: number;
+}
+
+/** `export const config = {...}` beside an HTTP function's handler. Every field is optional. */
+export interface HttpFunctionConfig {
+  description?: string;
+  auth?: HttpAuth;
+  /** Seconds a request may run; capped by the installation (400 by default). */
+  timeout?: number;
+  /** Heap limit of the function's workers, in MB; capped by the installation. */
+  memory?: number;
+  /** Workers kept running while idle, so a request never waits for a cold start. */
+  warm?: number;
+  /** Requests one worker serves at once before another is started. */
+  concurrency?: number;
+  /** Answer preflight requests and add CORS headers to every response. */
+  cors?: boolean | CorsConfig;
+  /** Methods the function answers; others get 405 before it runs. Default: all. */
+  methods?: string[];
+  tags?: string[];
+}
+
+/** What an HTTP function's handler receives beside the request. */
+export interface HttpContext {
+  /** The caller, as policies see it: `authenticated`, `user_id`, `roles`, `permissions`, `org`, … */
+  auth: Record<string, any>;
+  env: string;
+  branch: string;
+  project: string;
+  /** The function's name. */
+  function: string;
+  /** The gateway's request id: quote it to find the run in Studio. */
+  requestId: string;
+  /** The path after `/functions/v1/<name>` (`/` when there is none), and the query string's values. */
+  path: string;
+  query: URLSearchParams;
+  /** The platform runtime, acting as the caller: data, events, cache, storage, mail, secrets, other functions. */
+  runtime: Runtime;
+  /** A line recorded with this run (`console.log` is recorded too). */
+  log: (...parts: unknown[]) => void;
+  /** Keep working after the response is sent, until the promise settles (bounded by the installation). */
+  waitUntil: (promise: Promise<unknown>) => void;
+  /** Aborted when the caller goes away or the request runs out of time. */
+  signal: AbortSignal;
+}
+
+export type HttpHandler = (request: Request, ctx: HttpContext) => Response | Promise<Response>;
+
+interface HttpRegistration {
+  kind: "pawabase" | "deno";
+  handler: (request: Request, extra: any) => Response | Promise<Response>;
+}
+
+const http: { current: HttpRegistration | null } = ((globalThis as any).__pawabase_http ??= { current: null });
+const contexts: WeakMap<Request, HttpContext> = ((globalThis as any).__pawabase_contexts ??= new WeakMap());
+
+/** Make this module an HTTP function. Call it once, at the top level of `functions/<name>/index.ts`. */
+export function serve(handler: HttpHandler): void {
+  if (typeof handler !== "function") throw new Error("serve() needs a handler: (request, ctx) => Response");
+  if (http.current) throw new Error("serve() was called twice: an HTTP function has one handler");
+  http.current = { kind: "pawabase", handler: (request, ctx) => handler(request, ctx) };
+}
+
+/** The context of a request an HTTP function is answering: for handlers written with `Deno.serve`, which receive only the request. */
+export function getContext(request: Request): HttpContext {
+  const found = contexts.get(request);
+  if (!found) throw new Error("getContext() is only available for the request an HTTP function is answering");
+  return found;
+}
+
+/** Answer with JSON. */
+export function json(body: unknown, init: ResponseInit = {}): Response {
+  const headers = new Headers(init.headers);
+  if (!headers.has("content-type")) headers.set("content-type", "application/json; charset=utf-8");
+  return new Response(JSON.stringify(body), { ...init, headers });
+}
+
+/** Answer with an error in the platform's shape: `{ error, message, details }`. */
+export function errorResponse(status: number, code: string, message: string, details: unknown = null): Response {
+  return json({ error: code, message, details }, { status });
+}
+
+/** Server-sent events: `return sse(async (send) => { send({ event: "tick", data: 1 }); })`. The stream ends when the callback returns. */
+export function sse(
+  producer: (send: (event: { event?: string; data: unknown; id?: string; retry?: number }) => void, signal: AbortSignal) => Promise<void> | void,
+  init: ResponseInit & { signal?: AbortSignal } = {},
+): Response {
+  const encoder = new TextEncoder();
+  const controller = new AbortController();
+  init.signal?.addEventListener("abort", () => controller.abort());
+  const stream = new ReadableStream<Uint8Array>({
+    async start(out) {
+      const send = (event: { event?: string; data: unknown; id?: string; retry?: number }) => {
+        let text = "";
+        if (event.id !== undefined) text += `id: ${event.id}\n`;
+        if (event.event) text += `event: ${event.event}\n`;
+        if (event.retry !== undefined) text += `retry: ${event.retry}\n`;
+        const data = typeof event.data === "string" ? event.data : JSON.stringify(event.data);
+        for (const line of data.split("\n")) text += `data: ${line}\n`;
+        out.enqueue(encoder.encode(text + "\n"));
+      };
+      try {
+        await producer(send, controller.signal);
+      } finally {
+        try {
+          out.close();
+        } catch {
+          // the reader went away first
+        }
+      }
+    },
+    cancel() {
+      controller.abort();
+    },
+  });
+  const headers = new Headers(init.headers);
+  headers.set("content-type", "text/event-stream");
+  headers.set("cache-control", "no-cache");
+  return new Response(stream, { ...init, headers });
+}
+
+export { contexts as __contexts, http as __http, registry };

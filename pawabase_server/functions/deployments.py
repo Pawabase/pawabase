@@ -38,6 +38,8 @@ from typing import Any
 
 from pawabase.functions import module_prefix
 
+from pawabase_server.functions import vendor as vendoring
+from pawabase_server.functions.http_functions import HttpFunctionSpec, parse_config
 from pawabase_server.functions.registry import (
     MAIN,
     ProjectCode,
@@ -174,8 +176,24 @@ class Deployments:
         index_url: str = "",
         install_timeout: int = 300,
         binary_only: bool = False,
+        vendor: bool = True,
+        vendor_timeout: int = 300,
+        npm_registry: str = "",
+        http_limits: dict[str, int] | None = None,
     ) -> None:
         self.root = Path(root).resolve()
+        #: Fetches a TypeScript deployment's ``npm:``/``jsr:``/URL imports when it is activated (see ``functions/vendor.py``).
+        self.vendor = vendoring.Vendor(
+            self.root,
+            enabled=vendor,
+            timeout=vendor_timeout,
+            npm_registry=npm_registry,
+            kit=typescript.KIT,
+        )
+        #: What an HTTP function's ``config`` may ask for: the installation's ceilings.
+        self.http_limits = {"timeout": 400, "memory": 512, "concurrency": 256, **(http_limits or {})}
+        #: The HTTP functions of each loaded deployment, by registry key and name.
+        self.http: dict[str, dict[str, HttpFunctionSpec]] = {}
         self.install_requirements = install_requirements
         self.index_url = index_url
         self.install_timeout = install_timeout
@@ -194,6 +212,24 @@ class Deployments:
 
     def archive(self, env: str, branch: str, deployment_id: str) -> Path:
         return self.folder(env, branch) / "archives" / f"{deployment_id}.tar.gz"
+
+    def vendor_cache(self, env: str, branch: str = MAIN) -> Path | None:
+        """The vendored module cache of what is live for *env*/*branch*, or ``None`` when it imports nothing remote."""
+        digest = (self.stamp(env, branch) or {}).get("vendor")
+        return self.vendor.cache_dir(digest) if digest and self.vendor.ready(digest) else None
+
+    def http_functions(self, env: str, branch: str = MAIN) -> dict[str, HttpFunctionSpec]:
+        """The HTTP functions live for *env*/*branch* (loading the deployment if this process has not yet)."""
+        self.ensure_loaded(env, branch)
+        return dict(self.http.get(deployment_key(env, branch), {}))
+
+    def http_function(self, env: str, name: str, branch: str | None = None) -> HttpFunctionSpec | None:
+        """An HTTP function as *branch* sees it: the branch's deployment first, then the environment's."""
+        for where in ([branch] if branch and branch != MAIN else []) + [MAIN]:
+            found = self.http_functions(env, where).get(name)
+            if found is not None:
+                return found
+        return None
 
     def language(self, env: str, branch: str = MAIN) -> str:
         """``python`` or ``typescript``: what the live deployment of *env*/*branch* is written in."""
@@ -384,6 +420,7 @@ class Deployments:
             return seen.code
         if wanted is None:
             clear_functions(key)
+            self.http.pop(key, None)
             seen.loaded_id, seen.code = None, None
             return None
         return self.load(env, branch)
@@ -392,12 +429,13 @@ class Deployments:
         key = deployment_key(env, branch)
         seen = self._seen.setdefault(key, _Seen())
         clear_functions(key)
+        self.http.pop(key, None)
         for name in [name for name in sys.modules if name.startswith(f"{module_prefix(key)}.")]:
             del sys.modules[name]
         stamp = self.stamp(env, branch)
         current = self.current(env, branch)
         if (stamp or {}).get("language") == typescript.TYPESCRIPT:
-            code = self._load_typescript(key, current)
+            code = self._load_typescript(key, current, env=env, branch=branch, stamp=stamp or {})
             seen.checked_at, seen.loaded_id, seen.code = (
                 time.monotonic(),
                 (stamp or {}).get("id"),
@@ -424,14 +462,26 @@ class Deployments:
             logger.warning("deployment %s has errors: %s", key, code.errors)
         return code
 
-    def _load_typescript(self, key: str, current: Path) -> ProjectCode:
+    def _load_typescript(
+        self, key: str, current: Path, *, env: str, branch: str, stamp: dict[str, Any]
+    ) -> ProjectCode:
         """Ask a confined Deno what the deployment defines, and register each function here so routing and policies see it.
 
-        The handlers registered here are stand-ins: a TypeScript function always runs in its own Deno worker, never in this process.
+        ``fn()`` functions are registered in the kit's registry with stand-in handlers (a TypeScript function always runs in its Deno
+        worker, never in this process). HTTP functions are kept in :attr:`http`, with their checked ``config``.
         """
+        digest = stamp.get("vendor")
+        cache = self.vendor.cache_dir(digest) if digest and self.vendor.ready(digest) else None
+        if digest and cache is None:
+            return ProjectCode(
+                project=key,
+                errors=[
+                    "The deployment's npm/jsr/URL imports are not on this server any more; deploy it again to fetch them."
+                ],
+            )
         try:
             answer = typescript.describe(
-                current, environment=self.worker_environment(), confinement=self.confinement
+                current, environment=self.worker_environment(), confinement=self.confinement, cache=cache
             )
         except typescript.RuntimeUnavailable as exc:
             return ProjectCode(project=key, errors=[str(exc)])
@@ -453,6 +503,34 @@ class Deployments:
             code.errors.append(f"A function definition was refused: {exc}")
         finally:
             _loading_project.reset(token)
+        http: dict[str, HttpFunctionSpec] = {}
+        for found in answer.get("http") or []:
+            name = str(found.get("name"))
+            config, problems = parse_config(
+                found.get("config"),
+                max_timeout=self.http_limits["timeout"],
+                max_memory=self.http_limits["memory"],
+                max_concurrency=self.http_limits["concurrency"],
+            )
+            if problems:
+                code.errors.extend(f"{found.get('entry')}: {problem}" for problem in problems)
+                continue
+            if name in code.functions:
+                code.errors.append(
+                    f"{found.get('entry')}: an fn() function is also called {name!r}; one name, one function."
+                )
+                continue
+            http[name] = HttpFunctionSpec(
+                name=name,
+                entry=str(found.get("entry")),
+                config=config,
+                style=str(found.get("style") or "pawabase"),
+                env=env,
+                branch=branch,
+                deployment_id=stamp.get("id"),
+                vendor=digest,
+            )
+        self.http[key] = http
         return code
 
     @staticmethod
@@ -504,6 +582,9 @@ class Deployments:
             if problems:
                 raise DeploymentError("The bundle was refused.", problems)
             packages = self.prepare(archive) if language != typescript.TYPESCRIPT else None
+            vendored = (
+                self._vendor(staging, checksum) if language == typescript.TYPESCRIPT else None
+            )
             (staging / STAMP).write_text(
                 json.dumps(
                     {
@@ -512,6 +593,8 @@ class Deployments:
                         "files": files,
                         "packages": packages,
                         "language": language or typescript.PYTHON,
+                        "vendor": vendored.digest if vendored else None,
+                        "remote_imports": vendored.specifiers if vendored else [],
                         "activated_at": time.time(),
                     }
                 )
@@ -544,6 +627,22 @@ class Deployments:
             target.write_bytes(archive)
         return code
 
+    def _vendor(self, staging: Path, checksum: str) -> vendoring.VendorResult:
+        """Fetch the remote imports of an unpacked TypeScript deployment, or raise :class:`DeploymentError` saying why it cannot be."""
+        try:
+            deno = typescript.deno_path()
+        except typescript.RuntimeUnavailable as exc:
+            raise DeploymentError(str(exc), status=500) from exc
+        http = [
+            {"name": path.parent.name, "entry": path.relative_to(staging).as_posix()}
+            for path in sorted((staging / "functions").glob("*/index.*"))
+            if typescript.is_http_entry(path.relative_to(staging).as_posix())
+        ]
+        try:
+            return self.vendor.vendor(staging, checksum, deno=deno, http_functions=http)
+        except vendoring.VendorError as exc:
+            raise DeploymentError(exc.message, exc.problems) from exc
+
     def reactivate(self, env: str, branch: str, deployment_id: str) -> ProjectCode:
         """Put an earlier artifact back (a rollback). Raises :class:`DeploymentError` when its bytes are gone."""
         source = self.archive(env, branch, deployment_id)
@@ -568,6 +667,7 @@ class Deployments:
         if not folder.exists():
             return False
         clear_functions(deployment_key(env, branch))
+        self.http.pop(deployment_key(env, branch), None)
         self._seen.pop(deployment_key(env, branch), None)
         shutil.rmtree(folder)
         return True
@@ -576,8 +676,11 @@ class Deployments:
     def _check(directory: Path, language: str = "python") -> list[str]:
         problems: list[str] = []
         if language == typescript.TYPESCRIPT:
-            if not any(p.suffix in typescript.SOURCES for p in (directory / "functions").glob("*")):
-                problems.append("The bundle must contain functions/*.ts.")
+            names = [p.relative_to(directory).as_posix() for p in directory.rglob("*") if p.is_file()]
+            if not any(
+                p.suffix in typescript.SOURCES for p in (directory / "functions").glob("*")
+            ) and not any(typescript.is_http_entry(n) for n in names):
+                problems.append("The bundle must contain functions/*.ts or functions/<name>/index.ts.")
             if (directory / "functions" / "requirements.txt").exists():
                 problems.append(
                     "functions/requirements.txt is for Python; a TypeScript deployment carries its own code."

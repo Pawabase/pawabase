@@ -112,14 +112,17 @@ def _no_new_privs() -> None:
 
 
 def apply_landlock(
-    read: Iterable[Path], write: Iterable[Path], files: dict[Path, int]
+    read: Iterable[Path], write: Iterable[Path], files: dict[Path, int], *, network: bool = False
 ) -> dict[str, Any]:
-    """Restrict this process's filesystem (and, where the kernel can, TCP, abstract sockets and signals) to the given paths."""
+    """Restrict this process's filesystem (and, where the kernel can, TCP, abstract sockets and signals) to the given paths.
+
+    ``network=True`` leaves TCP alone (a ``direct``-network function): the filesystem and signal rules still apply.
+    """
     abi = landlock_abi()
     if abi < 1:
         raise OSError(errno.ENOSYS, "Landlock is not available in this kernel")
     handled = _fs_rights(abi)
-    net = NET_BIND_TCP | NET_CONNECT_TCP if abi >= 4 else 0
+    net = NET_BIND_TCP | NET_CONNECT_TCP if abi >= 4 and not network else 0
     scoped = SCOPE_ABSTRACT_UNIX_SOCKET | SCOPE_SIGNAL if abi >= 6 else 0
     if abi >= 6:
         attr = struct.pack("=QQQ", handled, net, scoped)
@@ -300,8 +303,11 @@ def _errno(code: int) -> int:
     return RET_ERRNO | code
 
 
-def seccomp_program(machine: str, pid: int) -> list[tuple[int, int, int, int]]:
-    """The filter as BPF instructions ``(code, jt, jf, k)``. Labels are resolved here; every jump is forward."""
+def seccomp_program(machine: str, pid: int, *, sockets: bool = False) -> list[tuple[int, int, int, int]]:
+    """The filter as BPF instructions ``(code, jt, jf, k)``. Labels are resolved here; every jump is forward.
+
+    ``sockets=True`` lets ``socket()`` through (a ``direct``-network function); everything else is filtered the same.
+    """
     numbers = SYSCALLS[machine]
     program: list[tuple] = []  # (code, jt_label|int, jf_label|int, k)
     program.append((LD_W_ABS, 0, 0, 4))  # arch
@@ -312,7 +318,8 @@ def seccomp_program(machine: str, pid: int) -> list[tuple[int, int, int, int]]:
         program.append((JGE, "x32", 0, 0x40000000))
     for name in DENIED:
         program.append((JEQ, "eperm", 0, numbers[name]))
-    program.append((JEQ, "eacces", 0, numbers["socket"]))
+    if not sockets:
+        program.append((JEQ, "eacces", 0, numbers["socket"]))
     program.append(
         (JEQ, "enosys", 0, numbers["clone3"])
     )  # glibc falls back to clone, whose flags can be read
@@ -367,18 +374,18 @@ class _SockFprog(ctypes.Structure):
     _fields_ = [("len", ctypes.c_ushort), ("filter", ctypes.POINTER(_SockFilter))]
 
 
-def apply_seccomp() -> dict[str, Any]:
+def apply_seccomp(*, sockets: bool = False) -> dict[str, Any]:
     machine = platform.machine().lower()
     if sys.platform != "linux" or machine not in SYSCALLS:
         raise OSError(errno.ENOSYS, f"no seccomp filter for {sys.platform}/{machine}")
-    program = seccomp_program(machine, os.getpid())
+    program = seccomp_program(machine, os.getpid(), sockets=sockets)
     filters = (_SockFilter * len(program))(*[_SockFilter(*instruction) for instruction in program])
     fprog = _SockFprog(len(program), filters)
     _no_new_privs()
     if _lib().prctl(22, 2, ctypes.byref(fprog), 0, 0) != 0:  # PR_SET_SECCOMP, SECCOMP_MODE_FILTER
         code = ctypes.get_errno()
         raise OSError(code, os.strerror(code))
-    return {"machine": machine, "instructions": len(program)}
+    return {"machine": machine, "instructions": len(program), "sockets": sockets}
 
 
 # ── both ────────────────────────────────────────────────────────────────
@@ -419,24 +426,44 @@ def readable_roots(artifact: Path, libs: list[Path]) -> list[Path]:
     return roots
 
 
-def confine(mode: str, *, artifact: Path, libs: list[Path], tmp: Path) -> dict[str, Any]:
-    """Apply what the system supports. ``required``: raise unless both Landlock and seccomp apply. ``best``: apply what can be."""
-    report: dict[str, Any] = {"mode": mode}
+#: Read by a process that resolves names and verifies TLS itself (``direct`` network).
+NETWORK_FILES = (
+    "/etc/resolv.conf",
+    "/etc/hosts",
+    "/etc/nsswitch.conf",
+    "/etc/gai.conf",
+    "/etc/ssl",
+    "/etc/ca-certificates",
+    "/usr/share/ca-certificates",
+)
+
+
+def confine(
+    mode: str, *, artifact: Path, libs: list[Path], tmp: Path, network: bool = False
+) -> dict[str, Any]:
+    """Apply what the system supports. ``required``: raise unless both Landlock and seccomp apply. ``best``: apply what can be.
+
+    ``network=True`` keeps the process's own sockets (TCP through Landlock, ``socket()`` through seccomp) for functions an operator
+    lets reach the network directly; the filesystem, tracing, namespace and signal rules are unchanged.
+    """
+    report: dict[str, Any] = {"mode": mode, "network": "direct" if network else "none"}
     problems: list[str] = []
     try:
+        files = {
+            Path("/dev/null"): FS_READ_FILE | FS_WRITE_FILE,
+            Path("/dev/urandom"): FS_READ_FILE,
+            Path("/proc/self"): READ,
+        }
+        if network:  # name resolution and the system's certificates, which a process with its own sockets reads
+            for name in NETWORK_FILES:
+                files[Path(name)] = READ
         report["filesystem"] = apply_landlock(
-            readable_roots(artifact, libs),
-            [tmp],
-            {
-                Path("/dev/null"): FS_READ_FILE | FS_WRITE_FILE,
-                Path("/dev/urandom"): FS_READ_FILE,
-                Path("/proc/self"): READ,
-            },
+            readable_roots(artifact, libs), [tmp], files, network=network
         )
     except OSError as exc:
         problems.append(f"Landlock: {exc.strerror or exc}")
     try:
-        report["syscalls"] = apply_seccomp()
+        report["syscalls"] = apply_seccomp(sockets=network)
     except (OSError, ValueError) as exc:
         problems.append(f"seccomp: {getattr(exc, 'strerror', None) or exc}")
     report["problems"] = problems

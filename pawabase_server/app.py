@@ -32,6 +32,7 @@ from sillo.record import Record
 from sillo.security import CorsConfig, CORSMiddleware
 
 from pawabase_server.compiler.dispatch import DataPlaneDispatcher
+from pawabase_server.functions.http_dispatch import HttpFunctionDispatcher
 from pawabase_server.core.auth import UserBackend
 from pawabase_server.core.namespace import scoped
 from pawabase_server.core.service import create_service
@@ -117,7 +118,7 @@ def create_app(
         title=f"{settings.project_name} server",
         description="Identity, the management plane, the data plane, storage, functions, flows, events and realtime.",
         backends=[UserBackend(settings.jwt_master_secret)],
-        inner=[DataPlaneDispatcher(platform)],
+        inner=[DataPlaneDispatcher(platform), HttpFunctionDispatcher(platform)],
         installables=[Record(database_config(settings), tuple(MODEL_MODULES))],
     )
     app.state["record"].set_migrations(MIGRATIONS_MODULE)
