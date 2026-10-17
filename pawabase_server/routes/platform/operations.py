@@ -29,6 +29,7 @@ from pawabase_server.db.models import (
     WorkerHeartbeat,
 )
 from pawabase_server.environments.configuration import report as configuration_report
+from pawabase_server.infra.storage import folders
 from pawabase_server.infra.storage import shares as object_shares
 from pawabase_server.infra.storage import transform
 from pawabase_server.observability import audit_log as audit_log_store
@@ -67,6 +68,10 @@ class MoveBody(BaseModel):
     target: str = Field(min_length=1, max_length=1024)
 
 
+class FolderBody(BaseModel):
+    prefix: str = Field(min_length=1, max_length=1024)
+
+
 class MailTestBody(BaseModel):
     to: list[str]
     subject: str = "Pawabase test message"
@@ -87,6 +92,11 @@ def _custom_window(start: str | None, end: str | None) -> tuple[datetime, dateti
     if last <= first:
         raise HTTPException(422, "to must be after from")
     return first, last
+
+
+async def _folder_body():
+    """The bytes of a folder marker: written once to make a folder exist, never served."""
+    yield folders.MARKER_BODY
 
 
 class ReplayBody(BaseModel):
@@ -350,6 +360,7 @@ def register(r: Router, platform: Platform) -> None:
                     "url": platform.storage.object_url(state, bucket, f.key),
                 }
                 for f in page.files
+                if not folders.is_marker(f.key)
             ],
             "prefixes": list(page.prefixes),
             "cursor": page.cursor,
@@ -380,6 +391,8 @@ def register(r: Router, platform: Platform) -> None:
         state = await platform.state(env)
         held = service_bucket(state, bucket)
         key = object_key(ctx)
+        if folders.is_marker(key):
+            raise HTTPException(404, "no such object")
         try:
             info = await held.stat(key)
         except (FileNotFound, UnsafeKey) as exc:
@@ -500,6 +513,58 @@ def register(r: Router, platform: Platform) -> None:
             "key": target,
             "url": platform.storage.object_url(state, bucket, target),
         }
+
+    @r.post(
+        f"{base}/buckets/{{bucket}}/folders",
+        auth=MANAGE,
+        tags=["storage"],
+        request_model=FolderBody,
+        summary="Create an empty folder (a marker object under the prefix)",
+    )
+    async def create_folder(ctx: HttpContext, env: str, bucket: str, body: FolderBody):
+        state = await platform.state(env)
+        held = service_bucket(state, bucket)
+        try:
+            root = folders.clean(body.prefix)
+        except UnsafeKey as exc:
+            raise HTTPException(400, "a folder needs a safe name") from exc
+        if await held.driver.exists(root):
+            raise HTTPException(409, "an object already has that name")
+        marker = folders.marker_key(root)
+        # Written on the driver, not held.put: a folder must not answer to the bucket's accepted types. Idempotent besides.
+        if not await held.driver.exists(marker):
+            await held.driver.write(
+                marker,
+                _folder_body(),
+                content_type="application/octet-stream",
+                declared_type="",
+            )
+        await audit(ctx, "storage.folder.created", env=env, target=f"{bucket}/{root}/")
+        return {"bucket": bucket, "prefix": f"{root}/", "key": marker}
+
+    @r.delete(
+        f"{base}/buckets/{{bucket}}/folders/{{prefix:path}}",
+        auth=MANAGE,
+        tags=["storage"],
+        summary="Delete an empty folder",
+    )
+    async def delete_folder(ctx: HttpContext, env: str, bucket: str, prefix: str):
+        state = await platform.state(env)
+        held = service_bucket(state, bucket)
+        try:
+            root = folders.clean(prefix)
+        except UnsafeKey as exc:
+            raise HTTPException(400, "a folder needs a safe name") from exc
+        marker = folders.marker_key(root)
+        if not await held.driver.exists(marker):
+            raise HTTPException(status_code=404, detail="no such folder")
+        page = await held.page(f"{root}/", limit=1000)
+        occupied = [f.key for f in page.files if not folders.is_marker(f.key)]
+        if occupied or page.prefixes:
+            raise HTTPException(409, "the folder is not empty")
+        await held.driver.delete(marker)
+        await audit(ctx, "storage.folder.deleted", env=env, target=f"{bucket}/{root}/")
+        return no_content()
 
     @r.get(
         f"{base}/buckets/{{bucket}}/shares",
