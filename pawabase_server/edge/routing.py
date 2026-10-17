@@ -56,7 +56,7 @@ ROUTES: tuple[Upstream, ...] = (
 )
 
 #: What the public entry point answers itself, with no key: the landing page, liveness and the status page.
-OPEN_PATHS = frozenset({"/", "/health", "/status", "/v1/status"})
+OPEN_PATHS = frozenset({"/", "/health", "/health/ready", "/status", "/v1/status"})
 OPEN_PREFIXES = ("/status/",)
 
 #: Never exposed publicly, whatever the prefix table says.

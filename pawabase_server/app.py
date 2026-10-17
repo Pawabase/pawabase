@@ -33,6 +33,7 @@ from sillo.security import CorsConfig, CORSMiddleware
 
 from pawabase_server.compiler.dispatch import DataPlaneDispatcher
 from pawabase_server.functions.http_dispatch import HttpFunctionDispatcher
+from pawabase_server.gateway.registry import GatewayRegistry
 from pawabase_server.core.auth import UserBackend
 from pawabase_server.core.namespace import scoped
 from pawabase_server.core.service import create_service
@@ -126,6 +127,8 @@ def create_app(
     app.state["accounts"] = accounts
     app.state["realtime"] = realtime
     platform.app = app
+    gateway_registry = GatewayRegistry(settings) if role == "server" else None
+    app.state["gateway_registry"] = gateway_registry
     rollup = RequestRollup(retention_days=settings.request_retention_days).attach(
         app.state["pawabase.telemetry"]
     )
@@ -141,6 +144,8 @@ def create_app(
         await platform.audit_configuration()
         rollup.start()
         await realtime.start()
+        if gateway_registry is not None:
+            gateway_registry.start()
         tasks.append(
             asyncio.create_task(
                 housekeeping(realtime, settings.sweep_interval), name="realtime-housekeeping"
@@ -179,6 +184,8 @@ def create_app(
             await scheduler.stop()
         if role == "server":
             await realtime.stop()
+        if gateway_registry is not None:
+            await gateway_registry.stop()
         await platform.stop()
 
     # Shutdown handlers run in the order they were added, and the database installable added its own when the service was created.
@@ -189,6 +196,10 @@ def create_app(
     from pawabase_server.routes import register_routes
 
     register_routes(app, platform, accounts, realtime)
+    if role == "server":
+        from pawabase_server.routes.public import gateway_registry as gateway_routes
+
+        gateway_routes.register(app, settings)
     return app
 
 

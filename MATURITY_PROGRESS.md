@@ -112,6 +112,11 @@ Supabase-style functions as a service of its own. `functions/service/` (engine, 
 - **SDKs**: JS `functions.fetch()`, Python `functions.request()`; `@pawabase/functions` `serve()` kit, `callHttp`/`loadHttpFunction` test helpers, `new`, `serve` (local Deno dev server); Python CLI scaffolds HTTP functions.
 - Verified: 17 Deno end-to-end tests on Linux with confinement (incl. the service path over ASGI and the vendoring test against real npm/jsr), 29 unit tests, live dev stack with the `functions` container (Cloud's Python functions through the service). Not verified: WebSocket upgrades in HTTP functions (not supported yet), per-request CPU-time limits (wall clock and heap only), multi-instance service behind a load balancer.
 
+## Gateway replica registry (2026-10-17)
+
+Every Core instance self-registers regardless of whether anything orchestrates it: `gateway/registry.py`, `GatewayInstance` (migration `0029_gateway_instances`), `GET /health/ready` (open), `SERVICE_ONLY` `/internal/v1/gateway/{instances,drain}` + `DELETE .../instances/{id}`. Tests: `tests/platform/test_gateway_registry.py` (13, passing).
+- A standalone "Compute Controller" service (its own package, Traefik, a Studio "Gateway fleet" page) was built and then **removed**: it assumed self-hosted Core should orchestrate its own replicas, which is the wrong layer — horizontal/geographic scaling of the API-serving layer belongs to Pawabase Cloud's existing `runtime_pools` model, not to Core. See `pawabase-cloud`'s multi-pool project registration (`cloudlib/pools.py:peers_of`, `projects.pools_add`/`pools_remove`) for where that capability actually lives now. This registry primitive is the only piece that stayed in Core — it's orchestrator-agnostic and useful to any self-hoster's own tooling, Cloud's or otherwise.
+
 ## Tests executed
 
 | Suite | Result |

@@ -36,6 +36,7 @@ from pawabase_server.db.models.framework import (
     UserPermission,
 )
 from pawabase_server.db.models.functions import FunctionDeployment, FunctionRun
+from pawabase_server.db.models.gateway import GatewayInstance
 from pawabase_server.db.models.orgs import Invitation, Membership, Organization, Team, TeamMember
 from pawabase_server.db.models.platform_ops import (
     AlarmEvent,
@@ -113,6 +114,7 @@ __all__ = [
     "FlowRun",
     "FunctionDeployment",
     "FunctionRun",
+    "GatewayInstance",
     "Group",
     "GroupPermission",
     "Identity",

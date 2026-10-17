@@ -36,9 +36,7 @@ def asset_version(manifest: Path) -> str | None:
     return hashlib.sha256(manifest.read_bytes()).hexdigest()[:12]
 
 
-def create_studio(
-    settings: StudioSettings | None = None, *, client: ServiceClient | None = None
-) -> SilloApp:
+def create_studio(settings: StudioSettings | None = None, *, client: ServiceClient | None = None) -> SilloApp:
     """Build Studio.
 
     Args:

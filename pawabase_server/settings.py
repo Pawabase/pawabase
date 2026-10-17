@@ -88,6 +88,24 @@ class Settings(Config):
 
     internal_secret: str = "dev-internal-secret-change-me-please"
     jwt_master_secret: str = "dev-jwt-master-secret-change-me-please"
+
+    # ── gateway fleet (horizontal replicas) ──────────────────────────────
+    #: A stable id for this process in the gateway instance registry. Empty: one is generated at start-up (host + a short random
+    #: suffix), which is right for a single long-lived container; an orchestrator that recreates containers under new names should
+    #: set this to something it controls, so a replacement is recognised as a replacement, not a new, unrelated instance.
+    gateway_instance_id: str = ""
+    #: Which API plane this instance was placed on (an orchestration detail; empty for a plain self-hosted installation).
+    gateway_plane_id: str = ""
+    #: Where this instance's public port is reached from the load balancer or from another host (``host:port``, or a Docker service
+    #: name). Empty: derived from ``host``/``port``, right only when nothing else needs to reach this instance by name.
+    gateway_public_host: str = ""
+    #: A version string shown in the fleet view and used for staged rollouts (an image tag, a commit, anything the operator sets).
+    gateway_version: str = ""
+    #: How often a running instance renews its heartbeat.
+    gateway_heartbeat_seconds: float = 10.0
+    #: How long since the last heartbeat before an instance is treated as unhealthy (by Studio and by ``/health/ready``'s view of
+    #: *other* instances; an instance's own readiness depends only on itself, never on this).
+    gateway_stale_seconds: float = 30.0
     master_key: str = "dev-master-key-change-me-please-32bytes"
 
     redis_url: str = ""
