@@ -168,7 +168,7 @@ function BranchHistory({ runtime, env, url, onClose }) {
   const createRevision = async () => { if (await run(() => post(envPath(env, `/branches/${branch}/revisions`), { message: revisionMessage }), "Revision created")) { setRevisionMessage(""); reload(); } };
   const createVersion = async () => { if (await run(() => post(envPath(env, "/api-versions"), { name: newVersion }), "API version created")) { setNewVersion(""); reload(); } };
   const prepareRelease = async () => { if (await run(() => post(envPath(env, "/releases"), draft), "Release prepared")) { setRelease({ revision_id: "", api_version: "", name: "", allow_breaking: false }); reload(); } };
-  return <Sheet title="History" subtitle={`Working on ${branch} · ${runtime.name} / ${env}`} icon="gitBranch" tabs={[["branches", "Branches"], ["releases", "Releases"], ["revisions", "Revisions"], ["versions", "API versions"], ["deployments", "Deployments"]].map(([value, label]) => ({ value, label }))} tab={tab} onTab={setTab} onClose={onClose} footer={<Button onClick={onClose}>Done</Button>}>
+  return <Sheet title="History" subtitle={`Working on ${branch} · ${runtime.name} / ${env}`} icon="gitBranch" tabs={[["branches", "Branches"], ["releases", "Releases"], ["revisions", "Revisions"], ["versions", "API versions"], ["deployments", "Deployments"]].map(([value, label]) => ({ value, label }))} tab={tab} onTab={setTab} tabsPlacement="top" onClose={onClose} footer={<Button onClick={onClose}>Done</Button>}>
     {tab === "branches" && <>
     <section className="form-section">
       <div className="form-section-head"><div><h3>Checkout</h3><p>Switch the working definition tree instantly.</p></div></div>
