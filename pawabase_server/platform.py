@@ -46,6 +46,9 @@ from pawabase_server.functions.registry import (
 from pawabase_server.functions.runtime_rpc import Transactions
 from pawabase_server.functions.sandbox import SandboxPool
 from pawabase_server.functions.sandbox.host import Limits, resolve_confinement
+from pawabase_server.functions.http_functions import HttpFunctionSpec
+from pawabase_server.functions.limits import FunctionGates, RunLimits, resolve, timeout_of
+from pawabase_server.functions.service.gateway import gateway_for
 from pawabase_server.infra.mail import MailManager
 from pawabase_server.infra.storage.manager import StorageManager
 from pawabase_server.projects.quotas import UsageMeter
@@ -117,8 +120,20 @@ class Platform:
             index_url=settings.function_index_url,
             install_timeout=settings.function_install_timeout,
             binary_only=settings.function_install_binary_only,
+            vendor=settings.function_vendor_enabled,
+            vendor_timeout=settings.function_vendor_timeout,
+            npm_registry=settings.function_npm_registry,
+            http_limits={
+                "timeout": settings.functions_max_timeout_seconds,
+                "memory": settings.functions_memory_mb,
+                "concurrency": max(settings.functions_worker_concurrency, 1) * 8,
+            },
         )
         self.deployments.confinement = self.sandboxes.limits.confinement
+        #: Where functions run: this process, or the runtime service at ``PAWABASE_FUNCTIONS_RUNTIME_URL``.
+        self.functions = gateway_for(self)
+        #: Per-function concurrency (the project's ``max_concurrent_runs_per_function``, ``functions/limits.py``).
+        self.function_gates = FunctionGates()
         self.app: Any = None
         self.app: Any = None
         self.started_at = datetime.now(UTC)
@@ -194,7 +209,8 @@ class Platform:
             )
 
     async def stop(self) -> None:
-        await self.sandboxes.close()
+        await self.functions.close()
+        await self.sandboxes.close()  # idempotent: the embedded runtime may have closed it already
         await self.records.stop()  # before the database closes
         await self.bus.stop()
         await self.sources.close()
@@ -241,6 +257,21 @@ class Platform:
         if branch and branch != MAIN:
             self.deployments.ensure_loaded(env, branch)
         return resolve_function(env, branch, name)
+
+    async def run_limits(self, state: EnvironmentState, spec: Any, *, kind: str) -> RunLimits:
+        """The limits a run of *spec* gets: its project's (else the installation's defaults), with the timeout its code asks for if shorter."""
+        return resolve(self.settings, kind=kind, project=state.project_limits, timeout=timeout_of(spec))
+
+    def http_function(self, env: str, name: str, branch: str | None = None) -> HttpFunctionSpec | None:
+        """The HTTP function *name* as *branch* of *env* sees it (``functions/<name>/index.ts`` of a TypeScript deployment)."""
+        return self.deployments.http_function(env, name, branch)
+
+    def http_functions(self, env: str, branch: str | None = None) -> list[HttpFunctionSpec]:
+        """Every HTTP function visible to *env* (and *branch*, whose own replace the environment's of the same name)."""
+        merged = dict(self.deployments.http_functions(env))
+        if branch and branch != MAIN:
+            merged.update(self.deployments.http_functions(env, branch))
+        return sorted(merged.values(), key=lambda spec: spec.name)
 
     def function_specs(self, env: str, branch: str | None = None) -> list[FunctionSpec]:
         self.ensure_code()

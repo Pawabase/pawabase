@@ -20,8 +20,11 @@ from pawabase_server.db.models import FunctionRun
 from pawabase_server.environments.state import EnvironmentState
 from pawabase_server.flows import FlowError, FlowRun
 from pawabase_server.functions.execution_limits import ExecutionLimitExceeded
+from pawabase_server.functions.limits import ConcurrencyLimitReached
+from pawabase_server.functions.sandbox.host import LimitExceeded
 from pawabase_server.functions.registry import MAIN, FunctionError
 from pawabase_server.functions.runtime import ApiRuntime, function_context
+from pawabase_server.functions.service.grants import Grant, new_invocation_id
 from pawabase_server.platform import Platform, json_safe
 from pawabase_server.projects import quotas
 
@@ -151,6 +154,9 @@ async def call_function(
         platform, state, auth=auth, request_id=request_id, depth=depth, branch=branch
     )
     context = function_context(runtime, input, trigger, request)
+    limits = await platform.run_limits(state, spec, kind="call")
+    usage: dict[str, Any] = {}
+    limit_hit: str | None = None
     started = time.perf_counter()
     status, output, error = "succeeded", None, None
     try:
@@ -161,27 +167,57 @@ async def call_function(
                 max_concurrent=int(state.project_limits.get("max_function_concurrency") or 0),
                 max_queued=int(state.project_limits.get("max_queued_jobs") or 0),
                 nested=depth > 0,
+            ), platform.function_gates.slot(
+                state.env_name,
+                name,
+                0 if depth > 0 else limits.concurrency,  # a nested call already holds its caller's slot
+                wait=platform.settings.functions_queue_seconds,
             ):
                 work = (
-                    platform.sandboxes.invoke(
-                        platform.deployments,
+                    platform.functions.call(
                         env=owner[0],
                         branch=owner[1],
                         function=name,
                         context=context,
                         runtime=runtime,
-                        transactions=platform.sandbox_transactions,
+                        grant=Grant(
+                            env=state.env_name,
+                            branch=branch or MAIN,
+                            function=name,
+                            invocation=new_invocation_id(),
+                            auth=dict(auth or {}),
+                            request_id=request_id,
+                            depth=depth,
+                            kind="call",
+                            deployment_id=_deployment_of(platform, spec),
+                        ),
+                        limits=limits,
+                        usage=usage,
                     )
                     if owner is not None
-                    else spec.handler(context)
+                    else spec.handler(context)  # the platform's own (or in-process) code: only the timeout applies
                 )
-                output = await asyncio.wait_for(work, timeout=spec.timeout)
+                output = await asyncio.wait_for(work, timeout=limits.timeout)
         return output
     except TimeoutError as exc:
-        status, error = "failed", f"function {name!r} exceeded {spec.timeout}s"
+        limit_hit = "timeout"
+        status, error = "failed", f"function {name!r} exceeded its {limits.timeout:g}s timeout"
         raise FlowError(
-            f"function {name!r} exceeded {spec.timeout}s", status=504, code="timeout"
+            f"function {name!r} exceeded its {limits.timeout:g}s timeout", status=504, code="timeout"
         ) from exc
+    except LimitExceeded as exc:
+        limit_hit = exc.limit
+        status, error = "failed", exc.failure.line()
+        raise FlowError(
+            f"function {name!r} {exc.failure.message.removeprefix('the function ')}",
+            status=500,
+            code=f"{exc.limit}_limit_exceeded",
+            details={"limit": exc.limit, "allowed": getattr(limits, exc.limit, None)},
+        ) from exc
+    except ConcurrencyLimitReached as exc:
+        limit_hit = "concurrency"
+        status, error = "failed", str(exc)
+        raise FlowError(str(exc), status=429, code="too_many_runs", details={"limit": exc.limit}) from exc
     except FunctionError as exc:
         # A function that chose to fail: its status and code reach the caller as they are, not as a 500.
         status, error = "failed", exc.message
@@ -215,6 +251,11 @@ async def call_function(
                     logs=json_safe([*context.logs, *runtime.logs]),
                     duration_ms=round((time.perf_counter() - started) * 1000, 3),
                     request_id=request_id,
+                    kind="call",
+                    limits=limits.as_dict(),
+                    cpu_ms=usage.get("cpu_ms"),
+                    memory_peak_mb=usage.get("memory_peak_mb"),
+                    limit_hit=limit_hit,
                 )
             )
         except Exception:

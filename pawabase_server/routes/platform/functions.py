@@ -21,11 +21,17 @@ from sillo import HttpContext, Router, created
 from sillo.exceptions import HTTPException
 
 from pawabase_server.core.context import current_context
+from pawabase_server.core.principal import ANONYMOUS_POLICY_CONTEXT
 from pawabase_server.core.ids import new_ulid
 from pawabase_server.db.models import Environment, FunctionDeployment, FunctionRun
 from pawabase_server.functions.deployments import DeploymentError
+from pawabase_server.functions import limits as limits_module
 from pawabase_server.functions.registry import MAIN
+from pawabase_server.functions.runtime import ApiRuntime
 from pawabase_server.functions.sandbox import typescript
+from pawabase_server.functions.service.grants import Grant, new_invocation_id
+from pawabase_server.functions.service import watchdog
+from pawabase_server.functions.service.runtime import HttpRequest, variables_version
 from pawabase_server.platform import Platform
 from pawabase_server.routes.common import (
     MANAGE,
@@ -44,6 +50,26 @@ def _manage_scope(ctx: HttpContext) -> None:
         raise HTTPException(
             status_code=403, detail="This API key lacks the 'functions:manage' scope"
         )
+
+
+class TryBody(BaseModel):
+    """A request to send to an HTTP function from the management plane (Studio's "Try it")."""
+
+    method: str = Field(default="GET", pattern=r"^(GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)$")
+    path: str = Field(default="/", max_length=2000, description="What follows /functions/v1/<name>, with its query string")
+    headers: dict[str, str] = Field(default_factory=dict)
+    body: str | None = Field(default=None, description="Text, or base64 when body_base64 is true")
+    body_base64: bool = False
+    as_user: dict[str, Any] | None = Field(default=None, description="The auth context to run as; anonymous when omitted")
+    branch: str | None = None
+
+
+class RestartBody(BaseModel):
+    function: str | None = None
+
+
+#: What a "Try it" request reads of a response before it stops (the rest is reported as cut off).
+TRY_MAX_BYTES = 1024 * 1024
 
 
 class DeployBody(BaseModel):
@@ -450,3 +476,179 @@ def register(r: Router, platform: Platform) -> None:
         if row is None:
             raise HTTPException(status_code=404, detail="no such function run")
         return dump(row)
+
+    # ── HTTP functions and the runtime ───────────────────────────────────
+
+    @r.get(f"{base}/functions-runtime", auth=MANAGE, tags=["functions"], summary="Where functions run, and what is running")
+    async def runtime_status(ctx: HttpContext, env: str):
+        """The runtime (embedded or the service), its limits, and for each HTTP function its workers and statistics."""
+        _manage_scope(ctx)
+        await get_environment(env)
+        return await platform.functions.status(env)
+
+    @r.post(
+        f"{base}/functions-runtime/restart",
+        auth=MANAGE,
+        tags=["functions"],
+        request_model=RestartBody,
+        summary="Drain function workers so the next request starts fresh ones",
+    )
+    async def runtime_restart(ctx: HttpContext, env: str, body: RestartBody):
+        _manage_scope(ctx)
+        await get_environment(env)
+        result = await platform.functions.restart(env, body.function)
+        await audit(ctx, "functions.restart", env=env, target=body.function or "", details=result)
+        return result
+
+    @r.get(f"{base}/http-functions/{{name}}", auth=MANAGE, tags=["functions"], summary="One HTTP function, with its statistics")
+    async def http_function(ctx: HttpContext, env: str, name: str):
+        _manage_scope(ctx)
+        await platform.state(env)
+        branch = ctx.query_params.get("branch") or None
+        spec = platform.http_function(env, name, branch)
+        if spec is None:
+            raise HTTPException(status_code=404, detail=f"no HTTP function {name!r}")
+        hours = max(1, min(int(ctx.query_params.get("hours") or 24), 24 * 30))
+        since = datetime.now(UTC).timestamp() - hours * 3600
+        rows = await FunctionRun.filter(
+            env=env, function=name, kind="http", created_at__gte=datetime.fromtimestamp(since, UTC)
+        ).values("status", "status_code", "duration_ms", "cold_start")
+        durations = sorted(float(r["duration_ms"] or 0) for r in rows)
+
+        def percentile(fraction: float) -> float | None:
+            if not durations:
+                return None
+            return round(durations[min(len(durations) - 1, round(fraction * (len(durations) - 1)))], 2)
+
+        codes: dict[str, int] = {}
+        for row in rows:
+            family = f"{(row['status_code'] or 0) // 100}xx" if row["status_code"] else "none"
+            codes[family] = codes.get(family, 0) + 1
+        base_url = platform.settings.public_url.rstrip("/")
+        return {
+            **spec.describe(),
+            "url": f"{base_url}/functions/v1/{name}",
+            "public_url": f"{base_url}/functions/v1/public/{env}/{name}" if spec.config.auth == "public" else None,
+            "stats": {
+                "hours": hours,
+                "requests": len(rows),
+                "failed": sum(1 for row in rows if row["status"] == "failed"),
+                "cold_starts": sum(1 for row in rows if row["cold_start"]),
+                "status_codes": codes,
+                "latency_ms": {"p50": percentile(0.5), "p95": percentile(0.95), "p99": percentile(0.99)},
+            },
+        }
+
+    @r.post(
+        f"{base}/http-functions/{{name}}/request",
+        auth=MANAGE,
+        tags=["functions"],
+        request_model=TryBody,
+        summary="Send a request to an HTTP function (Try it)",
+    )
+    async def try_http_function(ctx: HttpContext, env: str, name: str, body: TryBody):
+        """Run the function as the operator says (``as_user``, anonymous by default), bypassing its ``auth`` setting. The run is
+        recorded like any other. The response is returned as text (or base64 when it is not UTF-8), up to 1 MB."""
+        _manage_scope(ctx)
+        state = await platform.state(env)
+        spec = platform.http_function(env, name, body.branch)
+        if spec is None:
+            raise HTTPException(status_code=404, detail=f"no HTTP function {name!r}")
+        auth = body.as_user or dict(ANONYMOUS_POLICY_CONTEXT)
+        raw = (
+            base64.b64decode(body.body) if body.body_base64 and body.body else (body.body or "").encode()
+        )
+        path, _, query = body.path.partition("?")
+        path = path if path.startswith("/") else "/" + path
+
+        async def once():
+            yield raw
+
+        invocation = new_invocation_id()
+        request = HttpRequest(
+            method=body.method,
+            url=f"{platform.settings.public_url.rstrip('/')}/functions/v1/{name}{'' if path == '/' else path}"
+            + (f"?{query}" if query else ""),
+            path=path,
+            headers=[(k.lower(), v) for k, v in body.headers.items()],
+            body=once() if raw and body.method not in ("GET", "HEAD") else None,
+            invocation=invocation,
+            request_id=ctx.headers.get("x-request-id"),
+            auth=auth,
+            project=str(state.project_id or ""),
+            client_ip=None,
+            variables_version=variables_version(dict(state.secret_values)),
+        )
+        grant = Grant(
+            env=env,
+            branch=spec.branch,
+            function=name,
+            invocation=invocation,
+            auth=auth,
+            request_id=request.request_id,
+            kind="http",
+            deployment_id=spec.deployment_id,
+        )
+        request.limits = await platform.run_limits(state, spec, kind="http")
+        runtime = ApiRuntime(platform, state, auth=auth, request_id=request.request_id, branch=spec.branch)
+        started = datetime.now(UTC)
+        reply = await platform.functions.http(spec, request, runtime=runtime, grant=grant)
+        content = bytearray()
+        truncated = False
+        stream = reply.body
+        try:
+            async for chunk in stream:
+                content.extend(chunk)
+                if len(content) > TRY_MAX_BYTES:
+                    truncated = True
+                    break
+        finally:
+            await stream.aclose()
+        data = bytes(content[:TRY_MAX_BYTES])
+        try:
+            text, encoded = data.decode("utf-8"), False
+        except UnicodeDecodeError:
+            text, encoded = base64.b64encode(data).decode(), True
+        return {
+            "status": reply.status,
+            "headers": [[k, v] for k, v in reply.headers],
+            "body": text,
+            "body_base64": encoded,
+            "truncated": truncated,
+            "cold_start": reply.cold_start,
+            "worker": reply.worker,
+            "duration_ms": round((datetime.now(UTC) - started).total_seconds() * 1000, 2),
+            "invocation": invocation,
+            "caller": auth,
+        }
+
+    # ── resource limits (read-only: they are the project's) ─────────────
+
+    @r.get(f"{base}/function-limits", auth=MANAGE, tags=["functions"], summary="What every function run may use")
+    async def function_limits(ctx: HttpContext, env: str):
+        """The resource limits every run of each function gets, from the project's limits (else the installation's defaults), and
+        where each value came from. They are set when the project is created and changed by whoever operates the installation
+        (Pawabase Cloud, or ``pawabase-server projects limits set``); this API only shows them."""
+        _manage_scope(ctx)
+        state = await platform.state(env)
+        rows = []
+        for kind, specs in (("call", platform.function_specs(env)), ("http", platform.http_functions(env))):
+            for spec in specs:
+                effective = await platform.run_limits(state, spec, kind=kind)
+                running = platform.function_gates.in_use(env, spec.name)
+                rows.append(
+                    {
+                        "function": spec.name,
+                        "kind": kind,
+                        "limits": effective.as_dict(),
+                        "running": {"now": running[0], "limit": running[1]} if running else None,
+                    }
+                )
+        project = {key: state.project_limits.get(key) for key in limits_module.PROJECT_KEYS.values() if state.project_limits.get(key)}
+        defaults, maximums = limits_module.installation(platform.settings, kind="call")
+        return {
+            "data": rows,
+            "project": project,
+            "installation": {"defaults": defaults, "maximums": maximums},
+            "enforced": {"cpu_and_memory": watchdog.supported(), "timeout": True, "concurrency": True},
+        }

@@ -71,6 +71,13 @@ NOUNS = {
     "max_upload_bytes": "bytes in one upload",
     "max_database_bytes": "bytes of database",
     "max_realtime_channels": "realtime channels in use",
+    # What one function run may use (``functions/limits.py``): a run is held to them, never refused for them.
+    "max_function_memory_mb": "MB of memory per function run",
+    "max_function_cpu_seconds": "CPU seconds per function run",
+    "max_function_timeout_seconds": "seconds per function run",
+    "max_concurrent_runs_per_function": "runs of one function at once",
+    "max_function_body_mb": "MB of request body per function call",
+    "max_function_workers": "workers per HTTP function",
 }
 
 

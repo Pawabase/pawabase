@@ -251,11 +251,23 @@ def register(r: Router, platform: Platform) -> None:
                     return {"file": file.relative_to(root).as_posix(), "line": line}
             return {"file": None, "line": None}
 
+        calls = [
+            {**spec.describe(), "kind": "call", "source": _source_of(spec.project), **where(spec.handler)}
+            for spec in platform.function_specs(env, branch)
+        ]
+        http = [
+            {
+                **spec.describe(),
+                "url": f"{platform.settings.public_url.rstrip('/')}/functions/v1/{spec.name}",
+                "public_url": f"{platform.settings.public_url.rstrip('/')}/functions/v1/public/{env}/{spec.name}"
+                if spec.config.auth == "public"
+                else None,
+            }
+            for spec in platform.http_functions(env, branch)
+        ]
         return {
-            "data": [
-                {**spec.describe(), "source": _source_of(spec.project), **where(spec.handler)}
-                for spec in platform.function_specs(env, branch)
-            ],
+            # fn() functions first, then HTTP functions (``kind: "http"``), each with its ``config`` and URL.
+            "data": calls + http,
             "branch": branch or "main",
             "modules": code.modules,
             "errors": code.errors,

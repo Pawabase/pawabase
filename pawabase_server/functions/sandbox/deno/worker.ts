@@ -9,6 +9,10 @@
  */
 
 import { Context, decode, encode, FunctionError, registry, Runtime } from "./pawabase.ts";
+import { discover, installServeShim } from "./http_support.ts";
+
+// An HTTP function's module may call Deno.serve when it is imported (describe); it must never listen.
+installServeShim();
 
 const out = new TextEncoder();
 
@@ -28,7 +32,7 @@ const toStderr = (...parts: unknown[]) => {
 };
 for (const name of ["log", "info", "warn", "error", "debug"] as const) (console as any)[name] = toStderr;
 
-async function load(artifact: string): Promise<string[]> {
+async function load(artifact: string, allowEmpty = false): Promise<string[]> {
   const errors: string[] = [];
   const folder = `${artifact}/functions`;
   const files: string[] = [];
@@ -45,7 +49,7 @@ async function load(artifact: string): Promise<string[]> {
       errors.push(`functions/${file}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  if (!files.length) errors.push("The bundle must contain functions/*.ts.");
+  if (!files.length && !allowEmpty) errors.push("The bundle must contain functions/*.ts or functions/<name>/index.ts.");
   return errors;
 }
 
@@ -74,8 +78,12 @@ function where(error: unknown, artifact: string) {
 
 if (Deno.args[0] === "--describe") {
   const artifact = Deno.args[1];
-  const errors = await load(artifact);
-  send({ specs: specs(artifact), errors });
+  const errors = await load(artifact, true);
+  const found = await discover(artifact);
+  if (!registry.size && !found.functions.length && !errors.length && !found.errors.length) {
+    errors.push("The bundle must contain functions/*.ts or functions/<name>/index.ts.");
+  }
+  send({ specs: specs(artifact), http: found.functions, errors: [...errors, ...found.errors] });
   Deno.exit(0);
 }
 

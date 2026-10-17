@@ -1,6 +1,7 @@
 #!/bin/sh
-# entrypoint [serve|studio|worker|scheduler|migrate|check|version]: prepare the container, then hand over. `studio` runs the control plane;
-# `worker` and `scheduler` run the queue worker and the scheduler as processes of their own; everything else is the server.
+# entrypoint [serve|studio|functions|worker|scheduler|migrate|check|version]: prepare the container, then hand over. `studio` runs the control
+# plane; `functions` runs the functions runtime service; `worker` and `scheduler` run the queue worker and the scheduler as processes of their
+# own; everything else is the server.
 set -e
 
 # PAWABASE_EXTRA_CA_B64: a certificate authority to trust besides the system's, base64-encoded (for a database or storage server that signs
@@ -26,6 +27,10 @@ fi
 
 if [ "$command" = "studio" ]; then
   exec python -m studio
+fi
+
+if [ "$command" = "functions" ]; then
+  exec python -m pawabase_server.functions.service
 fi
 
 exec python -m pawabase_server "$@"

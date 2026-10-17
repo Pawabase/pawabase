@@ -41,7 +41,13 @@ CONFIG_SECONDS = 5.0
 FLUSH_SECONDS = 2.0
 MAX_BUFFER = 5000
 #: Keyless routes that name their environment in the path, and where.
-PATH_ENV = {"/hooks/v1/": 3, "/docs/v1/": 3, "/storage/v1/files/": 4, "/storage/v1/signed/": 4}
+PATH_ENV = {
+    "/hooks/v1/": 3,
+    "/docs/v1/": 3,
+    "/storage/v1/files/": 4,
+    "/storage/v1/signed/": 4,
+    "/functions/v1/public/": 4,
+}
 
 
 @dataclass
