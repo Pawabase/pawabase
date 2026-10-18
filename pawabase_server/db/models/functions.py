@@ -72,3 +72,7 @@ class FunctionRun(Model):
     #: Which limit stopped it, when one did: ``timeout``, ``memory``, ``cpu``, ``concurrency``, ``max_body``.
     limit_hit = fields.CharField(max_length=16, null=True)
 
+    class Meta:
+        table = "pb_function_runs"
+        ordering = ["-created_at"]
+
