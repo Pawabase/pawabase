@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/Layout";
 import { useDataSubnav } from "../../components/DataNav";
 import { Icon } from "../../components/icons";
-import { Badge, Button, PageTabs, Popover, Sheet, Spinner, copyToClipboard, useAction, useToast } from "../../components/ui";
+import { Badge, Button, Field, PageTabs, Popover, Sheet, Spinner, Switch, copyToClipboard, useAction, useToast } from "../../components/ui";
 import { HistoryPanel, IndexesPanel, SchemaPanel } from "../../components/SchemaPanels";
 import { DefinitionSheet } from "../../components/definitions/DefinitionSheet";
 import { editable } from "../../lib/kinds";
-import { del, envPath, get, post, put, useApi } from "../../lib/api";
+import { del, envPath, get, patch, post, put, useApi } from "../../lib/api";
 
 /**
  * The table editor: browse the environment's database like a spreadsheet. Tables open as tabs (kept per
@@ -199,7 +199,7 @@ function TableTab({ env, base, table, resource, initialView = "data", onTablesCh
         value={view}
         onChange={setView}
       />
-      {view === "data" && <DataView env={env} base={base} table={table} columns={columns} info={info} />}
+      {view === "data" && <DataView env={env} base={base} table={table} columns={columns} info={info} resource={resource} />}
       {view === "schema" && (
         resource
           ? <ResourceSchema env={env} resource={resource} onRowsChanged={info.reload} onTablesChanged={onTablesChanged} />
@@ -214,11 +214,15 @@ function TableTab({ env, base, table, resource, initialView = "data", onTablesCh
   );
 }
 
-function DataView({ env, base, table, columns, info }) {
+function DataView({ env, base, table, columns, info, resource }) {
   const [page, setPage] = useState({ offset: 0, size: 100 });
   const [sort, setSort] = useState(null); // [column, "asc" | "desc"]
   const [filter, setFilter] = useState(null); // { column, op, value }
   const [row, setRow] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [newValues, setNewValues] = useState({});
+  const [createError, setCreateError] = useState(null);
+  const [createBusy, setCreateBusy] = useState(false);
   const params = {
     limit: page.size,
     offset: page.offset,
@@ -235,11 +239,37 @@ function DataView({ env, base, table, columns, info }) {
     setPage((p) => ({ ...p, offset: 0 }));
   };
   const last = page.offset + data.length;
+  const pkCol = columns.find((name) => types[name]?.primary_key);
+  const createRow = async () => {
+    setCreateError(null);
+    setCreateBusy(true);
+    try {
+      const body = {};
+      for (const name of columns) {
+        const v = newValues[name];
+        if (v === "" || v === null || v === undefined) continue;
+        if (pkCol && name === pkCol) continue; // backend auto-generates the primary key
+        body[name] = v;
+      }
+      await post(envPath(env, `/resources/${resource}/records`), body);
+      setCreating(false);
+      setNewValues({});
+      rows.reload();
+      info.reload();
+    } catch (err) {
+      setCreateError(err.message);
+    } finally {
+      setCreateBusy(false);
+    }
+  };
   return (
     <>
       <div className="tbl-toolbar">
         <span className="grow" />
         <div className="row" style={{ gap: 6 }}>
+          {resource && (
+            <Button size="sm" variant="primary" onClick={() => { setNewValues({}); setCreateError(null); setCreating(true); }}><Icon name="plus" size={13} /> Add row</Button>
+          )}
           <FilterButton columns={names} filter={filter} onApply={(next) => { setFilter(next); setPage((p) => ({ ...p, offset: 0 })); }} />
           <SortButton columns={names} sort={sort} onApply={(next) => { setSort(next); setPage((p) => ({ ...p, offset: 0 })); }} />
           <Button size="sm" onClick={() => { info.reload(); rows.reload(); }} title="Reload rows"><Icon name="refresh" size={14} /></Button>
@@ -302,7 +332,28 @@ function DataView({ env, base, table, columns, info }) {
         </div>
       </div>
 
-      {row && <RowSheet table={table} row={row} columns={names} types={types} onClose={() => setRow(null)} />}
+      {creating && (
+        <Sheet title={`Add row to ${table}`} onClose={() => { setCreating(false); setCreateError(null); setNewValues({}); }} footer={
+          <>
+            <Button onClick={() => { setCreating(false); setCreateError(null); setNewValues({}); }}>Cancel</Button>
+            <Button variant="primary" disabled={createBusy} onClick={createRow}>{createBusy ? "Creating…" : "Create row"}</Button>
+          </>
+        }>
+          {createError && <div className="alert error">{createError}</div>}
+          <div className="stack sm" style={{ gap: 12 }}>
+            {names.map((name) => {
+              const c = types[name];
+              return (
+                <Field key={name} label={name} hint={c?.type ? String(c.type).toLowerCase() : undefined} optional={!c?.primary_key}>
+                  <input className="mono" value={newValues[name] ?? ""} onChange={(e) => setNewValues({ ...newValues, [name]: e.target.value || null })} placeholder={c?.primary_key ? "auto-generated" : undefined} />
+                </Field>
+              );
+            })}
+        </div>
+      </Sheet>
+      )}
+
+      {row && <RowSheet table={table} row={row} columns={names} types={types} env={env} resource={resource} onClose={() => setRow(null)} onUpdated={() => { rows.reload(); info.reload(); setRow(null); }} />}
     </>
   );
 }
@@ -390,6 +441,7 @@ function TableSettings({ env, table, resource, onDeleted, onDisabled }) {
   const [run, busy] = useAction();
   const [confirming, setConfirming] = useState(false);
   const [typed, setTyped] = useState("");
+  const [realtime, setRealtime] = useState(null);
   const disable = async () => {
     const path = envPath(env, `/resources/${resource}`);
     const result = await run(async () => {
@@ -399,6 +451,14 @@ function TableSettings({ env, table, resource, onDeleted, onDisabled }) {
     }, "The resource's REST API is now off. Fields, history and the table are untouched.");
     if (result) onDisabled?.();
   };
+  const toggleRealtime = async (value) => {
+    const path = envPath(env, `/resources/${resource}`);
+    const result = await run(async () => {
+      const current = await get(path);
+      return put(path, { ...editable(current), realtime: value });
+    }, value ? "Broadcasting row changes to realtime subscribers." : "Stopped broadcasting row changes.");
+    if (result) setRealtime(value);
+  };
   const dropTable = async () => {
     const result = await run(async () => {
       if (resource) await del(envPath(env, `/resources/${resource}`));
@@ -406,18 +466,35 @@ function TableSettings({ env, table, resource, onDeleted, onDisabled }) {
     }, `${table} is gone`);
     if (result) onDeleted?.();
   };
+  useEffect(() => {
+    if (!resource) return;
+    let cancelled = false;
+    get(envPath(env, `/resources/${resource}`)).then((current) => { if (!cancelled) setRealtime(Boolean(current.realtime)); });
+    return () => { cancelled = true; };
+  }, [env, resource]);
   return (
     <div className="stack" style={{ padding: 16, maxWidth: 560 }}>
       {resource && (
-        <div className="card" style={{ padding: 14 }}>
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <div>
-              <b>Disable the API</b>
-              <p className="muted">Turns off every operation on <span className="mono">{resource}</span> (list, get, create, update, delete). The table, its rows and its fields are not touched — this can be turned back on from the Schema tab.</p>
+        <>
+          <div className="card" style={{ padding: 14 }}>
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <div>
+                <b>Disable the API</b>
+                <p className="muted">Turns off every operation on <span className="mono">{resource}</span> (list, get, create, update, delete). The table, its rows and its fields are not touched — this can be turned back on from the Schema tab.</p>
+              </div>
+              <Button disabled={busy} onClick={disable}>Disable</Button>
             </div>
-            <Button disabled={busy} onClick={disable}>Disable</Button>
           </div>
-        </div>
+          <div className="card" style={{ padding: 14 }}>
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <div>
+                <b>Broadcast changes</b>
+                <p className="muted">Push row changes (create, update, delete) to realtime subscribers on the <span className="mono">resource:{resource}</span> channel.</p>
+              </div>
+              <Switch size="sm" checked={realtime ?? false} onChange={toggleRealtime} disabled={busy} />
+            </div>
+          </div>
+        </>
       )}
       <div className="card" style={{ padding: 14, borderColor: "var(--danger)" }}>
         <b>Delete table</b>
@@ -502,23 +579,74 @@ function SortButton({ columns, sort, onApply }) {
   );
 }
 
-function RowSheet({ table, row, columns, types, onClose }) {
+function RowSheet({ table, row, columns, types, env, resource, onClose, onUpdated }) {
   const toast = useToast();
   const json = JSON.stringify(row, null, 2);
+  const [editing, setEditing] = useState(false);
+  const [editValues, setEditValues] = useState(row);
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [saveError, setSaveError] = useState(null);
+  const pkCol = columns.find((name) => types[name]?.primary_key);
+  const saveRow = async () => {
+    setSaveError(null);
+    setSaveBusy(true);
+    try {
+      const body = {};
+      for (const name of columns) {
+        const v = editValues[name];
+        if (v === "" || v === null || v === undefined) continue;
+        if (pkCol && name === pkCol) continue;
+        body[name] = v;
+      }
+      await patch(envPath(env, `/resources/${resource}/records/${row.id}`), body);
+      setEditing(false);
+      onUpdated?.();
+      toast("Row saved", "ok");
+    } catch (err) {
+      setSaveError(err.message);
+    } finally {
+      setSaveBusy(false);
+    }
+  };
   return (
     <Sheet
       title={row.id != null ? `${table} · ${row.id}` : table}
       icon="resources"
       onClose={onClose}
-      footer={<Button size="sm" onClick={async () => toast((await copyToClipboard(json)) ? "Row copied as JSON" : "Could not copy", "ok")}><Icon name="copy" size={14} /> Copy as JSON</Button>}
+      footer={
+        <>
+          {editing ? (
+            <>
+              <Button onClick={() => { setEditing(false); setEditValues(row); setSaveError(null); }}>Cancel</Button>
+              <Button variant="primary" disabled={saveBusy} onClick={saveRow}>{saveBusy ? "Saving…" : "Save changes"}</Button>
+            </>
+          ) : (
+            <>
+              <Button size="sm" onClick={async () => toast((await copyToClipboard(json)) ? "Row copied as JSON" : "Could not copy", "ok")}><Icon name="copy" size={14} /> Copy as JSON</Button>
+              <Button size="sm" variant="primary" onClick={() => { setEditValues({ ...row }); setEditing(true); setSaveError(null); }}><Icon name="edit" size={14} /> Edit</Button>
+            </>
+          )}
+        </>
+      }
     >
+      {editing && saveError && <div className="alert error">{saveError}</div>}
       <dl className="tbl-row">
         {columns.map((name) => {
-          const { text, kind } = display(row[name]);
+          const c = types[name];
+          const value = editValues[name];
+          const { text, kind } = display(value);
+          if (editing) {
+            return (
+              <div key={name} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <dt><span className="mono">{name}</span>{c?.type && <small>{String(c.type).toLowerCase()}</small>}</dt>
+                <input className="mono" value={value == null ? "" : String(value)} onChange={(e) => setEditValues({ ...editValues, [name]: e.target.value || null })} placeholder={c?.primary_key ? "auto-generated" : undefined} />
+              </div>
+            );
+          }
           return (
             <div key={name}>
-              <dt><span className="mono">{name}</span>{types[name]?.type && <small>{String(types[name].type).toLowerCase()}</small>}</dt>
-              <dd className={kind}>{kind === "json" ? <pre>{JSON.stringify(asJson(row[name]) ?? row[name], null, 2)}</pre> : text}</dd>
+              <dt><span className="mono">{name}</span>{c?.type && <small>{String(c.type).toLowerCase()}</small>}</dt>
+              <dd className={kind}>{kind === "json" ? <pre>{JSON.stringify(asJson(value) ?? value, null, 2)}</pre> : text}</dd>
             </div>
           );
         })}
