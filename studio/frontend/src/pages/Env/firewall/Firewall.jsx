@@ -24,7 +24,7 @@ const FIELD_LABEL = Object.fromEntries(FIELDS);
 const DURATIONS = [[0, "Never"], [3600, "1 hour"], [86400, "1 day"], [7 * 86400, "7 days"], [30 * 86400, "30 days"]];
 
 /** Starting points for common rules. */
-const TEMPLATES = [
+export const TEMPLATES = [
   { label: "Allow office addresses", rule: { name: "Office", action: "allow", conditions: [{ field: "ip", op: "in_cidr", value: ["10.0.0.0/8"] }] } },
   { label: "Block countries", rule: { name: "Blocked countries", action: "block", conditions: [{ field: "country", op: "in", value: ["XX"] }] } },
   { label: "Rate-limit sign-in", rule: { name: "Sign-in burst", action: "rate_limit", conditions: [{ field: "path", op: "starts_with", value: "/auth/v1/token" }], rate_limit: { requests: 10, window_seconds: 60, by: "ip", ban_seconds: 900 } } },
@@ -49,12 +49,28 @@ const seconds = (value) => (!value ? "—" : value < 120 ? `${value}s` : value <
 
 // ── overview ────────────────────────────────────────────────────────────
 
-export function FirewallOverview({ base, onBan, onSection }) {
+export function FirewallOverview({ base, onBan, onNewRule }) {
   const [hours, setHours] = useState(24);
   const stats = useApi(`${base}/firewall-stats`, { params: { hours }, interval: 15000 });
+  const rules = useApi(`${base}/firewall`);
+  const noRules = rules.data && rules.data.data.length === 0;
   return (
     <>
-      <PageHead title="Firewall" description="Every request to this environment's API passes through the firewall first: bans, your rules in order, then managed attack signatures." actions={<Segmented options={[[1, "1 h"], [24, "24 h"], [168, "7 days"]]} value={hours} onChange={setHours} />} />
+      <PageHead title="Firewall" description="Every request to this environment's API passes through the firewall first: bans, then your rules in order." actions={<Segmented options={[[1, "1 h"], [24, "24 h"], [168, "7 days"]]} value={hours} onChange={setHours} />} />
+      {noRules && (
+        <div className="fw-empty">
+          <Icon name="policies" size={20} className="faint" />
+          <h3>No rules yet</h3>
+          <p>Requests go through unchecked except for bans. Start from a template:</p>
+          <div className="fw-templates">
+            {TEMPLATES.map((t) => (
+              <button key={t.label} type="button" onClick={() => onNewRule({ ...blank(), ...t.rule })}>
+                <b>{t.label}</b><small>{ACTION_LABELS[t.rule.action]} · {describe({ ...blank(), ...t.rule })}</small>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <Loading state={stats}>
         {(s) => {
           const by = s.by_action || {};
@@ -76,12 +92,13 @@ export function FirewallOverview({ base, onBan, onSection }) {
                 </Card>
               )}
               {s.total === 0 ? (
-                <div className="fw-empty">
-                  <Icon name="networking" size={20} className="faint" />
-                  <h3>Nothing to report</h3>
-                  <p>No request was blocked, limited or logged in this period.</p>
-                  <Button onClick={() => onSection("managed")}>Turn on managed rules</Button>
-                </div>
+                !noRules && (
+                  <div className="fw-empty">
+                    <Icon name="networking" size={20} className="faint" />
+                    <h3>Nothing to report</h3>
+                    <p>No request was blocked, limited or logged in this period.</p>
+                  </div>
+                )
               ) : (
                 <div className="fw-tops fw-flat">
                   <TopList title="Top addresses" rows={s.top_ips} action={(ip) => <Button size="sm" onClick={() => onBan(ip)}>Ban</Button>} />
@@ -120,11 +137,16 @@ function TopList({ title, rows, action, mono, empty = "Nothing yet." }) {
 
 // ── rules ───────────────────────────────────────────────────────────────
 
-export function FirewallRules({ base }) {
+export function FirewallRules({ base, prefill, onPrefilled }) {
   const list = useApi(`${base}/firewall`);
   const [editing, setEditing] = useState(null);
   const [run] = useAction();
   const reload = () => list.reload();
+  useEffect(() => {
+    if (!prefill) return;
+    setEditing(prefill);
+    onPrefilled?.();
+  }, [prefill]); // eslint-disable-line react-hooks/exhaustive-deps
   const move = async (rows, index, by) => {
     const ids = rows.map((r) => r.id);
     const [item] = ids.splice(index, 1);
@@ -214,7 +236,7 @@ function RuleSheet({ base, initial, onClose, onSaved }) {
       <section className="form-section">
         <div className="form-grid">
           <Field label="Name"><input autoFocus value={rule.name} onChange={(e) => set({ name: e.target.value })} placeholder="Block admin from outside" /></Field>
-          <Field label="Action"><Segmented options={ACTIONS} value={rule.action} onChange={(action) => set({ action })} /></Field>
+          <Field label="Action"><select value={rule.action} onChange={(e) => set({ action: e.target.value })}>{ACTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
         </div>
         <div className="row wrap" style={{ gap: 18, marginTop: 6 }}>
           <Switch checked={rule.mode === "simulate"} onChange={(on) => set({ mode: on ? "simulate" : "enforce" })} label="Simulate" hint="Record what it would do, without doing it." />
@@ -222,7 +244,7 @@ function RuleSheet({ base, initial, onClose, onSaved }) {
         </div>
       </section>
       <section className="form-section">
-        <div className="form-section-head"><div><h3>When</h3><p>Match {rule.logic === "any" ? "any" : "all"} of these.</p></div><Segmented options={[["all", "All"], ["any", "Any"]]} value={rule.logic} onChange={(logic) => set({ logic })} /></div>
+        <div className="form-section-head"><div><h3>When</h3><p>Match {rule.logic === "any" ? "any" : "all"} of these.</p></div><select value={rule.logic} onChange={(e) => set({ logic: e.target.value })}><option value="all">All</option><option value="any">Any</option></select></div>
         <div className="fw-conditions">
           {rule.conditions.map((c, index) => {
             const prefix = c.field.startsWith("header:") ? "header:" : c.field.startsWith("query:") ? "query:" : null;
@@ -262,54 +284,6 @@ function RuleSheet({ base, initial, onClose, onSaved }) {
         </div>
       </section>
     </Sheet>
-  );
-}
-
-// ── managed rules and automatic bans ────────────────────────────────────
-
-export function ManagedRules({ base }) {
-  const config = useApi(`${base}/firewall-config`);
-  const [run] = useAction();
-  const save = async (body) => { if (await run(() => put(`${base}/firewall-config`, body), "Saved")) config.reload(); };
-  return (
-    <>
-      <PageHead title="Managed rules" description="Attack signatures Pawabase maintains, checked after your rules. Start with Log to see what they would catch, then Block." actions={<Button onClick={() => save({ managed: Object.fromEntries((config.data?.managed || []).map((m) => [m.key, "block"])) })}>Block all</Button>} />
-      <Loading state={config}>
-        {(data) => (
-          <>
-            <Card flush title="Signatures">
-              <div className="fw-managed">
-                {data.managed.map((m) => (
-                  <div key={m.key} className="fw-managed-row">
-                    <div className="grow"><b>{m.label}</b><p>{m.about}</p></div>
-                    <Segmented options={[["off", "Off"], ["log", "Log"], ["block", "Block"]]} value={m.action} onChange={(action) => save({ managed: { [m.key]: action } })} />
-                  </div>
-                ))}
-              </div>
-            </Card>
-            <AutoBan value={data.auto_ban} onSave={(auto_ban) => save({ auto_ban })} />
-          </>
-        )}
-      </Loading>
-    </>
-  );
-}
-
-function AutoBan({ value, onSave }) {
-  const [draft, setDraft] = useState(value);
-  const set = (change) => setDraft((current) => ({ ...current, ...change }));
-  return (
-    <Card title="Automatic bans" actions={<Button variant="primary" onClick={() => onSave(draft)}>Save</Button>}>
-      <p className="muted" style={{ marginTop: 0 }}>An address that gets too many error responses in a short time is banned for a while: password guessing, key guessing, scraping for paths.</p>
-      <Switch checked={Boolean(draft.enabled)} onChange={(enabled) => set({ enabled })} label="Ban addresses automatically" />
-      <div className="form-grid" style={{ marginTop: 12 }}>
-        <Field label="After this many errors"><input type="number" min="2" value={draft.threshold} onChange={(e) => set({ threshold: Number(e.target.value) })} /></Field>
-        <Field label="Within (seconds)"><input type="number" min="5" value={draft.window_seconds} onChange={(e) => set({ window_seconds: Number(e.target.value) })} /></Field>
-        <Field label="Ban for"><select value={draft.ban_seconds} onChange={(e) => set({ ban_seconds: Number(e.target.value) })}>{[[300, "5 minutes"], [900, "15 minutes"], [3600, "1 hour"], [21600, "6 hours"], [86400, "1 day"], [604800, "7 days"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
-        <Field label="Counting statuses"><TagInput value={(draft.statuses || []).map(String)} onChange={(statuses) => set({ statuses: statuses.map(Number).filter(Boolean) })} placeholder="401, then Enter" /></Field>
-        <Field label="Never ban" hint="Your own offices, monitors and servers." className="span-2"><TagInput value={draft.exempt || []} onChange={(exempt) => set({ exempt })} placeholder="10.0.0.0/8, then Enter" /></Field>
-      </div>
-    </Card>
   );
 }
 

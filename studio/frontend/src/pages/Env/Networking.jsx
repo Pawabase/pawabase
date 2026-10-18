@@ -1,7 +1,7 @@
 import { Link } from "@inertiajs/react";
 import { useState } from "react";
 import Layout, { envHref, sectionNav, useSection } from "../../components/Layout";
-import { Bans, FirewallEvents, FirewallOverview, FirewallRules, FirewallTester, ManagedRules } from "./firewall/Firewall";
+import { Bans, FirewallEvents, FirewallOverview, FirewallRules, FirewallTester } from "./firewall/Firewall";
 import { Badge, Button, Card, CopyText, EmptyState, Field, Loading, Modal, PageHead, Switch, Table, TagInput, when, useAction } from "../../components/ui";
 import { del, envPath, patch, post, put, useApi } from "../../lib/api";
 
@@ -9,24 +9,24 @@ const STATUS_TONES = { verified: "green", pending: "yellow", failed: "red" };
 
 export default function Networking({ env }) {
   const base = envPath(env);
-  const [tab, setTab] = useSection(["domains", "overview", "rules", "managed", "bans", "events", "test"], "overview");
+  const [tab, setTab] = useSection(["domains", "overview", "rules", "bans", "events", "test"], "overview");
   const [banning, setBanning] = useState(null);
+  const [newRule, setNewRule] = useState(null);
   const ban = (ip) => { setBanning(ip); setTab("bans"); };
+  const createRule = (rule) => { setNewRule(rule); setTab("rules"); };
   return (
     <Layout title="Networking" subnav={sectionNav("Networking", [
       { title: "Firewall", items: [
-        ["overview", "Overview", "What it blocked and who"],
-        ["rules", "Rules", "Allow, block, log, rate limit"],
-        ["managed", "Managed rules", "Attack signatures, automatic bans"],
-        ["bans", "IP bans", "Addresses refused now"],
-        ["events", "Events", "Every request it acted on"],
-        ["test", "Test a request", "See what would happen"],
+        ["overview", "Overview", null, { icon: "overview" }],
+        ["rules", "Rules", null, { icon: "policies" }],
+        ["bans", "IP bans", null, { icon: "x" }],
+        ["events", "Events", null, { icon: "events" }],
+        ["test", "Test a request", null, { icon: "play" }],
       ] },
-      { title: "Addresses", items: [["domains", "Custom domains", "Where this environment answers"]] },
+      { title: "Addresses", items: [["domains", "Custom domains", null, { icon: "link" }]] },
     ], tab, setTab)}>
-      {tab === "overview" && <FirewallOverview base={base} onBan={ban} onSection={setTab} />}
-      {tab === "rules" && <FirewallRules base={base} />}
-      {tab === "managed" && <ManagedRules base={base} />}
+      {tab === "overview" && <FirewallOverview base={base} onBan={ban} onNewRule={createRule} />}
+      {tab === "rules" && <FirewallRules base={base} prefill={newRule} onPrefilled={() => setNewRule(null)} />}
       {tab === "bans" && <Bans base={base} prefill={banning} onPrefilled={() => setBanning(null)} />}
       {tab === "events" && <FirewallEvents base={base} onBan={ban} />}
       {tab === "test" && <FirewallTester base={base} />}
