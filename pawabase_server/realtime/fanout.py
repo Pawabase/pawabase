@@ -96,6 +96,23 @@ class Fanout:
         await self._send({"kind": "message", "room": room_name(env, channel), "message": message})
         return {"id": message["id"], "channel": channel, "event": event}
 
+    async def deliver_stored(self, env: str, channel: str, row: Any) -> dict[str, Any]:
+        """Broadcast an already-persisted :class:`RealtimeMessage` row — the durable-channel counterpart of
+        :meth:`publish`, reusing the row's own id instead of minting a fresh one, since this message already has
+        a durable identity."""
+        message = {
+            "type": "message",
+            "id": row.id,
+            "channel": channel,
+            "event": row.event,
+            "payload": row.data,
+            "from": row.sender,
+            "sent_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        self.stats.bump("published", env=env)
+        await self._send({"kind": "message", "room": room_name(env, channel), "message": message})
+        return {"id": message["id"], "channel": channel, "event": row.event}
+
     async def presence_diff(
         self,
         env: str,

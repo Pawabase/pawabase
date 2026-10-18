@@ -310,6 +310,8 @@ class Settings(Config):
     max_presence_bytes: int = 2 * 1024
     max_history: int = 1000
     history_bytes: int = 256 * 1024
+    #: Default retention for a durable channel's messages when its own rule doesn't set one. 0 keeps them forever.
+    realtime_retention_seconds: int = 7 * 24 * 3600
     stale_config_ttl: int = 300
     idle_timeout: float = 300.0
     max_connections_per_env: int = 0

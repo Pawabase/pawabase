@@ -144,11 +144,45 @@ class Realtime:
     # ── publication ──────────────────────────────────────────────────────
 
     async def publish(
-        self, env: str, channel: str, event: str, payload: Any, *, sender: str | None = None
+        self,
+        env: str,
+        channel: str,
+        event: str,
+        payload: Any,
+        *,
+        sender: str | None = None,
+        client_msg_id: str | None = None,
     ) -> dict[str, Any]:
-        """Deliver to every subscriber on every instance."""
+        """Deliver to every subscriber on every instance.
+
+        A durable channel's publish is written to :class:`RealtimeMessage` first. When *client_msg_id* names a
+        publish already stored for this channel, nothing is delivered again — the caller's retry gets back the
+        same stored message, not a second delivery (idempotent publish, guaranteed only for durable channels;
+        an ephemeral or plain channel has no durable store to dedupe against, so a retry there is a second
+        delivery, same as it always was — see the module docstring's note on documented delivery scopes).
+        """
         self.authorizer.check_payload(payload)
-        return await self.fanout.publish(env, channel, check_event(event), payload, sender=sender)
+        event = check_event(event)
+        config = await self.store.get(env)
+        rule = config.rule_for(channel)
+        if rule.durable:
+            from pawabase_server.realtime.persistence import store_durable
+
+            row, created = await store_durable(
+                self.platform,
+                env,
+                channel,
+                event,
+                payload,
+                client_msg_id=client_msg_id,
+                sender=sender,
+                retention_seconds=rule.retention_seconds or self.settings.realtime_retention_seconds,
+            )
+            if not created:
+                return {"id": row.id, "channel": channel, "event": event, "duplicate": True}
+            await self.fanout.deliver_stored(env, channel, row)
+            return {"id": row.id, "channel": channel, "event": event}
+        return await self.fanout.publish(env, channel, event, payload, sender=sender)
 
     def forward(self, connection: Connection, channel: str, event: str, payload: Any) -> bool:
         """Offer a client publication to flows. Never waits; see :class:`FlowForwarder`."""
@@ -365,12 +399,18 @@ class Realtime:
         self, env: str, channel: str, limit: int = 50, *, auth=None, credential=None
     ) -> list[dict[str, Any]]:
         limit = max(1, min(limit, self.settings.max_history))
-        envelopes = await self.hub.history(room_name(env, channel), limit=limit)
-        messages = [
-            {**envelope.payload, "seq": envelope.seq}
-            for envelope in envelopes
-            if isinstance(envelope.payload, dict) and envelope.payload.get("type") == "message"
-        ]
+        config = await self.store.get(env)
+        if config.rule_for(channel).durable:
+            from pawabase_server.realtime.persistence import durable_history
+
+            messages = await durable_history(self.platform, env, channel, limit)
+        else:
+            envelopes = await self.hub.history(room_name(env, channel), limit=limit)
+            messages = [
+                {**envelope.payload, "seq": envelope.seq}
+                for envelope in envelopes
+                if isinstance(envelope.payload, dict) and envelope.payload.get("type") == "message"
+            ]
         if channel.startswith("resource:"):
             if auth is None or credential is None:
                 return []  # no ambient service bypass for raw history readers
@@ -387,7 +427,17 @@ class Realtime:
 
     async def sweep(self) -> dict[str, int]:
         """One housekeeping pass: idle peers, stale presence, expiring tokens, changed rules. Returns what it did, for tests and logs."""
-        done = {"pruned": 0, "presence_expired": 0, "tokens_expired": 0, "revalidated": 0}
+        done = {
+            "pruned": 0,
+            "presence_expired": 0,
+            "tokens_expired": 0,
+            "revalidated": 0,
+            "durable_expired": 0,
+        }
+        from pawabase_server.realtime.persistence import purge_expired
+
+        with contextlib.suppress(Exception):
+            done["durable_expired"] = await purge_expired()
         for peer in await self.hub.prune():
             connection = self.connections.get(str(peer.id))
             if connection is not None:

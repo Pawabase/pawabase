@@ -11,6 +11,7 @@ let refCounter = 0;
 export function useRealtimeSocket(env) {
   const [status, setStatus] = useState("connecting"); // connecting | open | closed
   const [stats, setStats] = useState({ sent: 0, received: 0 });
+  const [connected, setConnected] = useState(true);
   const socketRef = useRef(null);
   const listenersRef = useRef(new Set());
   const subsRef = useRef(new Map());
@@ -54,7 +55,13 @@ export function useRealtimeSocket(env) {
     return request({ type: "unsubscribe", channel });
   }, [request]);
 
-  const publish = useCallback((channel, event, payload) => request({ type: "publish", channel, event, payload }), [request]);
+  const publish = useCallback((channel, event, payload, options = {}) => request({
+    type: "publish",
+    channel,
+    event,
+    payload,
+    ...(options.id ? { id: options.id } : {}),
+  }), [request]);
   const trackPresence = useCallback((channel, meta) => request({ type: "presence", channel, meta }), [request]);
   const history = useCallback((channel, limit = 50) => request({ type: "history", channel, limit }), [request]);
 
@@ -120,6 +127,10 @@ export function useRealtimeSocket(env) {
       };
     }
 
+    if (!connected) {
+      setStatus("closed");
+      return;
+    }
     connect();
     return () => {
       stopped = true;
@@ -128,7 +139,10 @@ export function useRealtimeSocket(env) {
       socketRef.current = null;
       try { socket?.close(); } catch { /* already closed */ }
     };
-  }, [env]);
+  }, [env, connected]);
 
-  return { status, stats, on, subscribe, unsubscribe, publish, trackPresence, history };
+  const disconnect = useCallback(() => { setConnected(false); }, []);
+  const reconnect = useCallback(() => { setConnected(true); }, []);
+
+  return { status, stats, connected, on, subscribe, unsubscribe, publish, trackPresence, history, connect: reconnect, disconnect };
 }

@@ -34,6 +34,9 @@ class Message:
     channel: str = ""
     event: Any = None
     payload: Any = None
+    #: The client's own idempotency key for a publish, distinct from ``ref`` (which is only for ack correlation
+    #: and is never persisted). See ``Realtime.publish``.
+    id: str | None = None
     meta: dict[str, Any] = field(default_factory=dict)
     presence: dict[str, Any] | None = None
     since: int | None = None
@@ -80,12 +83,14 @@ def parse(raw: str, *, max_bytes: int) -> Message:
     presence = data.get("presence")
     channel = data.get("channel")
     token = data.get("token")
+    msg_id = data.get("id")
     return Message(
         kind=kind,
         ref=_ref(data.get("ref")),
         channel=channel if isinstance(channel, str) else "",
         event=data.get("event"),
         payload=data.get("payload"),
+        id=msg_id[:128] if isinstance(msg_id, str) else None,
         meta=dict(meta) if isinstance(meta, dict) else {},
         presence=dict(presence) if isinstance(presence, dict) else None,
         since=_int(data.get("since"), "since"),

@@ -30,6 +30,16 @@ class ChannelRule:
     publish: Any = DEFAULT_POLICY
     presence: bool = True
     history: int = 50
+    #: public | private | presence | protected | ephemeral | durable. Only ``"durable"`` changes behaviour today:
+    #: its publishes are written to ``RealtimeMessage`` so history survives a restart, not just the in-memory
+    #: backlog. The others are informational/default-setting labels a channel is created with.
+    kind: str = "public"
+    #: Seconds a durable channel's messages are kept; 0 uses the installation default (``Settings.realtime_retention_seconds``).
+    retention_seconds: int = 0
+
+    @property
+    def durable(self) -> bool:
+        return self.kind == "durable"
 
     @property
     def templated(self) -> bool:
@@ -106,6 +116,8 @@ def build_config(payload: Mapping[str, Any]) -> ChannelConfig:
                 publish=rule.get("publish") or DEFAULT_POLICY,
                 presence=bool(rule.get("presence", True)),
                 history=_history(rule.get("history", 50)),
+                kind=rule.get("kind") or "public",
+                retention_seconds=max(0, int(rule.get("retention_seconds") or 0)),
             )
         )
     return ChannelConfig(

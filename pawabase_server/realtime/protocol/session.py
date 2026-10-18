@@ -184,7 +184,12 @@ class Session:
         )
         event = check_event(message.event)
         result = await self.realtime.publish(
-            connection.env, channel, event, message.payload, sender=connection.user_id
+            connection.env,
+            channel,
+            event,
+            message.payload,
+            sender=connection.user_id,
+            client_msg_id=message.id,
         )
         await self._ack(message, id=result["id"])
         self.realtime.forward(connection, channel, event, message.payload)

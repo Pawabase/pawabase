@@ -18,6 +18,9 @@ class PublishBody(BaseModel):
     channel: str = Field(min_length=1, max_length=200)
     event: str = Field(default="message", min_length=1, max_length=100)
     payload: Any = None
+    #: An idempotency key for a durable channel: resending the same id returns the already-stored message
+    #: instead of delivering it again. Ignored on a non-durable channel (nothing durable to dedupe against).
+    client_msg_id: str | None = Field(default=None, max_length=128)
 
 
 def refusal(exc: PermissionError) -> HTTPException:
@@ -58,7 +61,12 @@ def register(app: SilloApp, realtime: Realtime) -> None:
         except PayloadTooLarge as exc:
             raise too_large(exc) from exc
         return await realtime.publish(
-            context.env, body.channel, event, body.payload, sender=auth.get("user_id")
+            context.env,
+            body.channel,
+            event,
+            body.payload,
+            sender=auth.get("user_id"),
+            client_msg_id=body.client_msg_id,
         )
 
     @router.get("/channels/{channel}/presence", summary="Who is present on a channel")

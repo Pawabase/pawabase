@@ -515,13 +515,21 @@ class Platform:
         }
 
     async def realtime_settings(self, env: str) -> dict[str, Any]:
-        """The channel rules realtime enforces for an environment: its own, plus one per realtime Resource."""
-        from pawabase_server.db.models import PolicyDef
+        """The channel rules realtime enforces for an environment: its own JSON-configured rules, then any
+        persisted ``RealtimeChannelConfig`` records (Studio's real CRUD surface — see
+        ``pawabase_server/db/models/realtime.py``), then one auto-rule per realtime Resource. An environment that
+        has never used the persisted kind behaves exactly as before: this is additive, not a replacement.
+        """
+        from pawabase_server.db.models import PolicyDef, RealtimeChannelConfig
 
         state = await self.state(env)
         environment = state.environment
         realtime = dict((environment.settings or {}).get("realtime") or {})
         channels = list(realtime.get("channels") or [])
+        channels.extend(
+            row.describe()
+            for row in await RealtimeChannelConfig.filter(environment_id=environment.id)
+        )
         for resource in state.resources.values():
             if resource.realtime:
                 # Anyone may subscribe while the resource can be read at all: the read policy is a row policy (``owner``, a

@@ -38,6 +38,13 @@ from pawabase_server.db.models.framework import (
 from pawabase_server.db.models.functions import FunctionDeployment, FunctionRun
 from pawabase_server.db.models.gateway import GatewayInstance
 from pawabase_server.db.models.orgs import Invitation, Membership, Organization, Team, TeamMember
+from pawabase_server.db.models.realtime import (
+    PushDevice,
+    RealtimeChannelConfig,
+    RealtimeChannelState,
+    RealtimeMessage,
+    RealtimeUsageRecord,
+)
 from pawabase_server.db.models.platform_ops import (
     AlarmEvent,
     AlarmRule,
@@ -110,6 +117,11 @@ __all__ = [
     "FirewallRule",
     "Lease",
     "ObjectShare",
+    "PushDevice",
+    "RealtimeChannelConfig",
+    "RealtimeChannelState",
+    "RealtimeMessage",
+    "RealtimeUsageRecord",
     "Flow",
     "FlowRun",
     "FunctionDeployment",
