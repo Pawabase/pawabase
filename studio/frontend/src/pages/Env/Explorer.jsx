@@ -9,7 +9,7 @@ const METHODS = ["get", "post", "put", "patch", "delete", "head"];
 const METHOD_TONES = { get: "green", head: "green", post: "blue", put: "yellow", patch: "yellow", delete: "red" };
 /** The groups a person picks from, in order: what each holds, and its icon. */
 const GROUPS = [
-  ["Resources", "database", "Read and write your data: list, create, update and delete records."],
+  ["Tables", "database", "Read and write your data: list, create, update and delete records."],
   ["Application routes", "routes", "Your own HTTP routes and the flows behind them."],
   ["Authentication", "users", "Sign up, sign in, tokens, sessions and second factors for your users."],
   ["Functions", "functions", "Call your deployed functions over HTTP."],
@@ -19,7 +19,7 @@ const GROUPS = [
   ["Webhooks", "webhooks", "Inbound hooks other services call."],
   ["Events", "events", "Emit and inspect events."],
   ["User administration", "keys", "Manage users with a secret key: create, update, disable, roles."],
-  ["Management", "settings", "Configure this environment: resources, policies, keys, schedules, webhooks and more."],
+  ["Management", "settings", "Configure this environment: tables, policies, keys, schedules, webhooks and more."],
   ["System", "status", "Health and status."],
   ["Other", "braces", "Everything else."],
 ];
@@ -74,7 +74,7 @@ function sampleFor(document, raw, depth = 0) {
 
 function categoryFor(path, operation, source) {
   const tags = (operation.tags || []).map((tag) => tag.toLowerCase());
-  if (path.startsWith("/rest/")) return tags.some((tag) => tag === "routes") || String(operation.operationId || "").startsWith("route.") ? "Application routes" : "Resources";
+  if (path.startsWith("/rest/")) return tags.some((tag) => tag === "routes") || String(operation.operationId || "").startsWith("route.") ? "Application routes" : "Tables";
   if (path.startsWith("/auth/")) return "Authentication";
   if (path.startsWith("/functions/")) return "Functions";
   if (path.startsWith("/flows/")) return "Flows";
