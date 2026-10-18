@@ -1753,6 +1753,7 @@ th::first-letter { text-transform: uppercase; }
  * The one exception is the commit action at the foot of a sheet (Save, Create),
  * the single place a filled button tells you what finishes the task. */
 .btn, .btn.soft, .btn.primary, label.btn, label.btn.primary { background: transparent; box-shadow: none; filter: none; }
+
 .btn.primary, label.btn.primary { border-color: color-mix(in srgb, var(--brand) 65%, transparent); color: var(--brand-strong); }
 .btn.primary:hover, label.btn.primary:hover { background: color-mix(in srgb, var(--brand) 12%, transparent); border-color: var(--brand); }
 .btn.soft { border-color: var(--line-2); color: var(--brand-strong); }
@@ -2546,4 +2547,3 @@ a.card:hover,
   .rt-page-head { flex-direction: column; align-items: flex-start; gap: 10px; }
   .rt-page-head > div:last-child { width: 100%; justify-content: space-between; }
 }
-

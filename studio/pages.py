@@ -42,6 +42,7 @@ SECTIONS: dict[str, str] = {
     "events": "Env/Events",
     "webhook-deliveries": "Env/WebhookDeliveries",
     "realtime": "Env/Realtime",
+    "dashboards": "Env/Dashboards",
     "observability": "Env/Observability",
     "usage": "Env/Usage",
     "explorer": "Env/Explorer",

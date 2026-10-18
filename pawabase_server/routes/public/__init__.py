@@ -8,8 +8,9 @@ from pawabase_server.settings import Settings
 
 
 def register_routes(app: SilloApp, settings: Settings) -> None:
-    from pawabase_server.routes.public import internal, landing, status
+    from pawabase_server.routes.public import dashboards, internal, landing, status
 
     landing.register(app, settings)
     status.register(app)
+    dashboards.register(app, settings)
     internal.register(app, settings)

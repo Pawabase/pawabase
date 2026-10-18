@@ -11,6 +11,7 @@ from pawabase_server.db.models.activity import (
     WebhookDelivery,
     WorkerHeartbeat,
 )
+from pawabase_server.db.models.dashboards import Dashboard
 from pawabase_server.db.models.definitions import (
     Bucket,
     EventSubscription,
@@ -104,6 +105,7 @@ __all__ = [
     "BackupSnapshot",
     "Branch",
     "Bucket",
+    "Dashboard",
     "DefinitionRevision",
     "Deployment",
     "Domain",
