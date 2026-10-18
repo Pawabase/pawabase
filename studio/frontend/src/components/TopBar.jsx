@@ -145,7 +145,7 @@ function EnvSwitcher({ runtime, envs, env, section, onCreate, onHistory }) {
 }
 
 const CREATE = [
-  ["resources", "Resource", "A table exposed as a REST API", "resources"],
+  ["tables", "Table", "A table exposed as a REST API", "resources"],
   ["routes", "Route", "A custom endpoint for a flow or function", "routes"],
   ["policies", "Policy", "A reusable access rule", "policies"],
   ["flows", "Flow", "A visual workflow", "flows", "/flows/new"],

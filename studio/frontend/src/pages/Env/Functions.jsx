@@ -489,14 +489,15 @@ export default function Functions({ env }) {
   const reloadAll = () => { list.reload(); runs.reload(); };
 
   const subnav = sectionNav("Functions", [
-    { items: [["all", "All functions", list.data ? `${functions.length} loaded` : undefined]] },
+    { items: [["all", "All functions", null, { icon: "functions" }]] },
     { title: "Functions", items: shown.map((f) => [`fn:${f.name}`, f.name, f.file || undefined, {
       mono: true,
+      icon: "functions",
       tag: stats[f.name]?.total ? String(stats[f.name].total) : f.kind === "http" ? "HTTP" : undefined,
       flag: stats[f.name]?.failed ? "critical" : undefined,
       title: f.description || f.name,
     }]) },
-    { title: "Activity", items: [["runs", "Runs", "Every call, newest first"], ["deployments", "Deployments", "What the CLI shipped"], ["source", "Source files"]] },
+    { title: "Activity", pinned: true, items: [["runs", "Runs", null, { icon: "jobs" }], ["deployments", "Deployments", null, { icon: "upload" }], ["source", "Source files", null, { icon: "code" }]] },
   ], section, setSection, {
     loading: list.loading && !list.data,
     search: { value: query, onChange: setQuery, placeholder: "Find a function" },

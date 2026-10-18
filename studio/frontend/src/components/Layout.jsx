@@ -38,12 +38,15 @@ export function useSection(keys, fallback = Array.isArray(keys) ? keys[0] : unde
   return [section, choose];
 }
 
-/** A secondary sidebar listing a page's sections: ``groups`` is ``[{ title?, items: [[key, label, sub?, extra?], …] }]``. */
+/** A secondary sidebar listing a page's sections: ``groups`` is ``[{ title?, pinned?, items: [[key, label, sub?, extra?], …] }]``.
+ *  A ``pinned`` group (e.g. actions that shouldn't scroll with a long list above them) renders fixed at the
+ *  bottom of the sidebar instead of in the scrollable list — see ``SubNav``. */
 export function sectionNav(title, groups, active, onSelect, extra = {}) {
   return {
     title,
     groups: groups.map((group) => ({
       title: group.title,
+      pinned: group.pinned,
       items: group.items.map(([key, label, sub, more]) => ({ key, label, sub, ...(more || {}) })),
     })),
     active,

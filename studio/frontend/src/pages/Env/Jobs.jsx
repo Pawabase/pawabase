@@ -25,9 +25,9 @@ export default function Jobs({ env }) {
   const open = async (id) => setJob(await get(`${base}/jobs/${id}`));
   return (
     <Layout title="Jobs & queues" subnav={sectionNav("Jobs & queues", [
-      { title: "Work", items: [["jobs", "Jobs", "Every queued and finished job"], ["failed", "Failed", "Gave up after retries"]] },
-      { title: "Health", items: [["health", "Service health", "Failures and waiting work"], ["retries", "Retry policies", "How each kind is retried"]] },
-      { title: "Capacity", items: [["workers", "Workers", "Processes taking jobs"]] },
+      { title: "Work", items: [["jobs", "Jobs", null, { icon: "jobs" }], ["failed", "Failed", null, { icon: "x" }]] },
+      { title: "Health", items: [["health", "Service health", null, { icon: "observability" }], ["retries", "Retry policies", null, { icon: "refresh" }]] },
+      { title: "Capacity", items: [["workers", "Workers", null, { icon: "terminal" }]] },
     ], tab, setTab)}>
       <PageHead title="Jobs & queues" description="Background work on Sillo's queue: flow runs, function calls, webhook deliveries, mail. Failed jobs retry with backoff, then land here." />
       {tab === "jobs" && (

@@ -28,7 +28,7 @@ const TABS = [
 
 const INFRA = { database: "Database", storage: "Storage", mail: "Mail", cache: "Cache", queue: "Queue", events: "Events" };
 const INVENTORY = [
-  ["resources", "Resources", "resources"],
+  ["tables", "Tables", "tables", "resources"],
   ["routes", "Routes", "routes"],
   ["policies", "Policies", "policies"],
   ["flows", "Flows", "flows"],
@@ -257,9 +257,9 @@ export default function Overview({ runtime, env, overview }) {
         <div className="ov-panel flush">
           <div className="ov-panel-head pad"><h2>What's built</h2><span className="faint small">definitions v{overview.version}</span></div>
           <div className="ov-inventory">
-            {INVENTORY.map(([key, label, page]) => (
+            {INVENTORY.map(([key, label, page, icon]) => (
               <Link key={key} href={envHref(env, page)} className="ov-count">
-                <Icon name={page} size={15} />
+                <Icon name={icon || page} size={15} />
                 <span className="grow">{label}</span>
                 <b>{compact(overview.counts?.[key] ?? 0)}</b>
               </Link>

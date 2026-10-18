@@ -11,8 +11,8 @@ export default function Events({ env }) {
   const [emitting, setEmitting] = useState(false);
   return (
     <Layout title="Events & runs" subnav={sectionNav("Events & runs", [
-      { title: "Events", items: [["events", "Event log", "Everything on the bus"], ["graph", "Event map", "Who consumes what"]] },
-      { title: "What they started", items: [["runs", "Flow runs"], ["webhook-deliveries", "Webhook deliveries", undefined, { href: envHref(env, "webhook-deliveries"), external: true }], ["mail", "Mail sent"]] },
+      { title: "Events", items: [["events", "Event log", null, { icon: "events" }], ["graph", "Event map", null, { icon: "observability" }]] },
+      { title: "What they started", items: [["runs", "Flow runs", null, { icon: "flows" }], ["webhook-deliveries", "Webhook deliveries", undefined, { href: envHref(env, "webhook-deliveries"), external: true, icon: "webhooks" }], ["mail", "Mail sent", null, { icon: "mail" }]] },
     ], tab, setTab)}>
       <PageHead title="Events & runs" description="Everything that happened: events on the bus, the flows they started, webhooks delivered and mail sent."
         actions={<Button onClick={() => setEmitting(true)}>Emit test event</Button>} />

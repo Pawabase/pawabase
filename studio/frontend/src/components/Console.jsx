@@ -6,13 +6,13 @@ import { runHttp } from "../lib/httpcommand";
 import { startTour } from "../lib/tour";
 
 const SECTIONS = [
-  "overview", "database", "resources", "schemas", "transformers", "policies", "routes", "explorer",
+  "overview", "database", "tables", "schemas", "transformers", "policies", "routes", "explorer",
   "functions", "flows", "subscriptions", "schedules", "webhooks", "inbound-hooks", "mail-templates",
   "users", "storage", "realtime", "releases", "jobs", "events", "observability", "keys", "secrets", "settings",
 ];
 
 const READ_COMMANDS = [
-  ["resources", "List resource definitions", "resources"], ["schemas", "List schemas", "schemas"],
+  ["resources", "List table definitions", "resources"], ["schemas", "List schemas", "schemas"],
   ["transformers", "List transformers", "transformers"], ["policies", "List policies", "policies"],
   ["routes", "List custom routes", "routes"], ["functions", "List functions", "functions"],
   ["subscriptions", "List event subscriptions", "subscriptions"], ["schedules", "List schedules", "schedules"],

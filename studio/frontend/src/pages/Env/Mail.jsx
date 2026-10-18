@@ -34,10 +34,10 @@ export default function Mail({ env }) {
 
   return (
     <Layout title="Mail" subnav={sectionNav("Mail", [
-      { title: "Activity", items: [["log", "Sent mail", log.data ? `${rows.length} recent` : undefined]] },
+      { title: "Activity", items: [["log", "Sent mail", null, { icon: "mail" }]] },
       { title: "Setup", items: [
-        ["delivery", "Delivery", configured ? `${settingOf("host") || "SMTP"}` : "Not delivering", { flag: setup.data && !configured ? "warn" : undefined }],
-        ["templates", "Templates", "What each message says"],
+        ["delivery", "Delivery", null, { icon: "send", flag: setup.data && !configured ? "warn" : undefined }],
+        ["templates", "Templates", null, { icon: "mail-templates" }],
       ] },
     ], section, setSection)}>
       {section === "delivery" && <>
