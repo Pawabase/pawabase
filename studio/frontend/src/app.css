@@ -1,0 +1,66 @@
+@import "tailwindcss";
+@import "./styles.css" layer(components);
+
+@theme {
+  /* surfaces */
+  --color-frame: #0c0c10;
+  --color-canvas: #111116;
+  --color-surface: #191920;
+  --color-sunken: #22212a;
+  --color-line: #24232c;
+  --color-line-2: #312f3a;
+
+  /* text */
+  --color-ink: #f7f6fb;
+  --color-on-ink: #111116;
+  --color-text: #f7f6fb;
+  --color-muted: #aaa8b8;
+  --color-faint: #747180;
+
+  /* brand */
+  --color-brand: #7869ff;
+  --color-brand-strong: #a89eff;
+  --color-brand-soft: #282446;
+  --color-brand-ring: rgba(120, 105, 255, 0.34);
+
+  /* pastels (decoration only) */
+  --color-lavender: #cfc4fa;
+  --color-peach: #ffd4b8;
+  --color-mint: #c4ebd9;
+  --color-butter: #f8e6a8;
+  --color-sky: #c3dcf6;
+  --color-rose: #f7cadb;
+  --color-pastel-ink: #211f2c;
+
+  /* status */
+  --color-ok: #6fd3a2;
+  --color-ok-soft: #1c3329;
+  --color-warn: #efc463;
+  --color-warn-soft: #3a3019;
+  --color-danger: #f39a93;
+  --color-danger-soft: #3d2224;
+  --color-info: #8fb8f2;
+  --color-info-soft: #1d2a40;
+
+  /* interactive fills */
+  --color-hover: color-mix(in srgb, #f7f6fb 6%, transparent);
+  --color-press: color-mix(in srgb, #7869ff 19%, transparent);
+  --color-head-bg: color-mix(in srgb, #191920 82%, #111116);
+
+  /* radii */
+  --radius-xs: 7px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 22px;
+
+  /* type */
+  --font-sans: "Geist Variable", "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* layout constants */
+  --spacing-bar: 52px;
+  --spacing-gutter: 24px;
+  --spacing-control: 34px;
+  --spacing-control-sm: 30px;
+}
