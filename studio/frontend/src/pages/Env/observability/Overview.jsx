@@ -91,39 +91,39 @@ function Body({ s, services, focus, setFocus, filter, setFilter, showAll, setSho
     : "Everything looks healthy";
   const findings = showAll ? s.problems : s.problems.slice(0, 4);
   return (
-    <div className="stack lg">
-      <div className={`banner ${tone}`}>
+    <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
+      <div className={`banner flex items-center justify-between gap-3.5 p-[11px_16px] rounded-sm text-body flex-wrap [&.ok]:bg-ok-soft [&.ok]:text-ok [&.warn]:bg-warn-soft [&.warn]:text-warn [&.error]:bg-danger-soft [&.error]:text-danger [&_.services]:flex [&_.services]:gap-3.5 [&_.services]:flex-wrap [&_.services]:text-text [&_.services]:text-ui-sm [&_.services_span]:inline-flex [&_.services_span]:items-center [&_.services_span]:gap-1.5 ${tone}`}>
         <b>{down ? `${down} service${down > 1 ? "s" : ""} unreachable · ` : ""}{headline}</b>
         <span className="services">
-          {(services || []).map((x) => <span key={x.name} title={x.detail || ""}><i className={`light ${x.status}`} />{x.name}{x.status === "up" && x.latency_ms != null ? <span className="muted"> {Math.round(x.latency_ms)}ms</span> : null}</span>)}
+          {(services || []).map((x) => <span key={x.name} title={x.detail || ""}><i className={`light ${x.status}`} />{x.name}{x.status === "up" && x.latency_ms != null ? <span className="muted text-muted"> {Math.round(x.latency_ms)}ms</span> : null}</span>)}
         </span>
       </div>
 
-      <Card title={<Segmented options={items.map((i) => [i.key, i.label])} value={active.key} onChange={setFocus} />} className="chart-card"
-        actions={<><Legend items={active.lines.map(([, label, color]) => [label, color])} /><button type="button" className="chip" onClick={() => onOpen(active.section)}>Open {active.label.toLowerCase()} →</button></>}>
+      <Card title={<Segmented options={items.map((i) => [i.key, i.label])} value={active.key} onChange={setFocus} />} className="chart-card [&_h2]:text-heading"
+        actions={<><Legend items={active.lines.map(([, label, color]) => [label, color])} /><button type="button" className="chip [border:1px_solid_var(--line)] bg-none text-muted rounded-xs p-[3px_11px] font-inherit text-xs cursor-pointer [&:hover]:border-brand [&:hover]:text-brand-strong [&.on]:border-solid [&.on]:border-brand [&.on]:bg-brand-soft [&.on]:text-brand-strong font-semibold [&.active]:bg-text [&.active]:text-surface [&.active]:border-text" onClick={() => onOpen(active.section)}>Open {active.label.toLowerCase()} →</button></>}>
         <Chart height={230} stepSeconds={s.window.step_seconds} data={active.rows} format={active.format}
           series={active.lines.map(([key, label, color, type]) => ({ key, label, color, type }))} empty={`No ${active.label.toLowerCase()} activity in this window.`} />
       </Card>
 
-      <div className="obs-split">
-        <Card title="Recent failures" actions={<div className="chips">{FILTERS.map(([key, label]) => <button key={key} type="button" className={`chip ${filter === key ? "active" : ""}`} onClick={() => setFilter(key)}>{label}</button>)}</div>}>
+      <div className="obs-split grid grid-cols-[minmax(0,_1.5fr)_minmax(0,_1fr)] gap-3.5 items-start max-layout:grid-cols-1">
+        <Card title="Recent failures" actions={<div className="chips flex flex-wrap gap-1.5">{FILTERS.map(([key, label]) => <button key={key} type="button" className={`chip [border:1px_solid_var(--line)] bg-none text-muted rounded-xs p-[3px_11px] font-inherit text-xs cursor-pointer [&:hover]:border-brand [&:hover]:text-brand-strong [&.on]:border-solid [&.on]:border-brand [&.on]:bg-brand-soft [&.on]:text-brand-strong font-semibold [&.active]:bg-text [&.active]:text-surface [&.active]:border-text ${filter === key ? "active" : ""}`} onClick={() => setFilter(key)}>{label}</button>)}</div>}>
           {shown.length === 0 ? <Empty>Nothing failed{filter === "all" ? "" : ` in ${KIND[filter].toLowerCase()}s`} in this window.</Empty> : shown.slice(0, 12).map((i) => (
-            <div key={`${i.kind}${i.id}`} className="feed-item" onClick={() => openIncident(i)} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && openIncident(i)}>
+            <div key={`${i.kind}${i.id}`} className="feed-item flex gap-3 items-start p-[11px_6px] [border-bottom:1px_solid_var(--line)] cursor-pointer rounded-none [&:last-child]:border-b-0 [&:hover]:bg-sunken [&_.kind]:flex-none [&_.kind]:w-[74px] [&_.kind]:text-2xs [&_.kind]:font-bold [&_.kind]:uppercase [&_.kind]:tracking-[0.04em] [&_.kind]:text-muted [&_.kind]:pt-0.5 [&_.body]:min-w-0 [&_.body]:flex-1 [&_.body_b]:block [&_.body_b]:text-body [&_.body_>_span]:block [&_.body_>_span]:text-ui-sm [&_.body_>_span]:text-muted [&_.body_>_span]:overflow-hidden [&_.body_>_span]:text-ellipsis [&_.body_>_span]:whitespace-nowrap [&_time]:flex-none [&_time]:text-xs [&_time]:text-faint [&_.count]:inline-block [&_.count]:ml-2 [&_.count]:[vertical-align:1px] [&_.count]:text-2xs [&_.count]:font-bold [&_.count]:p-[1px_7px] [&_.count]:rounded-sm [&_.count]:bg-danger-soft [&_.count]:text-danger" onClick={() => openIncident(i)} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && openIncident(i)}>
               <span className="kind">{KIND[i.kind]}</span>
               <span className="body"><b>{i.title}{i.count > 1 && <span className="count">×{i.count}</span>}</b><span title={i.detail}>{i.detail}</span></span>
               <time title={i.at}>{when(i.at)}</time>
             </div>
           ))}
         </Card>
-        <Card title="Needs attention" actions={<span className="muted small">{s.problems.length ? `${s.problems.length} finding${s.problems.length > 1 ? "s" : ""}` : "all clear"}</span>}>
+        <Card title="Needs attention" actions={<span className="muted text-muted small text-ui-sm">{s.problems.length ? `${s.problems.length} finding${s.problems.length > 1 ? "s" : ""}` : "all clear"}</span>}>
           {s.problems.length === 0 ? <Empty>No findings in this window.</Empty> : <>
             {findings.map((p, i) => (
-              <button key={i} type="button" className="finding" onClick={() => onOpen(AREA_SECTION[p.area])}>
-                <i className={`dot ${p.severity === "critical" ? "bad" : "warn"}`} />
+              <button key={i} type="button" className="finding flex gap-2.5 items-start w-full text-left border-0 bg-none font-inherit text-inherit p-[9px_6px] rounded-sm cursor-pointer [&:hover]:bg-sunken [&_.dot]:mt-1.5 [&_small]:block [&_small]:text-muted [&_small]:text-caption [&_small]:capitalize" onClick={() => onOpen(AREA_SECTION[p.area])}>
+                <i className={`dot w-[7px] h-[7px] rounded-full bg-[var(--faint)] flex-none inline-block [&.ok]:bg-ok [&.warn]:bg-warn [&.bad]:bg-danger [&.info]:bg-info ${p.severity === "critical" ? "bad" : "warn"}`} />
                 <span><small>{p.area}</small>{p.message}</span>
               </button>
             ))}
-            {s.problems.length > 4 && <button type="button" className="chip" style={{ marginTop: 8 }} onClick={() => setShowAll(!showAll)}>{showAll ? "Show fewer" : `Show all ${s.problems.length}`}</button>}
+            {s.problems.length > 4 && <button type="button" className="chip [border:1px_solid_var(--line)] bg-none text-muted rounded-xs p-[3px_11px] font-inherit text-xs cursor-pointer [&:hover]:border-brand [&:hover]:text-brand-strong [&.on]:border-solid [&.on]:border-brand [&.on]:bg-brand-soft [&.on]:text-brand-strong font-semibold [&.active]:bg-text [&.active]:text-surface [&.active]:border-text" style={{ marginTop: 8 }} onClick={() => setShowAll(!showAll)}>{showAll ? "Show fewer" : `Show all ${s.problems.length}`}</button>}
           </>}
         </Card>
       </div>

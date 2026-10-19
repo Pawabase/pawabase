@@ -73,7 +73,7 @@ export function webhooksSubnav(env, active) {
 
 export const ENV_NAV = [
   { title: "Build", items: [
-    ["overview", "Overview"], ["data", "Data", "tables", "database"], ["policies", "Policies"], ["routes", "Routes"], ["explorer", "API Explorer"], ["functions", "Functions"], ["dashboards", "Dashboards", null, "usage"],
+    ["overview", "Overview"], ["data", "Data", "tables", "database"], ["policies", "Policies"], ["routes", "Routes"], ["explorer", "API Explorer"], ["functions", "Functions"],
   ] },
   { title: "Automate", items: [
     ["flows", "Flows"], ["subscriptions", "Event subscriptions"], ["schedules", "Schedules"],
@@ -164,28 +164,28 @@ function BranchHistory({ runtime, env, url, onClose }) {
   const prepareRelease = async () => { if (await run(() => post(envPath(env, "/releases"), draft), "Release prepared")) { setRelease({ revision_id: "", api_version: "", name: "", allow_breaking: false }); reload(); } };
   return <Sheet title="History" subtitle={`Working on ${branch} · ${runtime.name} / ${env}`} icon="gitBranch" tabs={[["branches", "Branches"], ["releases", "Releases"], ["revisions", "Revisions"], ["versions", "API versions"], ["deployments", "Deployments"]].map(([value, label]) => ({ value, label }))} tab={tab} onTab={setTab} tabsPlacement="top" onClose={onClose} footer={<Button onClick={onClose}>Done</Button>}>
     {tab === "branches" && <>
-    <section className="form-section">
-      <div className="form-section-head"><div><h3>Checkout</h3><p>Switch the working definition tree instantly.</p></div></div>
-      <div className="row wrap">
+    <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
+      <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Checkout</h3><p>Switch the working definition tree instantly.</p></div></div>
+      <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">
         {items.map((item) => <Button key={item.name} size="sm" variant={item.name === branch ? "primary" : ""} disabled={busy || item.name === branch} onClick={() => choose(item.name)}>{item.name}{item.protected ? " · protected" : ""}</Button>)}
       </div>
     </section>
-    <section className="form-section">
-      <div className="form-section-head"><div><h3>Create branch</h3><p>Starts from the checked-out branch, without changing it.</p></div></div>
-      <div className="row"><input value={newBranch} onChange={(event) => setNewBranch(event.target.value)} placeholder="feature-checkout" /><Button variant="primary" disabled={busy || !newBranch} onClick={() => act(async () => { await post(envPath(env, "/branches"), { name: newBranch, from_branch: branch === "main" ? null : branch }); const next = newBranch; setNewBranch(""); choose(next); })}>Create & checkout</Button></div>
+    <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
+      <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Create branch</h3><p>Starts from the checked-out branch, without changing it.</p></div></div>
+      <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5"><input value={newBranch} onChange={(event) => setNewBranch(event.target.value)} placeholder="feature-checkout" /><Button variant="primary" disabled={busy || !newBranch} onClick={() => act(async () => { await post(envPath(env, "/branches"), { name: newBranch, from_branch: branch === "main" ? null : branch }); const next = newBranch; setNewBranch(""); choose(next); })}>Create & checkout</Button></div>
     </section>
-    {branch !== "main" && <section className="form-section">
-      <div className="form-section-head"><div><h3>Merge {branch}</h3><p>Applies this branch’s isolated definitions to a target branch.</p></div></div>
-      <div className="row"><select value={target} onChange={(event) => setTarget(event.target.value)}>{items.filter((item) => item.name !== branch).map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select><Button variant="primary" disabled={busy} onClick={() => act(() => post(envPath(env, `/branches/${branch}/merge`), { target }))}>Merge into {target}</Button></div>
-      <div className="stack" style={{ gap: 6, marginTop: 12 }}><span className="hint">{branchDraft.data?.branch?.changes?.length || 0} recorded actions</span>{(branchDraft.data?.branch?.changes || []).slice().reverse().slice(0, 8).map((change, index) => <div className="hint" key={`${change.at || index}-${index}`}>{change.action}{change.target ? ` · ${change.target}` : ""}{change.at ? ` · ${when(change.at)}` : ""}</div>)}</div>
+    {branch !== "main" && <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
+      <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Merge {branch}</h3><p>Applies this branch’s isolated definitions to a target branch.</p></div></div>
+      <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5"><select value={target} onChange={(event) => setTarget(event.target.value)}>{items.filter((item) => item.name !== branch).map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select><Button variant="primary" disabled={busy} onClick={() => act(() => post(envPath(env, `/branches/${branch}/merge`), { target }))}>Merge into {target}</Button></div>
+      <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 6, marginTop: 12 }}><span className="hint text-xs font-book text-muted leading-[1.45]">{branchDraft.data?.branch?.changes?.length || 0} recorded actions</span>{(branchDraft.data?.branch?.changes || []).slice().reverse().slice(0, 8).map((change, index) => <div className="hint text-xs font-book text-muted leading-[1.45]" key={`${change.at || index}-${index}`}>{change.action}{change.target ? ` · ${change.target}` : ""}{change.at ? ` · ${when(change.at)}` : ""}</div>)}</div>
     </section>}
     </>}
     {tab === "releases" && <>
-      <section className="form-section"><div className="form-section-head"><div><h3>Prepare release</h3><p>Point a stable API version at an immutable revision.</p></div></div><Field label="Revision"><select value={draft.revision_id} onChange={(event) => setRelease({ ...release, revision_id: event.target.value })}>{validRevisions.map((item) => <option key={item.id} value={item.id}>#{item.number} · {item.branch} · {item.message || item.checksum.slice(0, 8)}</option>)}</select></Field><Field label="API version"><select value={draft.api_version} onChange={(event) => setRelease({ ...release, api_version: event.target.value })}>{versionRows.map((item) => <option key={item.id}>{item.name}</option>)}</select></Field><Field label="Release name"><input value={release.name} onChange={(event) => setRelease({ ...release, name: event.target.value })} placeholder="v2.0.0" /></Field><label className="check"><input type="checkbox" checked={release.allow_breaking} onChange={(event) => setRelease({ ...release, allow_breaking: event.target.checked })} /> I acknowledge breaking compatibility findings.</label><div style={{ marginTop: 14 }}><Button variant="primary" disabled={busy || !draft.revision_id || !draft.api_version || !draft.name} onClick={prepareRelease}>Prepare release</Button></div></section>
-      <section className="form-section"><div className="form-section-head"><div><h3>Prepared releases</h3></div></div><Loading state={releases} empty="No releases prepared.">{(data) => <Table rows={data.data} columns={[{ label: "Release", render: (item) => <b>{item.name}</b> }, { label: "Path", render: (item) => <code>/rest/{item.api_version}</code> }, { label: "Status", render: (item) => <Status value={item.status} /> }, { label: "Compatibility", render: (item) => item.compatibility?.compatible ? <Badge tone="green">compatible</Badge> : <Badge tone="red">breaking</Badge> }, { label: "Created", render: (item) => when(item.created_at) }, { label: "", render: (item) => <Button size="sm" disabled={busy || item.status === "active"} onClick={() => act(() => post(envPath(env, `/releases/${item.id}/activate`), {}))}>Activate</Button> }]} />}</Loading></section>
+      <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0"><div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Prepare release</h3><p>Point a stable API version at an immutable revision.</p></div></div><Field label="Revision"><select value={draft.revision_id} onChange={(event) => setRelease({ ...release, revision_id: event.target.value })}>{validRevisions.map((item) => <option key={item.id} value={item.id}>#{item.number} · {item.branch} · {item.message || item.checksum.slice(0, 8)}</option>)}</select></Field><Field label="API version"><select value={draft.api_version} onChange={(event) => setRelease({ ...release, api_version: event.target.value })}>{versionRows.map((item) => <option key={item.id}>{item.name}</option>)}</select></Field><Field label="Release name"><input value={release.name} onChange={(event) => setRelease({ ...release, name: event.target.value })} placeholder="v2.0.0" /></Field><label className="check [label&]:flex [label&]:items-center [label&]:gap-2 [label&]:text-text [label&]:text-ui"><input type="checkbox" checked={release.allow_breaking} onChange={(event) => setRelease({ ...release, allow_breaking: event.target.checked })} /> I acknowledge breaking compatibility findings.</label><div style={{ marginTop: 14 }}><Button variant="primary" disabled={busy || !draft.revision_id || !draft.api_version || !draft.name} onClick={prepareRelease}>Prepare release</Button></div></section>
+      <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0"><div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Prepared releases</h3></div></div><Loading state={releases} empty="No releases prepared.">{(data) => <Table rows={data.data} columns={[{ label: "Release", render: (item) => <b>{item.name}</b> }, { label: "Path", render: (item) => <code>/rest/{item.api_version}</code> }, { label: "Status", render: (item) => <Status value={item.status} /> }, { label: "Compatibility", render: (item) => item.compatibility?.compatible ? <Badge tone="green">compatible</Badge> : <Badge tone="red">breaking</Badge> }, { label: "Created", render: (item) => when(item.created_at) }, { label: "", render: (item) => <Button size="sm" disabled={busy || item.status === "active"} onClick={() => act(() => post(envPath(env, `/releases/${item.id}/activate`), {}))}>Activate</Button> }]} />}</Loading></section>
     </>}
-    {tab === "revisions" && <><section className="form-section"><div className="form-section-head"><div><h3>Create revision</h3><p>Capture the current {branch} definition tree.</p></div></div><div className="row"><input value={revisionMessage} onChange={(event) => setRevisionMessage(event.target.value)} placeholder={`Snapshot ${branch}`} /><Button variant="primary" disabled={busy} onClick={createRevision}>Create revision</Button></div></section><Loading state={revisions} empty="No revisions yet.">{(data) => <Table rows={data.data} columns={[{ label: "#", key: "number" }, { label: "Branch", key: "branch" }, { label: "Status", render: (item) => <Status value={item.status} /> }, { label: "Message", key: "message" }, { label: "Created", render: (item) => when(item.created_at) }]} />}</Loading></>}
-    {tab === "versions" && <><section className="form-section"><div className="form-section-head"><div><h3>Add API version</h3><p>Creates a stable public path such as v2.</p></div></div><div className="row"><input value={newVersion} onChange={(event) => setNewVersion(event.target.value)} placeholder="v2" /><Button variant="primary" disabled={busy || !/^v[1-9][0-9]*$/.test(newVersion)} onClick={createVersion}>Add version</Button></div></section><Loading state={versions} empty="No API versions yet.">{(data) => <Table rows={data.data} columns={[{ label: "Version", key: "name" }, { label: "Status", render: (item) => <Status value={item.status} /> }]} />}</Loading></>}
+    {tab === "revisions" && <><section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0"><div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Create revision</h3><p>Capture the current {branch} definition tree.</p></div></div><div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5"><input value={revisionMessage} onChange={(event) => setRevisionMessage(event.target.value)} placeholder={`Snapshot ${branch}`} /><Button variant="primary" disabled={busy} onClick={createRevision}>Create revision</Button></div></section><Loading state={revisions} empty="No revisions yet.">{(data) => <Table rows={data.data} columns={[{ label: "#", key: "number" }, { label: "Branch", key: "branch" }, { label: "Status", render: (item) => <Status value={item.status} /> }, { label: "Message", key: "message" }, { label: "Created", render: (item) => when(item.created_at) }]} />}</Loading></>}
+    {tab === "versions" && <><section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0"><div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Add API version</h3><p>Creates a stable public path such as v2.</p></div></div><div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5"><input value={newVersion} onChange={(event) => setNewVersion(event.target.value)} placeholder="v2" /><Button variant="primary" disabled={busy || !/^v[1-9][0-9]*$/.test(newVersion)} onClick={createVersion}>Add version</Button></div></section><Loading state={versions} empty="No API versions yet.">{(data) => <Table rows={data.data} columns={[{ label: "Version", key: "name" }, { label: "Status", render: (item) => <Status value={item.status} /> }]} />}</Loading></>}
     {tab === "deployments" && <Loading state={deployments} empty="No deployments yet.">{(data) => <Table rows={data.data} columns={[{ label: "Version", key: "api_version" }, { label: "Action", key: "action" }, { label: "Release", render: (item) => <code>{item.release_id.slice(0, 8)}</code> }, { label: "Status", render: (item) => <Status value={item.status} /> }, { label: "When", render: (item) => when(item.created_at) }, { label: "", render: (item) => item.id === data.data.find((row) => row.api_version === item.api_version)?.id && item.previous_release_id ? <Button size="sm" disabled={busy} onClick={() => act(() => post(envPath(env, `/api-versions/${item.api_version}/rollback`), {}))}>Rollback</Button> : null }]} />}</Loading>}
   </Sheet>;
 }
@@ -226,22 +226,22 @@ function SidebarControl({ mode, onChange }) {
   useDismiss(open, () => setOpen(false), ref);
   const current = SIDEBAR_MODES.find(([key]) => key === mode) || SIDEBAR_MODES[0];
   return (
-    <div className="side-control" ref={ref}>
+    <div className="side-control relative mt-2.5 pt-2.5 [border-top:1px_solid_var(--line-2)] max-navigation:hidden h-[var(--dock)] box-border m-0 p-[0_14px] hidden items-center" ref={ref}>
       {open && (
-        <div className="side-menu" role="menu" aria-label="Sidebar control">
-          <div className="side-menu-title">Sidebar control</div>
+        <div className="side-menu absolute left-0 bottom-[calc(100%_+_6px)] w-[262px] bg-surface [border:1px_solid_var(--line-2)] rounded-sm p-1.5 z-[40] [&_button]:flex [&_button]:items-center [&_button]:gap-2.5 [&_button]:w-full [&_button]:p-[8px_10px] [&_button]:border-0 [&_button]:rounded-xs [&_button]:bg-none [&_button]:text-text [&_button]:font-inherit [&_button]:text-left [&_button]:cursor-pointer [&_button:hover]:bg-sunken [&_button.on]:bg-sunken [&_b]:block [&_b]:text-body [&_b]:font-semibold [&_small]:block [&_small]:text-xs [&_small]:text-muted min-w-[262px] shadow-none" role="menu" aria-label="Sidebar control">
+          <div className="side-menu-title p-[8px_10px_6px] text-2xs font-bold uppercase tracking-[0.09em] text-faint">Sidebar control</div>
           {SIDEBAR_MODES.map(([key, label, icon, hint]) => (
             <button key={key} type="button" role="menuitemradio" aria-checked={key === mode} className={key === mode ? "on" : ""} onClick={() => { onChange(key); setOpen(false); }}>
               <Icon name={icon} size={16} />
-              <span className="grow"><b>{label}</b><small>{hint}</small></span>
+              <span className="grow flex-1 min-w-0"><b>{label}</b><small>{hint}</small></span>
               {key === mode && <Icon name="check" size={15} />}
             </button>
           ))}
         </div>
       )}
-      <button type="button" className="side-toggle" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)} title="Sidebar control">
+      <button type="button" className="side-toggle flex items-center gap-[11px] w-full p-[6px_12px] border-0 rounded-sm bg-none text-muted font-inherit font-medium-plus text-base cursor-pointer [&:hover]:bg-sunken [&:hover]:text-text [&[aria-expanded=true]]:bg-sunken [&[aria-expanded=true]]:text-text" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)} title="Sidebar control">
         <Icon name={current[2]} size={18} />
-        <span className="label">Sidebar</span>
+        <span className="label whitespace-nowrap">Sidebar</span>
       </button>
     </div>
   );
@@ -270,15 +270,15 @@ function SubNavTree({ tree, active, forceOpen, row }) {
   const folder = (node, depth) => {
     const isOpen = forceOpen || open.has(node.key);
     return (
-      <div key={node.key} className={`subnav-folder depth-${depth} ${isOpen ? "open" : ""}`}>
-        <button type="button" className="subnav-folder-head" aria-expanded={isOpen} onClick={() => toggle(node.key)}>
-          <Icon name="chevronRight" size={13} className="subnav-chevron" />
-          {node.icon && <Icon name={node.icon} size={14} className="faint" />}
-          <span className="grow">{node.title}</span>
-          <span className="subnav-count">{count(node)}</span>
+      <div key={node.key} className={`subnav-folder [&.depth-1_>_.subnav-folder-head]:font-medium-plus [&.depth-1_>_.subnav-folder-head]:text-muted [&.depth-1_>_.subnav-folder-head]:text-ui-sm [&.open_>_.subnav-folder-head_.subnav-chevron]:transform-[rotate(90deg)] depth-${depth} ${isOpen ? "open" : ""}`}>
+        <button type="button" className="subnav-folder-head flex items-center gap-[7px] w-full min-h-8 p-[6px_8px] border-0 rounded-sm bg-none text-text font-inherit text-ui font-semibold text-left cursor-pointer [&:hover]:bg-hover" aria-expanded={isOpen} onClick={() => toggle(node.key)}>
+          <Icon name="chevronRight" size={13} className="subnav-chevron flex-none text-faint transition-[transform_0.12s_ease]" />
+          {node.icon && <Icon name={node.icon} size={14} className="faint text-faint" />}
+          <span className="grow flex-1 min-w-0">{node.title}</span>
+          <span className="subnav-count text-2xs font-semibold text-faint">{count(node)}</span>
         </button>
         {isOpen && (
-          <div className="subnav-folder-body">
+          <div className="subnav-folder-body flex flex-col gap-px pl-3 ml-[13px] [border-left:1px_solid_var(--line-2)]">
             {(node.folders || []).map((child) => folder(child, depth + 1))}
             {(node.items || []).map(row)}
           </div>
@@ -286,7 +286,7 @@ function SubNavTree({ tree, active, forceOpen, row }) {
       </div>
     );
   };
-  return <div className="subnav-tree">{tree.map((node) => folder(node, 0))}</div>;
+  return <div className="subnav-tree flex flex-col gap-px">{tree.map((node) => folder(node, 0))}</div>;
 }
 
 /** A second column of navigation for a section with parts of its own; the main sidebar folds to an icon rail while it is open. */
@@ -294,54 +294,54 @@ function SubNav({ subnav, backHref, showHeader = true }) {
   const row = (item) => {
     const body = (
       <>
-        {item.icon && <Icon name={item.icon} size={15} className="subnav-icon" />}
-        {item.badge && <span className={`subnav-badge ${item.badgeTone || ""}`}>{item.badge}</span>}
-        <span className="subnav-text">
+        {item.icon && <Icon name={item.icon} size={15} className="subnav-icon shrink-0 text-faint" />}
+        {item.badge && <span className={`subnav-badge font-mono text-3xs font-bold p-[1px_6px] rounded-xs bg-sunken text-muted [&.blue]:bg-info-soft [&.blue]:text-info [&.green]:bg-ok-soft [&.green]:text-ok [&.yellow]:bg-warn-soft [&.yellow]:text-warn [&.red]:bg-danger-soft [&.red]:text-danger min-w-[42px] text-center ${item.badgeTone || ""}`}>{item.badge}</span>}
+        <span className="subnav-text flex-1 min-w-0 grid gap-px [&_>_span]:overflow-hidden [&_>_span]:text-ellipsis [&_>_span]:whitespace-nowrap [&_small]:text-caption [&_small]:font-book [&_small]:text-faint [&_small]:overflow-hidden [&_small]:text-ellipsis [&_small]:whitespace-nowrap">
           <span className={item.mono ? "mono" : ""}>{item.label}</span>
         </span>
-        {item.tag && <span className="subnav-tag">{item.tag}</span>}
-        {item.flag && <i className={`obs-dot ${item.flag}`} />}
+        {item.tag && <span className="subnav-tag text-[10.5px] text-faint rounded-xs">{item.tag}</span>}
+        {item.flag && <i className={`obs-dot w-2 h-2 rounded-full bg-warn flex-none [&.critical]:bg-danger ${item.flag}`} />}
       </>
     );
     const active = subnav.active === item.key;
     return item.href ? (
-      <Link key={item.key} data-tour={`sub-${item.key}`} href={item.href} className={`subnav-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>{body}{item.external && <Icon name="chevronRight" size={13} className="faint" />}</Link>
+      <Link key={item.key} data-tour={`sub-${item.key}`} href={item.href} className={`subnav-item [&.active_.subnav-icon]:text-brand-strong relative flex items-center gap-2 w-full min-h-8 p-[6px_10px] border-0 rounded-sm bg-none text-muted font-inherit text-body font-medium text-left cursor-pointer [&:hover]:bg-hover [&:hover]:text-text [&.active]:bg-brand-soft [&.active]:text-brand-strong [&.active]:font-semibold h-auto [&.active]:shadow-none [&.active::before]:hidden [&.active]:border-brand-line [&.active_.icon]:text-brand ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>{body}{item.external && <Icon name="chevronRight" size={13} className="faint text-faint" />}</Link>
     ) : (
-      <button key={item.key} type="button" className={`subnav-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined} title={item.title || item.label} onClick={() => subnav.onSelect(item.key)}>{body}</button>
+      <button key={item.key} type="button" className={`subnav-item [&.active_.subnav-icon]:text-brand-strong relative flex items-center gap-2 w-full min-h-8 p-[6px_10px] border-0 rounded-sm bg-none text-muted font-inherit text-body font-medium text-left cursor-pointer [&:hover]:bg-hover [&:hover]:text-text [&.active]:bg-brand-soft [&.active]:text-brand-strong [&.active]:font-semibold h-auto [&.active]:shadow-none [&.active::before]:hidden [&.active]:border-brand-line [&.active_.icon]:text-brand ${active ? "active" : ""}`} aria-current={active ? "page" : undefined} title={item.title || item.label} onClick={() => subnav.onSelect(item.key)}>{body}</button>
     );
   };
   return (
-    <aside className={`subnav ${subnav.wide ? "wide" : ""}`} aria-label={subnav.title}>
-      {showHeader && <div className="subnav-head">
+    <aside className={`subnav w-[248px] shrink-0 flex flex-col bg-canvas [border-right:1px_solid_var(--line)] z-[20] max-navigation:hidden [&.wide]:w-[320px] h-full min-h-0 ${subnav.wide ? "wide" : ""}`} aria-label={subnav.title}>
+      {showHeader && <div className="subnav-head h-[var(--bar)] box-border flex items-center p-[0_12px_0_16px] [border-bottom:1px_solid_var(--line)] text-base justify-between [&_b]:font-semibold">
         <b>{subnav.title}</b>
-        {subnav.action && <button type="button" className="subnav-action" onClick={subnav.action.onClick} title={subnav.action.label} aria-label={subnav.action.label}><Icon name="plus" size={16} /></button>}
+        {subnav.action && <button type="button" className="subnav-action grid place-items-center w-control-sm h-control-sm [border:1px_solid_var(--line-2)] rounded-sm bg-transparent text-text cursor-pointer [&:hover]:bg-hover" onClick={subnav.action.onClick} title={subnav.action.label} aria-label={subnav.action.label}><Icon name="plus" size={16} /></button>}
       </div>}
       {subnav.search && (
-        <div className="subnav-search">
+        <div className="subnav-search flex items-center gap-2 m-[12px_12px_4px] p-[0_10px] [border:1px_solid_var(--line-2)] rounded-sm bg-transparent text-faint [&_input]:flex-1 [&_input]:min-w-0 [&_input]:border-0 [&_input]:outline-none [&_input]:shadow-none [&_input]:bg-transparent [&_input]:p-[8px_0] [&_input]:text-ui [&:focus-within]:border-brand h-control">
           <Icon name="search" size={14} />
           <input value={subnav.search.value} onChange={(event) => subnav.search.onChange(event.target.value)} placeholder={subnav.search.placeholder} aria-label={subnav.search.placeholder} />
         </div>
       )}
-      <nav className="subnav-list">
-        {subnav.loading && <p className="subnav-empty">Loading…</p>}
-        {subnav.tree && !subnav.loading && subnav.tree.length === 0 && <p className="subnav-empty">{subnav.empty || "Nothing here yet."}</p>}
+      <nav className="subnav-list flex-1 overflow-y-auto p-[8px_10px] [&_button]:relative [&_button]:flex [&_button]:items-center [&_button]:gap-2 [&_button]:w-full [&_button]:h-auto [&_button]:p-[6px_10px] [&_button]:border-0 [&_button]:rounded-sm [&_button]:bg-none [&_button]:text-muted [&_button]:font-inherit [&_button]:text-body [&_button]:font-medium [&_button]:text-left [&_button]:cursor-pointer [&_button:hover]:bg-hover [&_button:hover]:text-text [&_button.active]:bg-brand-soft [&_button.active]:text-brand-strong [&_button.active]:font-semibold [&_.subnav-item]:h-auto [&_.subnav-item]:p-[7px_10px] [&_.subnav-item_.subnav-text_small]:mt-px min-h-0 [&_button]:min-h-8 [&_button.active]:shadow-none [&_button.active::before]:hidden [&_.subnav-group]:m-[0_-10px] [&_.subnav-group]:p-[4px_10px_8px] [&_.subnav-group_+_.subnav-group]:mt-0 [&_.subnav-group_+_.subnav-group]:[border-top:1px_solid_var(--line-2)] [&_.subnav-group_+_.subnav-group]:pt-1.5 [&_.subnav-group_>_.nav-title]:p-[10px_10px_6px] [&_.subnav-group_>_.nav-title]:text-2xs [&_.subnav-group_>_.nav-title]:font-semibold-plus [&_.subnav-group_>_.nav-title]:tracking-[0.06em] [&_.subnav-group_>_.nav-title]:uppercase [&_.subnav-group_>_.nav-title]:text-muted [&_button.active]:border-brand-line">
+        {subnav.loading && <p className="subnav-empty m-[16px_10px] text-muted text-ui">Loading…</p>}
+        {subnav.tree && !subnav.loading && subnav.tree.length === 0 && <p className="subnav-empty m-[16px_10px] text-muted text-ui">{subnav.empty || "Nothing here yet."}</p>}
         {subnav.tree && <SubNavTree tree={subnav.tree} active={subnav.active} forceOpen={subnav.expandAll} row={row} />}
-        {!subnav.tree && !subnav.loading && subnav.groups.every((group) => group.items.length === 0) && <p className="subnav-empty">{subnav.empty || "Nothing here yet."}</p>}
+        {!subnav.tree && !subnav.loading && subnav.groups.every((group) => group.items.length === 0) && <p className="subnav-empty m-[16px_10px] text-muted text-ui">{subnav.empty || "Nothing here yet."}</p>}
         {!subnav.tree && subnav.groups.filter((g) => !g.pinned).map((group, index) => group.items.length > 0 && (
-          <div key={group.title || index} className="subnav-group">
-            {group.title && <div className="nav-title">{group.title}</div>}
+          <div key={group.title || index} className="subnav-group [&_+_.subnav-group]:mt-1.5 [&_.nav-title]:p-[12px_10px_6px] [&_.nav-title]:text-2xs [&_.nav-title]:font-bold [&_.nav-title]:uppercase [&_.nav-title]:tracking-[0.1em] [&_.nav-title]:text-faint">
+            {group.title && <div className="nav-title text-2xs font-semibold uppercase tracking-[0.08em] text-faint p-[16px_10px_6px] [&::after]:hidden">{group.title}</div>}
             {group.items.map(row)}
           </div>
         ))}
       </nav>
-      {subnav.note && <div className="subnav-note">{subnav.note}</div>}
+      {subnav.note && <div className="subnav-note p-[10px_22px] [border-top:1px_solid_var(--line)] text-muted text-xs">{subnav.note}</div>}
       {!subnav.tree && subnav.groups.filter((g) => g.pinned && g.items.length > 0).map((group, index) => (
-        <div key={group.title || `pinned-${index}`} className="subnav-pinned">
-          {group.title && <div className="nav-title">{group.title}</div>}
+        <div key={group.title || `pinned-${index}`} className="subnav-pinned shrink-0 p-[6px_12px_10px] [border-top:1px_solid_var(--line-2)]">
+          {group.title && <div className="nav-title text-2xs font-semibold uppercase tracking-[0.08em] text-faint p-[16px_10px_6px] [&::after]:hidden">{group.title}</div>}
           {group.items.map(row)}
         </div>
       ))}
-      <Link href={backHref} className="subnav-foot"><Icon name="chevronRight" size={14} className="rotate-180" /> Overview</Link>
+      <Link href={backHref} className="subnav-foot h-[44px] box-border flex items-center gap-2 p-[0_16px] [border-top:1px_solid_var(--line)] text-muted text-ui-sm font-semibold [&:hover]:text-text"><Icon name="chevronRight" size={14} className="rotate-180 transform-[rotate(180deg)]" /> Overview</Link>
     </aside>
   );
 }
@@ -377,21 +377,21 @@ export default function Layout({ title, crumbs = [], children, full, subnav, flo
   return (
     <ToastProvider>
       <Head title={title} />
-      <div className={`shell side-${subnav && sidebar === "expanded" ? "hover" : sidebar} ${subnav ? "has-sub" : ""} ${navOpen ? "nav-open" : ""} ${flowPage ? "flow-page" : ""}`}>
+      <div className={`shell h-full p-0 max-navigation:p-0 max-navigation:gap-0 max-navigation:[&.nav-open_.sidebar]:transform-[none] [&_.term-in_input]:min-h-0 [&_.term-in_input]:h-auto [&_.term-in_input]:border-0 [&_.term-in_input]:rounded-none [&_.term-in_input]:p-0 [&_.term-in_input]:bg-transparent [&_.term-in_input]:shadow-none [&_.term-in_input:focus]:border-0 [&_.term-in_input:focus]:shadow-none [&_.term-find_input]:min-h-0 [&_.term-find_input]:h-auto [&_.term-find_input]:[border:1px_solid_var(--term-line)] [&_.term-find_input]:rounded-xs [&_.term-find_input]:p-[3px_8px] [&_.term-find_input]:bg-[#3c3c3c] [&_.term-find_input]:text-[var(--term-text)] [&_.term-find_input]:shadow-none [&_.term-find_input:focus]:[border-color:#007fd4] [&_.term-find_input:focus]:shadow-none [&.flow-page_.main.flow-main]:min-w-0 [&.flow-page_.main.flow-main]:min-h-0 [&.flow-page_.main.flow-main]:overflow-hidden [&.flow-page_.content.flow-content]:flex-1 [&.flow-page_.content.flow-content]:w-full [&.flow-page_.content.flow-content]:min-w-0 [&.flow-page_.content.flow-content]:min-h-0 [&.flow-page_.content.flow-content]:h-auto [&.flow-page_.content.flow-content]:max-w-none [&.flow-page_.content.flow-content]:p-0 [&.flow-page_.content.flow-content]:overflow-hidden [&.flow-page_.flow-shell]:w-full [&.flow-page_.flow-shell]:h-full [&.flow-page_.flow-shell]:min-w-0 [&.flow-page_.flow-shell]:min-h-0 [&.flow-page_.flow-shell]:overflow-hidden [&.flow-page_.palette]:min-w-0 [&.flow-page_.palette]:min-h-0 [&.flow-page_.palette]:overflow-x-hidden [&.flow-page_.palette]:overflow-y-auto [&.flow-page_.palette]:overscroll-contain [&.flow-page_.inspector]:min-w-0 [&.flow-page_.inspector]:min-h-0 [&.flow-page_.inspector]:overflow-x-hidden [&.flow-page_.inspector]:overflow-y-auto [&.flow-page_.inspector]:overscroll-contain [&.flow-page_.flow-canvas]:relative [&.flow-page_.flow-canvas]:min-w-0 [&.flow-page_.flow-canvas]:min-h-0 [&.flow-page_.flow-canvas]:overflow-hidden [&.flow-page_.flow-canvas]:bg-canvas [&.flow-page_.flow-canvas_>_.react-flow]:absolute [&.flow-page_.flow-canvas_>_.react-flow]:inset-[44px_0_0_0] [&.flow-page_.inspector-tabs]:p-[8px_12px_0] [&.flow-page_.inspector-body]:p-[0_14px_20px] grid grid-rows-[var(--bar)_minmax(0,_1fr)] bg-canvas [&_>_.frame]:h-auto [&_>_.frame]:min-h-0 [&_>_.frame]:bg-canvas [&:not(.side-collapsed):not(.side-hover)_.appbar-brand]:w-auto [&:not(.side-collapsed):not(.side-hover)_.appbar-brand]:justify-start [&:not(.side-collapsed):not(.side-hover)_.appbar-brand]:pl-[18px] [&_.content]:p-0 [&_.content]:max-w-none [&_.content]:flex [&_.content]:flex-col [&_.content]:min-h-[100%] [&_.content.full]:h-full [&_.content.full]:min-h-0 [&_.content_>_*]:mt-0! [&_.content_>_*]:mb-0 [&_.content_>_.page-head]:order-[-2] [&_.content_>_.page-head]:flex [&_.content_>_.page-head]:items-center [&_.content_>_.page-head]:justify-between [&_.content_>_.page-head]:gap-4 [&_.content_>_.page-head]:min-h-[72px] [&_.content_>_.page-head]:m-0 [&_.content_>_.page-head]:p-[16px_var(--gutter)] [&_.content_>_.page-head]:[border-bottom:1px_solid_var(--line)] [&_.content_>_.card]:m-0 [&_.content_>_.card]:border-0 [&_.content_>_.card]:rounded-none [&_.content_>_.card]:[border-bottom:1px_solid_var(--line)] [&_.content_>_.card]:bg-transparent [&_.content_>_.card]:p-[20px_var(--gutter)] [&_.content_>_.form-section]:m-0 [&_.content_>_.form-section]:border-0 [&_.content_>_.form-section]:rounded-none [&_.content_>_.form-section]:[border-bottom:1px_solid_var(--line)] [&_.content_>_.form-section]:bg-transparent [&_.content_>_.form-section]:p-[20px_var(--gutter)] [&_.content_>_section]:m-0 [&_.content_>_section]:border-0 [&_.content_>_section]:rounded-none [&_.content_>_section]:[border-bottom:1px_solid_var(--line)] [&_.content_>_section]:bg-transparent [&_.content_>_section]:p-[20px_var(--gutter)] [&_.content_>_.card.flush]:p-0 [&_.content_>_.card.flush_>_.card-head]:p-[0_var(--gutter)] [&_.content_>_.alert]:m-[12px_var(--gutter)_0] [&_.content_>_:where(.stack,_.grid,_.grid2,_.row,_.spread,_.obs-bar,_.segmented,_.usage-filters,_.split,_div:not([class]))]:p-[16px_var(--gutter)] [&_.content_>_:where(.stack,_.grid,_.grid2,_.obs-split)]:[border-bottom:1px_solid_var(--line)] [&_.content_>_.obs-split]:p-[16px_var(--gutter)] [&_.content_>_.tabs]:p-[0_var(--gutter)] [&_.content_>_.tabs]:m-0 [&_.content_>_.card.flush_th:first-child]:pl-gutter [&_.content_>_.card.flush_td:first-child]:pl-gutter [&_.content_>_.table-wrap_th:first-child]:pl-gutter [&_.content_>_.table-wrap_td:first-child]:pl-gutter [&_.content_>_.card.flush_th:last-child]:pr-gutter [&_.content_>_.card.flush_td:last-child]:pr-gutter [&_.content_>_.table-wrap_th:last-child]:pr-gutter [&_.content_>_.table-wrap_td:last-child]:pr-gutter [&_.content_>_.spread_.chips]:gap-0 [&_.content_>_.spread_.chips]:flex-nowrap [&_.content_>_.spread_.chips]:[border:1px_solid_var(--line-2)] [&_.content_>_.spread_.chips]:rounded-sm [&_.content_>_.spread_.chips]:overflow-hidden [&_.content_>_.spread_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_.content_>_.spread_.chip]:p-[0_10px] [&_.content_>_.spread_.chip]:border-0 [&_.content_>_.spread_.chip]:[border-left:1px_solid_var(--line-2)] [&_.content_>_.spread_.chip]:rounded-none [&_.content_>_.spread_.chip]:bg-transparent [&_.content_>_.spread_.chip]:text-muted [&_.content_>_.spread_.chip]:text-xs [&_.content_>_.spread_.chip]:font-medium-plus [&_.content_>_.spread_.chip:first-child]:border-l-0 [&_.content_>_.ov-grid]:p-0 [&:not(.side-collapsed):not(.side-hover)_.appbar-brand]:h-auto [&:not(.side-collapsed):not(.side-hover)_.appbar-brand]:p-[0_6px_0_0] [&:not(.side-collapsed):not(.side-hover)_.appbar-brand]:border-r-0 grid-cols-[minmax(0,_1fr)] w-full overflow-clip [&_>_.frame]:min-w-0 [&_.content_>_.page-head]:flex-wrap [&_.content_>_.page-head]:gap-y-2.5 [&_.content_>_.ex-context]:m-0 [&_.content_>_.ex-context]:p-[18px_var(--gutter)_16px] [&_.content_>_.ex-context]:[border-bottom:1px_solid_var(--line)] [&_.content_>_.fw-flat]:p-0 [&_.content_>_.fw-flat]:grid [&_.content_>_.fw-flat]:[border-bottom:1px_solid_var(--line)] [&_.content_>_.ov-board]:order-[0] [&_.content_>_.ov-board]:m-[16px_var(--gutter)]! [&_.content_>_.ov-board]:[border:1px_solid_var(--line-2)] [&_.content_>_.ov-board]:rounded-[calc(var(--r)_+_4px)] [&_.content_>_.ov-board]:overflow-hidden [&_.content_>_.ov-board]:bg-transparent [&_.content_>_.ov-board]:shadow-none side-${subnav && sidebar === "expanded" ? "hover" : sidebar} ${subnav ? "has-sub" : ""} ${navOpen ? "nav-open" : ""} ${flowPage ? "flow-page" : ""}`}>
        <TopBar runtime={runtime} envs={envs} env={env} section={section} confined={confined} crumbs={crumbs} onMenu={() => setNavOpen(true)} onHistory={() => setHistoryOpen(true)} onCreateEnv={() => setNewEnv(true)} />
-       <div className="frame">
-        <div className="side-slot">
-        <button type="button" className="side-collapse" onClick={() => setSidebar(sidebar === "expanded" ? "collapsed" : "expanded")} aria-label={sidebar === "expanded" ? "Collapse the sidebar" : "Expand the sidebar"} title={sidebar === "expanded" ? "Collapse" : "Expand"}><Icon name="chevronRight" size={14} style={{ transform: sidebar === "expanded" ? "rotate(180deg)" : "none" }} /></button>
-        <aside className="sidebar">
-          <nav className="nav">
+       <div className="frame relative flex h-full bg-canvas">
+        <div className="side-slot relative w-[236px] shrink-0 transition-[width_0.18s_ease] z-[30] max-navigation:w-0">
+        <button type="button" className="side-collapse absolute z-[40] grid place-items-center cursor-pointer text-muted top-[50%] right-[-12px] w-6 h-6 transform-[translateY(-50%)] [border:1px_solid_var(--line-2)] rounded-sm bg-canvas shadow-none" onClick={() => setSidebar(sidebar === "expanded" ? "collapsed" : "expanded")} aria-label={sidebar === "expanded" ? "Collapse the sidebar" : "Expand the sidebar"} title={sidebar === "expanded" ? "Collapse" : "Expand"}><Icon name="chevronRight" size={14} style={{ transform: sidebar === "expanded" ? "rotate(180deg)" : "none" }} /></button>
+        <aside className="sidebar w-[236px] shrink-0 bg-canvas rounded-none flex flex-col min-h-0 p-[8px_0_12px] max-navigation:fixed max-navigation:inset-[0_auto_0_0] max-navigation:z-[40] max-navigation:shadow-none max-navigation:transform-[translateX(-120%)] max-navigation:transition-[transform_0.25s_ease] absolute inset-[0_auto_0_0] [border-right:1px_solid_var(--line)] transition-[width_0.18s_ease] [&_.brand]:pb-3.5 [&_.brand]:[border-bottom:1px_solid_var(--line-2)] [&_.brand]:mb-2.5 max-navigation:w-[292px]! max-navigation:px-3.5! max-navigation:[&_.label]:[display:revert]! max-navigation:[&_.brand-name]:[display:revert]! max-navigation:[&_.nav-title]:[display:revert]! overflow-visible [&_.nav]:overflow-y-auto [&_.nav]:overflow-x-hidden [&_.brand]:h-[var(--bar)] [&_.brand]:box-border [&_.brand]:m-0 [&_.brand]:p-[0_22px] [&_.brand]:items-center [&_.nav]:m-0 [&_.nav]:p-[0_10px] max-navigation:[border-right:1px_solid_var(--line-2)] [&_.brand]:hidden [&::after]:hidden [&::before]:hidden">
+          <nav className="nav overflow-auto flex-1 m-[0_-4px] p-[0_4px] [&_a]:flex [&_a]:items-center [&_a]:gap-2.5 [&_a]:p-[0_10px] [&_a]:rounded-sm [&_a]:text-muted [&_a]:font-medium [&_a]:text-body [&_a]:transition-[background_0.15s,_color_0.15s] [&_a_+_a]:mt-px [&_a:hover]:bg-hover [&_a:hover]:text-text [&_a.active]:bg-brand-soft [&_a.active]:text-brand-strong [&_a.active]:font-semibold [&_a_.icon]:opacity-100 [&_a_.grow]:overflow-hidden [&_a_.grow]:text-ellipsis [&_a_.grow]:whitespace-nowrap [&_a_>_span:not(.icon):not(.badge)]:overflow-hidden [&_a_>_span:not(.icon):not(.badge)]:text-ellipsis [&_a_>_span:not(.icon):not(.badge)]:whitespace-nowrap [&_a_.badge]:shrink-0 [&_a_.badge]:max-w-[45%] [&_a_.badge]:overflow-hidden [&_a_.badge]:text-ellipsis [&_.nav-title]:flex [&_.nav-title]:items-center [&_.nav-title]:justify-between [&_.nav-title]:w-full [&_.nav-title]:p-[12px_12px_6px] [&_.nav-title]:border-0 [&_.nav-title]:bg-none [&_.nav-title]:font-inherit [&_.nav-title]:text-2xs [&_.nav-title]:font-bold [&_.nav-title]:uppercase [&_.nav-title]:tracking-[0.1em] [&_.nav-title]:text-faint [&_.nav-title]:cursor-default [&_.nav-title:hover]:text-faint [&_.nav-title_.icon]:transition-[transform_0.15s] [&_a]:relative [&_a]:h-8 [&_a_.icon]:w-[17px] [&_a_.icon]:h-[17px] [&_a.active]:shadow-none [&_a.active::before]:hidden [&_a_.icon]:text-inherit [&_a.active]:border-brand-line [&_a.active_.icon]:text-brand">
             {env ? (
               ENV_NAV.map((group) => (
-                <div key={group.title} className="nav-group">
-                  <div className="nav-title">{group.title}</div>
+                <div key={group.title} className="nav-group [&_+_.nav-group]:mt-1.5 [&.closed_.nav-title_.icon]:transform-[rotate(-90deg)] [&.closed_.nav-items]:hidden">
+                  <div className="nav-title text-2xs font-semibold uppercase tracking-[0.08em] text-faint p-[16px_10px_6px] [&::after]:hidden">{group.title}</div>
                   <div className="nav-items">
                     {group.items.map(([key, label, to, icon]) => (
                       <Link key={key} data-tour={`nav-${key}`} href={envHref(env, to || key)} className={section === key || (key === "data" && DATA_SECTIONS.includes(section)) || (key === "webhooks" && WEBHOOK_PAGES.some(([page]) => page === section)) ? "active" : ""} title={label}>
-                        <Icon name={icon || key} size={16} /><span className="label">{label}</span>
+                        <Icon name={icon || key} size={16} /><span className="label whitespace-nowrap">{label}</span>
                       </Link>
                     ))}
                   </div>
@@ -399,11 +399,11 @@ export default function Layout({ title, crumbs = [], children, full, subnav, flo
               ))
             ) : (
               <>
-                <div className="nav-title">{name}</div>
+                <div className="nav-title text-2xs font-semibold uppercase tracking-[0.08em] text-faint p-[16px_10px_6px] [&::after]:hidden">{name}</div>
                 {(envs || []).map((e, i) => (
                   <Link key={e.name} href={envHref(e.name, "overview")}>
-                    <span className={`avatar pastel ${envTone(e.name, i)}`} style={{ width: 18, height: 18, fontSize: 10 }}>{e.name.slice(0, 1).toUpperCase()}</span>
-                    <span className="label">{e.name}</span>
+                    <span className={`avatar grid place-items-center font-extrabold text-base text-pastel-ink bg-lavender shrink-0 [&.pastel]:bg-sunken [&.pastel]:text-text [&.pastel]:[border:1px_solid_var(--line-2)] [&.pastel.lavender]:bg-sunken [&.pastel.lavender]:text-text [&.pastel.lavender]:[border:1px_solid_var(--line-2)] pastel text-text pastel-contrast [&.lavender]:bg-lavender [&.peach]:bg-peach [&.mint]:bg-mint [&.butter]:bg-butter [&.sky]:bg-sky [&.rose]:bg-rose [&.lavender]:text-text [&.peach]:text-text [&.mint]:text-text [&.butter]:text-text [&.sky]:text-text [&.rose]:text-text ${envTone(e.name, i)}`} style={{ width: 18, height: 18, fontSize: 10 }}>{e.name.slice(0, 1).toUpperCase()}</span>
+                    <span className="label whitespace-nowrap">{e.name}</span>
                   </Link>
                 ))}
               </>
@@ -411,17 +411,17 @@ export default function Layout({ title, crumbs = [], children, full, subnav, flo
           </nav>
         </aside>
         </div>
-        <div className={`workspace ${subnav ? "has-secondary" : ""}`}>
-          {subnav && <nav className="secondary-bar" aria-label={`${subnav.title} section navigation`}>
+        <div className={`workspace flex-1 min-w-0 min-h-0 flex flex-col ${subnav ? "has-secondary" : ""}`}>
+          {subnav && <nav className="secondary-bar h-[var(--bar)] [flex:0_0_var(--bar)] flex items-center gap-2.5 p-[0_16px] [border-bottom:1px_solid_var(--line)] bg-[color-mix(in_srgb,_var(--canvas)_94%,_var(--surface))] text-base [&_b]:font-semibold [&_.subnav-action]:ml-auto" aria-label={`${subnav.title} section navigation`}>
             <b>{subnav.title}</b>
-            {subnav.action && <button type="button" className="subnav-action" onClick={subnav.action.onClick} title={subnav.action.label} aria-label={subnav.action.label}><Icon name="plus" size={16} /></button>}
+            {subnav.action && <button type="button" className="subnav-action grid place-items-center w-control-sm h-control-sm [border:1px_solid_var(--line-2)] rounded-sm bg-transparent text-text cursor-pointer [&:hover]:bg-hover" onClick={subnav.action.onClick} title={subnav.action.label} aria-label={subnav.action.label}><Icon name="plus" size={16} /></button>}
           </nav>}
-          <div className="workspace-body">
+          <div className="workspace-body flex-1 min-h-0 flex">
             {subnav && <SubNav subnav={subnav} backHref={env ? envHref(env, "overview") : "/"} showHeader={false} />}
-            {navOpen && <div className="sheet-overlay" style={{ zIndex: 39 }} onClick={() => setNavOpen(false)} />}
-            <div className="main-col">
-              <main className={`main ${flowPage ? "flow-main" : ""}`}>
-                <div className={`content ${full ? "full" : ""} ${flowPage ? "flow-content" : ""}`}>
+            {navOpen && <div className="sheet-overlay fixed inset-0 bg-[rgba(6,_5,_10,_0.55)] backdrop-filter-none z-[50] animate-[fade_0.15s_ease]" style={{ zIndex: 39 }} onClick={() => setNavOpen(false)} />}
+            <div className="main-col flex-1 min-w-0 flex flex-col h-full [&_.main]:flex-1 [&_.main]:min-h-0">
+              <main className={`main flex-1 min-w-0 overflow-auto bg-canvas rounded-none [&_>_.topbar]:hidden ${flowPage ? "flow-main" : ""}`}>
+                <div className={`content p-[4px_32px_64px] max-w-[1320px] [&.full]:max-w-none [&.full]:p-0 [&.full]:h-[calc(100%_-_76px)] max-navigation:p-[4px_16px_48px] [&_>_:where(.card,_.form-section,_section,_.alert,_.notice)_+_:where(.card,_.form-section,_section,_.alert,_.notice)]:mt-4 ${full ? "full" : ""} ${flowPage ? "flow-content" : ""}`}>
                   {children}
                 </div>
               </main>

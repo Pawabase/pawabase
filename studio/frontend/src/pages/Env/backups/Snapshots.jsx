@@ -32,7 +32,7 @@ export default function Snapshots({ env, base, list }) {
   return (
     <Card
       title="Saved backups"
-      actions={<div className="row">
+      actions={<div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5">
         <Button onClick={() => list.data && setScheduling(list.data.schedule)}>Schedule</Button>
         <Button variant="primary" onClick={() => setTaking(true)}>Back up now</Button>
       </div>}
@@ -41,7 +41,7 @@ export default function Snapshots({ env, base, list }) {
       <Loading state={list} empty="No saved backups yet. Take one now, or turn on a schedule.">
         {(data) => (
           <>
-            <div className="muted small" style={{ padding: "10px 16px" }}>
+            <div className="muted text-muted small text-ui-sm" style={{ padding: "10px 16px" }}>
               {data.schedule.enabled
                 ? <>Automatic: {data.schedule.frequency}{data.schedule.frequency !== "hourly" ? ` at ${String(data.schedule.hour).padStart(2, "0")}:00 UTC` : ""}{data.schedule.frequency === "weekly" ? ` on ${DAYS[data.schedule.weekday]}s` : ""}, keeping the last {data.schedule.keep_last || "any number"} for up to {data.schedule.keep_days || "any number of"} days.{data.schedule.last_run_at ? ` Last ran ${when(data.schedule.last_run_at)} (${data.schedule.last_status}).` : ""}</>
                 : "Automatic backups are off."}
@@ -51,13 +51,13 @@ export default function Snapshots({ env, base, list }) {
               <Table
                 rows={data.data}
                 columns={[
-                  { label: "Backup", render: (s) => <div><strong>{s.name}</strong>{s.note && <div className="faint small">{s.note}</div>}</div> },
+                  { label: "Backup", render: (s) => <div><strong>{s.name}</strong>{s.note && <div className="faint text-faint small text-ui-sm">{s.note}</div>}</div> },
                   { label: "Kind", render: (s) => <Badge tone={TRIGGERS[s.trigger]?.[1]}>{TRIGGERS[s.trigger]?.[0] || s.trigger}</Badge> },
-                  { label: "Holds", render: (s) => <span className="muted small">{(s.include || []).join(", ")}</span> },
+                  { label: "Holds", render: (s) => <span className="muted text-muted small text-ui-sm">{(s.include || []).join(", ")}</span> },
                   { label: "Size", render: (s) => (s.status === "complete" ? size(s.size_bytes) : <Badge tone="red">{s.status}</Badge>) },
                   { label: "Taken", render: (s) => when(s.created_at) },
                   { label: "Check", render: (s) => verdicts[s.id] ? <Badge tone={verdicts[s.id].ok ? "green" : "red"}>{verdicts[s.id].ok ? "intact" : "damaged"}</Badge> : <Button size="sm" disabled={s.status !== "complete"} onClick={() => verify(s)}>Verify</Button> },
-                  { label: "", render: (s) => <div className="row">
+                  { label: "", render: (s) => <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5">
                     <Button size="sm" disabled={s.status !== "complete"} onClick={() => setRestoring(s)}>Restore</Button>
                     <Button size="sm" disabled={s.status !== "complete"} onClick={() => run(async () => save(`${env}-${s.created_at.slice(0, 19).replace(/:/g, "-")}.pawabase-backup.json`, await get(`${base}/snapshots/${s.id}/download`)))}>Download</Button>
                     <Button size="sm" onClick={async () => { if (await run(() => patch(`${base}/snapshots/${s.id}`, { pinned: !s.pinned }), s.pinned ? "Unpinned" : "Pinned: retention will keep it")) list.reload(); }}>{s.pinned ? "Unpin" : "Pin"}</Button>
@@ -78,9 +78,9 @@ export default function Snapshots({ env, base, list }) {
 
 function PartPicker({ value, onChange }) {
   return (
-    <div className="stack" style={{ gap: 6 }}>
+    <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 6 }}>
       {PARTS.map(([key, label]) => (
-        <label className="check" key={key}>
+        <label className="check [label&]:flex [label&]:items-center [label&]:gap-2 [label&]:text-text [label&]:text-ui" key={key}>
           <input type="checkbox" checked={value.includes(key)} onChange={() => onChange(value.includes(key) ? value.filter((k) => k !== key) : [...value, key])} /> {label}
         </label>
       ))}
@@ -109,12 +109,12 @@ function ScheduleSheet({ base, schedule, onClose, onDone }) {
       <Switch checked={data.enabled} onChange={(enabled) => setData({ ...data, enabled })} label="Back up automatically" hint="Taken by the platform's scheduler and kept in its object storage." />
       <Field label="How often"><Segmented value={data.frequency} onChange={(frequency) => setData({ ...data, frequency })} options={[["hourly", "Hourly"], ["daily", "Daily"], ["weekly", "Weekly"]]} /></Field>
       {data.frequency !== "hourly" && (
-        <div className="grid2">
+        <div className="grid2 grid grid-cols-2 gap-[14px_16px] max-tablet:grid-cols-1">
           <Field label="At (UTC hour)"><input type="number" min="0" max="23" value={data.hour} onChange={num("hour")} /></Field>
           {data.frequency === "weekly" && <Field label="On"><select value={data.weekday} onChange={num("weekday")}>{DAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}</select></Field>}
         </div>
       )}
-      <div className="grid2">
+      <div className="grid2 grid grid-cols-2 gap-[14px_16px] max-tablet:grid-cols-1">
         <Field label="Keep the last" hint="Scheduled backups; 0 for no limit."><input type="number" min="0" value={data.keep_last} onChange={num("keep_last")} /></Field>
         <Field label="Keep for (days)" hint="0 for no limit. Pinned backups are never removed."><input type="number" min="0" value={data.keep_days} onChange={num("keep_days")} /></Field>
       </div>
@@ -138,10 +138,10 @@ function RestoreSheet({ env, base, snapshot, onClose, onDone }) {
   return (
     <Modal title={`Restore: ${snapshot.name}`} onClose={report ? onDone : onClose} footer={report ? <Button variant="primary" onClick={onDone}>Done</Button> : <Button variant={strategy === "replace" ? "danger" : "primary"} disabled={busy || !ready} onClick={go}>{busy ? "Restoring…" : strategy === "replace" ? "Replace from backup" : "Restore"}</Button>}>
       {report ? (
-        <div className="stack">
-          {report.safety_snapshot && <div className="alert info">The environment as it was is saved as a "Before restore" backup, so this can be undone.</div>}
+        <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
+          {report.safety_snapshot && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] info">The environment as it was is saved as a "Before restore" backup, so this can be undone.</div>}
           <Field label="Restored"><pre className="json">{JSON.stringify({ ...report, warnings: undefined, safety_snapshot: undefined }, null, 2)}</pre></Field>
-          {report.warnings?.map((w, i) => <span className="muted" key={i}>{w}</span>)}
+          {report.warnings?.map((w, i) => <span className="muted text-muted" key={i}>{w}</span>)}
         </div>
       ) : (
         <>

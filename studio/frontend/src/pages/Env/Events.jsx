@@ -44,9 +44,9 @@ function Graph({ base }) {
     <Card flush>
       <Loading state={graph} empty="No producers or consumers defined yet.">
         {(data) => <Table rows={data.data.map((r) => ({ ...r, id: r.event }))} columns={[
-          { label: "Producers", render: (r) => <div className="row wrap">{r.producers.map((p) => <Badge key={p} tone="blue">{p}</Badge>)}</div> },
+          { label: "Producers", render: (r) => <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">{r.producers.map((p) => <Badge key={p} tone="blue">{p}</Badge>)}</div> },
           { label: "Event", render: (r) => <code>{r.event}</code> },
-          { label: "Consumers", render: (r) => <div className="row wrap">{r.consumers.map((c) => <Badge key={typeof c === "string" ? c : JSON.stringify(c)} tone="green">{typeof c === "string" ? c : c.name || JSON.stringify(c)}</Badge>)}</div> },
+          { label: "Consumers", render: (r) => <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">{r.consumers.map((c) => <Badge key={typeof c === "string" ? c : JSON.stringify(c)} tone="green">{typeof c === "string" ? c : c.name || JSON.stringify(c)}</Badge>)}</div> },
         ]} />}
       </Loading>
     </Card>
@@ -63,7 +63,7 @@ function Runs({ base, env, onOpen }) {
           { label: "Flow", render: (r) => <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.visit(`/envs/${env}/flows/${r.flow}`); }} style={{ color: "var(--brand)" }}>{r.flow}</a> },
           { label: "Status", render: (r) => <Status value={r.status} /> }, { label: "Trigger", key: "trigger" },
           { label: "Duration", render: (r) => (r.duration_ms != null ? `${Math.round(r.duration_ms)} ms` : "—") },
-          { label: "Error", render: (r) => r.error && <span className="error-text">{r.error}</span> }, { label: "When", render: (r) => when(r.created_at) },
+          { label: "Error", render: (r) => r.error && <span className="error-text text-danger text-ui-sm font-medium">{r.error}</span> }, { label: "When", render: (r) => when(r.created_at) },
         ]} />}
       </Loading>
     </Card>
@@ -75,9 +75,9 @@ function Mail({ base }) {
   const [to, setTo] = useState("");
   const [run, busy] = useAction();
   return (
-    <div className="stack lg">
+    <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
       <Card title="Send a test message">
-        <div className="row"><input placeholder="you@example.com" value={to} onChange={(e) => setTo(e.target.value)} /><Button disabled={busy || !to} onClick={() => run(() => post(`${base}/mail/test`, { to: [to] }), "Test message queued")}>Send</Button></div>
+        <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5"><input placeholder="you@example.com" value={to} onChange={(e) => setTo(e.target.value)} /><Button disabled={busy || !to} onClick={() => run(() => post(`${base}/mail/test`, { to: [to] }), "Test message queued")}>Send</Button></div>
       </Card>
       <Card flush title="Mail log">
         <Loading state={log} empty="Nothing sent yet.">

@@ -36,8 +36,8 @@ export function PolicyPicker({ value, onChange, policies = [], nullLabel = "Defa
     else onChange(next);
   };
   return (
-    <div className="stack sm">
-      <div className="list-row">
+    <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 sm">
+      <div className="list-row flex items-center gap-2 [&_>_input]:flex-1 [&_>_input]:min-w-0 [&_>_select]:flex-1 [&_>_select]:min-w-0">
         <select value={mode} onChange={(e) => choose(e.target.value)}>
           {allowNull && <option value="__null">{nullLabel}</option>}
           <optgroup label="Built-in">
@@ -66,10 +66,10 @@ export function PolicyPicker({ value, onChange, policies = [], nullLabel = "Defa
       </div>
       {mode === "__custom" && <ConditionBuilder tree={tree} onChange={(t, cond) => { setTree(t); onChange(cond); }} />}
       {mode === "__list" && (
-        <div className="stack sm" style={{ paddingLeft: 16, borderLeft: "2px solid var(--line)" }}>
+        <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 sm" style={{ paddingLeft: 16, borderLeft: "2px solid var(--line)" }}>
           {value.map((item, i) => (
-            <div key={i} className="row" style={{ alignItems: "flex-start" }}>
-              <div className="grow"><PolicyPicker value={item} onChange={(v) => onChange(value.map((x, j) => (j === i ? v : x)))} policies={policies} allowNull={false} allowList={false} /></div>
+            <div key={i} className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ alignItems: "flex-start" }}>
+              <div className="grow flex-1 min-w-0"><PolicyPicker value={item} onChange={(v) => onChange(value.map((x, j) => (j === i ? v : x)))} policies={policies} allowNull={false} allowList={false} /></div>
               <IconButton icon="trash" label="Remove" onClick={() => onChange(value.filter((_, j) => j !== i))} disabled={value.length <= 1} />
             </div>
           ))}

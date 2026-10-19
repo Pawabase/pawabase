@@ -49,9 +49,9 @@ export default function Status({ env }) {
           <>
             <Section title="Page" description="Turn it on and the gateway starts serving it. Sampling begins as soon as it is enabled.">
               <Card>
-               <div className="stack lg">
+               <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
                 <Switch checked={draft.enabled} onChange={(enabled) => set({ enabled })} label="Publish the status page" hint={draft.enabled ? <>Live at <CopyText text={publicUrl} label={publicUrl} /> and <code>{publicUrl}.json</code></> : "Hidden: the address returns 404."} />
-                <div className="grid2">
+                <div className="grid2 grid grid-cols-2 gap-[14px_16px] max-tablet:grid-cols-1">
                   <Field label="Title"><input value={draft.title} onChange={(e) => set({ title: e.target.value })} /></Field>
                   <Field label="Support link" optional><input value={draft.contact_url} onChange={(e) => set({ contact_url: e.target.value })} placeholder="https://example.com/support" /></Field>
                 </div>
@@ -73,7 +73,7 @@ export default function Status({ env }) {
                     ) },
                     { label: "Now", render: (c) => {
                       const live = data.preview?.components.find((x) => x.name === c.name);
-                      return live ? <Badge tone={TONES[live.status]}>{live.status}{live.uptime != null ? ` · ${live.uptime}%` : ""}</Badge> : <span className="faint">—</span>;
+                      return live ? <Badge tone={TONES[live.status]}>{live.status}{live.uptime != null ? ` · ${live.uptime}%` : ""}</Badge> : <span className="faint text-faint">—</span>;
                     } },
                     { label: "", render: (c) => <Button size="sm" variant="danger" onClick={() => set({ components: draft.components.filter((_, n) => n !== c.i) })}>Remove</Button> },
                   ]}
@@ -99,7 +99,7 @@ export default function Status({ env }) {
                   { label: "Impact", key: "impact" },
                   { label: "Affects", render: (i) => (i.components?.length ? i.components.join(", ") : "everything") },
                   { label: "Started", render: (i) => when(i.created_at) },
-                  { label: "", render: (i) => <div className="row">
+                  { label: "", render: (i) => <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5">
                     <Button size="sm" onClick={() => setUpdating(i)}>Post update</Button>
                     <Button size="sm" variant="danger" onClick={async () => { if (confirm("Delete this incident and its updates?") && await run(() => del(`${base}/incidents/${i.id}`), "Deleted")) { incidents.reload(); page.reload(); } }}>Delete</Button>
                   </div> },
@@ -121,7 +121,7 @@ function IncidentSheet({ base, draft, names, onClose, onDone }) {
   return (
     <Modal title="Open incident" onClose={onClose} footer={<Button variant="primary" disabled={busy || !data.title} onClick={async () => { if (await run(() => post(`${base}/incidents`, data), "Incident opened")) onDone(); }}>Publish</Button>}>
       <Field label="Title"><input value={data.title} onChange={(e) => setData({ ...data, title: e.target.value })} placeholder="Sign-in is slow" /></Field>
-      <div className="grid2">
+      <div className="grid2 grid grid-cols-2 gap-[14px_16px] max-tablet:grid-cols-1">
         <Field label="Stage"><select value={data.status} onChange={(e) => setData({ ...data, status: e.target.value })}>{STAGES.map((s) => <option key={s}>{s}</option>)}</select></Field>
         <Field label="Impact"><select value={data.impact} onChange={(e) => setData({ ...data, impact: e.target.value })}>{IMPACTS.map((s) => <option key={s}>{s}</option>)}</select></Field>
       </div>
@@ -136,13 +136,13 @@ function UpdateSheet({ base, incident, onClose, onDone }) {
   const [run, busy] = useAction();
   return (
     <Modal title={`Update: ${incident.title}`} onClose={onClose} footer={<Button variant="primary" disabled={busy || !data.message} onClick={async () => { if (await run(() => post(`${base}/incidents/${incident.id}/updates`, data), "Update posted")) onDone(); }}>Post</Button>}>
-      <div className="grid2">
+      <div className="grid2 grid grid-cols-2 gap-[14px_16px] max-tablet:grid-cols-1">
         <Field label="Stage"><select value={data.status} onChange={(e) => setData({ ...data, status: e.target.value })}>{STAGES.map((s) => <option key={s}>{s}</option>)}</select></Field>
         <Field label="Impact"><select value={data.impact} onChange={(e) => setData({ ...data, impact: e.target.value })}>{IMPACTS.map((s) => <option key={s}>{s}</option>)}</select></Field>
       </div>
       <Field label="Message"><textarea rows={3} value={data.message} onChange={(e) => setData({ ...data, message: e.target.value })} /></Field>
-      <div className="stack" style={{ marginTop: 10 }}>
-        {[...(incident.updates || [])].reverse().map((u, n) => <div key={n} className="muted small"><b>{u.status}</b> · {when(u.at)} — {u.message}</div>)}
+      <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ marginTop: 10 }}>
+        {[...(incident.updates || [])].reverse().map((u, n) => <div key={n} className="muted text-muted small text-ui-sm"><b>{u.status}</b> · {when(u.at)} — {u.message}</div>)}
       </div>
     </Modal>
   );

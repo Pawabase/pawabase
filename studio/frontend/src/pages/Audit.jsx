@@ -16,7 +16,7 @@ export default function Audit({ entries }) {
     <Layout title="Audit log">
       <PageHead title="Audit log" description="Every change made through Studio, the API and the CLI, and who made it. Kept for the installation's audit retention (a year by default)."
         actions={<><Button onClick={() => window.open(exportUrl("csv"))}>Export CSV</Button><Button onClick={() => window.open(exportUrl("jsonl"))}>Export JSON lines</Button></>} />
-      <div className="row wrap" style={{ marginBottom: 12 }}>
+      <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap" style={{ marginBottom: 12 }}>
         <input placeholder="Action, e.g. webhook.*" defaultValue="" onChange={set("action")} style={{ width: 220 }} />
         <input placeholder="Actor" onChange={set("actor")} style={{ width: 180 }} />
         <input placeholder="Environment" onChange={set("env")} style={{ width: 160 }} />
@@ -29,7 +29,7 @@ export default function Audit({ entries }) {
               empty="Nothing matches."
               columns={[
                 { label: "When", render: (r) => <span title={r.created_at}>{when(r.created_at)}</span> },
-                { label: "Actor", render: (r) => r.actor || <span className="faint">—</span> },
+                { label: "Actor", render: (r) => r.actor || <span className="faint text-faint">—</span> },
                 { label: "Action", render: (r) => <code>{r.action}</code> },
                 { label: "Environment", render: (r) => r.env || "—" },
                 { label: "Target", key: "target" },

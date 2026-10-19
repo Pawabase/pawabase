@@ -15,7 +15,7 @@ export default function Mfa({ env, base }) {
   const reset = async (user) => { if (confirm(`Remove ${user.email}'s second factors? They will sign in with a password alone until they enrol again.`) && await run(() => post(`${base}/users/${user.id}/mfa/reset`, {}, AUTH), "Second factors removed")) users.reload(); };
   const off = !config.value.mfa_enabled;
   return (
-    <div className="stack lg">
+    <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
       <Loading state={config.state}>
         {() => (
           <>
@@ -41,10 +41,10 @@ export default function Mfa({ env, base }) {
               </Field>
               {policy.require !== "off" && (
                 <Field label="Grace period" hint="Days a new account may sign in without one. 0 asks at the first sign-in.">
-                  <div className="row"><input type="number" min={0} max={90} value={policy.grace_days} onChange={(e) => setPolicy({ grace_days: Math.min(90, Math.max(0, Number(e.target.value) || 0)) })} style={{ maxWidth: 120 }} /><span className="muted">days</span></div>
+                  <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5"><input type="number" min={0} max={90} value={policy.grace_days} onChange={(e) => setPolicy({ grace_days: Math.min(90, Math.max(0, Number(e.target.value) || 0)) })} style={{ maxWidth: 120 }} /><span className="muted text-muted">days</span></div>
                 </Field>
               )}
-              {policy.require === "admins" && <p className="hint" style={{ margin: 0 }}>Administrators are people with an admin or owner role, staff accounts, and owners or admins of an organization.</p>}
+              {policy.require === "admins" && <p className="hint text-xs font-book text-muted leading-[1.45]" style={{ margin: 0 }}>Administrators are people with an admin or owner role, staff accounts, and owners or admins of an organization.</p>}
               {policy.require !== "off" && !policy.totp && !policy.email && <p className="note bad" style={{ margin: 0 }}>Turn on at least one strategy, or nobody can enrol and the requirement is ignored.</p>}
             </SettingsPanel>
           </>
@@ -57,8 +57,8 @@ export default function Mfa({ env, base }) {
               rows={data.data}
               empty="Nobody here."
               columns={[
-                { label: "User", render: (u) => <span className="row"><Avatar text={u.email} size={28} /><b>{u.email}</b></span> },
-                { label: "Second factors", render: (u) => ((u.mfa_factors || []).length ? <span className="row" style={{ gap: 6 }}>{u.mfa_factors.map((k) => <Badge key={k} tone="blue">{LABELS[k] || k}</Badge>)}</span> : u.mfa_enabled ? <Badge tone="blue">enrolled</Badge> : <span className="faint">none</span>) },
+                { label: "User", render: (u) => <span className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5"><Avatar text={u.email} size={28} /><b>{u.email}</b></span> },
+                { label: "Second factors", render: (u) => ((u.mfa_factors || []).length ? <span className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ gap: 6 }}>{u.mfa_factors.map((k) => <Badge key={k} tone="blue">{LABELS[k] || k}</Badge>)}</span> : u.mfa_enabled ? <Badge tone="blue">enrolled</Badge> : <span className="faint text-faint">none</span>) },
                 { label: "Last sign-in", render: (u) => when(u.last_sign_in_at) },
                 { label: "", render: (u) => u.mfa_enabled && <Button size="sm" disabled={busy} onClick={() => reset(u)}>Reset</Button> },
               ]}

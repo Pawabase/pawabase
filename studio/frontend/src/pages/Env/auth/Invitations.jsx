@@ -37,9 +37,9 @@ export function InviteSheet({ base, org, onClose, onSent }) {
   return (
     <Modal title="Invite people" onClose={onClose} footer={results ? <Button variant="primary" onClick={onClose}>Done</Button> : <Button variant="primary" disabled={busy || !chosen || !emails.length || bad.length > 0} onClick={send}>{emails.length > 1 ? `Send ${emails.length} invitations` : "Send invitation"}</Button>}>
       {results ? (
-        <div className="stack">
+        <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
           {results.map((r) => (
-            <div key={r.email} className={`alert ${r.ok ? "ok" : "error"}`}><b>{r.email}</b> {r.ok ? "was sent an invitation." : `could not be invited: ${r.why}`}</div>
+            <div key={r.email} className={`alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] ${r.ok ? "ok" : "error"}`}><b>{r.email}</b> {r.ok ? "was sent an invitation." : `could not be invited: ${r.why}`}</div>
           ))}
         </div>
       ) : (
@@ -53,13 +53,13 @@ export function InviteSheet({ base, org, onClose, onSent }) {
           )}
           <Field label="Email addresses" hint="Type an address and press Enter. Add as many as you like.">
             <TagInput value={emails} onChange={(v) => setEmails(v.map((e) => e.trim().toLowerCase()))} placeholder="ada@example.com" />
-            {bad.length > 0 && <span className="error-text">{bad.join(", ")} {bad.length === 1 ? "is" : "are"} not a valid email address.</span>}
+            {bad.length > 0 && <span className="error-text text-danger text-ui-sm font-medium">{bad.join(", ")} {bad.length === 1 ? "is" : "are"} not a valid email address.</span>}
           </Field>
           <Field label="Role"><select value={role} onChange={(e) => setRole(e.target.value)}>{ROLES.map((r) => <option key={r}>{r}</option>)}</select></Field>
           <Field label="Where the link goes" optional hint="An address from Domains where your application finishes the invitation. Leave empty to use none.">
             <input value={redirect} onChange={(e) => setRedirect(e.target.value)} placeholder="https://app.example.com/accept-invite" />
           </Field>
-          <p className="hint" style={{ margin: 0 }}>The person needs an account with the same email address to accept. Your application reads the token from the link and calls the accept endpoint.</p>
+          <p className="hint text-xs font-book text-muted leading-[1.45]" style={{ margin: 0 }}>The person needs an account with the same email address to accept. Your application reads the token from the link and calls the accept endpoint.</p>
         </>
       )}
     </Modal>
@@ -83,11 +83,11 @@ export default function Invitations({ base }) {
               empty="No pending invitations. Invite people with the button above."
               columns={[
                 { label: "Email", render: (i) => <b>{i.email}</b> },
-                { label: "Organization", render: (i) => <span>{i.org_name} <code className="faint">{i.org}</code></span> },
+                { label: "Organization", render: (i) => <span>{i.org_name} <code className="faint text-faint">{i.org}</code></span> },
                 { label: "Role", render: (i) => <Badge>{i.role}</Badge> },
                 { label: "Sent", render: (i) => when(i.created_at) },
                 { label: "Expires", render: (i) => when(i.expires_at) },
-                { label: "", render: (i) => <span className="row" style={{ gap: 6 }}><Button size="sm" disabled={busy} onClick={() => resend(i)}>Resend</Button><Button size="sm" variant="danger" disabled={busy} onClick={() => revoke(i)}>Revoke</Button></span> },
+                { label: "", render: (i) => <span className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ gap: 6 }}><Button size="sm" disabled={busy} onClick={() => resend(i)}>Resend</Button><Button size="sm" variant="danger" disabled={busy} onClick={() => revoke(i)}>Revoke</Button></span> },
               ]}
             />
           )}

@@ -26,13 +26,13 @@ export function span(seconds) {
 }
 
 export function Legend({ items }) {
-  return <div className="legend">{items.map(([label, color]) => <span key={label}><i className="swatch" style={{ background: color }} />{label}</span>)}</div>;
+  return <div className="legend flex flex-wrap gap-3.5 text-xs text-muted [&_span]:inline-flex [&_span]:items-center [&_span]:gap-1.5 mt-2 [&_i]:inline-block [&_i]:w-2.5 [&_i]:h-2.5 [&_i]:rounded-xs [&_i]:mr-1">{items.map(([label, color]) => <span key={label}><i className="swatch w-2.5 h-2.5 rounded-xs inline-block flex-none" style={{ background: color }} />{label}</span>)}</div>;
 }
 
 /** A titled time-series card. `lines` are [key, label, color, type] tuples. */
 export function SeriesCard({ title, window, data, lines, height = 200, empty }) {
   return (
-    <Card title={title} className="chart-card" actions={<Legend items={lines.map(([, label, color]) => [label, color])} />}>
+    <Card title={title} className="chart-card [&_h2]:text-heading" actions={<Legend items={lines.map(([, label, color]) => [label, color])} />}>
       <Chart
         height={height}
         stepSeconds={window?.step_seconds}
@@ -46,16 +46,16 @@ export function SeriesCard({ title, window, data, lines, height = 200, empty }) 
 
 /** A rate shown as a coloured badge: green when high, red when low. */
 export function RateBadge({ value, good = 98, warn = 90 }) {
-  if (value == null) return <span className="faint">—</span>;
+  if (value == null) return <span className="faint text-faint">—</span>;
   return <Badge tone={value >= good ? "green" : value >= warn ? "yellow" : "red"}>{value}%</Badge>;
 }
 
 export function Problems({ problems, onOpen }) {
   if (!problems?.length) return <Empty>Nothing needs attention in this window.</Empty>;
   return (
-    <div className="stack" style={{ gap: 8, padding: 4 }}>
+    <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 8, padding: 4 }}>
       {problems.map((p, i) => (
-        <button key={i} type="button" onClick={() => onOpen?.(AREA_SECTION[p.area])} className={`alert ${p.severity === "critical" ? "error" : "warn"}`} style={{ textAlign: "left", border: 0, cursor: "pointer", font: "inherit" }}>
+        <button key={i} type="button" onClick={() => onOpen?.(AREA_SECTION[p.area])} className={`alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] ${p.severity === "critical" ? "error" : "warn"}`} style={{ textAlign: "left", border: 0, cursor: "pointer", font: "inherit" }}>
           <b style={{ textTransform: "capitalize" }}>{p.area}</b> · {p.message}
         </button>
       ))}

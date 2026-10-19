@@ -73,11 +73,11 @@ function CodeView({ content, line, language = "python" }) {
     [content, language],
   );
   return (
-    <div className="codeview" role="region" aria-label="Source code">
+    <div className="codeview [border:1px_solid_var(--line)] rounded-sm bg-[#121119] text-[#e6e3f7] [font:12.5px/1.65_var(--mono)] overflow-hidden max-h-[62vh] p-[10px_0]" role="region" aria-label="Source code">
       {rows.map((parts, index) => (
-        <div key={index} className={`codeview-line ${line === index + 1 ? "target" : ""}`} ref={line === index + 1 ? (el) => el?.scrollIntoView({ block: "center" }) : undefined}>
-          <span className="codeview-n">{index + 1}</span>
-          <span className="codeview-t">{parts.length ? parts.map(([kind, text], i) => <span key={i} className={`tok-${kind}`}>{text}</span>) : " "}</span>
+        <div key={index} className={`codeview-line block whitespace-pre [&.target]:bg-[rgba(139,_108,_240,_0.22)] p-[0_16px_0_0] [&_i]:inline-block [&_i]:w-12 [&_i]:pr-3.5 [&_i]:text-right [&_i]:text-[var(--faint,_#9a96ad)] [&_i]:not-italic [&_i]:select-none ${line === index + 1 ? "target" : ""}`} ref={line === index + 1 ? (el) => el?.scrollIntoView({ block: "center" }) : undefined}>
+          <span className="codeview-n flex-none w-[52px] pr-3.5 text-right text-faint select-none">{index + 1}</span>
+          <span className="codeview-t pr-[18px]">{parts.length ? parts.map(([kind, text], i) => <span key={i} className={`tok-${kind}`}>{text}</span>) : " "}</span>
         </div>
       ))}
     </div>
@@ -86,12 +86,12 @@ function CodeView({ content, line, language = "python" }) {
 
 function SourceFile({ env, path, line, branch }) {
   const file = useApi(path ? envPath(env, "/function-source/file") : null, { params: { path, branch } });
-  if (!path) return <p className="muted">This function's file is not available.</p>;
+  if (!path) return <p className="muted text-muted">This function's file is not available.</p>;
   return (
     <Loading state={file}>
       {(data) => (
-        <div className="stack sm">
-          <div className="row spread"><code>{data.path}</code><span className="hint">{data.lines} lines · {(data.size / 1024).toFixed(1)} KB</span></div>
+        <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 sm">
+          <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 spread flex items-center justify-between gap-3"><code>{data.path}</code><span className="hint text-xs font-book text-muted leading-[1.45]">{data.lines} lines · {(data.size / 1024).toFixed(1)} KB</span></div>
           <CodeView content={data.content} line={line} language={languageOf(data.path)} />
         </div>
       )}
@@ -105,8 +105,8 @@ function RunDetail({ env, id, onClose }) {
     <Sheet title="Run" subtitle={id} icon="functions" onClose={onClose} footer={<Button onClick={onClose}>Close</Button>}>
       <Loading state={run}>
         {(r) => (
-          <div className="stack lg">
-            <div className="row wrap">
+          <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
+            <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">
               <Status value={r.status} />
               <Badge>{r.function}</Badge>
               <Badge>{r.trigger}</Badge>
@@ -119,26 +119,26 @@ function RunDetail({ env, id, onClose }) {
               {r.cpu_ms != null && <Badge>CPU {Math.round(r.cpu_ms)} ms</Badge>}
               {r.memory_peak_mb != null && <Badge>memory {Math.round(r.memory_peak_mb)} MB</Badge>}
               {r.limit_hit && <Badge tone="red">stopped: {r.limit_hit} limit</Badge>}
-              <span className="hint">{when(r.created_at)}</span>
+              <span className="hint text-xs font-book text-muted leading-[1.45]">{when(r.created_at)}</span>
             </div>
-            {r.error && <div className="alert error"><pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{r.error}</pre></div>}
+            {r.error && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error"><pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{r.error}</pre></div>}
             {r.limits && (
               <Field label="Limits of this run">
-                <div className="row wrap">{["timeout", "memory", "cpu", "concurrency", "max_body", "workers"].filter((k) => r.limits[k] != null).map((k) => <Badge key={k} tone={r.limit_hit === k ? "red" : undefined}>{k} {r.limits[k]}{({ timeout: "s", memory: " MB", cpu: "s", max_body: " MB" })[k] || ""}</Badge>)}</div>
+                <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">{["timeout", "memory", "cpu", "concurrency", "max_body", "workers"].filter((k) => r.limits[k] != null).map((k) => <Badge key={k} tone={r.limit_hit === k ? "red" : undefined}>{k} {r.limits[k]}{({ timeout: "s", memory: " MB", cpu: "s", max_body: " MB" })[k] || ""}</Badge>)}</div>
               </Field>
             )}
             <Field label="Input"><Json value={r.input ?? null} /></Field>
             <Field label="Output"><Json value={r.output ?? null} /></Field>
             <Field label={`Log (${(r.logs || []).length})`}>
-              {(r.logs || []).length === 0 ? <p className="muted">Nothing was logged.</p> : (
-                <div className="logview">
+              {(r.logs || []).length === 0 ? <p className="muted text-muted">Nothing was logged.</p> : (
+                <div className="logview [border:1px_solid_var(--line)] rounded-sm bg-sunken p-[10px_12px] [font:12.5px/1.6_var(--mono)] max-h-[260px] overflow-auto [&_code]:ml-2.5 [&_code]:text-muted">
                   {r.logs.map((entry, index) => (
                     <div key={index}><b>{entry.message ?? JSON.stringify(entry)}</b>{entry.data && Object.keys(entry.data).length > 0 ? <code>{JSON.stringify(entry.data)}</code> : null}</div>
                   ))}
                 </div>
               )}
             </Field>
-            <div className="hint">{r.request_id ? `request ${r.request_id}` : ""} {r.deployment_id ? `· deployment ${r.deployment_id}` : ""}</div>
+            <div className="hint text-xs font-book text-muted leading-[1.45]">{r.request_id ? `request ${r.request_id}` : ""} {r.deployment_id ? `· deployment ${r.deployment_id}` : ""}</div>
           </div>
         )}
       </Loading>
@@ -150,15 +150,15 @@ function RunsTable({ env, fn, onOpen }) {
   const [status, setStatus] = useState("");
   const runs = useApi(envPath(env, "/function-runs"), { params: { ...(fn ? { function: fn } : {}), ...(status ? { status } : {}), limit: 100 }, interval: 8000 });
   return (
-    <div className="stack">
-      <div className="row">
+    <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
+      <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5">
         <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 180 }} aria-label="Status">
           <option value="">Any status</option>
           <option value="succeeded">Succeeded</option>
           <option value="failed">Failed</option>
           <option value="running">Running</option>
         </select>
-        <span className="hint">Refreshes every few seconds</span>
+        <span className="hint text-xs font-book text-muted leading-[1.45]">Refreshes every few seconds</span>
       </div>
       <Loading state={runs} empty="No runs yet. Invoke a function, or call it over HTTP.">
         {(data) => (
@@ -169,10 +169,10 @@ function RunsTable({ env, fn, onOpen }) {
               { label: "When", render: (r) => when(r.created_at) },
               ...(fn ? [] : [{ label: "Function", render: (r) => <b>{r.function}</b> }]),
               { label: "Request", render: (r) => (r.kind === "http" ? <code>{r.method} {r.path}</code> : <Badge>{r.trigger}</Badge>) },
-              { label: "Status", render: (r) => <span className="row">{<Status value={r.status} />}{r.status_code ? <Badge tone={r.status_code >= 500 ? "red" : r.status_code >= 400 ? "amber" : undefined}>{r.status_code}</Badge> : null}{r.cold_start ? <Badge tone="blue">cold</Badge> : null}</span> },
+              { label: "Status", render: (r) => <span className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5">{<Status value={r.status} />}{r.status_code ? <Badge tone={r.status_code >= 500 ? "red" : r.status_code >= 400 ? "amber" : undefined}>{r.status_code}</Badge> : null}{r.cold_start ? <Badge tone="blue">cold</Badge> : null}</span> },
               { label: "Duration", render: (r) => (r.duration_ms != null ? `${Math.round(r.duration_ms)} ms` : "—") },
               { label: "CPU / memory", render: (r) => (r.cpu_ms != null || r.memory_peak_mb != null ? `${r.cpu_ms != null ? `${Math.round(r.cpu_ms)} ms` : "—"} / ${r.memory_peak_mb != null ? `${Math.round(r.memory_peak_mb)} MB` : "—"}` : "—") },
-              { label: "Error", render: (r) => (r.error ? <span className="truncate" title={r.error}>{String(r.error).split("\n")[0].slice(0, 70)}</span> : "—") },
+              { label: "Error", render: (r) => (r.error ? <span className="truncate inline-block max-w-[340px] overflow-hidden text-ellipsis whitespace-nowrap align-bottom" title={r.error}>{String(r.error).split("\n")[0].slice(0, 70)}</span> : "—") },
             ]}
           />
         )}
@@ -187,8 +187,8 @@ function Invoke({ base, fn }) {
   const [result, setResult] = useState(null);
   const [run, busy] = useAction();
   return (
-    <div className="stack">
-      {fn.input_fields?.length > 0 && <p className="hint">Expects: {fn.input_fields.map((f) => `${f.name}${f.required ? "*" : ""} (${f.type})`).join(", ")}</p>}
+    <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
+      {fn.input_fields?.length > 0 && <p className="hint text-xs font-book text-muted leading-[1.45]">Expects: {fn.input_fields.map((f) => `${f.name}${f.required ? "*" : ""} (${f.type})`).join(", ")}</p>}
       <Field label="Input"><JsonInput value={input} onChange={setInput} rows={8} /></Field>
       <Field label="As user (optional)" hint="An auth context; empty invokes with service rights."><JsonInput value={asUser ?? undefined} onChange={setAsUser} rows={3} /></Field>
       <div><Button variant="primary" disabled={busy} onClick={async () => { const r = await run(() => post(`${base}/${fn.name}/invoke`, { input, as_user: asUser || undefined })); if (r) setResult(r); }}>Run now</Button></div>
@@ -218,34 +218,34 @@ function TryHttp({ env, fn }) {
   let pretty = result?.body;
   if (result && !result.body_base64) { try { pretty = JSON.stringify(JSON.parse(result.body), null, 2); } catch { /* not JSON */ } }
   return (
-    <div className="stack">
-      <div className="row">
+    <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
+      <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5">
         <select value={method} onChange={(e) => setMethod(e.target.value)} style={{ width: 120 }} aria-label="Method">
           {allowed.map((m) => <option key={m}>{m}</option>)}
         </select>
-        <span className="mono muted">/functions/v1/{fn.name}</span>
-        <input className="grow mono" value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path?query=1" aria-label="Path" />
+        <span className="mono font-mono text-ui-sm muted text-muted">/functions/v1/{fn.name}</span>
+        <input className="grow flex-1 min-w-0 mono font-mono text-ui-sm" value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path?query=1" aria-label="Path" />
       </div>
       <Field label="Headers"><JsonInput value={headers} onChange={setHeaders} rows={3} /></Field>
       {!["GET", "HEAD"].includes(method) && (
-        <Field label="Body"><textarea className="mono" rows={7} value={body} onChange={(e) => setBody(e.target.value)} /></Field>
+        <Field label="Body"><textarea className="mono font-mono text-ui-sm" rows={7} value={body} onChange={(e) => setBody(e.target.value)} /></Field>
       )}
       <Field label="As user (optional)" hint={'An auth context such as {"authenticated": true, "user_id": "42"}; anonymous when empty. The function\'s own auth setting is not applied here.'}>
         <JsonInput value={asUser ?? undefined} onChange={setAsUser} rows={3} />
       </Field>
       <div><Button variant="primary" disabled={busy} onClick={send}><Icon name="play" />Send</Button></div>
       {result && (
-        <div className="stack">
-          <div className="row wrap">
+        <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
+          <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">
             <Badge tone={result.status >= 500 ? "red" : result.status >= 400 ? "amber" : "green"}>HTTP {result.status}</Badge>
             <Badge>{Math.round(result.duration_ms)} ms</Badge>
             {result.cold_start && <Badge tone="blue">cold start</Badge>}
             {result.truncated && <Badge tone="amber">first 1 MB shown</Badge>}
           </div>
           <Field label="Response headers">
-            <div className="logview">{result.headers.map(([k, v], i) => <div key={i}><b>{k}</b> <code>{v}</code></div>)}</div>
+            <div className="logview [border:1px_solid_var(--line)] rounded-sm bg-sunken p-[10px_12px] [font:12.5px/1.6_var(--mono)] max-h-[260px] overflow-auto [&_code]:ml-2.5 [&_code]:text-muted">{result.headers.map(([k, v], i) => <div key={i}><b>{k}</b> <code>{v}</code></div>)}</div>
           </Field>
-          <Field label={result.body_base64 ? "Body (base64: not text)" : "Body"}><pre className="codeview" style={{ whiteSpace: "pre-wrap", maxHeight: 360, overflow: "auto" }}>{pretty || <span className="muted">empty</span>}</pre></Field>
+          <Field label={result.body_base64 ? "Body (base64: not text)" : "Body"}><pre className="codeview [border:1px_solid_var(--line)] rounded-sm bg-[#121119] text-[#e6e3f7] [font:12.5px/1.65_var(--mono)] overflow-hidden max-h-[62vh] p-[10px_0]" style={{ whiteSpace: "pre-wrap", maxHeight: 360, overflow: "auto" }}>{pretty || <span className="muted text-muted">empty</span>}</pre></Field>
         </div>
       )}
     </div>
@@ -259,16 +259,16 @@ function HttpStats({ env, fn }) {
   const mine = (runtime.data?.http?.functions || []).find((f) => f.function === fn.name);
   const [run, busy] = useAction();
   return (
-    <div className="stack lg">
+    <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
       <Loading state={detail}>
         {(d) => (
           <Card title={`Last ${d.stats.hours} hours`}>
-            <dl className="fn-facts">
+            <dl className="fn-facts m-0 grid gap-0 [&_>_div]:flex [&_>_div]:gap-5 [&_>_div]:p-[10px_0] [&_>_div]:[border-bottom:1px_solid_var(--line)] [&_>_div]:text-body [&_dt]:w-[120px] [&_dt]:text-muted [&_dt]:flex-none [&_dd]:m-0">
               <div><dt>Requests</dt><dd>{d.stats.requests}</dd></div>
               <div><dt>Failed</dt><dd>{d.stats.failed ? <Badge tone="red">{d.stats.failed}</Badge> : 0}</dd></div>
               <div><dt>Latency p50 / p95 / p99</dt><dd>{["p50", "p95", "p99"].map((k) => (d.stats.latency_ms[k] != null ? `${Math.round(d.stats.latency_ms[k])} ms` : "—")).join(" / ")}</dd></div>
               <div><dt>Cold starts</dt><dd>{d.stats.cold_starts}</dd></div>
-              <div><dt>Status codes</dt><dd className="row wrap">{Object.entries(d.stats.status_codes).map(([k, v]) => <Badge key={k} tone={k === "5xx" ? "red" : k === "4xx" ? "amber" : undefined}>{k}: {v}</Badge>)}</dd></div>
+              <div><dt>Status codes</dt><dd className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">{Object.entries(d.stats.status_codes).map(([k, v]) => <Badge key={k} tone={k === "5xx" ? "red" : k === "4xx" ? "amber" : undefined}>{k}: {v}</Badge>)}</dd></div>
             </dl>
           </Card>
         )}
@@ -281,7 +281,7 @@ function HttpStats({ env, fn }) {
         <Loading state={runtime}>
           {(rt) => (
             <>
-              <p className="hint" style={{ padding: "8px 16px" }}>Runtime: {rt.mode === "service" ? <>service at <code>{rt.url}</code>{rt.reachable === false ? <Badge tone="red">unreachable</Badge> : null}</> : "inside the server"} · confinement {rt.confinement} · network {rt.network}</p>
+              <p className="hint text-xs font-book text-muted leading-[1.45]" style={{ padding: "8px 16px" }}>Runtime: {rt.mode === "service" ? <>service at <code>{rt.url}</code>{rt.reachable === false ? <Badge tone="red">unreachable</Badge> : null}</> : "inside the server"} · confinement {rt.confinement} · network {rt.network}</p>
               <Table
                 rows={mine?.workers || []}
                 empty={`No worker is running ${fn.name} right now; the next request starts one${fn.config?.warm ? " (warm workers are being started)" : ""}.`}
@@ -319,23 +319,23 @@ function FunctionLimits({ env, fn }) {
     <Loading state={all}>
       {(data) => {
         const row = data.data.find((r) => r.function === fn.name);
-        if (!row) return <p className="muted">This function is not loaded.</p>;
+        if (!row) return <p className="muted text-muted">This function is not loaded.</p>;
         const shown = LIMITS.filter((l) => row.kind === "http" || !["max_body", "workers"].includes(l.key));
         return (
-          <div className="stack lg">
-            <p className="hint">Every run of every function is held to these limits, so no project can starve another. They are this project's limits, set when it was created and changed by whoever operates this installation; they cannot be changed here.</p>
-            {!data.enforced.cpu_and_memory && <div className="alert">This server cannot measure CPU and memory (it is not Linux): only the timeout and runs at once are enforced here.</div>}
+          <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
+            <p className="hint text-xs font-book text-muted leading-[1.45]">Every run of every function is held to these limits, so no project can starve another. They are this project's limits, set when it was created and changed by whoever operates this installation; they cannot be changed here.</p>
+            {!data.enforced.cpu_and_memory && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)]">This server cannot measure CPU and memory (it is not Linux): only the timeout and runs at once are enforced here.</div>}
             <Card flush title="Every run gets">
               <Table
                 rows={shown}
                 columns={[
-                  { label: "Limit", render: (l) => <div><b>{l.label}</b><div className="hint">{l.hint}</div></div> },
+                  { label: "Limit", render: (l) => <div><b>{l.label}</b><div className="hint text-xs font-book text-muted leading-[1.45]">{l.hint}</div></div> },
                   { label: "Value", render: (l) => <b>{l.key === "concurrency" && row.limits[l.key] === 0 ? "no limit of its own" : `${row.limits[l.key]}${l.unit ? ` ${l.unit}` : ""}`}</b> },
                   { label: "Set by", render: (l) => <Badge tone={row.limits.sources[l.key] === "project" ? "blue" : undefined}>{SOURCE_LABEL[row.limits.sources[l.key]] || row.limits.sources[l.key]}</Badge> },
                 ]}
               />
             </Card>
-            {row.running && <p className="hint">Running now: {row.running.now} of {row.running.limit} allowed at once.</p>}
+            {row.running && <p className="hint text-xs font-book text-muted leading-[1.45]">Running now: {row.running.now} of {row.running.limit} allowed at once.</p>}
           </div>
         );
       }}
@@ -349,10 +349,10 @@ function FunctionPanel({ env, fn, base, branch, stats, onRun }) {
   const [trying, setTrying] = useState(false);
   return (
     <div>
-      <div className="fn-head">
-        <span className="tile-icon pastel sky" style={{ width: 40, height: 40, display: "grid", placeItems: "center", borderRadius: "var(--r)" }}><Icon name="functions" size={18} /></span>
-        <div className="grow">
-          <h1 className="mono">{fn.name}</h1>
+      <div className="fn-head flex items-start gap-4 mb-1.5 [&_.grow_h1]:m-0 [&_.grow_h1]:text-[20px] [&_.grow_p]:m-[4px_0_0] [&_.grow_p]:text-muted [&_.grow_p]:text-ui">
+        <span className="tile-icon pastel text-text pastel-contrast [&.lavender]:bg-lavender [&.peach]:bg-peach [&.mint]:bg-mint [&.butter]:bg-butter [&.sky]:bg-sky [&.rose]:bg-rose [&.lavender]:text-text [&.peach]:text-text [&.mint]:text-text [&.butter]:text-text [&.sky]:text-text [&.rose]:text-text sky" style={{ width: 40, height: 40, display: "grid", placeItems: "center", borderRadius: "var(--r)" }}><Icon name="functions" size={18} /></span>
+        <div className="grow flex-1 min-w-0">
+          <h1 className="mono font-mono text-ui-sm">{fn.name}</h1>
           <p>{fn.description || fn.module || <code>{fn.kind === "http" ? `ANY /functions/v1/${fn.name}/*` : `POST /functions/v1/${fn.name}`}</code>}</p>
         </div>
         <Button variant="primary" onClick={() => setTrying(true)}><Icon name="play" />Try it</Button>
@@ -369,9 +369,9 @@ function FunctionPanel({ env, fn, base, branch, stats, onRun }) {
         ]}
       />
       {tab === "overview" && (
-        <div className="stack lg">
+        <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
           <Card>
-            <dl className="fn-facts">
+            <dl className="fn-facts m-0 grid gap-0 [&_>_div]:flex [&_>_div]:gap-5 [&_>_div]:p-[10px_0] [&_>_div]:[border-bottom:1px_solid_var(--line)] [&_>_div]:text-body [&_dt]:w-[120px] [&_dt]:text-muted [&_dt]:flex-none [&_dd]:m-0">
               {fn.kind === "http" ? (
                 <>
                   <div><dt>Call it</dt><dd><code>{(fn.config?.methods || []).filter((m) => m !== "OPTIONS").join(" ")} {fn.url}</code></dd></div>
@@ -388,10 +388,10 @@ function FunctionPanel({ env, fn, base, branch, stats, onRun }) {
                 </>
               )}
               <div><dt>Timeout</dt><dd>{fn.timeout ? `${fn.timeout}s` : "default"}</dd></div>
-              <div><dt>Defined in</dt><dd>{fn.file ? <code>{fn.file}{fn.line ? `:${fn.line}` : ""}</code> : <span className="muted">unknown</span>}</dd></div>
+              <div><dt>Defined in</dt><dd>{fn.file ? <code>{fn.file}{fn.line ? `:${fn.line}` : ""}</code> : <span className="muted text-muted">unknown</span>}</dd></div>
               <div><dt>Served from</dt><dd><Badge>{fn.source}</Badge></dd></div>
-              <div><dt>Recent runs</dt><dd>{stats ? <>{stats.total}{stats.failed ? <> · <Badge tone="red">{stats.failed} failed</Badge></> : null}</> : <span className="muted">none</span>}</dd></div>
-              {fn.tags?.length > 0 && <div><dt>Tags</dt><dd className="row wrap">{fn.tags.map((t) => <Badge key={t}>{t}</Badge>)}</dd></div>}
+              <div><dt>Recent runs</dt><dd>{stats ? <>{stats.total}{stats.failed ? <> · <Badge tone="red">{stats.failed} failed</Badge></> : null}</> : <span className="muted text-muted">none</span>}</dd></div>
+              {fn.tags?.length > 0 && <div><dt>Tags</dt><dd className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">{fn.tags.map((t) => <Badge key={t}>{t}</Badge>)}</dd></div>}
             </dl>
           </Card>
           {fn.input_fields?.length > 0 && (
@@ -445,15 +445,15 @@ function Source({ env, branch }) {
       {(data) => {
         const path = chosen || data.files.find((f) => f.path.endsWith(".py"))?.path;
         return (
-          <div className="source-grid">
-            <aside className="source-files">
-              <div className="hint" style={{ padding: "0 12px 8px" }}>{data.mounted ? "Mounted code" : `Deployment ${String(data.deployment_id || "").slice(-10)}`}</div>
-              {data.files.length === 0 && <p className="muted" style={{ padding: "0 12px" }}>No files.</p>}
+          <div className="source-grid grid grid-cols-[260px_minmax(0,_1fr)] gap-5">
+            <aside className="source-files flex flex-col gap-0.5 [border-right:1px_solid_var(--line)] pr-2 max-h-[66vh] overflow-auto [&_button]:text-left [&_button]:bg-none [&_button]:border-0 [&_button]:p-[7px_12px] [&_button]:rounded-sm [&_button]:[font:12.5px_var(--mono)] [&_button]:text-muted [&_button]:cursor-pointer [&_button]:break-all [&_button:hover]:bg-sunken [&_button:hover]:text-text [&_button.on]:bg-brand-soft [&_button.on]:text-brand-strong">
+              <div className="hint text-xs font-book text-muted leading-[1.45]" style={{ padding: "0 12px 8px" }}>{data.mounted ? "Mounted code" : `Deployment ${String(data.deployment_id || "").slice(-10)}`}</div>
+              {data.files.length === 0 && <p className="muted text-muted" style={{ padding: "0 12px" }}>No files.</p>}
               {data.files.map((f) => (
                 <button key={f.path} type="button" className={f.path === path ? "on" : ""} onClick={() => setChosen(f.path)}>{f.path}</button>
               ))}
             </aside>
-            <div className="source-view">{path ? <SourceFile env={env} path={path} branch={branch} /> : <p className="muted">Nothing to show.</p>}</div>
+            <div className="source-view">{path ? <SourceFile env={env} path={path} branch={branch} /> : <p className="muted text-muted">Nothing to show.</p>}</div>
           </div>
         );
       }}
@@ -514,24 +514,24 @@ export default function Functions({ env }) {
           />
           <Loading state={list}>
             {(data) => (
-              <div className="stack lg">
-                {data.errors?.length > 0 && <div className="alert error"><b>Code failed to load</b><pre>{data.errors.join("\n")}</pre></div>}
+              <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
+                {data.errors?.length > 0 && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error"><b>Code failed to load</b><pre>{data.errors.join("\n")}</pre></div>}
                 <Card flush>
                   <Table
                     rows={shown}
                     empty="No functions loaded. Add a module under functions/ and deploy, or reload."
                     onRowClick={(f) => setSection(`fn:${f.name}`)}
                     columns={[
-                      { label: "Name", render: (f) => <div><b>{f.name}</b>{f.description ? <div className="hint">{f.description}</div> : null}</div> },
+                      { label: "Name", render: (f) => <div><b>{f.name}</b>{f.description ? <div className="hint text-xs font-book text-muted leading-[1.45]">{f.description}</div> : null}</div> },
                       { label: "Kind", render: (f) => (f.kind === "http" ? <Badge tone="blue">HTTP</Badge> : <Badge>fn()</Badge>) },
                       { label: "File", render: (f) => (f.file ? <code>{f.file}{f.line ? `:${f.line}` : ""}</code> : "—") },
                       { label: "Who may", render: (f) => <code>{typeof f.policy === "string" ? f.policy : JSON.stringify(f.policy ?? null)}</code> },
                       { label: "Timeout", render: (f) => (f.timeout ? `${f.timeout}s` : "—") },
-                      { label: "Recent runs", render: (f) => { const s = stats[f.name]; return s ? <span>{s.total}{s.failed ? <Badge tone="red">{s.failed} failed</Badge> : null}</span> : <span className="muted">none</span>; } },
+                      { label: "Recent runs", render: (f) => { const s = stats[f.name]; return s ? <span>{s.total}{s.failed ? <Badge tone="red">{s.failed} failed</Badge> : null}</span> : <span className="muted text-muted">none</span>; } },
                     ]}
                   />
                 </Card>
-                <div className="row wrap">{(data.modules || []).map((m) => <Badge key={m}>{m}</Badge>)}{data.router && <Badge tone="blue">routes.py router</Badge>}</div>
+                <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">{(data.modules || []).map((m) => <Badge key={m}>{m}</Badge>)}{data.router && <Badge tone="blue">routes.py router</Badge>}</div>
               </div>
             )}
           </Loading>

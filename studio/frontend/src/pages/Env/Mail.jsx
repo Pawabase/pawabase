@@ -60,11 +60,11 @@ export default function Mail({ env }) {
 
       {!setup.loading && setup.data && (
         configured ? (
-          <div className="alert ok" style={{ marginBottom: 16 }}>
+          <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] ok" style={{ marginBottom: 16 }}>
             Delivering through <b>{settingOf("host")}:{settingOf("port")}</b> as <b>{settingOf("from")}</b>.
           </div>
         ) : (
-          <div className="alert warn" style={{ marginBottom: 16 }}>
+          <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] warn" style={{ marginBottom: 16 }}>
             <b>{setup.data.configured ? "Delivery is paused, so nothing is sent." : "No mail server is configured, so nothing is delivered."}</b> Messages are recorded below as <i>suppressed</i> so you can see what would have gone out.{" "}
             <a href="#" onClick={(e) => { e.preventDefault(); setSection("delivery"); }}>See how mail is set up</a>
           </div>
@@ -83,9 +83,9 @@ export default function Mail({ env }) {
                 { label: "When", render: (r) => when(r.created_at) },
                 { label: "To", render: (r) => <span title={(r.to || []).join(", ")}>{(r.to || [])[0]}{(r.to || []).length > 1 ? ` +${r.to.length - 1}` : ""}</span> },
                 { label: "Subject", key: "subject" },
-                { label: "Template", render: (r) => (r.template ? <Badge tone="lavender">{r.template}</Badge> : <span className="faint">—</span>) },
+                { label: "Template", render: (r) => (r.template ? <Badge tone="lavender">{r.template}</Badge> : <span className="faint text-faint">—</span>) },
                 { label: "Status", render: (r) => <Status value={r.status} /> },
-                { label: "From", render: (r) => <span className="muted">{r.source}</span> },
+                { label: "From", render: (r) => <span className="muted text-muted">{r.source}</span> },
               ]}
             />
           )}
@@ -103,13 +103,13 @@ export default function Mail({ env }) {
 function MessageSheet({ message, onClose }) {
   return (
     <Modal title={message.subject || "(no subject)"} onClose={onClose} footer={<Button onClick={onClose}>Close</Button>}>
-      <div className="stack">
-        <div className="row wrap"><Status value={message.status} />{message.template && <Badge tone="lavender">{message.template}</Badge>}<span className="muted">{when(message.created_at)}</span></div>
+      <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
+        <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap"><Status value={message.status} />{message.template && <Badge tone="lavender">{message.template}</Badge>}<span className="muted text-muted">{when(message.created_at)}</span></div>
         <Field label="To"><div>{(message.to || []).join(", ")}</div></Field>
         <Field label="Sent from"><div>{message.source}</div></Field>
         {message.message_id && <Field label="Message id"><code>{message.message_id}</code></Field>}
-        {message.error && <div className="alert error"><b>Delivery failed</b><br />{message.error}</div>}
-        {message.status === "suppressed" && <div className="alert info">No mail server is configured, so this message was recorded and not delivered.</div>}
+        {message.error && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error"><b>Delivery failed</b><br />{message.error}</div>}
+        {message.status === "suppressed" && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] info">No mail server is configured, so this message was recorded and not delivered.</div>}
       </div>
     </Modal>
   );
@@ -130,7 +130,7 @@ function TestSheet({ base, onClose, onSent }) {
   };
   return (
     <Modal title="Send a test email" onClose={onClose} footer={<><Button onClick={onClose}>Close</Button><Button variant="primary" disabled={busy || !to.trim()} onClick={send}>{busy ? "Sending…" : "Send"}</Button></>}>
-      <div className="stack">
+      <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
         <Field label="To" hint="One or more addresses, separated by commas."><input value={to} onChange={(e) => setTo(e.target.value)} placeholder="you@example.com" autoFocus /></Field>
         <Field label="Template" optional hint="Leave empty to send the plain message below.">
           <select value={template} onChange={(e) => setTemplate(e.target.value)}>
@@ -147,8 +147,8 @@ function TestSheet({ base, onClose, onSent }) {
           </>
         )}
         {result && (result.suppressed
-          ? <div className="alert warn">Recorded but not delivered: no mail server is configured.</div>
-          : <div className="alert ok">Sent to {(result.to || []).join(", ")}.</div>)}
+          ? <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] warn">Recorded but not delivered: no mail server is configured.</div>
+          : <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] ok">Sent to {(result.to || []).join(", ")}.</div>)}
         {result && <Button size="sm" onClick={onSent}>Done</Button>}
       </div>
     </Modal>
@@ -169,7 +169,7 @@ function Delivery({ base, environment, onSaved }) {
     });
     setProvider((PROVIDERS.find(([, , preset]) => preset.host && preset.host === saved.host) || ["custom"])[0]);
   }, [environment.data]);
-  if (!form) return <Loading state={environment}>{() => <div className="empty"><Spinner /></div>}</Loading>;
+  if (!form) return <Loading state={environment}>{() => <div className="empty p-[40px_16px] text-center text-muted text-ui [&_>_.fw-empty]:p-[4px_0] [&_>_.fw-empty]:text-text"><Spinner /></div>}</Loading>;
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
   const choose = (key) => {
     setProvider(key);
@@ -195,12 +195,12 @@ function Delivery({ base, environment, onSaved }) {
   };
 
   return (
-    <div className="stack">
-      <section className="form-section">
-        <div className="form-section-head"><div><h3>Mail server</h3><p>Any SMTP service. Without a host, mail is recorded as suppressed and not delivered.</p></div></div>
+    <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
+      <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
+        <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Mail server</h3><p>Any SMTP service. Without a host, mail is recorded as suppressed and not delivered.</p></div></div>
         <Field label="Provider"><Segmented value={provider} onChange={choose} options={PROVIDERS.map(([k, label]) => [k, label])} /></Field>
-        <div className="row top" style={{ gap: 12 }}>
-          <Field label="Host" className="grow"><input value={form.host} onChange={(e) => set("host", e.target.value)} placeholder="smtp.example.com" /></Field>
+        <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 top" style={{ gap: 12 }}>
+          <Field label="Host" className="grow flex-1 min-w-0"><input value={form.host} onChange={(e) => set("host", e.target.value)} placeholder="smtp.example.com" /></Field>
           <Field label="Port" hint="465 uses SSL, 587 uses STARTTLS."><input type="number" value={form.port} onChange={(e) => set("port", e.target.value)} style={{ width: 96 }} /></Field>
         </div>
         <Field label="Username"><input value={form.username} onChange={(e) => set("username", e.target.value)} autoComplete="off" /></Field>
@@ -208,8 +208,8 @@ function Delivery({ base, environment, onSaved }) {
           <input type="password" value={form.password} onChange={(e) => set("password", e.target.value)} placeholder={form.has_password ? "••••••••" : ""} autoComplete="new-password" />
         </Field>
       </section>
-      <section className="form-section">
-        <div className="form-section-head"><div><h3>Sender</h3><p>The sender's domain must be verified with your provider (SPF and DKIM), or mail lands in spam.</p></div></div>
+      <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
+        <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Sender</h3><p>The sender's domain must be verified with your provider (SPF and DKIM), or mail lands in spam.</p></div></div>
         <Field label="From"><input value={form.from} onChange={(e) => set("from", e.target.value)} placeholder="Sell4me <orders@yourdomain.com>" /></Field>
         <Field label="Reply to" optional><input value={form.reply_to} onChange={(e) => set("reply_to", e.target.value)} placeholder="support@yourdomain.com" /></Field>
         <Switch checked={form.suppress} onChange={(v) => set("suppress", v)} label="Pause delivery" hint="Keep the settings but record messages as suppressed (useful while testing)." />
@@ -224,15 +224,15 @@ function Templates({ base }) {
   const [editing, setEditing] = useState(null);
   const rows = templates.data?.data || [];
   return (
-    <div className="stack">
-      <div className="spread">
-        <p className="muted" style={{ margin: 0, maxWidth: 420 }}>Written in Jinja. Flows and functions send a template by name and hand it data, for example <code>{"{{ order.number }}"}</code>.</p>
+    <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
+      <div className="spread flex items-center justify-between gap-3">
+        <p className="muted text-muted" style={{ margin: 0, maxWidth: 420 }}>Written in Jinja. Flows and functions send a template by name and hand it data, for example <code>{"{{ order.number }}"}</code>.</p>
         <Button variant="primary" size="sm" onClick={() => setEditing({ isNew: true, name: "", description: "", subject: "", html: "", text: "" })}><Icon name="plus" />New template</Button>
       </div>
       <Loading state={templates}>
         {() => rows.length === 0
           ? <EmptyState icon="mail" tone="rose" title="No templates yet">Create one, then send it from a flow with the Send email block.</EmptyState>
-          : <Table rows={rows} onRowClick={(row) => setEditing({ ...row })} columns={[{ label: "Name", render: (r) => <b>{r.name}</b> }, { label: "Subject", render: (r) => <span className="muted">{r.subject}</span> }]} />}
+          : <Table rows={rows} onRowClick={(row) => setEditing({ ...row })} columns={[{ label: "Name", render: (r) => <b>{r.name}</b> }, { label: "Subject", render: (r) => <span className="muted text-muted">{r.subject}</span> }]} />}
       </Loading>
       {editing && <TemplateEditor base={base} template={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); templates.reload(); }} />}
     </div>
@@ -263,16 +263,16 @@ function TemplateEditor({ base, template, onClose, onSaved }) {
         <Button variant="primary" disabled={busy || !data.name.trim()} onClick={save}>{busy ? "Saving…" : "Save"}</Button>
       </>}
     >
-      <div className="stack">
+      <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
         <Field label="Name" hint="What a flow names to send it."><input value={data.name} disabled={!template.isNew} onChange={(e) => set("name", e.target.value)} placeholder="order_receipt" /></Field>
         <Field label="Description" optional><input value={data.description || ""} onChange={(e) => set("description", e.target.value)} /></Field>
         <Field label="Subject"><input value={data.subject || ""} onChange={(e) => set("subject", e.target.value)} placeholder="Your order #{{ order.number }}" /></Field>
-        <div className="spread"><b>Body</b><Segmented value={view} onChange={setView} options={[["html", "HTML"], ["text", "Plain text"], ["preview", "Preview"]]} /></div>
-        {view === "html" && <textarea className="mono" rows={16} value={data.html || ""} onChange={(e) => set("html", e.target.value)} placeholder="<p>Hi {{ name }},</p>" />}
-        {view === "text" && <textarea className="mono" rows={16} value={data.text || ""} onChange={(e) => set("text", e.target.value)} placeholder="Hi {{ name }}," />}
+        <div className="spread flex items-center justify-between gap-3"><b>Body</b><Segmented value={view} onChange={setView} options={[["html", "HTML"], ["text", "Plain text"], ["preview", "Preview"]]} /></div>
+        {view === "html" && <textarea className="mono font-mono text-ui-sm" rows={16} value={data.html || ""} onChange={(e) => set("html", e.target.value)} placeholder="<p>Hi {{ name }},</p>" />}
+        {view === "text" && <textarea className="mono font-mono text-ui-sm" rows={16} value={data.text || ""} onChange={(e) => set("text", e.target.value)} placeholder="Hi {{ name }}," />}
         {view === "preview" && (
           <>
-            <div className="hint">The HTML as written. <code>{"{{ values }}"}</code> and <code>{"{% logic %}"}</code> appear as typed here; send a test to see them filled in.</div>
+            <div className="hint text-xs font-book text-muted leading-[1.45]">The HTML as written. <code>{"{{ values }}"}</code> and <code>{"{% logic %}"}</code> appear as typed here; send a test to see them filled in.</div>
             <iframe title="Template preview" sandbox="" srcDoc={data.html || "<p style='font-family:sans-serif;color:#888'>No HTML body.</p>"} style={{ width: "100%", height: 420, border: "1px solid var(--line)", borderRadius: "var(--r)", background: "#fff" }} />
           </>
         )}

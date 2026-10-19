@@ -108,17 +108,17 @@ function Editor({ env, flow, blocks }) {
   return (
     <Layout title={meta.name || "New flow"} crumbs={[<a key="f" href={envHref(env, "flows")}>flows</a>, meta.name || "new"]} full flowPage>
       <BlocksContext.Provider value={{ byKey, trace }}>
-        <div className="flow-shell">
+        <div className="flow-shell grid grid-cols-[228px_minmax(0,_1fr)_304px] w-full h-full min-h-0 max-navigation:grid-cols-1">
           <Palette blocks={blocks} onAdd={addBlock} />
           <div className="flow-canvas" ref={wrapper} onDrop={onDrop} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}>
-            <div className="flow-toolbar">
-              <div className="row flow-toolbar-title">
+            <div className="flow-toolbar absolute z-[4] top-0 left-0 right-0 flex items-center justify-between gap-3 pointer-events-auto h-[44px] p-[0_10px_0_14px] bg-canvas [border-bottom:1px_solid_var(--line)]">
+              <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 flow-toolbar-title pointer-events-auto min-w-0 p-0 bg-none border-0 rounded-none [&_b]:max-w-[220px] [&_b]:overflow-hidden [&_b]:text-ellipsis [&_b]:whitespace-nowrap gap-2">
                 <Icon name="flowBlock" size={18} />
                 <b>{meta.name || "Untitled flow"}</b>
                 <Badge tone={meta.enabled ? "green" : ""}>{meta.enabled ? "enabled" : "disabled"}</Badge>
                 {problems && (problems.length ? <Badge tone="red">{problems.length} problem(s)</Badge> : <Badge tone="green">valid</Badge>)}
               </div>
-              <div className="row flow-toolbar-actions">
+              <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 flow-toolbar-actions pointer-events-auto gap-1.5 [&_.btn]:p-[0_10px] [&_.btn]:text-ui-sm [&_.btn]:h-control-sm">
                 <Button onClick={validate} disabled={busy}>Validate</Button>
                 {!isNew && <Button onClick={() => setPanel("run")}>Test run</Button>}
                 <Button variant="primary" onClick={save} disabled={busy || !meta.name}>Save</Button>
@@ -143,15 +143,15 @@ function Editor({ env, flow, blocks }) {
               <MiniMap pannable zoomable nodeColor="#3a3649" nodeStrokeColor="#b9abff" maskColor="rgba(8,7,12,0.55)" />
             </ReactFlow>
           </div>
-          <aside className="inspector">
-            <div className="inspector-tabs">
+          <aside className="inspector bg-canvas overflow-auto [border-left:1px_solid_var(--line)] max-navigation:hidden">
+            <div className="inspector-tabs p-[0_14px]">
               <Segmented
                 value={panel}
                 onChange={setPanel}
                 options={[["flow", "Flow"], ...(selectedNode ? [["node", "Block"]] : []), ...(!isNew ? [["run", "Run"]] : [])]}
               />
             </div>
-            <div className="stack inspector-body">
+            <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 inspector-body">
               {panel === "flow" && <FlowSettings meta={meta} setMeta={setMeta} isNew={isNew} problems={problems} />}
               {panel === "node" && selectedNode && (
                 <NodeInspector
@@ -186,23 +186,23 @@ function Palette({ blocks, onAdd }) {
     return Object.entries(out).sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b));
   }, [blocks, filter]);
   return (
-    <aside className="palette">
+    <aside className="palette bg-canvas overflow-auto [border-right:1px_solid_var(--line)] max-navigation:hidden">
       <div style={{ padding: "12px 10px 4px" }}>
         <input placeholder={`Search ${blocks.length} blocks…`} value={filter} onChange={(e) => setFilter(e.target.value)} />
       </div>
       {groups.map(([category, items]) => (
-        <div key={category} className="palette-group">
+        <div key={category} className="palette-group p-[5px_10px] [&_h4]:m-[9px_3px_6px] [&_h4]:text-3xs [&_h4]:uppercase [&_h4]:tracking-[0.1em] [&_h4]:text-faint [&_h4]:font-bold-plus pb-1.5 [border-bottom:1px_solid_var(--line)] mb-1.5">
           <h4>{category}</h4>
           {items.map((b) => (
             <div
               key={b.key}
-              className="palette-item"
+              className="palette-item p-[8px_10px] rounded-sm bg-transparent mb-1 cursor-grab text-ui-sm font-medium-plus border-0 [&:hover]:border-brand [&:hover]:bg-hover [&_small]:block [&_small]:text-faint [&_small]:text-2xs [&_small]:leading-[1.3] [&_small]:m-[3px_0_0_22px] [&_small]:font-book m-0 [&:hover]:border-0"
               draggable
               onDragStart={(e) => { e.dataTransfer.setData("application/pawabase-block", b.key); e.dataTransfer.effectAllowed = "move"; }}
               onDoubleClick={() => onAdd(b.key)}
               title="Drag onto the canvas, or double-click to add"
             >
-              <span className="palette-item-title"><Icon name={blockIcon(b)} size={15} /><span>{b.title}</span></span>
+              <span className="palette-item-title flex items-center gap-[7px] min-w-0 [&_.icon]:flex-none [&_.icon]:text-muted"><Icon name={blockIcon(b)} size={15} /><span>{b.title}</span></span>
               <small>{plain(b.description)}</small>
             </div>
           ))}
@@ -220,14 +220,14 @@ function BlockNode({ id, data, selected }) {
   const summary = Object.entries(data.config || {}).slice(0, 2).map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`).join(" · ");
   const state = trace[id];
   return (
-    <div className={`flow-node ${selected ? "selected" : ""} ${block.trigger ? "trigger" : ""} ${state || ""}`}>
+    <div className={`flow-node bg-surface [border:1px_solid_var(--line-2)] rounded-sm min-w-[170px] max-w-[240px] text-xs [&.selected]:border-brand [&.selected]:shadow-none [&.trigger_.flow-node-head]:bg-head-bg [&.trigger_.flow-node-head]:text-text [&.trigger_.flow-node-head]:rounded-[var(--r)_var(--r)_0_0] [&.failed]:border-danger [&.ran]:outline-[1px_solid_var(--ok)] shadow-none [&.trigger_.flow-node-head]:shadow-none [&.trigger_.flow-node-head]:[border-top:2px_solid_var(--brand)] [&.ran]:outline-offset-[2px] ${selected ? "selected" : ""} ${block.trigger ? "trigger" : ""} ${state || ""}`}>
       {!block.trigger && <Handle type="target" position={Position.Top} />}
-      <div className="flow-node-head">
-        <span className="flow-node-title"><Icon name={blockIcon(block)} size={15} /><b>{data.label || block.title}</b></span>
-        <span className="faint mono" style={{ fontSize: 10 }}>{id}</span>
+      <div className="flow-node-head p-[7px_9px] [border-bottom:1px_solid_var(--line)] flex items-center justify-between gap-1.5 font-semibold-plus rounded-[var(--r)_var(--r)_0_0] bg-head-bg text-text">
+        <span className="flow-node-title flex items-center gap-[7px] min-w-0 [&_.icon]:text-brand [&_.icon]:flex-none"><Icon name={blockIcon(block)} size={15} /><b>{data.label || block.title}</b></span>
+        <span className="faint text-faint mono font-mono text-ui-sm" style={{ fontSize: 10 }}>{id}</span>
       </div>
-      <div className="flow-node-body" title={summary}>{summary || data.block}</div>
-      <div className="flow-handles">
+      <div className="flow-node-body p-[7px_11px] text-muted font-mono text-2xs overflow-hidden text-ellipsis whitespace-nowrap" title={summary}>{summary || data.block}</div>
+      <div className="flow-handles flex justify-around p-[4px_6px_8px] text-3xs text-faint">
         {handles.map((h) => <span key={h}>{h}</span>)}
       </div>
       {handles.map((h, i) => (
@@ -253,10 +253,10 @@ function FlowSettings({ meta, setMeta, isNew, problems }) {
       </Field>
       <Field label="Description"><input value={meta.description} onChange={set("description")} /></Field>
       <Field label="Timeout (seconds)"><input type="number" min="1" max="900" value={meta.timeout} onChange={set("timeout")} /></Field>
-      <label className="check"><input type="checkbox" checked={meta.enabled} onChange={set("enabled")} /> Enabled</label>
-      <label className="check"><input type="checkbox" checked={meta.record_runs} onChange={set("record_runs")} /> Record runs (with traces)</label>
-      {problems?.length > 0 && <div className="alert error"><ul style={{ margin: 0, paddingLeft: 18 }}>{problems.map((p, i) => <li key={i}>{p}</li>)}</ul></div>}
-      <div className="hint">
+      <label className="check [label&]:flex [label&]:items-center [label&]:gap-2 [label&]:text-text [label&]:text-ui"><input type="checkbox" checked={meta.enabled} onChange={set("enabled")} /> Enabled</label>
+      <label className="check [label&]:flex [label&]:items-center [label&]:gap-2 [label&]:text-text [label&]:text-ui"><input type="checkbox" checked={meta.record_runs} onChange={set("record_runs")} /> Record runs (with traces)</label>
+      {problems?.length > 0 && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error"><ul style={{ margin: 0, paddingLeft: 18 }}>{problems.map((p, i) => <li key={i}>{p}</li>)}</ul></div>}
+      <div className="hint text-xs font-book text-muted leading-[1.45]">
         Drag blocks from the left and connect handles. Every block except triggers has an <code>error</code> handle; connect it to handle failures.
         Config values accept templates like <code>{"{{ input.email }}"}</code>, <code>{"{{ steps.lookup.output.id }}"}</code> or <code>{"{{ auth.user_id }}"}</code>.
       </div>
@@ -270,7 +270,7 @@ function NodeInspector({ node, block, onChange, onRename, onDelete, step, nodes,
   const [focusedField, setFocusedField] = useState(null);
   const fieldRefs = useRef({});
 
-  if (!block) return <div className="alert error">Unknown block {node.data.block}</div>;
+  if (!block) return <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error">Unknown block {node.data.block}</div>;
   const config = node.data.config || {};
   const setConfig = (name, value) => {
     const next = { ...config };
@@ -298,8 +298,8 @@ function NodeInspector({ node, block, onChange, onRename, onDelete, step, nodes,
     <>
       <div>
         <h3>{block.title}</h3>
-        <code className="faint">{block.key}</code>
-        <p className="muted" style={{ margin: "6px 0 0", fontSize: 12.5 }}>{plain(block.description)}</p>
+        <code className="faint text-faint">{block.key}</code>
+        <p className="muted text-muted" style={{ margin: "6px 0 0", fontSize: 12.5 }}>{plain(block.description)}</p>
       </div>
       <Field label="Node id" hint="Other blocks read this node's output as steps.<id>.output.">
         <input value={id} onChange={(e) => setId(e.target.value)} onBlur={() => onRename(id)} />
@@ -325,7 +325,7 @@ function NodeInspector({ node, block, onChange, onRename, onDelete, step, nodes,
         onInsert={insertVariable}
       />
       {step?.length > 0 && (
-        <div className="stack" style={{ gap: 6 }}>
+        <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 6 }}>
           <h3>Last run</h3>
           {step.map((s, i) => <Json key={i} value={{ handle: s.handle, duration_ms: s.duration_ms, output: s.output, error: s.error }} />)}
         </div>
@@ -399,7 +399,7 @@ function AvailableVariables({ nodeId, nodes, edges, byKey, focusedField, onInser
           </button>
         ))}
       </div>
-      {!focusedField && <div className="hint" style={{ fontSize: 10, marginTop: 8, color: "var(--text-secondary)" }}>Focus a field to insert variables</div>}
+      {!focusedField && <div className="hint text-xs font-book text-muted leading-[1.45]" style={{ fontSize: 10, marginTop: 8, color: "var(--text-secondary)" }}>Focus a field to insert variables</div>}
     </div>
   );
 }
@@ -417,7 +417,7 @@ function ConfigField({ spec, value, onChange, fieldRef, onFocus, onBlur }) {
     );
   }
   if (spec.type === "boolean") {
-    return <label className="check"><input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} /> {spec.name}{spec.description && <span className="hint"> — {spec.description}</span>}</label>;
+    return <label className="check [label&]:flex [label&]:items-center [label&]:gap-2 [label&]:text-text [label&]:text-ui"><input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} /> {spec.name}{spec.description && <span className="hint text-xs font-book text-muted leading-[1.45]"> — {spec.description}</span>}</label>;
   }
   if (spec.type === "integer" || spec.type === "number") {
     return <Field label={label} hint={spec.description}><input type="number" value={value ?? ""} onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))} /></Field>;
@@ -455,18 +455,18 @@ function RunPanel({ base, name, nodes, result, onResult }) {
         const r = await run(() => post(`${base}/${name}/run`, { input, entry: entry || null, as_user: asUser || null }));
         if (r) onResult(r);
       }}>Run saved flow</Button>
-      <div className="hint">Runs the saved version. Save first to test changes.</div>
+      <div className="hint text-xs font-book text-muted leading-[1.45]">Runs the saved version. Save first to test changes.</div>
       {result && (
-        <div className="stack" style={{ gap: 8 }}>
-          <div className="row"><b>Result</b><Badge tone={result.status === "succeeded" ? "green" : "red"}>{result.status}</Badge></div>
-          {result.error && <div className="alert error">{result.error} {result.node && <>at <code>{result.node}</code></>}</div>}
+        <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 8 }}>
+          <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5"><b>Result</b><Badge tone={result.status === "succeeded" ? "green" : "red"}>{result.status}</Badge></div>
+          {result.error && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error">{result.error} {result.node && <>at <code>{result.node}</code></>}</div>}
           {result.response && <Json value={result.response} />}
           {result.result !== undefined && !result.response && <Json value={result.result} />}
           <h3>Trace</h3>
           {(result.trace || []).map((s, i) => (
-            <div key={i} className={`trace-step ${s.error ? "failed" : ""}`}>
-              <div className="spread"><code>{s.node}</code><span className="faint">{s.duration_ms} ms → {s.handle || "end"}</span></div>
-              {s.error ? <div className="error-text">{s.error}</div> : <pre className="faint" style={{ fontSize: 11 }}>{typeof s.output === "string" ? s.output : JSON.stringify(s.output)}</pre>}
+            <div key={i} className={`trace-step [border-left:2px_solid_var(--line-2)] p-[2px_0_8px_10px] text-xs [&.failed]:border-l-danger ${s.error ? "failed" : ""}`}>
+              <div className="spread flex items-center justify-between gap-3"><code>{s.node}</code><span className="faint text-faint">{s.duration_ms} ms → {s.handle || "end"}</span></div>
+              {s.error ? <div className="error-text text-danger text-ui-sm font-medium">{s.error}</div> : <pre className="faint text-faint" style={{ fontSize: 11 }}>{typeof s.output === "string" ? s.output : JSON.stringify(s.output)}</pre>}
             </div>
           ))}
           {result.logs?.length > 0 && <><h3>Logs</h3><Json value={result.logs} /></>}

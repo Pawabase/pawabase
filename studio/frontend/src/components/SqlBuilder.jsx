@@ -120,42 +120,42 @@ export default function SqlBuilder({ base, tables, dialect, initialTable, onSql,
   const firstColumn = available[0]?.ref || "";
 
   return (
-    <div className="qb">
-      <div className="qb-row">
-        <span className="qb-label">Action</span>
+    <div className="qb flex flex-col gap-3.5 p-4 bg-sunken rounded-sm">
+      <div className="qb-row flex items-center gap-2.5 flex-wrap [&.top]:items-start [&:not(.top)_.qb-label]:pt-0">
+        <span className="qb-label [flex:0_0_64px] min-w-16 text-xs font-bold tracking-[0.04em] uppercase text-muted pt-1.5">Action</span>
         <Segmented options={MODES} value={state.mode} onChange={(mode) => set({ mode, values: {}, columns: [], count: false })} />
       </div>
 
-      <div className="qb-row top">
-        <span className="qb-label">{state.mode === "select" ? "From" : "Table"}</span>
-        <div className="qb-chips">
+      <div className="qb-row flex items-center gap-2.5 flex-wrap [&.top]:items-start [&:not(.top)_.qb-label]:pt-0 top">
+        <span className="qb-label [flex:0_0_64px] min-w-16 text-xs font-bold tracking-[0.04em] uppercase text-muted pt-1.5">{state.mode === "select" ? "From" : "Table"}</span>
+        <div className="qb-chips flex flex-wrap gap-1.5 flex-1 min-w-0">
           {tables.map((t) => (
-            <button type="button" key={t.name} className={`qb-chip ${state.table === t.name ? "on" : ""}`} onClick={() => pickTable(t.name)}>{t.name}</button>
+            <button type="button" key={t.name} className={`qb-chip appearance-none inline-flex items-center gap-1.5 font-inherit text-ui-sm font-semibold text-text bg-surface border-0 rounded-sm p-[5px_12px] cursor-pointer transition-[background_0.12s,_color_0.12s] [&:hover:not(:disabled)]:bg-[var(--line)] [&.on]:bg-brand-soft [&.on]:text-brand-strong [&.ghost]:bg-transparent [&.ghost]:text-muted [&.ghost]:shadow-none [&.ghost]:[border:1px_solid_var(--line-2)] [&.ghost:hover:not(:disabled)]:text-text [&.ghost:hover:not(:disabled)]:bg-surface [&:disabled]:opacity-50 [&:disabled]:cursor-default [&_select]:w-auto [&_select]:p-0 [&_select]:border-0 [&_select]:bg-transparent [&_select]:text-2xs [&_select]:font-bold [&_select]:text-inherit [&_button]:appearance-none [&_button]:grid [&_button]:place-items-center [&_button]:border-0 [&_button]:bg-transparent [&_button]:text-inherit [&_button]:cursor-pointer [&_button]:p-0 ${state.table === t.name ? "on" : ""}`} onClick={() => pickTable(t.name)}>{t.name}</button>
           ))}
-          {!tables.length && <span className="hint">No tables yet.</span>}
+          {!tables.length && <span className="hint text-xs font-book text-muted leading-[1.45]">No tables yet.</span>}
         </div>
       </div>
 
       {state.table && state.mode === "select" && (
         <>
-          <div className="qb-row top">
-            <span className="qb-label">Columns</span>
-            <div className="qb-chips">
-              <button type="button" className={`qb-chip ${!state.columns.length && !state.count ? "on" : ""}`} onClick={() => set({ columns: [], count: false })}>All</button>
-              <button type="button" className={`qb-chip ${state.count ? "on" : ""}`} onClick={() => set({ count: !state.count })}>Count rows</button>
+          <div className="qb-row flex items-center gap-2.5 flex-wrap [&.top]:items-start [&:not(.top)_.qb-label]:pt-0 top">
+            <span className="qb-label [flex:0_0_64px] min-w-16 text-xs font-bold tracking-[0.04em] uppercase text-muted pt-1.5">Columns</span>
+            <div className="qb-chips flex flex-wrap gap-1.5 flex-1 min-w-0">
+              <button type="button" className={`qb-chip appearance-none inline-flex items-center gap-1.5 font-inherit text-ui-sm font-semibold text-text bg-surface border-0 rounded-sm p-[5px_12px] cursor-pointer transition-[background_0.12s,_color_0.12s] [&:hover:not(:disabled)]:bg-[var(--line)] [&.on]:bg-brand-soft [&.on]:text-brand-strong [&.ghost]:bg-transparent [&.ghost]:text-muted [&.ghost]:shadow-none [&.ghost]:[border:1px_solid_var(--line-2)] [&.ghost:hover:not(:disabled)]:text-text [&.ghost:hover:not(:disabled)]:bg-surface [&:disabled]:opacity-50 [&:disabled]:cursor-default [&_select]:w-auto [&_select]:p-0 [&_select]:border-0 [&_select]:bg-transparent [&_select]:text-2xs [&_select]:font-bold [&_select]:text-inherit [&_button]:appearance-none [&_button]:grid [&_button]:place-items-center [&_button]:border-0 [&_button]:bg-transparent [&_button]:text-inherit [&_button]:cursor-pointer [&_button]:p-0 ${!state.columns.length && !state.count ? "on" : ""}`} onClick={() => set({ columns: [], count: false })}>All</button>
+              <button type="button" className={`qb-chip appearance-none inline-flex items-center gap-1.5 font-inherit text-ui-sm font-semibold text-text bg-surface border-0 rounded-sm p-[5px_12px] cursor-pointer transition-[background_0.12s,_color_0.12s] [&:hover:not(:disabled)]:bg-[var(--line)] [&.on]:bg-brand-soft [&.on]:text-brand-strong [&.ghost]:bg-transparent [&.ghost]:text-muted [&.ghost]:shadow-none [&.ghost]:[border:1px_solid_var(--line-2)] [&.ghost:hover:not(:disabled)]:text-text [&.ghost:hover:not(:disabled)]:bg-surface [&:disabled]:opacity-50 [&:disabled]:cursor-default [&_select]:w-auto [&_select]:p-0 [&_select]:border-0 [&_select]:bg-transparent [&_select]:text-2xs [&_select]:font-bold [&_select]:text-inherit [&_button]:appearance-none [&_button]:grid [&_button]:place-items-center [&_button]:border-0 [&_button]:bg-transparent [&_button]:text-inherit [&_button]:cursor-pointer [&_button]:p-0 ${state.count ? "on" : ""}`} onClick={() => set({ count: !state.count })}>Count rows</button>
               {available.map((c) => (
-                <button type="button" key={c.ref} className={`qb-chip ${state.columns.includes(c.ref) ? "on" : ""}`} title={c.type} onClick={() => toggleColumn(c.ref)}>
-                  {multi && <span className="faint">{c.table}.</span>}{c.name}
+                <button type="button" key={c.ref} className={`qb-chip appearance-none inline-flex items-center gap-1.5 font-inherit text-ui-sm font-semibold text-text bg-surface border-0 rounded-sm p-[5px_12px] cursor-pointer transition-[background_0.12s,_color_0.12s] [&:hover:not(:disabled)]:bg-[var(--line)] [&.on]:bg-brand-soft [&.on]:text-brand-strong [&.ghost]:bg-transparent [&.ghost]:text-muted [&.ghost]:shadow-none [&.ghost]:[border:1px_solid_var(--line-2)] [&.ghost:hover:not(:disabled)]:text-text [&.ghost:hover:not(:disabled)]:bg-surface [&:disabled]:opacity-50 [&:disabled]:cursor-default [&_select]:w-auto [&_select]:p-0 [&_select]:border-0 [&_select]:bg-transparent [&_select]:text-2xs [&_select]:font-bold [&_select]:text-inherit [&_button]:appearance-none [&_button]:grid [&_button]:place-items-center [&_button]:border-0 [&_button]:bg-transparent [&_button]:text-inherit [&_button]:cursor-pointer [&_button]:p-0 ${state.columns.includes(c.ref) ? "on" : ""}`} title={c.type} onClick={() => toggleColumn(c.ref)}>
+                  {multi && <span className="faint text-faint">{c.table}.</span>}{c.name}
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="qb-row top">
-            <span className="qb-label">Join</span>
-            <div className="qb-chips">
+          <div className="qb-row flex items-center gap-2.5 flex-wrap [&.top]:items-start [&:not(.top)_.qb-label]:pt-0 top">
+            <span className="qb-label [flex:0_0_64px] min-w-16 text-xs font-bold tracking-[0.04em] uppercase text-muted pt-1.5">Join</span>
+            <div className="qb-chips flex flex-wrap gap-1.5 flex-1 min-w-0">
               {state.joins.map((j) => (
-                <span key={j.table} className="qb-chip on">
+                <span key={j.table} className="qb-chip appearance-none inline-flex items-center gap-1.5 font-inherit text-ui-sm font-semibold text-text bg-surface border-0 rounded-sm p-[5px_12px] cursor-pointer transition-[background_0.12s,_color_0.12s] [&:hover:not(:disabled)]:bg-[var(--line)] [&.on]:bg-brand-soft [&.on]:text-brand-strong [&.ghost]:bg-transparent [&.ghost]:text-muted [&.ghost]:shadow-none [&.ghost]:[border:1px_solid_var(--line-2)] [&.ghost:hover:not(:disabled)]:text-text [&.ghost:hover:not(:disabled)]:bg-surface [&:disabled]:opacity-50 [&:disabled]:cursor-default [&_select]:w-auto [&_select]:p-0 [&_select]:border-0 [&_select]:bg-transparent [&_select]:text-2xs [&_select]:font-bold [&_select]:text-inherit [&_button]:appearance-none [&_button]:grid [&_button]:place-items-center [&_button]:border-0 [&_button]:bg-transparent [&_button]:text-inherit [&_button]:cursor-pointer [&_button]:p-0 on">
                   <select value={j.type} onChange={(e) => set({ joins: state.joins.map((x) => (x.table === j.table ? { ...x, type: e.target.value } : x)) })} aria-label="Join type">
                     {["LEFT", "INNER"].map((t) => <option key={t}>{t}</option>)}
                   </select>
@@ -164,21 +164,21 @@ export default function SqlBuilder({ base, tables, dialect, initialTable, onSql,
                 </span>
               ))}
               {suggestions.map((s) => (
-                <button type="button" key={s.join.table} className="qb-chip ghost" title={s.hint} onClick={() => set({ joins: [...state.joins, s.join] })}><Icon name="plus" size={12} />{s.label}</button>
+                <button type="button" key={s.join.table} className="qb-chip appearance-none inline-flex items-center gap-1.5 font-inherit text-ui-sm font-semibold text-text bg-surface border-0 rounded-sm p-[5px_12px] cursor-pointer transition-[background_0.12s,_color_0.12s] [&:hover:not(:disabled)]:bg-[var(--line)] [&.on]:bg-brand-soft [&.on]:text-brand-strong [&.ghost]:bg-transparent [&.ghost]:text-muted [&.ghost]:shadow-none [&.ghost]:[border:1px_solid_var(--line-2)] [&.ghost:hover:not(:disabled)]:text-text [&.ghost:hover:not(:disabled)]:bg-surface [&:disabled]:opacity-50 [&:disabled]:cursor-default [&_select]:w-auto [&_select]:p-0 [&_select]:border-0 [&_select]:bg-transparent [&_select]:text-2xs [&_select]:font-bold [&_select]:text-inherit [&_button]:appearance-none [&_button]:grid [&_button]:place-items-center [&_button]:border-0 [&_button]:bg-transparent [&_button]:text-inherit [&_button]:cursor-pointer [&_button]:p-0 ghost" title={s.hint} onClick={() => set({ joins: [...state.joins, s.join] })}><Icon name="plus" size={12} />{s.label}</button>
               ))}
-              {!state.joins.length && !suggestions.length && <span className="hint">No foreign keys to join along.</span>}
+              {!state.joins.length && !suggestions.length && <span className="hint text-xs font-book text-muted leading-[1.45]">No foreign keys to join along.</span>}
             </div>
           </div>
         </>
       )}
 
       {state.table && (state.mode === "insert" || state.mode === "update") && (
-        <div className="qb-row top">
-          <span className="qb-label">{state.mode === "insert" ? "Values" : "Set"}</span>
-          <div className="qb-fields">
+        <div className="qb-row flex items-center gap-2.5 flex-wrap [&.top]:items-start [&:not(.top)_.qb-label]:pt-0 top">
+          <span className="qb-label [flex:0_0_64px] min-w-16 text-xs font-bold tracking-[0.04em] uppercase text-muted pt-1.5">{state.mode === "insert" ? "Values" : "Set"}</span>
+          <div className="qb-fields grid grid-cols-[repeat(auto-fill,_minmax(180px,_1fr))] gap-2.5 flex-1 min-w-0">
             {(info?.columns || []).map((c) => (
-              <label key={c.name} className="qb-field">
-                <span>{c.name} <span className="faint">{c.type}</span></span>
+              <label key={c.name} className="qb-field flex flex-col gap-1 text-xs text-muted font-semibold [&_input]:font-normal">
+                <span>{c.name} <span className="faint text-faint">{c.type}</span></span>
                 <input value={state.values[c.name] ?? ""} placeholder={c.default ? `default ${c.default}` : c.nullable ? "NULL" : ""} onChange={(e) => set({ values: { ...state.values, [c.name]: e.target.value } })} />
               </label>
             ))}
@@ -187,37 +187,37 @@ export default function SqlBuilder({ base, tables, dialect, initialTable, onSql,
       )}
 
       {state.table && state.mode !== "insert" && (
-        <div className="qb-row top">
-          <span className="qb-label">Where</span>
-          <div className="qb-where">
+        <div className="qb-row flex items-center gap-2.5 flex-wrap [&.top]:items-start [&:not(.top)_.qb-label]:pt-0 top">
+          <span className="qb-label [flex:0_0_64px] min-w-16 text-xs font-bold tracking-[0.04em] uppercase text-muted pt-1.5">Where</span>
+          <div className="qb-where flex flex-col gap-2 flex-1 min-w-0 items-start">
             {state.where.map((w, i) => (
-              <div key={i} className="qb-cond">
+              <div key={i} className="qb-cond flex gap-1.5 items-center flex-wrap w-full [&_select]:w-auto [&_input]:flex-1 [&_input]:min-w-[120px] [&_input]:w-auto">
                 {i > 0 ? (
                   <select value={w.join} onChange={(e) => updateWhere(i, { join: e.target.value })} aria-label="Combine with"><option>AND</option><option>OR</option></select>
-                ) : <span className="qb-and faint">where</span>}
+                ) : <span className="qb-and min-w-14 text-xs faint text-faint">where</span>}
                 <select value={w.column} onChange={(e) => updateWhere(i, { column: e.target.value })} aria-label="Column">
                   {available.map((c) => <option key={c.ref} value={c.ref}>{multi ? c.ref : c.name}</option>)}
                 </select>
                 <select value={w.op} onChange={(e) => updateWhere(i, { op: e.target.value })} aria-label="Operator">{OPERATORS.map((o) => <option key={o}>{o}</option>)}</select>
                 {!NO_VALUE.includes(w.op) && <input value={w.value} placeholder={w.op === "IN" ? "a, b, c" : w.op.includes("LIKE") ? "%text%" : "value"} onChange={(e) => updateWhere(i, { value: e.target.value })} />}
-                <button type="button" className="icon-btn" aria-label="Remove condition" onClick={() => set({ where: state.where.filter((_, j) => j !== i) })}><Icon name="x" size={14} /></button>
+                <button type="button" className="icon-btn w-control h-control rounded-[calc(var(--r)_-_1px)] grid place-items-center border-0 bg-transparent text-text cursor-pointer [&:hover]:bg-brand-soft [&:hover]:text-brand-strong" aria-label="Remove condition" onClick={() => set({ where: state.where.filter((_, j) => j !== i) })}><Icon name="x" size={14} /></button>
               </div>
             ))}
-            <button type="button" className="qb-chip ghost" disabled={!firstColumn} onClick={() => set({ where: [...state.where, { column: firstColumn, op: "=", value: "", join: "AND" }] })}><Icon name="plus" size={12} />Add condition</button>
-            {state.mode !== "select" && !state.where.some((w) => w.value !== "" || NO_VALUE.includes(w.op)) && <span className="hint" style={{ color: "var(--warn)" }}>No condition: this affects every row.</span>}
+            <button type="button" className="qb-chip appearance-none inline-flex items-center gap-1.5 font-inherit text-ui-sm font-semibold text-text bg-surface border-0 rounded-sm p-[5px_12px] cursor-pointer transition-[background_0.12s,_color_0.12s] [&:hover:not(:disabled)]:bg-[var(--line)] [&.on]:bg-brand-soft [&.on]:text-brand-strong [&.ghost]:bg-transparent [&.ghost]:text-muted [&.ghost]:shadow-none [&.ghost]:[border:1px_solid_var(--line-2)] [&.ghost:hover:not(:disabled)]:text-text [&.ghost:hover:not(:disabled)]:bg-surface [&:disabled]:opacity-50 [&:disabled]:cursor-default [&_select]:w-auto [&_select]:p-0 [&_select]:border-0 [&_select]:bg-transparent [&_select]:text-2xs [&_select]:font-bold [&_select]:text-inherit [&_button]:appearance-none [&_button]:grid [&_button]:place-items-center [&_button]:border-0 [&_button]:bg-transparent [&_button]:text-inherit [&_button]:cursor-pointer [&_button]:p-0 ghost" disabled={!firstColumn} onClick={() => set({ where: [...state.where, { column: firstColumn, op: "=", value: "", join: "AND" }] })}><Icon name="plus" size={12} />Add condition</button>
+            {state.mode !== "select" && !state.where.some((w) => w.value !== "" || NO_VALUE.includes(w.op)) && <span className="hint text-xs font-book text-muted leading-[1.45]" style={{ color: "var(--warn)" }}>No condition: this affects every row.</span>}
           </div>
         </div>
       )}
 
       {state.table && state.mode === "select" && !state.count && (
-        <div className="qb-row">
-          <span className="qb-label">Order</span>
+        <div className="qb-row flex items-center gap-2.5 flex-wrap [&.top]:items-start [&:not(.top)_.qb-label]:pt-0">
+          <span className="qb-label [flex:0_0_64px] min-w-16 text-xs font-bold tracking-[0.04em] uppercase text-muted pt-1.5">Order</span>
           <select value={state.orderBy} onChange={(e) => set({ orderBy: e.target.value })} aria-label="Order by" style={{ width: "auto", minWidth: 150 }}>
             <option value="">None</option>
             {available.map((c) => <option key={c.ref} value={c.ref}>{multi ? c.ref : c.name}</option>)}
           </select>
           <Segmented options={[["ASC", "Ascending"], ["DESC", "Descending"]]} value={state.direction} onChange={(direction) => set({ direction })} />
-          <span className="qb-label" style={{ marginLeft: 8, minWidth: 0 }}>Limit</span>
+          <span className="qb-label [flex:0_0_64px] min-w-16 text-xs font-bold tracking-[0.04em] uppercase text-muted pt-1.5" style={{ marginLeft: 8, minWidth: 0 }}>Limit</span>
           <input type="number" min="1" value={state.limit} onChange={(e) => set({ limit: e.target.value })} style={{ width: 92 }} />
         </div>
       )}

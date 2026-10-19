@@ -202,12 +202,12 @@ function shape(spec, i) {
 
 export function Icon({ name, size, className = "", style }) {
   const BulkIcon = BULK_ICONS[name];
-  if (BulkIcon) return <BulkIcon size={size || 18} color="currentColor" variant="Bulk" className={`icon ${className}`} style={style} aria-hidden />;
+  if (BulkIcon) return <BulkIcon size={size || 18} color="currentColor" variant="Bulk" className={`icon [svg&]:w-[18px] [svg&]:h-[18px] [svg&]:shrink-0 ${className}`} style={style} aria-hidden />;
   const shapes = SHAPES[name] || (name?.startsWith("block:") ? SHAPES.flowBlock : SHAPES.layers);
   return (
     <svg
       viewBox="0 0 24 24"
-      className={`icon ${className}`}
+      className={`icon [svg&]:w-[18px] [svg&]:h-[18px] [svg&]:shrink-0 ${className}`}
       style={size ? { width: size, height: size, ...style } : style}
       fill="none"
       stroke="currentColor"

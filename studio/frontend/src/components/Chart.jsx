@@ -95,19 +95,19 @@ export default function Chart({ series, data, height: wanted = 220, stepSeconds,
   }
 
   return (
-    <div className={`chart ${fill ? "fill" : ""}`} ref={ref} style={fill ? undefined : { height }}>
+    <div className={`chart relative w-full [&_svg]:block [&_svg]:overflow-visible [&.fill]:relative [&.fill_>_svg]:absolute [&.fill_>_svg]:inset-0 ${fill ? "fill" : ""}`} ref={ref} style={fill ? undefined : { height }}>
       {width > 0 && (
         <svg width={width} height={height} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img">
           {ticks.map((t) => (
             <g key={t}>
-              <line x1={pad.left} x2={width - pad.right} y1={y(t)} y2={y(t)} className="chart-grid" />
-              <text x={pad.left - 8} y={y(t) + 4} textAnchor="end" className="chart-axis">{format(t)}</text>
+              <line x1={pad.left} x2={width - pad.right} y1={y(t)} y2={y(t)} className="chart-grid stroke-line stroke-1 [stroke-dasharray:3_4]" />
+              <text x={pad.left - 8} y={y(t) + 4} textAnchor="end" className="chart-axis fill-faint text-2xs font-sans tabular-nums">{format(t)}</text>
             </g>
           ))}
           {data.map((row, i) => (i % every === 0 ? (
-            <text key={row.t} x={x(i)} y={height - 6} textAnchor="middle" className="chart-axis">{timeLabel(row.t, stepSeconds)}</text>
+            <text key={row.t} x={x(i)} y={height - 6} textAnchor="middle" className="chart-axis fill-faint text-2xs font-sans tabular-nums">{timeLabel(row.t, stepSeconds)}</text>
           ) : null))}
-          {hover != null && <rect x={pad.left + slot * hover} y={pad.top} width={slot} height={innerH} className="chart-hover" />}
+          {hover != null && <rect x={pad.left + slot * hover} y={pad.top} width={slot} height={innerH} className="chart-hover fill-sunken opacity-70" />}
           {stacked.length > 0 && data.map((row, i) => {
             let base = 0;
             const w = Math.max(2, Math.min(22, slot * 0.62));
@@ -173,20 +173,20 @@ export default function Chart({ series, data, height: wanted = 220, stepSeconds,
                 )}
                 <path d={line} fill="none" style={{ stroke: s.color }} strokeWidth={s.type === "area" ? 2.25 : 2} strokeLinecap="round" strokeDasharray={s.dashed ? "4 4" : undefined} />
                 {segments.map((pts) => pts.length === 1 && <circle key={pts[0][0]} cx={pts[0][0]} cy={pts[0][1]} r={3.5} style={{ fill: s.color }} />)}
-                {hover != null && data[hover][s.key] != null && <circle cx={x(hover)} cy={y(data[hover][s.key])} r={4} className="chart-dot" style={{ stroke: s.color }} />}
+                {hover != null && data[hover][s.key] != null && <circle cx={x(hover)} cy={y(data[hover][s.key])} r={4} className="chart-dot fill-surface [stroke-width:2.5]" style={{ stroke: s.color }} />}
               </g>
             );
           })}
         </svg>
       )}
-      {allZero && width > 0 && <div className="chart-empty">{empty}</div>}
+      {allZero && width > 0 && <div className="chart-empty absolute inset-[0_0_26px_40px] grid place-items-center text-faint text-ui text-center p-[0_16px] pointer-events-none">{empty}</div>}
       {hover != null && data[hover] && (
-        <div className="chart-tip" style={{ left: Math.min(Math.max(x(hover), 90), width - 90), top: 4 }}>
+        <div className="chart-tip absolute transform-[translateX(-50%)] min-w-[170px] bg-ink text-on-ink rounded-sm p-[9px_11px] text-xs flex flex-col gap-1 pointer-events-none shadow-none z-[3] [&_>_b]:text-caption [&_>_b]:opacity-[0.75] [&_>_b]:font-semibold" style={{ left: Math.min(Math.max(x(hover), 90), width - 90), top: 4 }}>
           <b>{timeLabel(data[hover].t, stepSeconds, true)}</b>
           {series.map((s) => (
-            <div key={s.key} className="row" style={{ gap: 8 }}>
-              <span className="swatch" style={{ background: s.color }} />
-              <span className="grow">{s.label}</span>
+            <div key={s.key} className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ gap: 8 }}>
+              <span className="swatch w-2.5 h-2.5 rounded-xs inline-block flex-none" style={{ background: s.color }} />
+              <span className="grow flex-1 min-w-0">{s.label}</span>
               <b>{data[hover][s.key] == null ? "–" : format(data[hover][s.key])}</b>
             </div>
           ))}

@@ -22,7 +22,7 @@ export default function Restrictions({ env }) {
   return (
     <Loading state={config.state}>
       {() => (
-        <div className="stack lg">
+        <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
           <SettingsPanel title="Sign-up" description="Whether strangers can create an account, and what they get when they do." config={config}>
             <Switch checked={value.signup_enabled} onChange={(v) => set({ signup_enabled: v })} label="Allow sign-ups" hint="Off makes the environment invitation-only: only operators create accounts." />
             <Switch checked={value.require_email_verification} onChange={(v) => set({ require_email_verification: v })} label="Require a verified email" hint="Unverified people cannot sign in until they confirm their address." />
@@ -32,11 +32,11 @@ export default function Restrictions({ env }) {
             <Field label="Only allow these domains" hint="Leave empty to allow any domain."><TagInput value={value.allowed_email_domains || []} onChange={(v) => set({ allowed_email_domains: clean(v) })} placeholder="acme.com" /></Field>
             <Field label="Always block these domains" hint="A blocked domain is refused even when the allow list is empty."><TagInput value={value.blocked_email_domains || []} onChange={(v) => set({ blocked_email_domains: clean(v) })} placeholder="mailinator.com" /></Field>
             <Field label="Try an address" hint="Checks the rules above, including changes you have not saved yet.">
-              <div className="row">
+              <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5">
                 <input value={probe} onChange={(e) => setProbe(e.target.value)} placeholder="someone@example.com" />
                 {result && <Badge tone={result.ok ? "green" : "red"}>{result.ok ? "allowed" : "refused"}</Badge>}
               </div>
-              {result && <span className="hint">{result.why}.</span>}
+              {result && <span className="hint text-xs font-book text-muted leading-[1.45]">{result.why}.</span>}
             </Field>
           </SettingsPanel>
         </div>

@@ -38,11 +38,11 @@ export function Dashboards({ env }) {
               rows={data.data}
               onRowClick={(row) => setEditing(row)}
               columns={[
-                { label: "Dashboard", render: (d) => <div><b>{d.title || d.name}</b><div className="hint mono">{d.name}</div></div> },
+                { label: "Dashboard", render: (d) => <div><b>{d.title || d.name}</b><div className="hint text-xs font-book text-muted leading-[1.45] mono font-mono text-ui-sm">{d.name}</div></div> },
                 { label: "Pages", render: (d) => (d.definition?.pages || []).length },
                 { label: "Status", render: (d) => d.published ? <Badge tone={d.public ? "green" : undefined}>{d.public ? "published" : "unpublished"}</Badge> : <Badge>draft</Badge> },
                 { label: "Enabled", render: (d) => (d.enabled ? "Yes" : "No") },
-                { label: "", render: (d) => <div className="row" onClick={(e) => e.stopPropagation()}><Button size="sm" variant="danger" disabled={busy} onClick={async () => { if (confirm(`Delete "${d.title || d.name}"?`) && await run(() => del(envPath(env, `/dashboards/${d.id}`)), "Deleted")) reload(); }}>Delete</Button></div> },
+                { label: "", render: (d) => <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" onClick={(e) => e.stopPropagation()}><Button size="sm" variant="danger" disabled={busy} onClick={async () => { if (confirm(`Delete "${d.title || d.name}"?`) && await run(() => del(envPath(env, `/dashboards/${d.id}`)), "Deleted")) reload(); }}>Delete</Button></div> },
               ]}
             />
           )}
@@ -81,7 +81,7 @@ function NewDashboardSheet({ env, onClose, onCreated }) {
     <Sheet title="New dashboard" subtitle="Starts with one empty page — add widgets next." icon="layers" tone="lavender" onClose={onClose}
       footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={busy || !slug} onClick={create}>Create</Button></>}>
       <Field label="Title"><input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Sales overview" /></Field>
-      <Field label="URL slug" hint={slug ? `Published at /dashboards/v1/${env}/${slug}` : "a-z, 0-9 and hyphens"}><input className="mono" value={name} onChange={(e) => setName(e.target.value)} placeholder="sales-overview" /></Field>
+      <Field label="URL slug" hint={slug ? `Published at /dashboards/v1/${env}/${slug}` : "a-z, 0-9 and hyphens"}><input className="mono font-mono text-ui-sm" value={name} onChange={(e) => setName(e.target.value)} placeholder="sales-overview" /></Field>
     </Sheet>
   );
 }
@@ -119,25 +119,25 @@ function DashboardEditor({ env, dashboard, onClose, onSaved }) {
   return (
     <Sheet
       title={draft.title || draft.name}
-      subtitle={<code className="faint">{draft.name}</code>}
+      subtitle={<code className="faint text-faint">{draft.name}</code>}
       icon="layers"
       tone="lavender"
       tabs={[["pages", "Pages"], ["widgets", "Widgets"], ["publish", "Publish"]]}
       tab={tab}
       onTab={setTab}
       onClose={onClose}
-      footer={tab !== "publish" ? <><Button onClick={onClose}>Close</Button><span className="grow" /><Button variant="primary" disabled={busy} onClick={() => save()}>Save</Button></> : <Button onClick={onClose}>Done</Button>}
+      footer={tab !== "publish" ? <><Button onClick={onClose}>Close</Button><span className="grow flex-1 min-w-0" /><Button variant="primary" disabled={busy} onClick={() => save()}>Save</Button></> : <Button onClick={onClose}>Done</Button>}
     >
       {tab === "pages" && (
-        <div className="stack" style={{ gap: 12 }}>
+        <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 12 }}>
           <Field label="Dashboard title"><input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} /></Field>
-          <div className="form-section-head"><div><h3>Pages</h3><p>Shown as tabs on the published page when there's more than one.</p></div><Button size="sm" onClick={addPage}><Icon name="plus" size={13} />Add page</Button></div>
-          <div className="stack" style={{ gap: 8 }}>
+          <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Pages</h3><p>Shown as tabs on the published page when there's more than one.</p></div><Button size="sm" onClick={addPage}><Icon name="plus" size={13} />Add page</Button></div>
+          <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 8 }}>
             {draft.definition.pages.map((p) => (
-              <div key={p.id} className="card sunken" style={{ padding: 12, display: "flex", gap: 10, alignItems: "center" }}>
+              <div key={p.id} className="card bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-md p-4 [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [&.flush_.card-head_+_*]:[border-top:1px_solid_var(--line)] [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:transform-[none]! [a&:hover]:shadow-none [border:1px_solid_var(--line)] shadow-none [&_>_.spread:first-child]:mb-3! [&_>_.spread_h2]:text-base [&_>_.spread_h2]:font-semibold [&_>_.spread_h2]:tracking-[-0.01em] [&.flush_>_.card-head_+_*]:border-t-0 [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&_>_.spread_.chips]:gap-0 [&_>_.spread_.chips]:flex-nowrap [&_>_.spread_.chips]:[border:1px_solid_var(--line-2)] [&_>_.spread_.chips]:rounded-sm [&_>_.spread_.chips]:overflow-hidden [&_>_.spread_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_>_.spread_.chip]:p-[0_10px] [&_>_.spread_.chip]:border-0 [&_>_.spread_.chip]:[border-left:1px_solid_var(--line-2)] [&_>_.spread_.chip]:rounded-none [&_>_.spread_.chip]:bg-transparent [&_>_.spread_.chip]:text-muted [&_>_.spread_.chip]:text-xs [&_>_.spread_.chip]:font-medium-plus [&_>_.spread_.chip:first-child]:border-l-0 [&_>_.spread_.chip.active]:bg-press [&_>_.spread_.chip.active]:text-text [&_>_.spread_.chip.on]:bg-press [&_>_.spread_.chip.on]:text-text [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100 sunken" style={{ padding: 12, display: "flex", gap: 10, alignItems: "center" }}>
                 <Icon name={p.id === pageId ? "check" : "document"} size={14} className={p.id === pageId ? "" : "faint"} />
                 <input value={p.name} onChange={(e) => setPage({ ...p, name: e.target.value })} style={{ flex: 1 }} />
-                <input className="mono" value={p.path} onChange={(e) => setPage({ ...p, path: e.target.value })} style={{ width: 140 }} />
+                <input className="mono font-mono text-ui-sm" value={p.path} onChange={(e) => setPage({ ...p, path: e.target.value })} style={{ width: 140 }} />
                 <Button size="sm" onClick={() => { setPageId(p.id); setTab("widgets"); }}>Widgets ({p.widgets.length})</Button>
                 {draft.definition.pages.length > 1 && <Button size="sm" variant="danger" onClick={() => removePage(p.id)}><Icon name="trash" size={13} /></Button>}
               </div>
@@ -147,17 +147,17 @@ function DashboardEditor({ env, dashboard, onClose, onSaved }) {
       )}
 
       {tab === "widgets" && (
-        <div className="stack" style={{ gap: 12 }}>
-          <div className="row" style={{ justifyContent: "space-between" }}>
+        <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 12 }}>
+          <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ justifyContent: "space-between" }}>
             <Field label="Page"><select value={pageId} onChange={(e) => setPageId(e.target.value)}>{draft.definition.pages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
             <Button size="sm" variant="primary" onClick={() => setEditingWidget(blankWidget())}><Icon name="plus" size={13} />Add widget</Button>
           </div>
-          {page.widgets.length === 0 && <p className="hint">No widgets on this page yet.</p>}
-          <div className="stack" style={{ gap: 8 }}>
+          {page.widgets.length === 0 && <p className="hint text-xs font-book text-muted leading-[1.45]">No widgets on this page yet.</p>}
+          <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 8 }}>
             {page.widgets.map((w) => (
-              <div key={w.id} className="card sunken" style={{ padding: 12, display: "flex", gap: 10, alignItems: "center" }}>
-                <Icon name={{ metric: "usage", table: "resources", chart: "observability", kanban: "layers", form: "edit" }[w.type] || "layers"} size={15} className="faint" />
-                <div className="grow"><b>{w.title || WIDGET_TYPES.find(([t]) => t === w.type)?.[1]}</b><div className="hint mono">{w.type} · {w.binding.resource || "no resource"}</div></div>
+              <div key={w.id} className="card bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-md p-4 [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [&.flush_.card-head_+_*]:[border-top:1px_solid_var(--line)] [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:transform-[none]! [a&:hover]:shadow-none [border:1px_solid_var(--line)] shadow-none [&_>_.spread:first-child]:mb-3! [&_>_.spread_h2]:text-base [&_>_.spread_h2]:font-semibold [&_>_.spread_h2]:tracking-[-0.01em] [&.flush_>_.card-head_+_*]:border-t-0 [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&_>_.spread_.chips]:gap-0 [&_>_.spread_.chips]:flex-nowrap [&_>_.spread_.chips]:[border:1px_solid_var(--line-2)] [&_>_.spread_.chips]:rounded-sm [&_>_.spread_.chips]:overflow-hidden [&_>_.spread_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_>_.spread_.chip]:p-[0_10px] [&_>_.spread_.chip]:border-0 [&_>_.spread_.chip]:[border-left:1px_solid_var(--line-2)] [&_>_.spread_.chip]:rounded-none [&_>_.spread_.chip]:bg-transparent [&_>_.spread_.chip]:text-muted [&_>_.spread_.chip]:text-xs [&_>_.spread_.chip]:font-medium-plus [&_>_.spread_.chip:first-child]:border-l-0 [&_>_.spread_.chip.active]:bg-press [&_>_.spread_.chip.active]:text-text [&_>_.spread_.chip.on]:bg-press [&_>_.spread_.chip.on]:text-text [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100 sunken" style={{ padding: 12, display: "flex", gap: 10, alignItems: "center" }}>
+                <Icon name={{ metric: "usage", table: "resources", chart: "observability", kanban: "layers", form: "edit" }[w.type] || "layers"} size={15} className="faint text-faint" />
+                <div className="grow flex-1 min-w-0"><b>{w.title || WIDGET_TYPES.find(([t]) => t === w.type)?.[1]}</b><div className="hint text-xs font-book text-muted leading-[1.45] mono font-mono text-ui-sm">{w.type} · {w.binding.resource || "no resource"}</div></div>
                 <Button size="sm" onClick={() => setEditingWidget(w)}>Edit</Button>
                 <Button size="sm" variant="danger" onClick={() => removeWidget(w.id)}><Icon name="trash" size={13} /></Button>
               </div>
@@ -192,23 +192,23 @@ function PublishPanel({ env, dashboard, base, onChanged }) {
     if (row) { onChanged(row); setKey(""); }
   };
   return (
-    <div className="stack" style={{ gap: 16 }}>
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <div><b>Public</b><p className="hint" style={{ margin: "2px 0 0" }}>Anyone with the link can load the page. Each widget still only shows what its resource's own policy allows.</p></div>
+    <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 16 }}>
+      <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ justifyContent: "space-between" }}>
+        <div><b>Public</b><p className="hint text-xs font-book text-muted leading-[1.45]" style={{ margin: "2px 0 0" }}>Anyone with the link can load the page. Each widget still only shows what its resource's own policy allows.</p></div>
         <Switch checked={dashboard.public} disabled={busy} onChange={toggle} />
       </div>
       {!dashboard.published && (
         <Field label="Publishable key" hint="Paste in this environment's publishable key from API keys — sealed and stored, never shown again. Needed once, the first time you publish.">
-          <input className="mono" value={key} onChange={(e) => setKey(e.target.value)} placeholder="pk_…" />
+          <input className="mono font-mono text-ui-sm" value={key} onChange={(e) => setKey(e.target.value)} placeholder="pk_…" />
         </Field>
       )}
       {dashboard.published && dashboard.public && (
         <div>
-          <b className="small">Published at</b>
+          <b className="small text-ui-sm">Published at</b>
           <div style={{ marginTop: 6 }}><CopyText text={publicUrl} label="dashboard URL" /></div>
         </div>
       )}
-      {dashboard.published && !dashboard.public && <p className="hint">A publishable key is already sealed — turning this on republishes without asking for it again.</p>}
+      {dashboard.published && !dashboard.public && <p className="hint text-xs font-book text-muted leading-[1.45]">A publishable key is already sealed — turning this on republishes without asking for it again.</p>}
     </div>
   );
 }
@@ -223,7 +223,7 @@ function WidgetSheet({ env, widget, resources, onClose, onSave }) {
   return (
     <Sheet title={WIDGET_TYPES.find(([t]) => t === draft.type)?.[1] || "Widget"} subtitle={WIDGET_TYPES.find(([t]) => t === draft.type)?.[2]} icon="layers" tone="mint" onClose={onClose}
       footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!b.resource} onClick={() => onSave(draft)}>Save widget</Button></>}>
-      <div className="form-grid">
+      <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
         <Field label="Type"><select value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })}>{WIDGET_TYPES.map(([t, label]) => <option key={t} value={t}>{label}</option>)}</select></Field>
         <Field label="Width"><select value={draft.width} onChange={(e) => setDraft({ ...draft, width: e.target.value })}>{WIDTHS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
       </div>
@@ -231,30 +231,30 @@ function WidgetSheet({ env, widget, resources, onClose, onSave }) {
       <Field label="Resource"><select value={b.resource} onChange={(e) => setB({ resource: e.target.value })}><option value="">Choose a resource…</option>{resources.map((r) => <option key={r.name} value={r.name}>{r.name}</option>)}</select></Field>
 
       {(draft.type === "metric" || draft.type === "chart") && (
-        <div className="form-grid">
+        <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
           <Field label="Aggregate"><select value={b.aggregate || "count"} onChange={(e) => setB({ aggregate: e.target.value })}>{AGGREGATES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
           {needsField && <Field label="Field"><select value={b.field || ""} onChange={(e) => setB({ field: e.target.value })}><option value="">Choose a field…</option>{fields.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}</select></Field>}
         </div>
       )}
       {draft.type === "chart" && (
-        <div className="form-grid">
+        <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
           <Field label="Group by"><select value={b.group_by || ""} onChange={(e) => setB({ group_by: e.target.value })}><option value="">Choose a field…</option>{fields.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}</select></Field>
           <Field label="Chart type"><select value={b.chart_type || "bar"} onChange={(e) => setB({ chart_type: e.target.value })}><option value="bar">Bar</option><option value="line">Line</option></select></Field>
         </div>
       )}
       {draft.type === "table" && (
         <>
-          <Field label="Columns" hint="None selected shows every column."><div className="row wrap" style={{ gap: 6 }}>{fields.map((c) => { const on = (b.fields || []).includes(c.name); return <Button key={c.name} size="sm" variant={on ? "primary" : ""} onClick={() => setB({ fields: on ? (b.fields || []).filter((n) => n !== c.name) : [...(b.fields || []), c.name] })}>{c.name}</Button>; })}</div></Field>
-          <div className="form-grid"><Field label="Sort by" optional><select value={b.sort || ""} onChange={(e) => setB({ sort: e.target.value })}><option value="">Default order</option>{fields.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}</select></Field><Field label="Row limit"><input type="number" min={1} max={500} value={b.limit || 50} onChange={(e) => setB({ limit: Number(e.target.value) || 50 })} /></Field></div>
+          <Field label="Columns" hint="None selected shows every column."><div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap" style={{ gap: 6 }}>{fields.map((c) => { const on = (b.fields || []).includes(c.name); return <Button key={c.name} size="sm" variant={on ? "primary" : ""} onClick={() => setB({ fields: on ? (b.fields || []).filter((n) => n !== c.name) : [...(b.fields || []), c.name] })}>{c.name}</Button>; })}</div></Field>
+          <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1"><Field label="Sort by" optional><select value={b.sort || ""} onChange={(e) => setB({ sort: e.target.value })}><option value="">Default order</option>{fields.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}</select></Field><Field label="Row limit"><input type="number" min={1} max={500} value={b.limit || 50} onChange={(e) => setB({ limit: Number(e.target.value) || 50 })} /></Field></div>
         </>
       )}
       {draft.type === "kanban" && (
         <>
-          <div className="form-grid">
+          <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
             <Field label="Group by (columns)"><select value={b.group_field || ""} onChange={(e) => setB({ group_field: e.target.value })}><option value="">Choose a field…</option>{fields.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}</select></Field>
             <Field label="Card title field"><select value={b.card_title_field || ""} onChange={(e) => setB({ card_title_field: e.target.value })}><option value="">Choose a field…</option>{fields.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}</select></Field>
           </div>
-          <Field label="Id field" hint="Usually id."><input className="mono" value={b.id_field || "id"} onChange={(e) => setB({ id_field: e.target.value })} /></Field>
+          <Field label="Id field" hint="Usually id."><input className="mono font-mono text-ui-sm" value={b.id_field || "id"} onChange={(e) => setB({ id_field: e.target.value })} /></Field>
         </>
       )}
       {draft.type === "form" && <FormFieldsEditor binding={b} setB={setB} fields={fields} />}
@@ -270,14 +270,14 @@ function FiltersEditor({ columns, filters, onChange }) {
   const add = () => onChange([...filters, { field: columns[0]?.name || "", op: "eq", value: "" }]);
   return (
     <div>
-      <div className="form-section-head"><div><h3>Filters</h3></div><Button size="sm" disabled={!columns.length} onClick={add}><Icon name="plus" size={13} />Add</Button></div>
-      <div className="stack" style={{ gap: 6 }}>
+      <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Filters</h3></div><Button size="sm" disabled={!columns.length} onClick={add}><Icon name="plus" size={13} />Add</Button></div>
+      <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 6 }}>
         {filters.map((f, i) => (
-          <div key={i} className="row" style={{ gap: 6 }}>
+          <div key={i} className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ gap: 6 }}>
             <select value={f.field} onChange={(e) => onChange(filters.map((x, j) => (j === i ? { ...x, field: e.target.value } : x)))}>{columns.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}</select>
             <select value={f.op} onChange={(e) => onChange(filters.map((x, j) => (j === i ? { ...x, op: e.target.value } : x)))}>{FILTER_OPS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-            <input className="grow" value={f.value} onChange={(e) => onChange(filters.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} />
-            <button type="button" className="icon-btn" aria-label="Remove filter" onClick={() => onChange(filters.filter((_, j) => j !== i))}><Icon name="x" size={14} /></button>
+            <input className="grow flex-1 min-w-0" value={f.value} onChange={(e) => onChange(filters.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} />
+            <button type="button" className="icon-btn w-control h-control rounded-[calc(var(--r)_-_1px)] grid place-items-center border-0 bg-transparent text-text cursor-pointer [&:hover]:bg-brand-soft [&:hover]:text-brand-strong" aria-label="Remove filter" onClick={() => onChange(filters.filter((_, j) => j !== i))}><Icon name="x" size={14} /></button>
           </div>
         ))}
       </div>
@@ -290,18 +290,18 @@ function FormFieldsEditor({ binding, setB, fields }) {
   const add = () => setB({ fields: [...list, { name: fields[0]?.name || "", label: "", type: "text" }] });
   return (
     <>
-      <div className="form-grid">
+      <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
         <Field label="Mode"><select value={binding.mode || "create"} onChange={(e) => setB({ mode: e.target.value })}><option value="create">Create a record</option><option value="update">Update a record</option></select></Field>
-        {binding.mode === "update" && <Field label="Record id from URL param" hint="e.g. ?id=…"><input className="mono" value={binding.id_param || "id"} onChange={(e) => setB({ id_param: e.target.value })} /></Field>}
+        {binding.mode === "update" && <Field label="Record id from URL param" hint="e.g. ?id=…"><input className="mono font-mono text-ui-sm" value={binding.id_param || "id"} onChange={(e) => setB({ id_param: e.target.value })} /></Field>}
       </div>
-      <div className="form-section-head"><div><h3>Fields</h3></div><Button size="sm" onClick={add}><Icon name="plus" size={13} />Add field</Button></div>
-      <div className="stack" style={{ gap: 6 }}>
+      <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Fields</h3></div><Button size="sm" onClick={add}><Icon name="plus" size={13} />Add field</Button></div>
+      <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 6 }}>
         {list.map((f, i) => (
-          <div key={i} className="row" style={{ gap: 6 }}>
+          <div key={i} className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ gap: 6 }}>
             <select value={f.name} onChange={(e) => setB({ fields: list.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })}>{fields.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}</select>
-            <input className="grow" placeholder="Label" value={f.label} onChange={(e) => setB({ fields: list.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
+            <input className="grow flex-1 min-w-0" placeholder="Label" value={f.label} onChange={(e) => setB({ fields: list.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
             <select value={f.type || "text"} onChange={(e) => setB({ fields: list.map((x, j) => (j === i ? { ...x, type: e.target.value } : x)) })}><option value="text">Text</option><option value="number">Number</option></select>
-            <button type="button" className="icon-btn" aria-label="Remove field" onClick={() => setB({ fields: list.filter((_, j) => j !== i) })}><Icon name="x" size={14} /></button>
+            <button type="button" className="icon-btn w-control h-control rounded-[calc(var(--r)_-_1px)] grid place-items-center border-0 bg-transparent text-text cursor-pointer [&:hover]:bg-brand-soft [&:hover]:text-brand-strong" aria-label="Remove field" onClick={() => setB({ fields: list.filter((_, j) => j !== i) })}><Icon name="x" size={14} /></button>
           </div>
         ))}
       </div>

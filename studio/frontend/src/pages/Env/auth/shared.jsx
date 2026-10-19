@@ -51,8 +51,8 @@ export function SettingsPanel({ title, description, config, children }) {
       <Button size="sm" disabled={config.busy} onClick={config.discard}>Discard</Button>
       <Button size="sm" variant="primary" disabled={config.busy} onClick={config.save}>Save changes</Button>
     </>}>
-      {description && <p className="muted" style={{ margin: "0 0 16px", maxWidth: 640 }}>{description}</p>}
-      <div className="stack lg">{children}</div>
+      {description && <p className="muted text-muted" style={{ margin: "0 0 16px", maxWidth: 640 }}>{description}</p>}
+      <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">{children}</div>
     </Card>
   );
 }
@@ -78,7 +78,7 @@ export function device(agent) {
 export const initials = (text) => (text || "?").replace(/@.*/, "").split(/[\s._-]+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "?";
 
 export function Avatar({ text, size = 32 }) {
-  return <span className="user-avatar" style={{ width: size, height: size, fontSize: Math.round(size * 0.38) }}>{initials(text)}</span>;
+  return <span className="user-avatar inline-grid place-items-center shrink-0 rounded-full bg-sunken [border:1px_solid_var(--line-2)] text-text font-bold tracking-[0.02em]" style={{ width: size, height: size, fontSize: Math.round(size * 0.38) }}>{initials(text)}</span>;
 }
 
 export const DIRECTORY_DEFAULTS = {

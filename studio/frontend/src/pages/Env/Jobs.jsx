@@ -35,7 +35,7 @@ export default function Jobs({ env }) {
           <Loading state={jobs} empty="No jobs.">
             {(data) => <Table rows={data.data} onRowClick={(j) => open(j.id)} columns={[
               { label: "Job", render: (j) => <code>{j.job}</code> }, { label: "Queue", key: "queue" }, { label: "Status", render: (j) => <Status value={j.status} /> },
-              { label: "Attempts", key: "attempts" }, { label: "Source", key: "source" }, { label: "Error", render: (j) => j.error && <span className="error-text">{j.error.slice(0, 80)}</span> }, { label: "Created", render: (j) => when(j.created_at) }, { label: "", render: (j) => <Button size="sm" onClick={(e) => { e.stopPropagation(); replayOne(j.id); }}>Replay</Button> },
+              { label: "Attempts", key: "attempts" }, { label: "Source", key: "source" }, { label: "Error", render: (j) => j.error && <span className="error-text text-danger text-ui-sm font-medium">{j.error.slice(0, 80)}</span> }, { label: "Created", render: (j) => when(j.created_at) }, { label: "", render: (j) => <Button size="sm" onClick={(e) => { e.stopPropagation(); replayOne(j.id); }}>Replay</Button> },
             ]} />}
           </Loading>
         </Card>
@@ -43,7 +43,7 @@ export default function Jobs({ env }) {
       {tab === "failed" && (
         <Card flush title="Failed for good" actions={<Button size="sm" disabled={busy} onClick={() => replayAll({ status: "failed", limit: 500 }, "failed")}>Replay all failed</Button>}>
           <Loading state={failed} empty="Nothing has failed permanently.">
-            {(data) => <Table rows={data.data} onRowClick={(f) => f.job_id && open(f.job_id)} columns={[{ label: "Job", render: (f) => <code>{f.job_name || f.job}</code> }, { label: "Queue", key: "queue" }, { label: "Error", render: (f) => <span className="error-text">{String(f.error || f.exception || "").slice(0, 120)}</span> }, { label: "Failed", render: (f) => when(f.failed_at || f.created_at) }, { label: "", render: (f) => f.job_id && <span className="row" style={{ gap: 6 }}><Button size="sm" onClick={(e) => { e.stopPropagation(); replayOne(f.job_id); }}>Replay</Button><Button size="sm" onClick={async (e) => { e.stopPropagation(); if (await run(() => del(`${base}/failed-jobs/${f.job_id}`), "Dismissed")) failed.reload(); }}>Dismiss</Button></span> }]} />}
+            {(data) => <Table rows={data.data} onRowClick={(f) => f.job_id && open(f.job_id)} columns={[{ label: "Job", render: (f) => <code>{f.job_name || f.job}</code> }, { label: "Queue", key: "queue" }, { label: "Error", render: (f) => <span className="error-text text-danger text-ui-sm font-medium">{String(f.error || f.exception || "").slice(0, 120)}</span> }, { label: "Failed", render: (f) => when(f.failed_at || f.created_at) }, { label: "", render: (f) => f.job_id && <span className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ gap: 6 }}><Button size="sm" onClick={(e) => { e.stopPropagation(); replayOne(f.job_id); }}>Replay</Button><Button size="sm" onClick={async (e) => { e.stopPropagation(); if (await run(() => del(`${base}/failed-jobs/${f.job_id}`), "Dismissed")) failed.reload(); }}>Dismiss</Button></span> }]} />}
           </Loading>
         </Card>
       )}
@@ -90,7 +90,7 @@ function ServiceHealth({ base }) {
 function RetryPolicies() {
   const policies = useApi("/retry-policies");
   return (
-    <Card flush title="How failed work is retried" actions={<span className="hint">Waits are randomised by ±20%. A webhook endpoint's own attempt limit replaces the default.</span>}>
+    <Card flush title="How failed work is retried" actions={<span className="hint text-xs font-book text-muted leading-[1.45]">Waits are randomised by ±20%. A webhook endpoint's own attempt limit replaces the default.</span>}>
       <Loading state={policies}>
         {(data) => <Table rows={data.data} columns={[
           { label: "Work", render: (p) => <b>{p.job.replace(/Job$/, "").replace(/([a-z])([A-Z])/g, "$1 $2")}</b> },

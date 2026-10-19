@@ -53,8 +53,8 @@ export function DefinitionSheet({ kind, env, editing, onClose, onSave, onDelete,
         <>
           {!editing.isNew && onDelete && <Button variant="danger" onClick={remove} disabled={busy}><Icon name="trash" />Delete</Button>}
           {actions && actions(body, run)}
-          <span className="grow" />
-          {issue && tab === "form" && <span className="hint">{issue}</span>}
+          <span className="grow flex-1 min-w-0" />
+          {issue && tab === "form" && <span className="hint text-xs font-book text-muted leading-[1.45]">{issue}</span>}
           <Button onClick={() => onClose(undefined)}>Cancel</Button>
           <Button variant="primary" onClick={save} disabled={busy || !!issue}>
             {editing.isNew ? `Create ${singular(kind).toLowerCase()}` : "Save changes"}
@@ -65,7 +65,7 @@ export function DefinitionSheet({ kind, env, editing, onClose, onSave, onDelete,
       {tab === "form" && (
         <>
           {editing.isNew && meta.template && (
-            <div className="alert info row" style={{ justifyContent: "space-between" }}>
+            <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] info row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ justifyContent: "space-between" }}>
               <span>New here? Start from a worked example and adjust it.</span>
               <Button size="sm" variant="soft" onClick={() => { setBody(meta.template); setFormKey((k) => k + 1); }}><Icon name="sparkle" />Use example</Button>
             </div>

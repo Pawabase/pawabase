@@ -18,31 +18,31 @@ export default function Routes({ env, minutes, onRoute, onTrace }) {
   const state = useApi(`${base}/observability/routes`, { params: { minutes, sort, limit: 200 }, interval: 15000 });
   const routes = useMemo(() => (state.data?.routes || []).filter((r) => r.route.toLowerCase().includes(search.toLowerCase())), [state.data, search]);
   return (
-    <div className="stack lg">
-      {state.data?.truncated && <div className="alert">This window has more than 50,000 requests; only the newest are analysed. Choose a shorter window for exact numbers.</div>}
-      <Card flush title={<div className="row wrap">
+    <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
+      {state.data?.truncated && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)]">This window has more than 50,000 requests; only the newest are analysed. Choose a shorter window for exact numbers.</div>}
+      <Card flush title={<div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">
         <Segmented options={SORTS} value={sort} onChange={setSort} />
         <input placeholder="Filter routes" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 200 }} />
       </div>}>
         <Loading state={state}>
           {() => <Table rows={routes} empty="No requests in this window." onRowClick={onRoute} columns={[
-            { label: "Route", render: (r) => <span className="row"><MethodBadge method={r.method} /><code>{r.route}</code></span> },
-            { label: "Requests", render: (r) => <span>{r.requests.toLocaleString()} <span className="faint">· {r.per_minute}/min</span></span> },
+            { label: "Route", render: (r) => <span className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5"><MethodBadge method={r.method} /><code>{r.route}</code></span> },
+            { label: "Requests", render: (r) => <span>{r.requests.toLocaleString()} <span className="faint text-faint">· {r.per_minute}/min</span></span> },
             { label: "5xx", render: (r) => (
-              <div className="rate-cell">
+              <div className="rate-cell flex items-center gap-2 min-w-[150px] [&_b.bad]:text-danger">
                 <b className={r.server_errors ? "bad" : "faint"}>{r.server_errors}</b>
                 <RateBar value={r.error_rate} tone="var(--danger)" />
-                <span className="faint">{percent(r.error_rate)}</span>
+                <span className="faint text-faint">{percent(r.error_rate)}</span>
               </div>
             ) },
-            { label: "4xx", render: (r) => (r.client_errors ? <Badge tone="yellow">{r.client_errors}</Badge> : <span className="faint">0</span>) },
+            { label: "4xx", render: (r) => (r.client_errors ? <Badge tone="yellow">{r.client_errors}</Badge> : <span className="faint text-faint">0</span>) },
             { label: "p50", render: (r) => ms(r.p50_ms) },
             { label: "p95", render: (r) => <b>{ms(r.p95_ms)}</b> },
             { label: "p99", render: (r) => ms(r.p99_ms) },
             { label: "Last failure", render: (r) => (r.last_failure_at ? (
               <a onClick={(e) => { e.stopPropagation(); onTrace(r.last_failure_request_id); }} style={{ cursor: "pointer" }}>{when(r.last_failure_at)}</a>
-            ) : <span className="faint">never</span>) },
-            { label: "Top problem", render: (r) => (r.top_problems[0] ? <span><code>{r.top_problems[0].problem}</code> <span className="faint">× {r.top_problems[0].count}</span></span> : <span className="faint">—</span>) },
+            ) : <span className="faint text-faint">never</span>) },
+            { label: "Top problem", render: (r) => (r.top_problems[0] ? <span><code>{r.top_problems[0].problem}</code> <span className="faint text-faint">× {r.top_problems[0].count}</span></span> : <span className="faint text-faint">—</span>) },
           ]} />}
         </Loading>
       </Card>

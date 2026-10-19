@@ -12,12 +12,12 @@ import { del, envPath, get, post, put, useApi } from "../../lib/api";
 const DATA_KINDS = ["schemas", "transformers"];
 
 const RENDER = {
-  enabled: (r) => <Badge tone={r.enabled ? "green" : ""}><span className="dot" />{r.enabled ? "On" : "Off"}</Badge>,
+  enabled: (r) => <Badge tone={r.enabled ? "green" : ""}><span className="dot w-[7px] h-[7px] rounded-full bg-[var(--faint)] flex-none inline-block [&.ok]:bg-ok [&.warn]:bg-warn [&.bad]:bg-danger [&.info]:bg-info" />{r.enabled ? "On" : "Off"}</Badge>,
   name: (r) => <b>{r.name}</b>,
-  slug: (r) => <b className="mono">{r.slug}</b>,
-  path: (r) => <b className="mono">{r.path}</b>,
-  method: (r) => <span className={`op-method m-${r.method}`}>{r.method}</span>,
-  events: (r) => <div className="row wrap" style={{ gap: 4 }}>{(r.events || []).map((e) => <Badge key={e} tone="brand">{e}</Badge>)}</div>,
+  slug: (r) => <b className="mono font-mono text-ui-sm">{r.slug}</b>,
+  path: (r) => <b className="mono font-mono text-ui-sm">{r.path}</b>,
+  method: (r) => <span className={`op-method font-mono text-[10.5px] font-bold p-[2px_7px] rounded-sm m-${r.method}`}>{r.method}</span>,
+  events: (r) => <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap" style={{ gap: 4 }}>{(r.events || []).map((e) => <Badge key={e} tone="brand">{e}</Badge>)}</div>,
   target_type: (r) => <Badge>{r.target_type}</Badge>,
   handler_type: (r) => <Badge>{r.handler_type}</Badge>,
   verification: (r) => <Badge tone={r.verification === "none" ? "yellow" : "green"}>{r.verification}</Badge>,
@@ -98,12 +98,12 @@ export default function Definitions({ env, kind }) {
       )}
       {extra && (
         <Modal title={extra.title} onClose={() => setExtra(null)} footer={<Button variant="primary" onClick={() => setExtra(null)}>Done</Button>}>
-          {extra.value?.url ? <CopyText text={extra.value.url} /> : <pre className="code-block">{JSON.stringify(extra.value, null, 2)}</pre>}
+          {extra.value?.url ? <CopyText text={extra.value.url} /> : <pre className="code-block bg-head-bg rounded-sm p-[12px_14px] overflow-auto max-h-[420px] [border:1px_solid_var(--line)] [pre&]:[border:1px_solid_var(--line)] [pre&]:rounded-sm [pre&]:bg-head-bg">{JSON.stringify(extra.value, null, 2)}</pre>}
         </Modal>
       )}
       {reveal && (
         <Modal title="Signing secret" onClose={() => setReveal(null)} footer={<Button variant="primary" onClick={() => setReveal(null)}>I have stored it</Button>}>
-          <div className="alert warn">Shown once. Store it where the other side can verify signatures.</div>
+          <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] warn">Shown once. Store it where the other side can verify signatures.</div>
           <CopyText text={reveal.secret || reveal.key} />
         </Modal>
       )}

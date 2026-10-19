@@ -99,8 +99,8 @@ export default function CommandSearch() {
 
   let lastGroup = null;
   return (
-    <div className={`cmd ${open ? "open" : ""}`} ref={box}>
-      <label className="cmd-field">
+    <div className={`cmd relative [&.open_.cmd-field]:w-[320px] [&.open_.cmd-field]:shadow-none [&.open_.cmd-field]:text-text max-navigation:[&.open_.cmd-field]:w-[min(240px,_52vw)] max-navigation:[&.open_.cmd-field]:p-[0_12px] max-navigation:[&.open_.cmd-field]:justify-start max-navigation:[&:not(.open)_.cmd-field_input]:absolute max-navigation:[&:not(.open)_.cmd-field_input]:w-px max-navigation:[&:not(.open)_.cmd-field_input]:opacity-0 ${open ? "open" : ""}`} ref={box}>
+      <label className="cmd-field flex items-center gap-2 h-10 w-[240px] p-[0_8px_0_14px] rounded-sm bg-surface text-muted cursor-text transition-[width_0.2s_ease,_box-shadow_0.15s] [&:focus-within]:w-[320px] [&:focus-within]:shadow-none [&:focus-within]:text-text [&_input]:flex-1 [&_input]:min-w-0 [&_input]:border-0 [&_input]:bg-none [&_input]:p-0 [&_input]:h-full [&_input]:font-inherit [&_input]:text-body [&_input]:text-text [&_input]:shadow-none [&_input:focus]:shadow-none [&_kbd]:[font:600_11px_var(--sans)] [&_kbd]:text-faint [&_kbd]:bg-transparent [&_kbd]:rounded-xs [&_kbd]:p-[1px_5px] max-navigation:w-10 max-navigation:p-0 max-navigation:justify-center max-navigation:[&:focus-within]:w-[min(240px,_52vw)] max-navigation:[&:focus-within]:p-[0_12px] max-navigation:[&:focus-within]:justify-start max-navigation:[&_kbd]:hidden [&_kbd]:[border:1px_solid_var(--line-2)]">
         <Icon name="search" size={16} />
         <input
           ref={input}
@@ -117,26 +117,26 @@ export default function CommandSearch() {
         <kbd>⌘K</kbd>
       </label>
       {open && (
-        <div className="cmd-results" id="cmd-results" role="listbox">
-          {items.length === 0 && <div className="cmd-empty">No page matches “{query}”.</div>}
+        <div className="cmd-results absolute right-0 top-[calc(100%_+_6px)] w-[380px] max-h-[min(460px,_70vh)] overflow-auto bg-surface rounded-sm shadow-none p-1 z-[30] max-navigation:w-[min(340px,_calc(100vw_-_32px))] max-navigation:right-[-48px] [border:1px_solid_var(--line-2)] left-[auto]" id="cmd-results" role="listbox">
+          {items.length === 0 && <div className="cmd-empty p-[18px_12px] text-muted text-ui">No page matches “{query}”.</div>}
           {items.map((item, i) => {
             const head = item.group !== lastGroup ? item.group : null;
             lastGroup = item.group;
             return (
               <div key={item.href + item.label}>
-                {head && <div className="cmd-group">{head}</div>}
+                {head && <div className="cmd-group text-2xs font-bold uppercase tracking-[0.06em] text-faint p-[10px_10px_4px]">{head}</div>}
                 <button
                   type="button"
                   role="option"
                   aria-selected={i === active}
-                  className={`cmd-item ${i === active ? "active" : ""}`}
+                  className={`cmd-item flex items-center gap-2.5 w-full border-0 bg-none font-inherit text-body text-text text-left p-[8px_10px] rounded-xs cursor-pointer [&.active]:bg-press [&.active_.cmd-icon]:bg-surface [&.active_.cmd-icon]:text-brand-strong ${i === active ? "active" : ""}`}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => go(item)}
                 >
-                  <span className="cmd-icon"><Icon name={item.icon} size={16} /></span>
-                  <span className="grow">{item.label}</span>
-                  <span className="cmd-hint">{item.hint}</span>
-                  {i === active && <Icon name="enter" size={14} className="faint" />}
+                  <span className="cmd-icon w-[28px] h-[28px] rounded-xs bg-transparent grid place-items-center flex-none text-muted [border:1px_solid_var(--line-2)]"><Icon name={item.icon} size={16} /></span>
+                  <span className="grow flex-1 min-w-0">{item.label}</span>
+                  <span className="cmd-hint text-xs text-faint whitespace-nowrap">{item.hint}</span>
+                  {i === active && <Icon name="enter" size={14} className="faint text-faint" />}
                 </button>
               </div>
             );

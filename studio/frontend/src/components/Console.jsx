@@ -218,47 +218,47 @@ export default function Console({ env }) {
     return parts;
   };
   return (
-    <div className={`dock ${open ? "open" : ""} ${maximized ? "max" : ""}`}>
+    <div className={`dock shrink-0 flex flex-col bg-surface [border-top:1px_solid_var(--line-2)] [&.open_.dock-btn]:bg-sunken [&.max_.term]:h-[min(78vh,_calc(100vh_-_160px))] min-h-[var(--dock)] ${open ? "open" : ""} ${maximized ? "max" : ""}`}>
       {open && (
-        <section className="term" aria-label="Pawabase terminal">
-          <div className="term-head">
-            <div className="term-tabs" role="tablist">
+        <section className="term [&_pre]:m-[2px_0_0] [&_pre]:whitespace-pre-wrap [&_pre]:text-[var(--term-text)] [&_pre]:text-ui-sm [&_pre.term-err]:text-[var(--term-red)] [&_mark]:bg-[#515c6a] [&_mark]:text-white [&_mark]:rounded-xs [&_mark]:shadow-none [scrollbar-color:#424242_transparent]" aria-label="Pawabase terminal">
+          <div className="term-head flex items-stretch justify-between bg-[var(--term-panel)] [border-bottom:1px_solid_var(--term-line)] min-h-[35px] font-sans">
+            <div className="term-tabs flex items-stretch min-w-0 overflow-x-auto [&_>_.term-icon]:m-[auto_6px] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:w-2.5" role="tablist">
               {tabs.map((item) => (
-                <div key={item.id} role="tab" aria-selected={item.id === tab.id} className={`term-tab ${item.id === tab.id ? "on" : ""}`} onClick={() => setActive(item.id)}>
+                <div key={item.id} role="tab" aria-selected={item.id === tab.id} className={`term-tab flex items-center gap-[7px] p-[0_8px_0_14px] text-[var(--term-muted)] text-ui-sm cursor-pointer [border-right:1px_solid_var(--term-line)] whitespace-nowrap [border-top:2px_solid_transparent] [&:hover]:text-[var(--term-text)] [&:hover]:bg-[#2d2d2d] [&.on]:bg-[var(--term-bg)] [&.on]:text-white [&.on]:[border-top-color:#007acc] [&_button]:grid [&_button]:place-items-center [&_button]:w-6 [&_button]:h-6 [&_button]:m-[auto_0] [&_button]:border-0 [&_button]:rounded-sm [&_button]:bg-none [&_button]:text-[var(--term-muted)] [&_button]:cursor-pointer [&_button]:p-0 [&_button:hover]:bg-[#3a3d41] [&_button:hover]:text-white ${item.id === tab.id ? "on" : ""}`} onClick={() => setActive(item.id)}>
                   <Icon name="terminal" size={13} />
                   <span>{item.name}</span>
                   <button type="button" aria-label={`Close ${item.name}`} onClick={(event) => { event.stopPropagation(); closeTab(item.id); }}><Icon name="x" size={12} /></button>
                 </div>
               ))}
-              <button type="button" className="term-icon" onClick={addTab} title="New terminal" aria-label="New terminal"><Icon name="plus" size={15} /></button>
+              <button type="button" className="term-icon grid place-items-center w-6 h-6 m-[auto_0] border-0 rounded-sm bg-none text-[var(--term-muted)] cursor-pointer p-0 [&:hover]:bg-[#3a3d41] [&:hover]:text-white [&.on]:bg-[#3a3d41] [&.on]:text-white" onClick={addTab} title="New terminal" aria-label="New terminal"><Icon name="plus" size={15} /></button>
             </div>
-            <div className="term-tools">
-              <button type="button" className={`term-icon ${searching ? "on" : ""}`} onClick={() => { setSearching((value) => !value); setQuery(""); }} title="Search" aria-label="Search terminal"><Icon name="search" size={15} /></button>
-              <button type="button" className="term-icon" onClick={() => patchTab(tab.id, () => ({ lines: [] }))} title="Clear" aria-label="Clear terminal"><Icon name="trash" size={15} /></button>
-              <button type="button" className="term-icon" onClick={() => setMaximized((value) => !value)} title={maximized ? "Restore size" : "Maximize"} aria-label={maximized ? "Restore size" : "Maximize terminal"}><Icon name={maximized ? "minimize" : "maximize"} size={15} /></button>
-              <button type="button" className="term-icon" onClick={() => setOpen(false)} title="Close (Esc)" aria-label="Close terminal"><Icon name="x" size={15} /></button>
+            <div className="term-tools flex items-center gap-0.5 pr-2">
+              <button type="button" className={`term-icon grid place-items-center w-6 h-6 m-[auto_0] border-0 rounded-sm bg-none text-[var(--term-muted)] cursor-pointer p-0 [&:hover]:bg-[#3a3d41] [&:hover]:text-white [&.on]:bg-[#3a3d41] [&.on]:text-white ${searching ? "on" : ""}`} onClick={() => { setSearching((value) => !value); setQuery(""); }} title="Search" aria-label="Search terminal"><Icon name="search" size={15} /></button>
+              <button type="button" className="term-icon grid place-items-center w-6 h-6 m-[auto_0] border-0 rounded-sm bg-none text-[var(--term-muted)] cursor-pointer p-0 [&:hover]:bg-[#3a3d41] [&:hover]:text-white [&.on]:bg-[#3a3d41] [&.on]:text-white" onClick={() => patchTab(tab.id, () => ({ lines: [] }))} title="Clear" aria-label="Clear terminal"><Icon name="trash" size={15} /></button>
+              <button type="button" className="term-icon grid place-items-center w-6 h-6 m-[auto_0] border-0 rounded-sm bg-none text-[var(--term-muted)] cursor-pointer p-0 [&:hover]:bg-[#3a3d41] [&:hover]:text-white [&.on]:bg-[#3a3d41] [&.on]:text-white" onClick={() => setMaximized((value) => !value)} title={maximized ? "Restore size" : "Maximize"} aria-label={maximized ? "Restore size" : "Maximize terminal"}><Icon name={maximized ? "minimize" : "maximize"} size={15} /></button>
+              <button type="button" className="term-icon grid place-items-center w-6 h-6 m-[auto_0] border-0 rounded-sm bg-none text-[var(--term-muted)] cursor-pointer p-0 [&:hover]:bg-[#3a3d41] [&:hover]:text-white [&.on]:bg-[#3a3d41] [&.on]:text-white" onClick={() => setOpen(false)} title="Close (Esc)" aria-label="Close terminal"><Icon name="x" size={15} /></button>
             </div>
           </div>
           {searching && (
-            <div className="term-find">
+            <div className="term-find flex items-center gap-2 p-[6px_12px] bg-[var(--term-panel)] [border-bottom:1px_solid_var(--term-line)] text-[var(--term-muted)] font-sans text-xs [&_input]:flex-1 [&_input]:min-w-0 [&_input]:max-w-[320px] [&_input]:[border:1px_solid_var(--term-line)] [&_input]:rounded-xs [&_input]:bg-[#3c3c3c] [&_input]:text-[var(--term-text)] [&_input]:p-[3px_8px] [&_input]:font-inherit [&_input]:outline-none [&_input]:shadow-none [&_input:focus]:[border-color:#007fd4] [&_input:focus]:shadow-none">
               <Icon name="search" size={14} />
               <input autoFocus value={query} onChange={(event) => { setQuery(event.target.value); setMatch(0); }} onKeyDown={(event) => { if (event.key === "Enter") focusMatch(match + (event.shiftKey ? -1 : 1)); if (event.key === "Escape") { setSearching(false); setQuery(""); } }} placeholder="Find in output" spellCheck={false} />
               <span>{needle ? (matches.length ? `${match + 1} of ${matches.length}` : "No results") : ""}</span>
-              <button type="button" className="term-icon" onClick={() => focusMatch(match - 1)} aria-label="Previous match"><Icon name="chevronUp" size={14} /></button>
-              <button type="button" className="term-icon" onClick={() => focusMatch(match + 1)} aria-label="Next match"><Icon name="chevronDown" size={14} /></button>
+              <button type="button" className="term-icon grid place-items-center w-6 h-6 m-[auto_0] border-0 rounded-sm bg-none text-[var(--term-muted)] cursor-pointer p-0 [&:hover]:bg-[#3a3d41] [&:hover]:text-white [&.on]:bg-[#3a3d41] [&.on]:text-white" onClick={() => focusMatch(match - 1)} aria-label="Previous match"><Icon name="chevronUp" size={14} /></button>
+              <button type="button" className="term-icon grid place-items-center w-6 h-6 m-[auto_0] border-0 rounded-sm bg-none text-[var(--term-muted)] cursor-pointer p-0 [&:hover]:bg-[#3a3d41] [&:hover]:text-white [&.on]:bg-[#3a3d41] [&.on]:text-white" onClick={() => focusMatch(match + 1)} aria-label="Next match"><Icon name="chevronDown" size={14} /></button>
             </div>
           )}
-          <div ref={outputRef} className="term-out" onClick={() => !window.getSelection()?.toString() && inputRef.current?.focus()}>
-            {!lines.length && <pre className="term-hello">{"Pawabase terminal\nType help for commands. Tab completes. Up arrow recalls history.\n\n"}</pre>}
+          <div ref={outputRef} className="term-out flex-1 overflow-auto p-[10px_16px] leading-[1.55] bg-[var(--term-bg)] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:bg-[#424242]" onClick={() => !window.getSelection()?.toString() && inputRef.current?.focus()}>
+            {!lines.length && <pre className="term-hello text-[#6a9955]!">{"Pawabase terminal\nType help for commands. Tab completes. Up arrow recalls history.\n\n"}</pre>}
             {lines.map((line, index) => (
-              <div key={index} data-line={index} className="term-entry">
-                <div className="term-cmd"><span className="term-ps"><b>pawabase</b>@{env}</span><span className="term-path"> ~</span> $ {mark(line.command)}</div>
+              <div key={index} data-line={index} className="term-entry mb-2.5">
+                <div className="term-cmd text-[var(--term-text)]"><span className="term-ps text-[var(--term-green)] [&_b]:font-semibold"><b>pawabase</b>@{env}</span><span className="term-path text-[var(--term-blue)] ml-1.5"> ~</span> $ {mark(line.command)}</div>
                 <pre className={line.error ? "term-err" : ""}>{mark(line.output)}</pre>
               </div>
             ))}
           </div>
-          <div className="term-in">
-            <span className="term-ps"><b>pawabase</b>@{env}</span><span className="term-path">~</span><span>$</span>
+          <div className="term-in [&_.term-path]:ml-0 flex gap-2 items-center p-[8px_16px] bg-[var(--term-bg)] [border-top:1px_solid_var(--term-line)] [&_input]:flex-1 [&_input]:min-w-0 [&_input]:border-0 [&_input]:outline-none [&_input]:shadow-none [&_input]:appearance-none [&_input]:p-0 [&_input]:rounded-none [&_input]:bg-transparent [&_input]:text-[var(--term-text)] [&_input]:font-inherit [&_input]:[caret-color:#aeafad]">
+            <span className="term-ps text-[var(--term-green)] [&_b]:font-semibold"><b>pawabase</b>@{env}</span><span className="term-path text-[var(--term-blue)] ml-1.5">~</span><span>$</span>
             <input
               ref={inputRef}
               value={input}
@@ -278,14 +278,14 @@ export default function Console({ env }) {
           </div>
         </section>
       )}
-      <div className="dockbar">
-        <button type="button" data-tour="terminal" className="dock-btn" aria-expanded={open} onClick={() => setOpen((value) => !value)} title="Terminal (⌘/Ctrl J)">
+      <div className="dockbar flex items-center gap-3 h-[38px] p-[0_12px] text-ui-sm text-muted [border-top:1px_solid_var(--line)] bg-canvas">
+        <button type="button" data-tour="terminal" className="dock-btn inline-flex items-center gap-2 h-[26px] p-[0_10px] border-0 rounded-sm bg-none text-text font-inherit font-semibold text-ui-sm cursor-pointer [&:hover]:bg-sunken [&_kbd]:font-mono [&_kbd]:text-2xs [&_kbd]:text-faint" aria-expanded={open} onClick={() => setOpen((value) => !value)} title="Terminal (⌘/Ctrl J)">
           <Icon name="terminal" size={15} />
           <span>Terminal</span>
           <kbd>⌘J</kbd>
         </button>
-        <span className="dock-env">{env}</span>
-        <button type="button" className="dock-chevron" onClick={() => setOpen((value) => !value)} aria-label={open ? "Collapse terminal" : "Expand terminal"}>
+        <span className="dock-env ml-auto font-mono text-xs">{env}</span>
+        <button type="button" className="dock-chevron grid place-items-center w-[26px] h-[26px] border-0 rounded-full bg-none text-muted cursor-pointer [&:hover]:bg-sunken [&:hover]:text-text" onClick={() => setOpen((value) => !value)} aria-label={open ? "Collapse terminal" : "Expand terminal"}>
           <Icon name={open ? "chevronDown" : "chevronUp"} size={15} />
         </button>
       </div>

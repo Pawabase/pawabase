@@ -31,11 +31,11 @@ export default function Networking({ env }) {
       {tab === "events" && <FirewallEvents base={base} onBan={ban} />}
       {tab === "test" && <FirewallTester base={base} />}
       {tab === "domains" && (
-        <div className="stack lg">
+        <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
           <PageHead title="Custom domains" description="Addresses this environment answers on, proved with a DNS record." />
           <Domains base={base} />
           <Card title="Other network controls">
-            <p className="muted">
+            <p className="muted text-muted">
               Allowed origins (CORS), the secret-key IP allowlist and maintenance mode live in <Link href={envHref(env, "settings")}>Settings</Link>. Each API key can also be limited to IP ranges and routes under <Link href={envHref(env, "keys")}>API keys</Link>.
             </p>
           </Card>
@@ -58,16 +58,16 @@ function Domains({ base }) {
             columns={[
               { label: "Hostname", render: (d) => <code>{d.hostname}</code> },
               { label: "Status", render: (d) => <Badge tone={STATUS_TONES[d.status]}>{d.status}</Badge> },
-              { label: "DNS record", render: (d) => d.status === "verified" ? <span className="muted small">verified {when(d.verified_at)}</span> : (
-                <div className="stack" style={{ gap: 4 }}>
-                  <span className="small muted">Add a {d.record.type} record named</span>
+              { label: "DNS record", render: (d) => d.status === "verified" ? <span className="muted text-muted small text-ui-sm">verified {when(d.verified_at)}</span> : (
+                <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 4 }}>
+                  <span className="small text-ui-sm muted text-muted">Add a {d.record.type} record named</span>
                   <CopyText text={d.record.name} />
-                  <span className="small muted">with the value</span>
+                  <span className="small text-ui-sm muted text-muted">with the value</span>
                   <CopyText text={d.record.value} />
-                  {d.last_error && <span className="small" style={{ color: "var(--red, #c4453a)" }}>{d.last_error}</span>}
+                  {d.last_error && <span className="small text-ui-sm" style={{ color: "var(--red, #c4453a)" }}>{d.last_error}</span>}
                 </div>
               ) },
-              { label: "", render: (d) => <div className="row">
+              { label: "", render: (d) => <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5">
                 <Button size="sm" disabled={busy} onClick={async () => { if (await run(() => post(`${base}/domains/${d.id}/verify`))) list.reload(); }}>{d.status === "verified" ? "Re-check" : "Check now"}</Button>
                 <Button size="sm" variant="danger" onClick={async () => { if (confirm(`Remove ${d.hostname}?`) && await run(() => del(`${base}/domains/${d.id}`), "Removed")) list.reload(); }}>Remove</Button>
               </div> },
@@ -75,7 +75,7 @@ function Domains({ base }) {
           />
         )}
       </Loading>
-      <p className="hint" style={{ padding: "12px 16px" }}>
+      <p className="hint text-xs font-book text-muted leading-[1.45]" style={{ padding: "12px 16px" }}>
         Verifying proves you own the hostname. Once verified, point it at your gateway with a CNAME or A record. Pawabase does not issue certificates: terminate TLS for the hostname at the proxy or CDN in front of the gateway.
       </p>
       {adding && <AddDomain base={base} onClose={() => setAdding(false)} onDone={() => { setAdding(false); list.reload(); }} />}

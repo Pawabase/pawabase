@@ -47,7 +47,7 @@ export default function WebhookDeliveries({ env }) {
               { label: "Status", render: (d) => <Status value={d.status} /> },
               { label: "HTTP", render: (d) => d.response_status ?? "—" },
               { label: "Attempts", key: "attempts" },
-              { label: "Next attempt", render: (d) => (d.next_attempt_at ? when(d.next_attempt_at) : <span className="faint">—</span>) },
+              { label: "Next attempt", render: (d) => (d.next_attempt_at ? when(d.next_attempt_at) : <span className="faint text-faint">—</span>) },
               { label: "Created", render: (d) => when(d.created_at) },
               { label: "", render: (d) => <Button size="sm" disabled={busy} onClick={(e) => { e.stopPropagation(); redeliverOne(d.id); }}>Redeliver</Button> },
             ]} />

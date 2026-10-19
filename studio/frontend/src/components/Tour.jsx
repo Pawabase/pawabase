@@ -56,7 +56,7 @@ function Confetti() {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
-  return <canvas ref={ref} className="tour-confetti" aria-hidden="true" />;
+  return <canvas ref={ref} className="tour-confetti fixed inset-0 w-full h-full pointer-events-none" aria-hidden="true" />;
 }
 
 /** A skippable walk through Studio: a spotlight on one part at a time, with the page opened behind it. */
@@ -176,37 +176,37 @@ export default function Tour({ env, section }) {
   const welcome = step.chapter === "welcome";
 
   return (
-    <div className="tour" role="dialog" aria-modal="false" aria-label={`Studio tour, step ${index + 1} of ${STEPS.length}: ${step.title}`}>
-      {veil.map((style, i) => <div key={i} className="tour-veil" style={style} onClick={(event) => event.stopPropagation()} />)}
-      {spot && <div className="tour-ring" style={spot} />}
+    <div className="tour fixed inset-0 z-[200] pointer-events-none" role="dialog" aria-modal="false" aria-label={`Studio tour, step ${index + 1} of ${STEPS.length}: ${step.title}`}>
+      {veil.map((style, i) => <div key={i} className="tour-veil fixed bg-[rgba(20,_16,_36,_0.58)] backdrop-filter-none pointer-events-auto transition-[left_.38s_cubic-bezier(.2,.8,.2,1),_top_.38s_cubic-bezier(.2,.8,.2,1),_width_.38s_cubic-bezier(.2,.8,.2,1),_height_.38s_cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-[none] motion-reduce:animate-[none]" style={style} onClick={(event) => event.stopPropagation()} />)}
+      {spot && <div className="tour-ring fixed [border:2px_solid_var(--brand)] rounded-sm pointer-events-none shadow-none transition-[left_.38s_cubic-bezier(.2,.8,.2,1),_top_.38s_cubic-bezier(.2,.8,.2,1),_width_.38s_cubic-bezier(.2,.8,.2,1),_height_.38s_cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-[none] motion-reduce:animate-[none]" style={spot} />}
       {celebrate > 0 && step.last && <Confetti key={celebrate} />}
-      <div ref={card} className={`tour-card tone-${chapter.tone} ${position.center ? "centered" : ""}`} style={{ left: position.left, top: position.top, width: CARD_W }}>
-        <div className="tour-progress" aria-hidden="true">
+      <div ref={card} className={`tour-card fixed pointer-events-auto bg-surface text-text rounded-sm p-[18px_20px_16px] shadow-none [border:1px_solid_var(--line)] flex flex-col gap-2.5 transition-[left_.38s_cubic-bezier(.2,.8,.2,1),_top_.38s_cubic-bezier(.2,.8,.2,1)] animate-[tour-in_.32s_cubic-bezier(.2,.8,.2,1)] [&.centered]:p-[24px_26px_20px] [&.centered_h2]:text-display-sm [&_h2]:m-0 [&_h2]:text-[17px] [&_h2]:tracking-[-0.01em] [&_p]:m-0 [&_p]:text-muted [&_p]:text-body [&_p]:leading-[1.55] motion-reduce:transition-[none] motion-reduce:animate-[none] max-phone:left-3! max-phone:right-3 max-phone:w-auto! tone-${chapter.tone} ${position.center ? "centered" : ""}`} style={{ left: position.left, top: position.top, width: CARD_W }}>
+        <div className="tour-progress flex gap-1 m-[-4px_0_4px]" aria-hidden="true">
           {CHAPTERS.map((item) => {
             const all = STEPS.map((s, i) => [s, i]).filter(([s]) => s.chapter === item.id);
             const done = all.filter(([, i]) => i < index).length + (all.some(([, i]) => i === index) ? 0.5 : 0);
-            return <span key={item.id} className="tour-seg" style={{ flexGrow: all.length }}><i style={{ width: `${(done / all.length) * 100}%` }} /></span>;
+            return <span key={item.id} className="tour-seg h-1 rounded-xs bg-sunken overflow-hidden min-w-1.5 [&_i]:block [&_i]:h-full [&_i]:bg-brand [&_i]:rounded-xs [&_i]:transition-[width_.4s_ease] motion-reduce:[&_i]:transition-[none] motion-reduce:[&_i]:animate-[none]" style={{ flexGrow: all.length }}><i style={{ width: `${(done / all.length) * 100}%` }} /></span>;
           })}
         </div>
-        <div className="tour-meta">
-          <span className={`tour-badge pastel ${chapter.tone}`}><Icon name={step.icon} size={16} /></span>
-          <span className="tour-chapter">{chapter.label}</span>
-          <span className="tour-count">{index + 1} / {STEPS.length}</span>
+        <div className="tour-meta flex items-center gap-2">
+          <span className={`tour-badge w-[30px] h-[30px] rounded-sm inline-flex items-center justify-center pastel text-text pastel-contrast [&.lavender]:bg-lavender [&.peach]:bg-peach [&.mint]:bg-mint [&.butter]:bg-butter [&.sky]:bg-sky [&.rose]:bg-rose [&.lavender]:text-text [&.peach]:text-text [&.mint]:text-text [&.butter]:text-text [&.sky]:text-text [&.rose]:text-text ${chapter.tone}`}><Icon name={step.icon} size={16} /></span>
+          <span className="tour-chapter text-caption font-semibold-plus tracking-[.06em] uppercase text-muted">{chapter.label}</span>
+          <span className="tour-count ml-auto [font:600_12px_var(--mono)] text-faint">{index + 1} / {STEPS.length}</span>
         </div>
         <h2>{step.title}</h2>
         <p>{step.body}</p>
-        {step.hint && <div className="tour-hint"><span className="tour-pulse" />{step.hint}<span className="faint"> or just continue</span></div>}
+        {step.hint && <div className="tour-hint flex items-center gap-2 text-ui-sm font-semibold text-brand-strong bg-brand-soft rounded-sm p-[8px_10px] [&_.faint]:font-book [&_.faint]:text-muted"><span className="tour-pulse w-2 h-2 rounded-full bg-brand animate-[tour-ping_1.4s_ease-out_infinite] shrink-0 motion-reduce:animate-[none]" />{step.hint}<span className="faint text-faint"> or just continue</span></div>}
         {welcome && (
-          <div className="tour-chapters">
-            <span className="eyebrow">Jump to</span>
-            <div className="row wrap">
+          <div className="tour-chapters flex flex-col gap-1.5">
+            <span className="eyebrow text-2xs font-bold uppercase tracking-[0.09em] text-faint">Jump to</span>
+            <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">
               {CHAPTERS.filter((c) => !["welcome", "finish"].includes(c.id)).map((c) => (
-                <button key={c.id} type="button" className={`tour-chip pastel ${c.tone}`} onClick={() => go(STEPS.findIndex((s) => s.chapter === c.id))}>{c.label}</button>
+                <button key={c.id} type="button" className={`tour-chip border-0 rounded-sm p-[6px_12px] [font:600_12.5px_var(--sans)] cursor-pointer text-pastel-ink transition-[transform_.15s_ease] [&:hover]:transform-[none]! pastel text-text pastel-contrast [&.lavender]:bg-lavender [&.peach]:bg-peach [&.mint]:bg-mint [&.butter]:bg-butter [&.sky]:bg-sky [&.rose]:bg-rose [&.lavender]:text-text [&.peach]:text-text [&.mint]:text-text [&.butter]:text-text [&.sky]:text-text [&.rose]:text-text ${c.tone}`} onClick={() => go(STEPS.findIndex((s) => s.chapter === c.id))}>{c.label}</button>
               ))}
             </div>
           </div>
         )}
-        <div className="tour-actions">
+        <div className="tour-actions flex items-center gap-2 mt-1">
           {step.last ? (
             <>
               <Button onClick={() => { update({ status: "done", step: 0 }); router.visit(envHref(env, "resources")); }}>Create a resource</Button>
@@ -214,14 +214,14 @@ export default function Tour({ env, section }) {
             </>
           ) : (
             <>
-              <button type="button" className="tour-skip" onClick={() => update({ status: "skipped", step: 0 })}>{welcome ? "Not now" : "Skip tour"}</button>
-              <span className="grow" />
+              <button type="button" className="tour-skip bg-none border-0 text-muted [font:600_12.5px_var(--sans)] cursor-pointer p-[6px_4px] [&:hover]:text-text" onClick={() => update({ status: "skipped", step: 0 })}>{welcome ? "Not now" : "Skip tour"}</button>
+              <span className="grow flex-1 min-w-0" />
               {index > 0 && <Button size="sm" onClick={back}>Back</Button>}
               <Button size="sm" variant="primary" onClick={next}>{welcome ? "Start the tour" : "Next"} <Icon name="chevronRight" size={14} /></Button>
             </>
           )}
         </div>
-        {!welcome && !step.last && <div className="tour-keys"><kbd>←</kbd><kbd>→</kbd> move · <kbd>Esc</kbd> pause</div>}
+        {!welcome && !step.last && <div className="tour-keys text-caption text-faint flex items-center gap-1 [&_kbd]:[font:600_11px_var(--mono)] [&_kbd]:bg-sunken [&_kbd]:rounded-sm [&_kbd]:p-[2px_6px] [&_kbd]:text-muted"><kbd>←</kbd><kbd>→</kbd> move · <kbd>Esc</kbd> pause</div>}
       </div>
     </div>
   );

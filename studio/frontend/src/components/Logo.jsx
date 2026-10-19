@@ -41,9 +41,9 @@ export function LogoMark({ size = 36, title = "Pawabase" }) {
 
 export function Logo({ sub }) {
   return (
-    <span className="row" style={{ gap: 11 }}>
+    <span className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ gap: 11 }}>
       <LogoMark />
-      <span className="brand-name">
+      <span className="brand-name font-extrabold text-[21px] tracking-[-0.035em] [&_small]:block [&_small]:text-2xs [&_small]:font-semibold [&_small]:tracking-[0.02em] [&_small]:text-faint [&_small]:mt-[-3px]">
         pawabase
         {sub && <small>{sub}</small>}
       </span>

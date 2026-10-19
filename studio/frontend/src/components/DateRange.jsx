@@ -36,8 +36,8 @@ function Month({ month, from, to, hover, today, onPick, onHover }) {
   const lo = from && end ? (from <= end ? from : end) : from;
   const hi = from && end ? (from <= end ? end : from) : from;
   return (
-    <div className="cal-grid" role="grid">
-      {WEEKDAYS.map((d) => <span key={d} className="cal-dow">{d}</span>)}
+    <div className="cal-grid grid grid-cols-[repeat(7,_1fr)] gap-[2px_0]" role="grid">
+      {WEEKDAYS.map((d) => <span key={d} className="cal-dow text-center text-2xs font-bold text-faint p-[4px_0_6px]">{d}</span>)}
       {cells.map((day, i) => {
         if (!day) return <span key={`b${i}`} />;
         const future = day > today;
@@ -49,7 +49,7 @@ function Month({ month, from, to, hover, today, onPick, onHover }) {
             key={day.getTime()}
             type="button"
             disabled={future || tooOld}
-            className={`cal-day ${inside ? "in" : ""} ${edge ? "edge" : ""} ${sameDay(day, today) ? "today" : ""}`}
+            className={`cal-day h-[34px] border-0 bg-none text-text font-inherit text-ui cursor-pointer rounded-none [&:hover:not(:disabled)]:bg-sunken [&:disabled]:text-line-2 [&:disabled]:cursor-not-allowed [&.today]:font-extrabold [&.today]:text-brand-strong [&.in]:bg-brand-soft [&.edge]:bg-ink [&.edge]:text-on-ink [&.edge]:rounded-sm ${inside ? "in" : ""} ${edge ? "edge" : ""} ${sameDay(day, today) ? "today" : ""}`}
             onClick={() => onPick(day)}
             onMouseEnter={() => onHover(day)}
             aria-label={day.toDateString()}
@@ -95,32 +95,32 @@ export default function DateRange({ value, onApply, active }) {
   const atNow = month.getFullYear() === today.getFullYear() && month.getMonth() === today.getMonth();
 
   return (
-    <div className="daterange" ref={ref}>
-      <button type="button" className={`range-btn ${active ? "active" : ""}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+    <div className="daterange relative" ref={ref}>
+      <button type="button" className={`range-btn inline-flex items-center gap-2 h-8 p-[0_14px] [border:1px_solid_var(--line-2)] rounded-sm bg-surface text-muted font-inherit text-ui-sm font-semibold cursor-pointer [&:hover]:text-text [&:hover]:border-faint [&[aria-expanded=true]]:text-text [&[aria-expanded=true]]:border-faint [&.active]:bg-brand-soft [&.active]:border-transparent [&.active]:text-brand-strong ${active ? "active" : ""}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <Icon name="schedules" size={14} />
         <span>{label}</span>
       </button>
       {open && (
-        <div className="range-pop" role="dialog" aria-label="Choose a date range">
-          <div className="range-presets">
+        <div className="range-pop absolute right-0 top-[calc(100%_+_8px)] z-[30] flex bg-surface [border:1px_solid_var(--line-2)] rounded-sm max-tablet:flex-col max-tablet:right-[auto] max-tablet:left-0 max-tablet:max-w-[calc(100vw_-_32px)] shadow-none" role="dialog" aria-label="Choose a date range">
+          <div className="range-presets grid content-start gap-0.5 p-2.5 min-w-[150px] [border-right:1px_solid_var(--line)] bg-sunken [&_button]:text-left [&_button]:p-[7px_10px] [&_button]:border-0 [&_button]:rounded-sm [&_button]:bg-none [&_button]:text-text [&_button]:font-inherit [&_button]:text-ui [&_button]:cursor-pointer [&_button:hover]:bg-surface max-tablet:grid-cols-[repeat(3,_1fr)] max-tablet:border-r-0 max-tablet:[border-bottom:1px_solid_var(--line)]">
             {PRESETS.map(([name, make]) => (
               <button key={name} type="button" onClick={() => { const [a, b] = make(); setFrom(a); setTo(b); setMonth(new Date(b.getFullYear(), b.getMonth(), 1)); }}>{name}</button>
             ))}
           </div>
-          <div className="range-cal" onMouseLeave={() => setHover(null)}>
-            <div className="cal-head">
-              <button type="button" className="icon-btn" onClick={() => shift(-1)} aria-label="Previous month"><Icon name="chevronRight" size={16} className="rotate-180" /></button>
+          <div className="range-cal p-[14px_16px_12px] w-[292px]" onMouseLeave={() => setHover(null)}>
+            <div className="cal-head flex items-center justify-between mb-2 [&_.icon-btn]:w-[30px] [&_.icon-btn]:h-[30px]">
+              <button type="button" className="icon-btn w-control h-control rounded-[calc(var(--r)_-_1px)] grid place-items-center border-0 bg-transparent text-text cursor-pointer [&:hover]:bg-brand-soft [&:hover]:text-brand-strong" onClick={() => shift(-1)} aria-label="Previous month"><Icon name="chevronRight" size={16} className="rotate-180 transform-[rotate(180deg)]" /></button>
               <b>{month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</b>
-              <button type="button" className="icon-btn" onClick={() => shift(1)} disabled={atNow} aria-label="Next month"><Icon name="chevronRight" size={16} /></button>
+              <button type="button" className="icon-btn w-control h-control rounded-[calc(var(--r)_-_1px)] grid place-items-center border-0 bg-transparent text-text cursor-pointer [&:hover]:bg-brand-soft [&:hover]:text-brand-strong" onClick={() => shift(1)} disabled={atNow} aria-label="Next month"><Icon name="chevronRight" size={16} /></button>
             </div>
             <Month month={month} from={from} to={to} hover={hover} today={today} onPick={pick} onHover={setHover} />
-            <div className="range-fields">
+            <div className="range-fields grid grid-cols-2 gap-2.5 mt-3 [&_label]:grid [&_label]:gap-1 [&_label]:text-caption [&_label]:font-semibold [&_label]:text-muted [&_input]:p-[6px_8px] [&_input]:text-ui-sm [&_input]:rounded-sm">
               <label>From<input type="date" value={from ? iso(from) : ""} max={iso(today)} onChange={(e) => { const d = parse(e.target.value); if (d) { setFrom(d); if (to && d > to) setTo(null); setMonth(new Date(d.getFullYear(), d.getMonth(), 1)); } }} /></label>
               <label>To<input type="date" value={last ? iso(last) : ""} max={iso(today)} onChange={(e) => { const d = parse(e.target.value); if (d) setTo(d); }} /></label>
             </div>
-            <div className="range-foot">
-              <span className={`small ${span > MAX_DAYS ? "danger-text" : "muted"}`}>{span ? `${span} day${span === 1 ? "" : "s"}${span > MAX_DAYS ? ` (most is ${MAX_DAYS})` : ""}` : "Pick a first and last day"}</span>
-              <span className="row">
+            <div className="range-foot flex items-center justify-between gap-2.5 mt-3 pt-2.5 [border-top:1px_solid_var(--line)]">
+              <span className={`small text-ui-sm ${span > MAX_DAYS ? "danger-text" : "muted"}`}>{span ? `${span} day${span === 1 ? "" : "s"}${span > MAX_DAYS ? ` (most is ${MAX_DAYS})` : ""}` : "Pick a first and last day"}</span>
+              <span className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5">
                 <Button size="sm" onClick={() => setOpen(false)}>Cancel</Button>
                 <Button size="sm" variant="primary" disabled={!valid} onClick={apply}>Apply</Button>
               </span>

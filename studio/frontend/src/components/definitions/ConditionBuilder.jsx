@@ -134,7 +134,7 @@ function Rule({ node, onChange, onRemove }) {
   const type = typeOf(node);
   const types = node.t === "raw" ? [["raw", "Custom (JSON)"], ...RULE_TYPES] : node.t === "const" && node.value ? [["const:true", "Anyone (always allow)"], ...RULE_TYPES] : RULE_TYPES;
   return (
-    <div className="cond-rule">
+    <div className="cond-rule flex items-center gap-2 bg-surface [border:1px_solid_var(--line)] rounded-sm p-[6px_6px_6px_8px] flex-wrap [&_>_select]:w-auto [&_>_select]:min-w-[170px] [&_>_input]:flex-1 [&_>_input]:min-w-[120px] [&_>_input]:w-auto [&_.op-select]:min-w-[130px] [&_.op-select]:flex-none">
       <select value={type} onChange={(e) => onChange(blankRule(e.target.value))} aria-label="Rule type">
         {types.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
       </select>
@@ -191,17 +191,17 @@ const JOIN = { all: "and", any: "or", none: "or" };
 function Group({ node, onChange, onRemove, depth = 0, emptyText }) {
   const set = (children) => onChange({ ...node, children });
   return (
-    <div className="cond-group">
-      <div className="cond-head">
+    <div className="cond-group rounded-sm bg-canvas [border:1px_solid_var(--line)] p-3 flex flex-col gap-2 [&_.cond-group]:bg-surface [&_.cond-group_.cond-rule]:bg-canvas">
+      <div className="cond-head flex items-center gap-2 flex-wrap text-ui text-muted font-medium-plus">
         <Segmented options={MODES} value={node.mode} onChange={(mode) => onChange({ ...node, mode })} />
         <span>these rules pass</span>
-        <span className="grow" />
+        <span className="grow flex-1 min-w-0" />
         {onRemove && <IconButton icon="trash" label="Remove group" onClick={onRemove} />}
       </div>
-      {node.children.length === 0 && <div className="hint" style={{ padding: "2px 4px" }}>{emptyText || (node.mode === "any" ? "No rules: nobody passes." : "No rules: everyone passes.")}</div>}
+      {node.children.length === 0 && <div className="hint text-xs font-book text-muted leading-[1.45]" style={{ padding: "2px 4px" }}>{emptyText || (node.mode === "any" ? "No rules: nobody passes." : "No rules: everyone passes.")}</div>}
       {node.children.map((child, i) => (
-        <div key={child.id} className="stack sm">
-          {i > 0 && <span className="cond-join">{JOIN[node.mode]}</span>}
+        <div key={child.id} className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 sm">
+          {i > 0 && <span className="cond-join text-[10.5px] font-extrabold uppercase tracking-[0.08em] text-brand pl-2.5">{JOIN[node.mode]}</span>}
           {child.t === "group" ? (
             <Group depth={depth + 1} node={child} onChange={(c) => set(node.children.map((x) => (x.id === child.id ? c : x)))} onRemove={() => set(node.children.filter((x) => x.id !== child.id))} />
           ) : (
@@ -209,7 +209,7 @@ function Group({ node, onChange, onRemove, depth = 0, emptyText }) {
           )}
         </div>
       ))}
-      <div className="cond-actions">
+      <div className="cond-actions flex gap-1.5">
         <Button size="sm" variant="soft" onClick={() => set([...node.children, blankRule("short:authenticated")])}><Icon name="plus" />Rule</Button>
         {depth < 2 && <Button size="sm" variant="ghost" onClick={() => set([...node.children, { id: id(), t: "group", mode: "any", children: [] }])}><Icon name="plus" />Group</Button>}
       </div>
