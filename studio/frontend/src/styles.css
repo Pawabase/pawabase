@@ -279,6 +279,44 @@ tr.clickable:hover td { background: var(--sunken); }
 .add-row { border: 1.5px dashed var(--line-2); background: none; border-radius: var(--r); padding: 10px; color: var(--muted); font: inherit; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
 .add-row:hover { border-color: var(--brand); color: var(--brand-strong); background: var(--brand-soft); }
 .add-row .icon { width: 16px; height: 16px; }
+
+/* Columns tab: rows carry a drag handle, a type menu and pills for the flags in play. */
+.field-card-row.rich { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 8px 8px 6px; }
+.field-card-row.rich .field-name-cell { display: flex; align-items: center; gap: 8px; flex: 1 1 170px; min-width: 0; }
+.field-card-row.rich .field-name-cell input { width: 100%; padding: 7px 10px; }
+.drag-handle { flex: none; width: 22px; height: 30px; padding: 0; border: 0; border-radius: var(--r); background: none; color: var(--faint); cursor: grab; display: grid; place-items: center; }
+.drag-handle:hover { color: var(--text); background: var(--sunken); }
+.drag-handle:active { cursor: grabbing; }
+.drag-handle .icon { width: 15px; height: 15px; }
+.field-card.dragging { opacity: 0.45; }
+.field-card.drop-here { border-color: var(--brand); box-shadow: inset 0 2px 0 var(--brand); }
+.field-type-pop { flex: none; }
+.field-type-btn { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--surface); color: var(--text); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
+.field-type-btn:hover { border-color: var(--brand); background: var(--brand-soft); }
+.field-type-btn .icon { width: 13px; height: 13px; color: var(--faint); }
+.type-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 9px; border: 0; border-radius: var(--r); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.type-menu-item:hover, .type-menu-item.on { background: var(--sunken); }
+.type-menu-text { display: flex; flex-direction: column; min-width: 0; }
+.type-menu-text b { font-size: 13px; font-weight: 600; }
+.type-menu-text small { font-size: 11.5px; color: var(--faint); font-family: var(--mono); }
+.type-menu-item > .icon { margin-left: auto; width: 14px; height: 14px; color: var(--brand-strong); }
+.field-flags { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; }
+.flag-pill { padding: 2px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--sunken); color: var(--muted); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.flag-pill.toggle { border-style: dashed; background: none; color: var(--faint); font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
+.flag-pill.toggle:hover { border-color: var(--line-2); color: var(--text); }
+.flag-pill.toggle.on { border-style: solid; border-color: var(--brand); background: var(--brand-soft); color: var(--brand-strong); }
+.field-warn { padding: 0 12px 10px 34px; color: var(--danger); font-size: 12px; }
+
+/* Relations: one summary line per relation, expanding into the editors. */
+.relation-card { margin-bottom: 8px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+.relation-card.open { border-color: var(--line-2); }
+.relation-card-head { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 10px; }
+.relation-card-toggle { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 0; padding: 0; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.relation-card-summary { min-width: 0; overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.relation-card-toggle .icon { width: 14px; height: 14px; margin-left: auto; color: var(--faint); }
+.relation-card-body { padding: 14px; border-top: 1px solid var(--line); border-radius: 0 0 var(--r) var(--r); background: var(--canvas); }
+
+.dirty-pill { padding: 3px 9px; border: 1px solid var(--brand); border-radius: 999px; background: var(--brand-soft); color: var(--brand-strong); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
 .ops-table { display: flex; flex-direction: column; }
 .op-row { display: grid; grid-template-columns: 200px 1fr; gap: 14px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .op-row:last-child { border-bottom: 0; }
@@ -1524,13 +1562,13 @@ html, body { background: var(--canvas); }
 .sidebar::after, .sidebar::before { display: none; }
 
 /* secondary panel (Data, Storage, …) */
-.subnav { width: 248px; background: var(--canvas); border-right: 1px solid var(--line); }
+.subnav { width: 248px; height: 100%; min-height: 0; background: var(--canvas); border-right: 1px solid var(--line); }
 .subnav-head { height: var(--bar); padding: 0 12px 0 16px; border-bottom: 1px solid var(--line); font-size: 14px; }
 .subnav-head b { font-weight: 600; }
 .subnav-action { width: var(--control-sm); height: var(--control-sm); border: 1px solid var(--line-2); border-radius: var(--r); background: transparent; }
 .subnav-action:hover { background: var(--hover); }
 .subnav-search { margin: 12px 12px 4px; height: var(--control); border: 1px solid var(--line-2); border-radius: var(--r); background: transparent; }
-.subnav-list { padding: 8px 10px; }
+.subnav-list { padding: 8px 10px; min-height: 0; }
 .subnav-item, .subnav-list button { min-height: 32px; height: auto; padding: 6px 10px; border-radius: var(--r); font-size: 13.5px; font-weight: 500; color: var(--muted); }
 .subnav-item:hover, .subnav-list button:hover { background: var(--hover); color: var(--text); }
 .subnav-item.active, .subnav-list button.active { background: var(--press); color: var(--text); font-weight: 600; box-shadow: none; }
@@ -1631,6 +1669,54 @@ button.kpi:hover { background: var(--hover) !important; }
 .btn.soft { background: var(--brand-soft); border-color: transparent; color: var(--brand-strong); }
 .btn.danger { background: transparent; border-color: color-mix(in srgb, var(--danger) 45%, transparent); color: var(--danger); }
 .btn.danger:hover { background: var(--danger-soft); }
+
+/* ── resource definition and index tabs ──────────────────────────────────
+ * Resource management deserves a calm reading column, not a dashboard stretched
+ * across the table editor. Straight rules separate each concern. */
+.resource-columns { padding: 0 var(--gutter) 48px; }
+.resource-columns-inner { width: min(100%, 720px); margin: 0 auto; }
+.resource-columns-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 68px; border-top: 1px solid var(--line); }
+.resource-columns-head > div:first-child { display: flex; flex-direction: column; gap: 2px; }
+.resource-columns-head > div:first-child > b { font-size: 14px; font-weight: 600; }
+.resource-columns-form .form-section { padding: 26px 0 30px; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; }
+.resource-columns-form .form-section:last-child { border-bottom: 0; }
+.resource-columns-form .field-card { background: var(--canvas); }
+.resource-settings { flex: 0 0 auto; width: 100%; min-height: min-content; padding: 0 var(--gutter) 48px; }
+.resource-settings-inner { width: min(100%, 720px); margin: 0 auto; }
+.resource-settings-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 68px; border-top: 1px solid var(--line); }
+.resource-settings-head > div:first-child { display: flex; flex-direction: column; gap: 2px; }
+.resource-settings-head > div:first-child > b { font-size: 14px; font-weight: 600; }
+.resource-settings-form .form-section { padding: 26px 0 30px; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; }
+/* Settings are independent controls, not a responsive form grid. Keeping
+   them in a single ruled list prevents a switch from recalculating a grid row
+   and shifting the whole table workspace. */
+.resource-settings-form .form-grid { display: flex; flex-direction: column; gap: 0; }
+.resource-settings-form .form-grid > * { width: 100%; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.resource-settings-form .form-grid > :first-child { padding-top: 0; }
+.resource-settings-form .form-grid > :last-child { padding-bottom: 0; border-bottom: 0; }
+.resource-settings-form .switch { min-height: 40px; align-items: center; }
+.resource-settings-form .switch .switch-text { min-width: 0; }
+.rate-limit-control { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.rate-limit-fields { flex: 0 0 330px; max-width: 330px; }
+.rate-limit-fields input { min-width: 52px; }
+.rate-limit-fields[aria-disabled="true"] { opacity: .45; }
+.resource-settings-operations { display: flex; flex-direction: column; gap: 0; }
+.resource-settings-operations .card { padding: 24px 0 28px !important; border: 0 !important; border-top: 1px solid var(--line) !important; border-radius: 0; background: transparent; }
+.resource-columns .stack.lg { gap: 0; }
+.resource-columns .card { padding: 24px 0 28px; border: 0; border-radius: 0; border-top: 1px solid var(--line); background: transparent; }
+.resource-columns .card > .spread:first-child { margin-bottom: 16px !important; }
+.resource-columns .card .card-head { min-height: 0; padding: 0 0 16px; border-bottom: 0; }
+.resource-columns .schema-change { border-color: var(--line-2); border-radius: 0; background: transparent; }
+.resource-columns .schema-change + .schema-change { border-top: 0; }
+.resource-columns .schema-entry { border-radius: 0; }
+@media (max-width: 620px) {
+  .resource-columns { padding: 0 16px 32px; }
+  .resource-columns-head { align-items: flex-start; flex-direction: column; justify-content: center; padding: 14px 0; }
+  .resource-settings { padding: 0 16px 32px; }
+  .resource-settings-head { align-items: flex-start; flex-direction: column; justify-content: center; padding: 14px 0; }
+  .rate-limit-control { align-items: flex-start; flex-direction: column; }
+  .rate-limit-fields { flex-basis: auto; width: 100%; max-width: none; }
+}
 .btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
 .btn.ghost:hover { background: var(--hover); color: var(--text); }
 .btn.sm { height: var(--control-sm); padding: 0 10px; font-size: 12.5px; }
@@ -1890,7 +1976,7 @@ kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; 
 @media (max-width: 980px) { .appbar { padding-left: 8px; } }
 
 /* the page grid never grows wider than the window: the shell's one column is the viewport, not the top bar's content */
-.shell { grid-template-columns: minmax(0, 1fr); width: 100%; overflow: hidden; }
+.shell { grid-template-columns: minmax(0, 1fr); width: 100%; overflow: clip; }
 .shell > .frame { min-width: 0; }
 .appbar { min-width: 0; overflow: visible; }
 .appbar-context { min-width: 0; flex-shrink: 1; }
@@ -1970,7 +2056,10 @@ kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; 
 .tbl-tabs .popover-wrap { align-items: center; padding: 0 4px; }
 .tbl-icon { display: grid; place-items: center; width: 30px; height: 30px; margin: auto 4px; border: 0; border-radius: var(--r); background: none; color: var(--muted); cursor: pointer; }
 .tbl-icon:hover { background: var(--hover); color: var(--text); }
-.tbl-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+/* Columns, settings and indexes can grow after an inline control opens.
+   Keep the table workspace itself scrollable so a growing section does not
+   overflow into an empty canvas below the viewport. */
+.tbl-body { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: auto; }
 .tbl-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 48px; flex-shrink: 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
 .tbl-identity { display: flex; align-items: center; gap: 8px; min-width: 0; height: 40px; flex-shrink: 0; padding: 0 16px; }
 .tbl-identity + .page-tabs { margin: 0 16px 0; padding-top: 0; border-bottom: 1px solid var(--line); }

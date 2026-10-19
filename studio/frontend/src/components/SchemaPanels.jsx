@@ -421,7 +421,7 @@ export function IndexesPanel({ env, name, onChanged }) {
                   </div>
                 ))}
                 {risky && <Field label={`Type ${name} to confirm`} hint="Dropping or rebuilding an index slows queries until it is back, and removing a unique index lifts the guarantee. The change can be rolled back."><input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={name} /></Field>}
-                <div className="row"><Button variant="primary" disabled={busy || (risky && typed !== name) || !data.table_exists} onClick={apply}>Apply {data.pending.length} change{data.pending.length === 1 ? "" : "s"}</Button>{!data.table_exists && <span className="hint">Create the table first (Schema tab).</span>}</div>
+                <div className="row"><Button variant="primary" disabled={busy || (risky && typed !== name) || !data.table_exists} onClick={apply}>Apply {data.pending.length} change{data.pending.length === 1 ? "" : "s"}</Button>{!data.table_exists && <span className="hint">Create the table first (Columns tab).</span>}</div>
               </div>
             </Card>
           )}
