@@ -2,7 +2,7 @@
 // expand into their constraints. Keys the editor does not know about are
 // carried through untouched.
 import { useState } from "react";
-import { Field, IconButton, JsonInput, Segmented, Switch, TagInput } from "../ui";
+import { Field, IconButton, JsonInput, Popover, Segmented, Switch, TagInput } from "../ui";
 import { Icon } from "../icons";
 import { RefSelect } from "./refs";
 
@@ -39,6 +39,18 @@ function setKey(field, key, value) {
   return next;
 }
 
+// Flags worth showing on a collapsed row: the ones that change how the column
+// behaves in the API. Unique already implies an index, so it wins over Indexed.
+function flagsOf(field) {
+  const out = [];
+  if (field.nullable) out.push("Nullable");
+  if (field.unique) out.push("Unique");
+  else if (field.indexed) out.push("Indexed");
+  if (field.read_only) out.push("Read only");
+  if (field.write_only) out.push("Write only");
+  return out;
+}
+
 function DefaultInput({ field, onChange }) {
   const t = field.type || "string";
   const has = "default" in field;
@@ -61,6 +73,37 @@ function DefaultInput({ field, onChange }) {
       placeholder="No default"
       onChange={(e) => onChange(e.target.value === "" ? setKey(field, "default") : { ...field, default: isNum(t) ? Number(e.target.value) : e.target.value })}
     />
+  );
+}
+
+function TypePicker({ field, onPick }) {
+  const type = TYPE[field.type || "string"] || TYPE.string;
+  return (
+    <Popover
+      label="Column type"
+      width={286}
+      className="field-type-pop"
+      trigger={({ ref, ...rest }) => (
+        <button ref={ref} type="button" className="field-type-btn" {...rest}>
+          <span>{type[1]}</span>
+          <Icon name="chevronDown" />
+        </button>
+      )}
+    >
+      {({ close }) => FIELD_TYPES.map(([value, label, glyph, tone]) => (
+        <button
+          key={value}
+          type="button"
+          role="menuitem"
+          className={`type-menu-item ${(field.type || "string") === value ? "on" : ""}`}
+          onClick={() => { onPick(value); close(); }}
+        >
+          <span className={`field-type-dot pastel ${tone}`}>{glyph}</span>
+          <span className="type-menu-text"><b>{label}</b><small>{value}</small></span>
+          {(field.type || "string") === value && <Icon name="check" />}
+        </button>
+      ))}
+    </Popover>
   );
 }
 
@@ -141,8 +184,11 @@ function FieldDetails({ field, onChange, schemas, depth, indexable }) {
   );
 }
 
-export function FieldsEditor({ value = [], onChange, schemas = [], depth = 0, addLabel = "Add field", empty, indexable = false }) {
+export function FieldsEditor({ value = [], onChange, schemas = [], depth = 0, addLabel = "Add field", empty, indexable = false, interactive = false }) {
   const [open, setOpen] = useState(null);
+  const [focusAt, setFocusAt] = useState(null);
+  const [dragAt, setDragAt] = useState(null);
+  const [overAt, setOverAt] = useState(null);
   const update = (i, field) => onChange(value.map((f, j) => (j === i ? field : f)));
   const move = (i, by) => {
     const next = [...value];
@@ -153,42 +199,108 @@ export function FieldsEditor({ value = [], onChange, schemas = [], depth = 0, ad
   const add = () => {
     onChange([...value, { name: "", type: "string" }]);
     setOpen(null);
+    setFocusAt(value.length);
   };
+  const reorder = (from, to) => {
+    if (from === null || from === to) return;
+    const next = [...value];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onChange(next);
+    setOpen(null);
+  };
+  const counts = value.reduce((acc, f) => (f.name ? { ...acc, [f.name]: (acc[f.name] || 0) + 1 } : acc), {});
+  const duplicated = (f) => !!f.name && counts[f.name] > 1;
   return (
     <div className="list-rows">
       {value.length === 0 && empty && <div className="hint">{empty}</div>}
       {value.map((field, i) => {
         const type = TYPE[field.type || "string"] || TYPE.string;
         const isOpen = open === i;
+        const bad = !!field.name && (duplicated(field) || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(field.name));
+        const nameInput = (
+          <input
+            className={`mono ${bad ? "invalid" : ""}`}
+            value={field.name}
+            placeholder="field_name"
+            autoFocus={interactive ? i === focusAt : (!field.name && i === value.length - 1)}
+            onChange={(e) => update(i, { ...field, name: e.target.value })}
+            onKeyDown={interactive ? (e) => {
+              if (e.key === "Enter") { e.preventDefault(); add(); }
+              else if (e.key === "Escape") setOpen(null);
+            } : undefined}
+          />
+        );
         return (
-          <div key={i} className={`field-card ${isOpen ? "open" : ""}`}>
-            <div className="field-card-row">
-              <div className="reorder">
-                <button type="button" aria-label="Move up" disabled={i === 0} onClick={() => move(i, -1)}><Icon name="chevronUp" /></button>
-                <button type="button" aria-label="Move down" disabled={i === value.length - 1} onClick={() => move(i, 1)}><Icon name="chevronDown" /></button>
+          <div
+            key={i}
+            className={`field-card ${isOpen ? "open" : ""} ${dragAt === i ? "dragging" : ""} ${dragAt !== null && overAt === i && dragAt !== i ? "drop-here" : ""}`}
+            onDragOver={interactive ? (e) => { e.preventDefault(); if (overAt !== i) setOverAt(i); } : undefined}
+            onDrop={interactive ? (e) => { e.preventDefault(); setOverAt(null); setDragAt(null); reorder(dragAt, i); } : undefined}
+          >
+            {interactive ? (
+              <div className="field-card-row rich">
+                <button
+                  type="button"
+                  className="drag-handle"
+                  aria-label={`Reorder column ${field.name || i + 1}`}
+                  title="Drag to reorder, or use the arrow keys"
+                  draggable
+                  onDragStart={(e) => { setDragAt(i); e.dataTransfer.effectAllowed = "move"; }}
+                  onDragEnd={() => { setDragAt(null); setOverAt(null); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowUp") { e.preventDefault(); move(i, -1); }
+                    else if (e.key === "ArrowDown") { e.preventDefault(); move(i, 1); }
+                  }}
+                >
+                  <Icon name="chevronsUpDown" />
+                </button>
+                <div className="field-name-cell">
+                  <span className={`field-type-dot pastel ${type[3]}`} title={type[1]}>{type[2]}</span>
+                  {nameInput}
+                </div>
+                <TypePicker field={field} onPick={(v) => update(i, { ...field, type: v })} />
+                <div className="field-flags">
+                  <button
+                    type="button"
+                    className={`flag-pill toggle ${field.required ? "on" : ""}`}
+                    aria-pressed={!!field.required}
+                    title="Reject rows that omit this column"
+                    onClick={() => update(i, setKey(field, "required", !field.required))}
+                  >
+                    Required
+                  </button>
+                  {flagsOf(field).map((flag) => <span key={flag} className="flag-pill">{flag}</span>)}
+                </div>
+                <div className="row" style={{ gap: 0 }}>
+                  <IconButton icon={isOpen ? "chevronUp" : "settings"} label={isOpen ? "Collapse" : "More options"} onClick={() => setOpen(isOpen ? null : i)} />
+                  <IconButton icon="trash" label="Remove field" onClick={() => { onChange(value.filter((_, j) => j !== i)); setOpen(null); }} />
+                </div>
               </div>
-              <div className="row" style={{ gap: 8 }}>
-                <span className={`field-type-dot pastel ${type[3]}`} title={type[1]}>{type[2]}</span>
-                <input
-                  className={`mono ${field.name && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(field.name) ? "invalid" : ""}`}
-                  value={field.name}
-                  placeholder="field_name"
-                  autoFocus={!field.name && i === value.length - 1}
-                  onChange={(e) => update(i, { ...field, name: e.target.value })}
-                />
+            ) : (
+              <div className="field-card-row">
+                <div className="reorder">
+                  <button type="button" aria-label="Move up" disabled={i === 0} onClick={() => move(i, -1)}><Icon name="chevronUp" /></button>
+                  <button type="button" aria-label="Move down" disabled={i === value.length - 1} onClick={() => move(i, 1)}><Icon name="chevronDown" /></button>
+                </div>
+                <div className="row" style={{ gap: 8 }}>
+                  <span className={`field-type-dot pastel ${type[3]}`} title={type[1]}>{type[2]}</span>
+                  {nameInput}
+                </div>
+                <select value={field.type || "string"} onChange={(e) => update(i, { ...field, type: e.target.value })}>
+                  {FIELD_TYPES.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+                </select>
+                <label className="check" style={{ fontSize: 12.5, fontWeight: 600 }}>
+                  <input type="checkbox" checked={!!field.required} onChange={(e) => update(i, setKey(field, "required", e.target.checked))} />
+                  Required
+                </label>
+                <div className="row" style={{ gap: 0 }}>
+                  <IconButton icon={isOpen ? "chevronUp" : "settings"} label={isOpen ? "Collapse" : "More options"} onClick={() => setOpen(isOpen ? null : i)} />
+                  <IconButton icon="trash" label="Remove field" onClick={() => { onChange(value.filter((_, j) => j !== i)); setOpen(null); }} />
+                </div>
               </div>
-              <select value={field.type || "string"} onChange={(e) => update(i, { ...field, type: e.target.value })}>
-                {FIELD_TYPES.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
-              </select>
-              <label className="check" style={{ fontSize: 12.5, fontWeight: 600 }}>
-                <input type="checkbox" checked={!!field.required} onChange={(e) => update(i, setKey(field, "required", e.target.checked))} />
-                Required
-              </label>
-              <div className="row" style={{ gap: 0 }}>
-                <IconButton icon={isOpen ? "chevronUp" : "settings"} label={isOpen ? "Collapse" : "More options"} onClick={() => setOpen(isOpen ? null : i)} />
-                <IconButton icon="trash" label="Remove field" onClick={() => { onChange(value.filter((_, j) => j !== i)); setOpen(null); }} />
-              </div>
-            </div>
+            )}
+            {interactive && duplicated(field) && <div className="field-warn">“{field.name}” is used by more than one column.</div>}
             {isOpen && <FieldDetails field={field} schemas={schemas} depth={depth} indexable={indexable} onChange={(f) => update(i, f)} />}
           </div>
         );

@@ -2,7 +2,7 @@
 // `patch(changes)` to merge into it, and the project's references. The body
 // is exactly what the API stores.
 import { useState } from "react";
-import { Field, JsonInput, KeyValue, Section, Segmented, Switch, TagInput, IconButton } from "../ui";
+import { Badge, Field, JsonInput, KeyValue, Section, Segmented, Switch, TagInput, IconButton } from "../ui";
 import { Icon } from "../icons";
 import { ConditionBuilder, toTree } from "./ConditionBuilder";
 import { FieldsEditor } from "./FieldsEditor";
@@ -31,19 +31,20 @@ function Enabled({ body, patch, label = "Enabled", hint }) {
   return <Switch checked={body.enabled !== false} onChange={(enabled) => patch({ enabled })} label={label} hint={hint} />;
 }
 
-function RateLimit({ value = {}, onChange }) {
-  const on = !!value.limit;
+function RateLimit({ value, onChange }) {
+  // Older resources may hold null here. Treat every non-object value as an
+  // unset limit so turning the control on is always safe.
+  const limit = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const on = !!limit.limit;
   return (
-    <div className="stack sm">
+    <div className="rate-limit-control">
       <Switch checked={on} onChange={(v) => onChange(v ? { limit: 60, window: 60 } : {})} label="Rate limit" hint="Per caller, counted across all gateway instances." />
-      {on && (
-        <div className="input-group" style={{ maxWidth: 420 }}>
-          <input type="number" min="1" value={value.limit} onChange={(e) => onChange({ ...value, limit: Number(e.target.value) })} />
-          <span className="addon">requests per</span>
-          <input type="number" min="1" value={value.window} onChange={(e) => onChange({ ...value, window: Number(e.target.value) })} />
-          <span className="addon">seconds</span>
-        </div>
-      )}
+      <div className="input-group rate-limit-fields" aria-disabled={!on}>
+        <input type="number" min="1" value={on ? limit.limit : 60} disabled={!on} onChange={(e) => onChange({ ...limit, limit: Number(e.target.value) || 1 })} aria-label="Requests" />
+        <span className="addon">requests per</span>
+        <input type="number" min="1" value={on ? limit.window : 60} disabled={!on} onChange={(e) => onChange({ ...limit, window: Number(e.target.value) || 1 })} aria-label="Seconds" />
+        <span className="addon">seconds</span>
+      </div>
     </div>
   );
 }
@@ -126,15 +127,17 @@ function PolicyForm({ body, patch, isNew }) {
 
 const OPS = [["list", "GET"], ["get", "GET"], ["create", "POST"], ["update", "PATCH"], ["delete", "DELETE"]];
 
-function ResourceForm({ body, patch, refs, isNew }) {
+export function ResourceForm({ body, patch, refs, isNew, mode = "all" }) {
   const ops = body.operations || {};
-  const fieldNames = (body.fields || []).map((f) => f.name).filter(Boolean);
+  const fields = body.fields || [];
+  const fieldNames = fields.map((f) => f.name).filter(Boolean);
   const setOp = (op, change) => patch({ operations: { ...ops, [op]: { enabled: false, policy: null, ...ops[op], ...change } } });
   const relations = body.relations || [];
   const setRel = (next) => patch({ relations: next });
+  const [openRelation, setOpenRelation] = useState(null);
   return (
     <>
-      <Section title="Details">
+      {mode !== "columns" && <Section title="Details">
         <div className="form-grid">
           <Field label="Name" hint={isNew ? `Served at /rest/v1/${body.name || "<name>"}` : "The URL segment; fixed once created."}>
             <input className="mono" autoFocus={isNew} placeholder="todos" {...text(body, "name", patch)} disabled={!isNew} />
@@ -152,11 +155,15 @@ function ResourceForm({ body, patch, refs, isNew }) {
           </Field>
           <Field label="Description" optional className="span"><input placeholder="What rows live here?" {...text(body, "description", patch)} /></Field>
         </div>
-      </Section>
-      <Section title="Fields" description={`The primary key${body.timestamps !== false ? " and created_at / updated_at are" : " is"} added for you.`}>
-        <FieldsEditor value={body.fields || []} onChange={(fields) => patch({ fields })} schemas={refs.schemas} indexable />
-      </Section>
-      <Section title="Access" description="Which endpoints exist, and who may call each.">
+      </Section>}
+      {mode !== "settings" && <Section
+        title="Columns"
+        description={`The primary key${body.timestamps !== false ? " and created_at / updated_at are" : " is"} added for you.`}
+        actions={fields.length > 0 ? <Badge tone="brand">{fields.length} column{fields.length === 1 ? "" : "s"}</Badge> : undefined}
+      >
+        <FieldsEditor value={fields} onChange={(next) => patch({ fields: next })} schemas={refs.schemas} indexable interactive empty="No columns yet — add one for each value the API should carry." />
+      </Section>}
+      {mode !== "columns" && <Section title="Access" description="Which endpoints exist, and who may call each.">
         <div className="ops-table">
           {OPS.map(([op, method]) => {
             const setting = ops[op] || {};
@@ -176,34 +183,48 @@ function ResourceForm({ body, patch, refs, isNew }) {
             );
           })}
         </div>
-      </Section>
-      <Section
+      </Section>}
+      {mode !== "settings" && <Section
         title="Relations"
         description="Include related rows with ?expand=name."
+        actions={relations.length > 0 ? <Badge tone="brand">{relations.length} relation{relations.length === 1 ? "" : "s"}</Badge> : undefined}
       >
+        {relations.length === 0 && <div className="hint">No relations yet — add one to join this resource to another.</div>}
         {relations.map((rel, i) => {
           const set = (change) => setRel(relations.map((r, j) => (j === i ? { ...r, ...change } : r)));
           const type = rel.type || "belongs_to";
           const targetFields = refs.fields[rel.resource] || [];
+          // A relation with no target yet has nothing to summarise, so it stays open until one is picked.
+          const isOpen = openRelation === i || !rel.resource;
+          const summary = [rel.name || "Untitled", type === "belongs_to" ? "belongs to" : "has many", [rel.resource, rel.field].filter(Boolean).join(".")].join(" · ");
           return (
-            <div key={i} className="card sunken" style={{ padding: 14 }}>
-              <div className="form-grid">
-                <Field label="Name"><input className="mono" value={rel.name || ""} placeholder="author" onChange={(e) => set({ name: e.target.value })} /></Field>
-                <Field label="Kind"><Segmented options={[["belongs_to", "Belongs to"], ["has_many", "Has many"]]} value={type} onChange={(t) => set({ type: t })} /></Field>
-                <Field label="Resource"><RefSelect options={refs.resources} value={rel.resource} allowEmpty={false} placeholder="Choose" onChange={(v) => set({ resource: v })} /></Field>
-                <Field label={type === "belongs_to" ? "Foreign key here" : `Foreign key on ${rel.resource || "target"}`}>
-                  <RefSelect options={type === "belongs_to" ? fieldNames : targetFields} value={rel.field} allowEmpty={false} placeholder="Choose a field" onChange={(v) => set({ field: v })} />
-                </Field>
+            <div key={i} className={`relation-card ${isOpen ? "open" : ""}`}>
+              <div className="relation-card-head">
+                <button type="button" className="relation-card-toggle" aria-expanded={isOpen} onClick={() => setOpenRelation(isOpen && rel.resource ? null : i)}>
+                  <span className={`field-type-dot pastel ${type === "belongs_to" ? "peach" : "mint"}`}>{type === "belongs_to" ? "→" : "⇄"}</span>
+                  <span className="relation-card-summary mono">{summary}</span>
+                  <Icon name={isOpen ? "chevronUp" : "chevronDown"} />
+                </button>
+                <IconButton icon="trash" label="Remove relation" onClick={() => { setRel(relations.filter((_, j) => j !== i)); setOpenRelation(null); }} />
               </div>
-              <div className="row" style={{ justifyContent: "flex-end", marginTop: 8 }}>
-                <IconButton icon="trash" label="Remove relation" onClick={() => setRel(relations.filter((_, j) => j !== i))} />
-              </div>
+              {isOpen && (
+                <div className="relation-card-body">
+                  <div className="form-grid">
+                    <Field label="Name"><input className="mono" value={rel.name || ""} placeholder="author" onChange={(e) => set({ name: e.target.value })} /></Field>
+                    <Field label="Kind"><Segmented options={[["belongs_to", "Belongs to"], ["has_many", "Has many"]]} value={type} onChange={(t) => set({ type: t })} /></Field>
+                    <Field label="Resource"><RefSelect options={refs.resources} value={rel.resource} allowEmpty={false} placeholder="Choose" onChange={(v) => set({ resource: v })} /></Field>
+                    <Field label={type === "belongs_to" ? "Foreign key here" : `Foreign key on ${rel.resource || "target"}`}>
+                      <RefSelect options={type === "belongs_to" ? fieldNames : targetFields} value={rel.field} allowEmpty={false} placeholder="Choose a field" onChange={(v) => set({ field: v })} />
+                    </Field>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
-        <button type="button" className="add-row" onClick={() => setRel([...relations, { name: "", type: "belongs_to", resource: "", field: "" }])}><Icon name="plus" />Add relation</button>
-      </Section>
-      <Section title="Behaviour">
+        <button type="button" className="add-row" onClick={() => { setRel([...relations, { name: "", type: "belongs_to", resource: "", field: "" }]); setOpenRelation(relations.length); }}><Icon name="plus" />Add relation</button>
+      </Section>}
+      {mode !== "columns" && <Section title="Behaviour">
         <div className="form-grid">
           <Switch checked={body.events !== false} onChange={(events) => patch({ events })} label="Emit events" hint={`${body.name || "name"}.created / updated / deleted`} />
           <Switch checked={!!body.realtime} onChange={(realtime) => patch({ realtime })} label="Broadcast changes" hint="Push row changes to realtime subscribers." />
@@ -220,7 +241,7 @@ function ResourceForm({ body, patch, refs, isNew }) {
             <TagInput value={body.tags || []} onChange={(tags) => patch({ tags })} placeholder="billing" />
           </Field>
         </div>
-      </Section>
+      </Section>}
     </>
   );
 }

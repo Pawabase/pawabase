@@ -155,7 +155,7 @@ function SqlConsole({ env, base, tables, dialect }) {
           {warning.action && (
             <Button size="sm" onClick={() => {
               const table = warning.action.table || (warning.action.type === "import" ? null : warning.action.resource);
-              router.visit(table ? `/envs/${env}/tables?table=${encodeURIComponent(table)}&tab=schema` : `/envs/${env}/tables`);
+              router.visit(table ? `/envs/${env}/tables?table=${encodeURIComponent(table)}&tab=columns` : `/envs/${env}/tables`);
             }}>{warning.action.label}</Button>
           )}
         </div>
