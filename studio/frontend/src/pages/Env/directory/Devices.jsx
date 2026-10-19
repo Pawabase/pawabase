@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { Badge, Button, Card, Field, Loading, Switch, Table, useAction, when } from "../../../components/ui";
 import { del, useApi } from "../../../lib/api";
-import { AUTH, SettingsPanel, useAuthConfig, useSection } from "../auth/shared";
+import { AUTH, SettingsButton, SettingsSheet, useAuthConfig, useSection } from "../auth/shared";
 
 /** Which devices people sign in from, and whether a known device may skip the second factor. */
 export default function Devices({ env, base }) {
@@ -8,26 +9,11 @@ export default function Devices({ env, base }) {
   const [policy, setPolicy] = useSection(config, "devices");
   const devices = useApi(`${base}/devices`, { ...AUTH, interval: 30000 });
   const [run, busy] = useAction();
+  const [settings, setSettings] = useState(false);
   const forget = async (row) => { if (await run(() => del(`${base}/users/${row.user_id}/devices/${row.id}`, AUTH), "Device forgotten")) devices.reload(); };
   return (
     <div className="stack lg">
-      <Loading state={config.state}>
-        {() => (
-          <SettingsPanel title="Device tracking" description="Pawabase remembers the browsers and apps a person signs in from." config={config}>
-            <Switch checked={policy.track} onChange={(v) => setPolicy({ track: v })} label="Track devices" hint="Recorded at sign-in, by the id the app or hosted page keeps." />
-            <Switch checked={policy.notify_new} onChange={(v) => setPolicy({ notify_new: v })} label="Email when a new device signs in" hint="Not sent for a person's first ever sign-in." />
-            <div className="grid two">
-              <Field label="Remember a device after two-step verification" hint="Days a device may skip the second factor. 0 always asks. Only a device with its own id can be remembered.">
-                <div className="row"><input type="number" min={0} max={365} value={policy.remember_days} onChange={(e) => setPolicy({ remember_days: Math.min(365, Math.max(0, Number(e.target.value) || 0)) })} style={{ maxWidth: 120 }} /><span className="muted">days</span></div>
-              </Field>
-              <Field label="Devices per person" hint="0 is unlimited. Over the limit, the least recently used is forgotten.">
-                <input type="number" min={0} max={100} value={policy.max_per_user} onChange={(e) => setPolicy({ max_per_user: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })} style={{ maxWidth: 120 }} />
-              </Field>
-            </div>
-          </SettingsPanel>
-        )}
-      </Loading>
-      <Card flush title="Recent devices">
+      <Card flush title="Recent devices" actions={config.state.data && <SettingsButton label="Device tracking" dirty={config.dirty} onClick={() => setSettings(true)} />}>
         <Loading state={devices} empty="No devices yet.">
           {() => (
             <Table
@@ -46,6 +32,20 @@ export default function Devices({ env, base }) {
           )}
         </Loading>
       </Card>
+      {settings && (
+        <SettingsSheet title="Device tracking" icon="terminal" description="Pawabase remembers the browsers and apps a person signs in from." config={config} onClose={() => setSettings(false)}>
+          <Switch checked={policy.track} onChange={(v) => setPolicy({ track: v })} label="Track devices" hint="Recorded at sign-in, by the id the app or hosted page keeps." />
+          <Switch checked={policy.notify_new} onChange={(v) => setPolicy({ notify_new: v })} label="Email when a new device signs in" hint="Not sent for a person's first ever sign-in." />
+          <div className="grid two">
+            <Field label="Remember a device after two-step verification" hint="Days a device may skip the second factor. 0 always asks. Only a device with its own id can be remembered.">
+              <div className="row"><input type="number" min={0} max={365} value={policy.remember_days} onChange={(e) => setPolicy({ remember_days: Math.min(365, Math.max(0, Number(e.target.value) || 0)) })} style={{ maxWidth: 120 }} /><span className="muted">days</span></div>
+            </Field>
+            <Field label="Devices per person" hint="0 is unlimited. Over the limit, the least recently used is forgotten.">
+              <input type="number" min={0} max={100} value={policy.max_per_user} onChange={(e) => setPolicy({ max_per_user: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })} style={{ maxWidth: 120 }} />
+            </Field>
+          </div>
+        </SettingsSheet>
+      )}
     </div>
   );
 }

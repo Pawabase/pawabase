@@ -132,15 +132,17 @@ function Providers({ env, kind }) {
     <>
       <Loading state={envState}>
         {() => kind === "social" ? (
-          <div className="provider-grid">
-            {KNOWN_PROVIDERS.map((name) => (
-              <button key={name} type="button" className="provider-tile" onClick={() => setEditing({ name })}>
-                <span className="provider-icon"><BrandIcon name={name} /></span>
-                <b>{name === "github" ? "GitHub" : name[0].toUpperCase() + name.slice(1)}</b>
-                {providers[name] ? (providers[name].enabled === false ? <Badge>disabled</Badge> : configured(name) ? <Badge tone="green">enabled</Badge> : <Badge tone="yellow">needs credentials</Badge>) : <span className="faint small">Not set up</span>}
-              </button>
-            ))}
-          </div>
+          <Card>
+            <div className="provider-grid">
+              {KNOWN_PROVIDERS.map((name) => (
+                <button key={name} type="button" className="provider-tile" onClick={() => setEditing({ name })}>
+                  <span className="provider-icon"><BrandIcon name={name} /></span>
+                  <b>{name === "github" ? "GitHub" : name[0].toUpperCase() + name.slice(1)}</b>
+                  {providers[name] ? (providers[name].enabled === false ? <Badge>disabled</Badge> : configured(name) ? <Badge tone="green">enabled</Badge> : <Badge tone="yellow">needs credentials</Badge>) : <span className="faint small">Not set up</span>}
+                </button>
+              ))}
+            </div>
+          </Card>
         ) : (
           <Card flush title="OAuth servers" actions={<Button variant="primary" size="sm" onClick={() => setEditing({ name: "", isNew: true })}><Icon name="plus" size={14} /> Add OAuth server</Button>}>
             <Table

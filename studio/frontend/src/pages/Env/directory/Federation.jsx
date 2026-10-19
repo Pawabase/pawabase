@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { usePage } from "@inertiajs/react";
-import { Badge, Card, Field, Loading, Segmented, Switch, TagInput } from "../../../components/ui";
+import { Icon } from "../../../components/icons";
+import { Badge, Button, Card, Field, Loading, Segmented, Sheet, Switch, TagInput } from "../../../components/ui";
 import { SettingsPanel, useAuthConfig } from "../auth/shared";
 
 const isEnterprise = (conf) => conf && (conf.type === "oidc" || conf.type === "saml");
@@ -80,30 +82,83 @@ export default function Federation({ env }) {
   const config = useAuthConfig(env);
   const { gateway_url: gatewayUrl } = usePage().props;
   const base = (gatewayUrl || "").replace(/\/$/, "");
+  const [adding, setAdding] = useState(null);
   const providers = config.value.providers || {};
   const names = Object.keys(providers).filter((n) => isEnterprise(providers[n]));
   const setProvider = (name, values) => config.set({ providers: { ...providers, [name]: { ...providers[name], ...values } } });
-  const add = (type) => {
-    const name = slug(type === "saml" ? "company-saml" : "company-oidc", new Set(Object.keys(providers)));
-    config.set({ providers: { ...providers, [name]: { type, enabled: true, domains: [] } } });
-  };
   const remove = (name) => { const next = { ...providers }; delete next[name]; config.set({ providers: next }); };
+  const create = (name, values) => { config.set({ providers: { ...providers, [name]: values } }); setAdding(null); };
   return (
     <Loading state={config.state}>
       {() => (
         <div className="stack lg">
-          <SettingsPanel title="Company sign-in" description="Let a company's people sign in with their own identity provider (Okta, Entra ID, Google Workspace, ADFS, Keycloak…). Social providers like Google and GitHub are under Users & auth." config={config}>
+          <SettingsPanel title="Company sign-in" icon="org" description="Let a company's people sign in with their own identity provider (Okta, Entra ID, Google Workspace, ADFS, Keycloak…). Social providers like Google and GitHub are under Users & auth." config={config}>
             <div className="row" style={{ gap: 10 }}>
-              <button type="button" className="btn" onClick={() => add("oidc")}>Add OpenID Connect</button>
-              <button type="button" className="btn" onClick={() => add("saml")}>Add SAML 2.0</button>
+              <Button onClick={() => setAdding("oidc")}><Icon name="plus" size={14} />Add OpenID Connect</Button>
+              <Button onClick={() => setAdding("saml")}><Icon name="plus" size={14} />Add SAML 2.0</Button>
             </div>
             {names.length === 0 && <p className="hint" style={{ margin: 0 }}>No company connections yet.</p>}
           </SettingsPanel>
           {names.map((name) => (
             <Connection key={name} env={env} base={base} name={name} conf={providers[name]} change={(values) => setProvider(name, values)} remove={() => remove(name)} />
           ))}
+          {adding && (
+            <AddConnectionSheet
+              env={env}
+              base={base}
+              type={adding}
+              taken={new Set(Object.keys(providers))}
+              onClose={() => setAdding(null)}
+              onCreate={create}
+            />
+          )}
         </div>
       )}
     </Loading>
+  );
+}
+
+function AddConnectionSheet({ env, base, type, taken, onClose, onCreate }) {
+  const saml = type === "saml";
+  const [name, setName] = useState(() => slug(saml ? "company-saml" : "company-oidc", taken));
+  const [draft, setDraft] = useState({ domains: [] });
+  const set = (values) => setDraft((current) => ({ ...current, ...values }));
+  const clean = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const nameTaken = taken.has(clean);
+  const address = saml ? `${base}/auth/v1/saml/${env}/${clean || "…"}` : `${base}/auth/v1/callback/${env}/${clean || "…"}`;
+  return (
+    <Sheet
+      title={saml ? "Add SAML 2.0" : "Add OpenID Connect"}
+      subtitle="A company's people sign in with their own identity provider."
+      icon="org"
+      tone="sky"
+      onClose={onClose}
+      footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!clean || nameTaken} onClick={() => onCreate(clean, { type, enabled: true, ...draft })}>Add connection</Button></>}
+    >
+      <Field label="Connection name" hint={`People are sent to ${address}`}>
+        <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="acme" />
+        {nameTaken && <span className="error-text">That name is taken.</span>}
+      </Field>
+      <Field label="Company email domains" hint="People who type an email at these domains are sent straight here, and addresses outside them are refused.">
+        <TagInput value={draft.domains} onChange={(v) => set({ domains: v })} placeholder="acme.com" />
+      </Field>
+      {saml ? (
+        <>
+          <Field label="Identity provider entity ID"><input value={draft.idp_entity_id || ""} onChange={(e) => set({ idp_entity_id: e.target.value })} placeholder="https://idp.acme.com/metadata" /></Field>
+          <Field label="Single sign-on URL"><input value={draft.idp_sso_url || ""} onChange={(e) => set({ idp_sso_url: e.target.value })} placeholder="https://idp.acme.com/sso" /></Field>
+          <Field label="Signing certificate" hint="Add the identity provider's public certificate (PEM). Responses not signed by it are refused.">
+            <textarea rows={4} value={draft.idp_cert || ""} onChange={(e) => set({ idp_cert: e.target.value })} placeholder={"-----BEGIN CERTIFICATE-----\n…\n-----END CERTIFICATE-----"} style={{ fontFamily: "var(--mono)", fontSize: 12 }} />
+          </Field>
+        </>
+      ) : (
+        <>
+          <Field label="Issuer" hint="Endpoints are discovered from <issuer>/.well-known/openid-configuration."><input value={draft.issuer || ""} onChange={(e) => set({ issuer: e.target.value })} placeholder="https://login.acme.com" /></Field>
+          <div className="grid two">
+            <Field label="Client ID"><input value={draft.client_id || ""} onChange={(e) => set({ client_id: e.target.value })} /></Field>
+            <Field label="Client secret" hint="Use secret://NAME to read it from Secrets."><input value={draft.client_secret || ""} onChange={(e) => set({ client_secret: e.target.value })} placeholder="secret://ACME_OIDC_SECRET" /></Field>
+          </div>
+        </>
+      )}
+    </Sheet>
   );
 }

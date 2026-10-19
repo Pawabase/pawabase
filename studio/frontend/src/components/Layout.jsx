@@ -73,7 +73,7 @@ export function webhooksSubnav(env, active) {
 
 export const ENV_NAV = [
   { title: "Build", items: [
-    ["overview", "Overview"], ["data", "Data", "tables", "database"], ["policies", "Policies"], ["routes", "Routes"], ["explorer", "API Explorer"], ["functions", "Functions"], ["dashboards", "Dashboards", null, "usage"],
+    ["overview", "Overview"], ["data", "Data", "tables", "database"], ["policies", "Policies"], ["routes", "Routes"], ["explorer", "API Explorer"], ["functions", "Functions"],
   ] },
   { title: "Automate", items: [
     ["flows", "Flows"], ["subscriptions", "Event subscriptions"], ["schedules", "Schedules"],

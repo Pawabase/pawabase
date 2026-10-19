@@ -1607,6 +1607,8 @@ html, body { background: var(--canvas); }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 52px; padding: 0 16px; border-bottom: 1px solid var(--line); }
 .card-head h2, .card > .spread h2 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
 .card.flush > .card-head + * { border-top: 0; }
+.panel-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.panel-head .icon { width: 17px; height: 17px; color: var(--muted); }
 a.card { transition: background 0.12s, border-color 0.12s; }
 a.card:hover { transform: none; box-shadow: none; background: var(--hover); border-color: var(--line-2); }
 .form-section { background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 20px 0; gap: 14px; }

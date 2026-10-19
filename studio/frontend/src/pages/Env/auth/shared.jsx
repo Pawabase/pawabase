@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Button, Card, useAction } from "../../../components/ui";
+import { Icon } from "../../../components/icons";
+import { Badge, Button, Card, Sheet, useAction } from "../../../components/ui";
 import { envPath, patch, useApi } from "../../../lib/api";
 
 export const AUTH = { service: "auth" };
@@ -39,21 +40,47 @@ export function useAuthConfig(env) {
   const value = { ...saved, ...(draft || {}) };
   const set = (values) => setDraft((current) => ({ ...(current || {}), ...values }));
   const save = async () => {
-    if (await run(() => patch(envPath(env), { auth: value }), "Saved")) { state.reload(); setDraft(undefined); }
+    const ok = await run(() => patch(envPath(env), { auth: value }), "Saved");
+    if (ok) { state.reload(); setDraft(undefined); }
+    return ok;
   };
   return { state, value, set, dirty: draft !== undefined, save, busy, discard: () => setDraft(undefined) };
 }
 
 /** A settings card with its own Save bar, for a page that edits part of the auth configuration. */
-export function SettingsPanel({ title, description, config, children }) {
+export function SettingsPanel({ title, description, config, icon, children }) {
   return (
-    <Card title={title} actions={config.dirty && <>
+    <Card title={icon ? <span className="panel-head"><Icon name={icon} size={17} />{title}</span> : title} actions={config.dirty && <>
       <Button size="sm" disabled={config.busy} onClick={config.discard}>Discard</Button>
       <Button size="sm" variant="primary" disabled={config.busy} onClick={config.save}>Save changes</Button>
     </>}>
       {description && <p className="muted" style={{ margin: "0 0 16px", maxWidth: 640 }}>{description}</p>}
       <div className="stack lg">{children}</div>
     </Card>
+  );
+}
+
+/** The same settings in a side sheet, for a page whose list is the page and configuration is a detour from it. */
+export function SettingsSheet({ title, description, icon, config, onClose, children }) {
+  return (
+    <Sheet title={title} subtitle={description} icon={icon} onClose={onClose} footer={<>
+      {config.dirty && <Button disabled={config.busy} onClick={() => { config.discard(); onClose(); }}>Discard</Button>}
+      <span className="grow" />
+      <Button disabled={config.busy} onClick={onClose}>Close</Button>
+      <Button variant="primary" disabled={config.busy || !config.dirty} onClick={async () => { if (await config.save()) onClose(); }}>Save changes</Button>
+    </>}>
+      <div className="stack lg">{children}</div>
+    </Sheet>
+  );
+}
+
+/** Opens a page's SettingsSheet from its list; "unsaved" means edits are waiting behind it. */
+export function SettingsButton({ label, onClick, dirty }) {
+  return (
+    <Button size="sm" onClick={onClick}>
+      <Icon name="settings" size={14} />{label}
+      {dirty && <Badge tone="yellow">unsaved</Badge>}
+    </Button>
   );
 }
 

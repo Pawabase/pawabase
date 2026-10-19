@@ -20,7 +20,7 @@ export default function SignIn({ env }) {
     <Loading state={config.state}>
       {() => (
         <div className="stack lg">
-          <SettingsPanel title="Sign in with" description="Which identifiers a person can type on the sign-in page. Email is always collected, because verification and recovery go there." config={config}>
+          <SettingsPanel title="Sign in with" icon="enter" description="Which identifiers a person can type on the sign-in page. Email is always collected, because verification and recovery go there." config={config}>
             <div className="stack">
               {IDENTIFIERS.map(([key, label]) => (
                 <label key={key} className="check">
@@ -32,7 +32,7 @@ export default function SignIn({ env }) {
             </div>
           </SettingsPanel>
 
-          <SettingsPanel title="Registration" config={config}>
+          <SettingsPanel title="Registration" icon="users" config={config}>
             <Switch checked={value.signup_enabled} onChange={(v) => set({ signup_enabled: v })} label="Self-registration" hint="Anyone may create an account. Turn off to create people yourself or by invitation." />
             <Switch checked={value.require_email_verification} onChange={(v) => set({ require_email_verification: v })} label="Verify email before sign-in" hint="A new account must open the link in its confirmation email first." />
             <Switch checked={value.magic_link_enabled} onChange={(v) => set({ magic_link_enabled: v })} label="Sign-in links" hint="Offer “email me a link” on the sign-in page." />

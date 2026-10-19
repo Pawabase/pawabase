@@ -44,7 +44,7 @@ export default function Attributes({ env }) {
     <Loading state={config.state}>
       {() => (
         <div className="stack lg">
-          <SettingsPanel title="Standard attributes" description="Choose, for each detail, whether sign-up asks for it. Email and password are always asked. Everything is enforced on the sign-up API as well as the hosted page." config={config}>
+          <SettingsPanel title="Standard attributes" icon="users" description="Choose, for each detail, whether sign-up asks for it. Email and password are always asked. Everything is enforced on the sign-up API as well as the hosted page." config={config}>
             <div className="attr-list">
               {ATTRIBUTES.map(([key, label]) => (
                 <div key={key} className="attr-row">
@@ -97,7 +97,7 @@ export default function Attributes({ env }) {
             </div>
           </Card>
 
-          <SettingsPanel title="Access token contents" description="Which profile attributes are copied into the access token, so policies and your API can read them without a lookup." config={config}>
+          <SettingsPanel title="Access token contents" icon="braces" description="Which profile attributes are copied into the access token, so policies and your API can read them without a lookup." config={config}>
             <Field label="Attributes in the token">
               <Segmented options={[["all", "Everything on the profile"], ["listed", "Only attributes marked “In token”"]]} value={config.value.directory?.claims?.mode || "all"} onChange={(mode) => config.set({ directory: { ...(config.value.directory || {}), claims: { mode } } })} />
             </Field>
