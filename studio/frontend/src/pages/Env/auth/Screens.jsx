@@ -138,7 +138,7 @@ export default function Screens({ env, base }) {
   const frame = <div className="pages-frame"><iframe title="Screen preview" src={previewUrl} sandbox="allow-scripts allow-same-origin" /></div>;
 
   const brandFields = (
-    <SettingsPanel title="Brand" icon="sparkle" description="Applies to every screen." config={config}>
+    <SettingsPanel title="Brand" description="Applies to every screen." config={config}>
       <Field label="Product name" hint="Shown above the form when there is no logo."><input value={branding.name} onChange={(e) => set({ name: e.target.value })} placeholder="Acme" maxLength={80} /></Field>
       <Field label="Logo address" hint="An https image, up to 44px tall."><input value={branding.logo_url} onChange={(e) => set({ logo_url: e.target.value })} placeholder="https://acme.com/logo.svg" /></Field>
       <div className="grid2">
@@ -165,7 +165,7 @@ export default function Screens({ env, base }) {
 
   const screenFields = screen && (
     <div className="stack lg">
-      <SettingsPanel title={`${screen.label}: words`} icon="panelLeft" description={screen.about} config={config}>
+      <SettingsPanel title={`${screen.label}: words`} description={screen.about} config={config}>
         {(screen.words || []).map((key) => (
           <Field key={key} label={WORDS[key][0]}><input value={branding[key]} maxLength={WORDS[key][1]} onChange={(e) => set({ [key]: e.target.value })} /></Field>
         ))}
@@ -180,7 +180,7 @@ export default function Screens({ env, base }) {
   );
 
   const cssFields = (
-    <SettingsPanel title="Custom styles" icon="braces" description="Plain CSS added after Pawabase's own, to every screen. No @import, no url(), no escapes: it can restyle, not load or run anything." config={config}>
+    <SettingsPanel title="Custom styles" description="Plain CSS added after Pawabase's own, to every screen. No @import, no url(), no escapes: it can restyle, not load or run anything." config={config}>
       <textarea rows={8} value={branding.custom_css} onChange={(e) => set({ custom_css: e.target.value })} spellCheck={false} placeholder={".primary { letter-spacing: .02em; }\nh1 { font-weight: 800; }"} style={{ fontFamily: "var(--mono)", fontSize: 13 }} />
       <p className="hint" style={{ margin: 0 }}>Useful hooks: <code>.primary</code> (buttons), <code>.fld</code> (a field), <code>.card</code>, <code>.brand</code> (the side panel), <code>h1</code>, <code>.sub</code>.</p>
     </SettingsPanel>

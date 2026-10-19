@@ -8,7 +8,7 @@ export default function Recovery({ env }) {
   return (
     <Loading state={config.state}>
       {() => (
-        <SettingsPanel title="Account recovery" icon="refresh" description="What happens when someone forgets their password." config={config}>
+        <SettingsPanel title="Account recovery" description="What happens when someone forgets their password." config={config}>
           <Switch checked={policy.enabled} onChange={(v) => setPolicy({ enabled: v })} label="Self-service password reset" hint="Off, nobody can reset their own password: an administrator sets it." />
           <Field label="Reset link lifetime" hint="Minutes. A link works once.">
             <div className="row"><input type="number" min={5} max={1440} value={policy.link_minutes} onChange={(e) => setPolicy({ link_minutes: Math.min(1440, Math.max(5, Number(e.target.value) || 60)) })} style={{ maxWidth: 140 }} /><span className="muted">minutes</span></div>

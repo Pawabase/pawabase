@@ -1,7 +1,6 @@
-import { useState } from "react";
 import { Badge, Button, Card, Field, Loading, Table, useAction, when } from "../../../components/ui";
 import { patch, useApi } from "../../../lib/api";
-import { AUTH, Avatar, SettingsButton, SettingsSheet, useAuthConfig } from "./shared";
+import { AUTH, Avatar, SettingsPanel, useAuthConfig } from "./shared";
 
 /** Locking accounts after repeated failures, and who is locked now. */
 export default function Protection({ env, base }) {
@@ -9,11 +8,20 @@ export default function Protection({ env, base }) {
   const locked = useApi(`${base}/users`, { ...AUTH, params: { status: "locked" }, interval: 15000 });
   const failures = useApi(`${base}/events`, { ...AUTH, params: { failed: "true" }, interval: 15000 });
   const [run, busy] = useAction();
-  const [lockout, setLockout] = useState(false);
   const unlock = async (user) => { if (await run(() => patch(`${base}/users/${user.id}`, { unlock: true }, AUTH), "Unlocked")) locked.reload(); };
   return (
     <div className="stack lg">
-      <Card flush title="Locked accounts" actions={config.state.data && <SettingsButton label="Lockout" dirty={config.dirty} onClick={() => setLockout(true)} />}>
+      <Loading state={config.state}>
+        {() => (
+          <SettingsPanel title="Lockout" description="After this many wrong passwords or codes in a row, the account locks for a while. A correct sign-in clears the count." config={config}>
+            <div className="grid two">
+              <Field label="Failed attempts before a lock" hint="Leave empty for the installation default."><input type="number" min={2} max={100} value={config.value.lockout_threshold ?? ""} onChange={(e) => config.set({ lockout_threshold: e.target.value ? Number(e.target.value) : null })} placeholder="Default" /></Field>
+              <Field label="Lock for (minutes)" hint="Leave empty for the installation default."><input type="number" min={1} max={1440} value={config.value.lockout_minutes ?? ""} onChange={(e) => config.set({ lockout_minutes: e.target.value ? Number(e.target.value) : null })} placeholder="Default" /></Field>
+            </div>
+          </SettingsPanel>
+        )}
+      </Loading>
+      <Card flush title="Locked accounts">
         <Loading state={locked} empty="No account is locked.">
           {(data) => (
             <Table
@@ -45,14 +53,6 @@ export default function Protection({ env, base }) {
           )}
         </Loading>
       </Card>
-      {lockout && (
-        <SettingsSheet title="Lockout" icon="policies" description="After this many wrong passwords or codes in a row, the account locks for a while. A correct sign-in clears the count." config={config} onClose={() => setLockout(false)}>
-          <div className="grid two">
-            <Field label="Failed attempts before a lock" hint="Leave empty for the installation default."><input type="number" min={2} max={100} value={config.value.lockout_threshold ?? ""} onChange={(e) => config.set({ lockout_threshold: e.target.value ? Number(e.target.value) : null })} placeholder="Default" /></Field>
-            <Field label="Lock for (minutes)" hint="Leave empty for the installation default."><input type="number" min={1} max={1440} value={config.value.lockout_minutes ?? ""} onChange={(e) => config.set({ lockout_minutes: e.target.value ? Number(e.target.value) : null })} placeholder="Default" /></Field>
-          </div>
-        </SettingsSheet>
-      )}
     </div>
   );
 }

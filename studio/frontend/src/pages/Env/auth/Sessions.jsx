@@ -1,19 +1,18 @@
-import { useState } from "react";
-import { Badge, Button, Card, Field, Loading, Table, useAction, when } from "../../../components/ui";
-import { del, useApi } from "../../../lib/api";
-import { AUTH, Avatar, SettingsButton, SettingsSheet, device, duration, useAuthConfig } from "./shared";
+import { Badge, Button, Card, Field, Loading, Table, when } from "../../../components/ui";
+import { del, post, useApi } from "../../../lib/api";
+import { useAction } from "../../../components/ui";
+import { AUTH, Avatar, SettingsPanel, device, duration, useAuthConfig } from "./shared";
 
 /** Every active session in the environment, who holds it, and how long sessions last. */
 export default function Sessions({ env, base }) {
   const sessions = useApi(`${base}/sessions`, { ...AUTH, interval: 20000 });
   const config = useAuthConfig(env);
   const [run, busy] = useAction();
-  const [lifetime, setLifetime] = useState(false);
   const rows = sessions.data?.data || [];
   const end = async (row) => { if (await run(() => del(`${base}/sessions/${row.id}`, AUTH), "Session ended")) sessions.reload(); };
   return (
     <div className="stack lg">
-      <Card flush title="Active sessions" actions={<div className="row" style={{ gap: 10 }}><span className="muted small">{rows.length} signed in</span>{config.state.data && <SettingsButton label="Session lifetime" dirty={config.dirty} onClick={() => setLifetime(true)} />}</div>}>
+      <Card flush title="Active sessions" actions={<span className="muted small">{rows.length} signed in</span>}>
         <Loading state={sessions} empty="Nobody is signed in.">
           {() => (
             <Table
@@ -33,18 +32,20 @@ export default function Sessions({ env, base }) {
           )}
         </Loading>
       </Card>
-      {lifetime && (
-        <SettingsSheet title="Session lifetime" icon="clock" description="Access tokens are short and refresh quietly. A refresh token that is used twice ends the whole session, on the assumption it was stolen." config={config} onClose={() => setLifetime(false)}>
-          <div className="grid two">
-            <Field label="Access token lifetime" hint={`Seconds. Now ${duration(config.value.access_ttl)}.`}><input type="number" min={60} value={config.value.access_ttl} onChange={(e) => config.set({ access_ttl: Number(e.target.value) || 900 })} /></Field>
-            <Field label="Refresh token lifetime" hint={`Seconds. Now ${duration(config.value.refresh_ttl)}. This is how long someone stays signed in without activity.`}><input type="number" min={3600} value={config.value.refresh_ttl} onChange={(e) => config.set({ refresh_ttl: Number(e.target.value) || 2592000 })} /></Field>
-          </div>
-          <Field label="Sessions per user" hint="0 is unlimited. Over the limit, the oldest session ends when a new one starts.">
-            <input type="number" min={0} max={100} value={config.value.max_sessions || 0} onChange={(e) => config.set({ max_sessions: Math.max(0, Number(e.target.value) || 0) })} style={{ maxWidth: 160 }} />
-          </Field>
-          <p className="hint" style={{ margin: 0 }}>Changes reach sign-ins within about 10 seconds, and apply to sessions that start after that.</p>
-        </SettingsSheet>
-      )}
+      <Loading state={config.state}>
+        {() => (
+          <SettingsPanel title="Session lifetime" description="Access tokens are short and refresh quietly. A refresh token that is used twice ends the whole session, on the assumption it was stolen." config={config}>
+            <div className="grid two">
+              <Field label="Access token lifetime" hint={`Seconds. Now ${duration(config.value.access_ttl)}.`}><input type="number" min={60} value={config.value.access_ttl} onChange={(e) => config.set({ access_ttl: Number(e.target.value) || 900 })} /></Field>
+              <Field label="Refresh token lifetime" hint={`Seconds. Now ${duration(config.value.refresh_ttl)}. This is how long someone stays signed in without activity.`}><input type="number" min={3600} value={config.value.refresh_ttl} onChange={(e) => config.set({ refresh_ttl: Number(e.target.value) || 2592000 })} /></Field>
+            </div>
+            <Field label="Sessions per user" hint="0 is unlimited. Over the limit, the oldest session ends when a new one starts.">
+              <input type="number" min={0} max={100} value={config.value.max_sessions || 0} onChange={(e) => config.set({ max_sessions: Math.max(0, Number(e.target.value) || 0) })} style={{ maxWidth: 160 }} />
+            </Field>
+            <p className="hint" style={{ margin: 0 }}>Changes reach sign-ins within about 10 seconds, and apply to sessions that start after that.</p>
+          </SettingsPanel>
+        )}
+      </Loading>
     </div>
   );
 }
