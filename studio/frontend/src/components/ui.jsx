@@ -2,16 +2,22 @@ import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState
 import { Icon } from "./icons";
 
 export function Button({ variant, size, className = "", ...props }) {
-  return <button type="button" className={`btn inline-flex items-center justify-center gap-1.5 [border:1px_solid_var(--line-2)] bg-transparent text-text rounded-sm p-[0_12px] font-inherit font-medium-plus text-ui cursor-pointer whitespace-nowrap transition-[background_0.12s,_border-color_0.12s] [&:hover]:border-line-hover [&:active]:transform-[none] [&:disabled]:opacity-45 [&:disabled]:cursor-not-allowed [&.primary]:bg-brand [&.primary]:border-transparent [&.primary]:text-text [&.primary:hover]:filter-none [&.soft]:bg-transparent [&.soft]:border-line-2 [&.soft]:text-text [&.danger]:text-danger [&.danger]:border-line-2 [&.danger]:bg-transparent [&.ghost]:bg-transparent [&.ghost]:border-transparent [&.ghost]:text-muted [&.ghost:hover]:text-text [&.ghost:hover]:bg-hover [&.sm]:p-[0_10px] [&.sm]:text-ui-sm [&.icon-only]:p-0 [&.icon-only]:w-control [&.icon-only]:h-[30px] [&_.icon]:w-4 [&_.icon]:h-4 h-control shadow-none [&:hover]:bg-hover [&:active]:bg-press [&:focus-visible]:outline-[2px_solid_var(--brand)] [&:focus-visible]:outline-offset-[1px] [&.primary:hover]:bg-brand [&.primary:hover]:border-line-hover [&.danger:hover]:bg-danger-soft [&.sm]:h-control-sm [&.sm.icon-only]:w-control-sm [label&]:inline-flex filter-none [&.soft]:shadow-none [&.soft]:filter-none [&.primary]:shadow-none [&.primary]:filter-none [label&]:bg-transparent [label&]:shadow-none [label&]:filter-none [label&.primary]:bg-transparent [label&.primary]:shadow-none [label&.primary]:filter-none [label&.primary]:border-line-2 [label&.primary]:text-text [label&.primary:hover]:bg-hover [label&.primary:hover]:border-line-hover [&.soft:hover]:bg-hover [&:disabled]:bg-transparent [&.primary:disabled]:bg-transparent [&.primary:disabled]:opacity-45 border-line-2 [label&]:border-line-2 [&.soft:hover]:border-line-hover [&.danger:hover]:border-line-hover [&.on]:border-brand [&.on]:text-text ${variant || ""} ${size || ""} ${className}`} {...props} />;
+  return <button type="button" className={`btn inline-flex items-center justify-center gap-1.5 [border:1px_solid_var(--line-2)] bg-transparent text-text rounded-sm p-[0_12px] font-inherit font-medium-plus text-ui cursor-pointer whitespace-nowrap transition-[background_0.12s,_border-color_0.12s] [&:hover]:border-line-hover [&:active]:transform-[none] [&:disabled]:opacity-45 [&:disabled]:cursor-not-allowed [&.primary]:bg-brand [&.primary]:border-transparent [&.primary]:text-text [&.primary:hover]:filter-none [&.soft]:bg-transparent [&.soft]:border-line-2 [&.soft]:text-text [&.danger]:text-danger [&.danger]:border-line-2 [&.danger]:bg-transparent [&.ghost]:bg-transparent [&.ghost]:border-transparent [&.ghost]:text-muted [&.ghost:hover]:text-text [&.ghost:hover]:bg-hover [&.sm]:p-[0_10px] [&.sm]:text-ui-sm [&.icon-only]:p-0 [&.icon-only]:w-control [&.icon-only]:h-[30px] [&_.icon]:w-4 [&_.icon]:h-4 h-control shadow-none [&:hover]:bg-hover [&:active]:bg-press [&:focus-visible]:outline-[2px_solid_var(--brand)] [&:focus-visible]:outline-offset-[1px] [&.primary:hover]:bg-brand [&.primary:hover]:border-line-hover [&.danger:hover]:bg-danger-soft [&.sm]:h-control-sm [&.sm.icon-only]:w-control-sm [label&]:inline-flex filter-none [&.soft]:shadow-none [&.soft]:filter-none [&.primary]:shadow-none [&.primary]:filter-none [label&]:bg-transparent [label&]:shadow-none [label&]:filter-none [label&.primary]:bg-transparent [label&.primary]:shadow-none [label&.primary]:filter-none [label&.primary]:border-line-2 [label&.primary]:text-text [label&.primary:hover]:bg-hover [label&.primary:hover]:border-line-hover [&.soft:hover]:bg-hover [&:disabled]:bg-transparent [&.primary:disabled]:bg-brand [&.primary:disabled]:opacity-45 border-line-2 [label&]:border-line-2 [&.soft:hover]:border-line-hover [&.danger:hover]:border-line-hover [&.on]:border-brand [&.on]:text-text ${variant || ""} ${size || ""} ${className}`} {...props} />;
 }
 
-export function Card({ title, actions, children, flush, className = "" }) {
+export function Card({ title, description, icon, actions, children, flush, className = "" }) {
   return (
-    <section className={`card bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-md p-4 [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [&.flush_.card-head_+_*]:[border-top:1px_solid_var(--line)] [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:transform-[none]! [a&:hover]:shadow-none [border:1px_solid_var(--line)] shadow-none [&_>_.spread:first-child]:mb-3! [&_>_.spread_h2]:text-base [&_>_.spread_h2]:font-semibold [&_>_.spread_h2]:tracking-[-0.01em] [&.flush_>_.card-head_+_*]:border-t-0 [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&_>_.spread_.chips]:gap-0 [&_>_.spread_.chips]:flex-nowrap [&_>_.spread_.chips]:[border:1px_solid_var(--line-2)] [&_>_.spread_.chips]:rounded-sm [&_>_.spread_.chips]:overflow-hidden [&_>_.spread_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_>_.spread_.chip]:p-[0_10px] [&_>_.spread_.chip]:border-0 [&_>_.spread_.chip]:[border-left:1px_solid_var(--line-2)] [&_>_.spread_.chip]:rounded-none [&_>_.spread_.chip]:bg-transparent [&_>_.spread_.chip]:text-muted [&_>_.spread_.chip]:text-xs [&_>_.spread_.chip]:font-medium-plus [&_>_.spread_.chip:first-child]:border-l-0 [&_>_.spread_.chip.active]:bg-press [&_>_.spread_.chip.active]:text-text [&_>_.spread_.chip.on]:bg-press [&_>_.spread_.chip.on]:text-text [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100 ${flush ? "flush" : ""} ${className}`}>
+    <section className={`card shrink-0 flex flex-col bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-[calc(var(--r)_+_4px)] [border:1px_solid_var(--line-2)] shadow-none p-[16px_18px_18px] [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100 [&_.card-head_.chips]:gap-0 [&_.card-head_.chips]:flex-nowrap [&_.card-head_.chips]:[border:1px_solid_var(--line-2)] [&_.card-head_.chips]:rounded-sm [&_.card-head_.chips]:overflow-hidden [&_.card-head_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_.card-head_.chip]:p-[0_10px] [&_.card-head_.chip]:border-0 [&_.card-head_.chip]:[border-left:1px_solid_var(--line-2)] [&_.card-head_.chip]:rounded-none [&_.card-head_.chip]:bg-transparent [&_.card-head_.chip]:text-muted [&_.card-head_.chip]:text-xs [&_.card-head_.chip]:font-medium-plus [&_.card-head_.chip:first-child]:border-l-0 [&_.card-head_.chip.active]:bg-press [&_.card-head_.chip.active]:text-text [&_.card-head_.chip.on]:bg-press [&_.card-head_.chip.on]:text-text ${flush ? "flush" : ""} ${className}`}>
       {(title || actions) && (
-        <div className={flush ? "card-head" : "spread"} style={flush ? undefined : { marginBottom: 12 }}>
-          <h2>{title}</h2>
-          <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5">{actions}</div>
+        <div className={`card-head flex items-center justify-between gap-3 min-h-[54px] p-[0_18px] bg-[color-mix(in_srgb,_var(--surface)_72%,_var(--canvas))] [border-radius:calc(var(--r)_+_4px)_calc(var(--r)_+_4px)_0_0] ${flush ? "" : "[margin:-16px_-18px_14px]"}`}>
+          <div className="flex items-center gap-2.5 min-w-0">
+            {icon && <Icon name={icon} size={18} className="icon shrink-0 text-brand" />}
+            <div className="min-w-0">
+              <h2>{title}</h2>
+              {description && <p className="m-[2px_0_0] text-ui-sm text-muted">{description}</p>}
+            </div>
+          </div>
+          <div className="row flex items-center gap-2 shrink-0 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5">{actions}</div>
         </div>
       )}
       {children}
@@ -275,7 +281,7 @@ export function ToastProvider({ children }) {
     <ToastContext.Provider value={push}>
       {children}
       <div className="toast-stack fixed bottom-14 right-4 flex flex-col gap-2 z-[60]">
-        {toasts.map((t) => <div key={t.id} className={`toast flex items-center gap-2.5 bg-surface text-text p-[10px_14px_10px_10px] rounded-sm min-w-[220px] max-w-[460px] shadow-none font-medium-plus text-body animate-[pop_0.2s_ease] [&_.toast-dot]:w-[22px] [&_.toast-dot]:h-[22px] [&_.toast-dot]:rounded-xs [&_.toast-dot]:grid [&_.toast-dot]:place-items-center [&_.toast-dot]:bg-mint [&_.toast-dot]:text-pastel-ink [&_.toast-dot]:shrink-0 [&.error_.toast-dot]:bg-rose [&_.toast-dot_.icon]:w-[13px] [&_.toast-dot_.icon]:h-[13px] [border:1px_solid_var(--line-2)] ${t.tone}`}><span className="toast-dot"><Icon name={t.tone === "error" ? "x" : "check"} /></span>{t.message}</div>)}
+        {toasts.map((t) => <div key={t.id} className={`toast flex items-center gap-2.5 bg-surface text-text p-[10px_14px_10px_10px] rounded-sm min-w-[220px] max-w-[460px] shadow-none font-medium-plus text-body animate-[pop_0.2s_ease] [&_.toast-dot]:shrink-0 [&_.toast-dot]:text-ok [&.error_.toast-dot]:text-danger [&_.toast-dot_.icon]:w-[17px] [&_.toast-dot_.icon]:h-[17px] [border:1px_solid_var(--line-2)] ${t.tone}`}><span className="toast-dot"><Icon name={t.tone === "error" ? "x" : "check"} /></span>{t.message}</div>)}
       </div>
     </ToastContext.Provider>
   );
@@ -317,8 +323,8 @@ export function Sheet({ title, subtitle, icon, tone = "lavender", tabs, tab, onT
     <>
       <div className="sheet-overlay fixed inset-0 bg-[rgba(6,_5,_10,_0.55)] backdrop-filter-none z-[50] animate-[fade_0.15s_ease]" onMouseDown={onClose} />
       <div className="sheet fixed top-0 right-0 bottom-0 w-[min(720px,_100vw)] bg-canvas rounded-none shadow-none z-[51] flex flex-col overflow-hidden animate-[slide-in_0.18s_ease-out] [border-left:1px_solid_var(--line-2)] max-navigation:w-[100vw] max-navigation:border-l-0 border-0 [&_>_.page-tabs]:flex-none [&_>_.page-tabs]:m-0 [&_>_.page-tabs]:p-[0_20px]" role="dialog" aria-label={typeof title === "string" ? title : undefined}>
-        <div className="sheet-head flex items-center gap-2.5 p-[0_12px_0_20px] [&_.tile-icon]:w-[26px] [&_.tile-icon]:h-[26px] [&_.tile-icon]:rounded-sm [&_.tile-icon]:grid [&_.tile-icon]:place-items-center [&_.tile-icon]:shrink-0 [&_h2]:text-heading [&_p]:m-[1px_0_0] [&_p]:text-ui-sm [&_p]:text-muted h-[var(--bar)] box-border [border-bottom:1px_solid_var(--line)] bg-canvas [&_.tile-icon]:bg-transparent! [&_.tile-icon]:text-muted [&_.tile-icon]:[border:1px_solid_var(--line-2)] shrink-0 [&_h2]:font-semibold [&_h2]:overflow-hidden [&_h2]:text-ellipsis [&_h2]:whitespace-nowrap [&_p]:hidden [&_.tile-icon_.icon]:w-3.5 [&_.tile-icon_.icon]:h-3.5">
-          {icon && <span className={`tile-icon pastel text-text pastel-contrast [&.lavender]:bg-lavender [&.peach]:bg-peach [&.mint]:bg-mint [&.butter]:bg-butter [&.sky]:bg-sky [&.rose]:bg-rose [&.lavender]:text-text [&.peach]:text-text [&.mint]:text-text [&.butter]:text-text [&.sky]:text-text [&.rose]:text-text ${tone}`}><Icon name={icon} size={20} /></span>}
+        <div className="sheet-head flex items-center gap-2.5 p-[0_12px_0_20px] [&_.tile-icon]:shrink-0 [&_h2]:text-heading [&_p]:m-[1px_0_0] [&_p]:text-ui-sm [&_p]:text-muted h-[var(--bar)] box-border [border-bottom:1px_solid_var(--line)] bg-canvas  shrink-0 [&_h2]:font-semibold [&_h2]:overflow-hidden [&_h2]:text-ellipsis [&_h2]:whitespace-nowrap [&_p]:hidden [&_.tile-icon_.icon]:w-[22px] [&_.tile-icon_.icon]:h-[22px]">
+          {icon && <span className={`tile-icon pastel text-text pastel-contrast [&.lavender]:text-lavender [&.peach]:text-peach [&.mint]:text-mint [&.butter]:text-butter [&.sky]:text-sky [&.rose]:text-rose ${tone}`}><Icon name={icon} size={20} /></span>}
           <div className="grow flex-1 min-w-0">
             <h2>{title}</h2>
             {subtitle && <p>{subtitle}</p>}
@@ -334,25 +340,28 @@ export function Sheet({ title, subtitle, icon, tone = "lavender", tabs, tab, onT
         ) : (
           <div className="sheet-body flex-1 overflow-auto p-[20px_20px_24px] flex flex-col gap-3.5">{children}</div>
         )}
-        {footer && <div className="sheet-foot flex items-center gap-2 p-[12px_20px] bg-canvas [border-top:1px_solid_var(--line)] min-h-[var(--dock)] box-border justify-end [&_.btn.primary]:bg-brand [&_.btn.primary]:border-brand [&_.btn.primary]:text-[#15121f] [&_.btn.primary:hover]:bg-[var(--brand-strong)] [&_.btn.primary:hover]:border-brand-strong">{footer}</div>}
+        {footer && <div className="sheet-foot shrink-0 flex items-center gap-2 p-[12px_20px] bg-canvas [border-top:1px_solid_var(--line)] min-h-[var(--dock)] box-border justify-end [&_.btn.primary]:bg-brand [&_.btn.primary]:border-brand [&_.btn.primary]:text-[#15121f] [&_.btn.primary:hover]:bg-[var(--brand-strong)] [&_.btn.primary:hover]:border-brand-strong">{footer}</div>}
       </div>
     </>
   );
 }
 
-export function Section({ title, description, actions, children }) {
+export function Section({ title, description, icon, actions, children }) {
   return (
-    <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
+    <section className="form-section shrink-0 flex flex-col overflow-hidden rounded-[calc(var(--r)_+_2px)] bg-[color-mix(in_srgb,_var(--surface)_40%,_var(--canvas))] [border:1px_solid_var(--line)] [&+&]:mt-3">
       {(title || actions) && (
-        <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold">
-          <div>
-            <h3>{title}</h3>
-            {description && <p>{description}</p>}
+        <div className="form-section-head flex items-center justify-between gap-3 min-h-[48px] p-[9px_16px] bg-[color-mix(in_srgb,_var(--surface)_66%,_var(--canvas))] [border-bottom:1px_solid_var(--line)]">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {icon && <Icon name={icon} size={17} className="icon shrink-0 text-brand" />}
+            <div className="min-w-0">
+              <h3 className="text-[13.5px] font-semibold tracking-[-0.01em]">{title}</h3>
+              {description && <p className="m-[2px_0_0] text-ui-sm text-muted">{description}</p>}
+            </div>
           </div>
-          {actions && <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5">{actions}</div>}
+          {actions && <div className="row flex items-center gap-2 shrink-0 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5">{actions}</div>}
         </div>
       )}
-      {children}
+      <div className="flex flex-col gap-3 p-[16px] min-w-0">{children}</div>
     </section>
   );
 }
@@ -374,7 +383,7 @@ export function Switch({ checked, onChange, label, hint, size }) {
 
 export function Segmented({ options, value, onChange }) {
   return (
-    <div className="segmented self-start w-fit max-w-[100%] inline-flex gap-0 p-0.5 bg-sunken rounded-[calc(var(--r)_+_1px)] flex-nowrap [&_button]:border-0 [&_button]:bg-transparent [&_button]:text-muted [&_button]:font-inherit [&_button]:text-ui-sm [&_button]:font-medium-plus [&_button]:p-[0_12px] [&_button]:rounded-[7px] [&_button]:cursor-pointer [&_button.active]:bg-surface [&_button.active]:text-text [&_button.active]:shadow-none! [&_button:disabled]:opacity-50 [&_button:disabled]:cursor-not-allowed [border:1px_solid_var(--line-2)] overflow-hidden [&_button]:h-[calc(var(--control)_-_2px)] [&_button]:[border-left:1px_solid_var(--line-2)] [&_button]:shadow-none! [&_button:first-child]:border-l-0 [&_button:hover]:bg-hover [&_button:hover]:text-text [&_button.active]:font-semibold" role="radiogroup">
+    <div className="segmented self-start w-fit max-w-[100%] inline-flex gap-0 p-0 bg-sunken rounded-sm flex-nowrap [&_button]:border-0 [&_button]:bg-transparent [&_button]:text-muted [&_button]:font-inherit [&_button]:text-ui-sm [&_button]:font-medium-plus [&_button]:p-[0_12px] [&_button]:rounded-none [&_button]:cursor-pointer [&_button.active]:bg-surface [&_button.active]:text-text [&_button.active]:shadow-none! [&_button:disabled]:opacity-50 [&_button:disabled]:cursor-not-allowed [border:1px_solid_var(--line-2)] overflow-hidden [&_button]:h-[calc(var(--control)_-_2px)] [&_button]:[border-left:1px_solid_var(--line-2)] [&_button]:shadow-none! [&_button:first-child]:border-l-0 [&_button:hover]:bg-hover [&_button:hover]:text-text [&_button.active]:font-semibold" role="radiogroup">
       {options.map((o) => {
         const [v, label] = Array.isArray(o) ? o : [o, o];
         return (
@@ -458,8 +467,8 @@ export function IconButton({ icon, label, onClick, disabled }) {
 
 export function EmptyState({ icon = "layers", tone = "lavender", title, children, action }) {
   return (
-    <div className="empty-state flex flex-col items-center gap-2 p-[56px_20px] text-center [&_.tile-icon]:w-[34px] [&_.tile-icon]:h-[34px] [&_.tile-icon]:rounded-[11px] [&_.tile-icon]:grid [&_.tile-icon]:place-items-center [&_.tile-icon]:bg-brand-soft [&_.tile-icon]:text-brand-strong [&_.tile-icon]:mb-1 [&_.tile-icon_.icon]:w-[26px] [&_.tile-icon_.icon]:h-[26px] [&_p]:m-0 [&_p]:text-muted [&_p]:max-w-[420px] [&_.tile-icon]:border-0 [&_h2]:text-heading [&_h2]:font-semibold">
-      <span className={`tile-icon pastel text-text pastel-contrast [&.lavender]:bg-lavender [&.peach]:bg-peach [&.mint]:bg-mint [&.butter]:bg-butter [&.sky]:bg-sky [&.rose]:bg-rose [&.lavender]:text-text [&.peach]:text-text [&.mint]:text-text [&.butter]:text-text [&.sky]:text-text [&.rose]:text-text ${tone}`}><Icon name={icon} /></span>
+    <div className="empty-state flex flex-col items-center gap-2 p-[56px_20px] text-center [&_.tile-icon]:mb-1 [&_.tile-icon]:grid [&_.tile-icon]:place-items-center [&_.tile-icon_.icon]:w-[34px] [&_.tile-icon_.icon]:h-[34px] [&_p]:m-0 [&_p]:text-muted [&_p]:max-w-[420px] [&_.tile-icon]:border-0 [&_h2]:text-heading [&_h2]:font-semibold">
+      <span className={`tile-icon pastel text-text pastel-contrast [&.lavender]:text-lavender [&.peach]:text-peach [&.mint]:text-mint [&.butter]:text-butter [&.sky]:text-sky [&.rose]:text-rose ${tone}`}><Icon name={icon} /></span>
       {title && <h2>{title}</h2>}
       {children && <p>{children}</p>}
       {action}
@@ -469,7 +478,7 @@ export function EmptyState({ icon = "layers", tone = "lavender", title, children
 
 export function Tile({ tone = "lavender", icon, value, label, i = 0 }) {
   return (
-    <div className={`tile rounded-none p-[14px_16px] flex flex-col gap-1 min-h-0 [&_.tile-icon]:w-[34px] [&_.tile-icon]:h-[34px] [&_.tile-icon]:rounded-[11px] [&_.tile-icon]:bg-brand-soft [&_.tile-icon]:grid [&_.tile-icon]:place-items-center [&.compact]:min-h-0 [&.compact]:flex-row [&.compact]:items-center [&.compact]:gap-3.5 [&.compact]:p-[16px_18px] [&.compact_b]:text-[24px] [&_b]:text-display-sm [&_b]:font-semibold [&_b]:tracking-[-0.02em] [&_b]:leading-[1.1] [&_span]:text-ui-sm [&_span]:font-medium [&_span]:text-muted relative m-0 border-0 [border-right:1px_solid_var(--line)] bg-transparent! text-text shadow-none! text-left cursor-default [&:last-child]:border-r-0 [&_b]:text-text [&_b]:tabular-nums [&_.tile-icon]:text-brand-strong [&.pastel]:bg-transparent [&_.tile-icon]:border-0 pastel text-text pastel-contrast [&.lavender]:bg-lavender [&.peach]:bg-peach [&.mint]:bg-mint [&.butter]:bg-butter [&.sky]:bg-sky [&.rose]:bg-rose [&.lavender]:text-text [&.peach]:text-text [&.mint]:text-text [&.butter]:text-text [&.sky]:text-text [&.rose]:text-text ${tone} rise animate-[rise_0.45s_cubic-bezier(0.2,_1,_0.3,_1)_both] [animation-delay:calc(var(--i,_0)_*_60ms)]`} style={{ "--i": i }}>
+    <div className={`tile rounded-none p-[14px_16px] flex flex-col gap-1 min-h-0 [&_.tile-icon]:grid [&_.tile-icon]:place-items-center [&_.tile-icon_.icon]:w-[26px] [&_.tile-icon_.icon]:h-[26px] [&.compact]:min-h-0 [&.compact]:flex-row [&.compact]:items-center [&.compact]:gap-3.5 [&.compact]:p-[16px_18px] [&.compact_b]:text-[24px] [&_b]:text-display-sm [&_b]:font-semibold [&_b]:tracking-[-0.02em] [&_b]:leading-[1.1] [&_span]:text-ui-sm [&_span]:font-medium [&_span]:text-muted relative m-0 border-0 [border-right:1px_solid_var(--line)] bg-transparent! text-text shadow-none! text-left cursor-default [&:last-child]:border-r-0 [&_b]:text-text [&_b]:tabular-nums [&_.tile-icon]:text-brand-strong [&.pastel]:bg-transparent [&_.tile-icon]:border-0 pastel text-text pastel-contrast [&.lavender]:text-lavender [&.peach]:text-peach [&.mint]:text-mint [&.butter]:text-butter [&.sky]:text-sky [&.rose]:text-rose ${tone} rise animate-[rise_0.45s_cubic-bezier(0.2,_1,_0.3,_1)_both] [animation-delay:calc(var(--i,_0)_*_60ms)]`} style={{ "--i": i }}>
       {icon && <span className="tile-icon"><Icon name={icon} /></span>}
       <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 2 }}>
         <b>{value}</b>

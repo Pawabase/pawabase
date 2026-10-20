@@ -13,7 +13,7 @@ const text = (body, key, patch) => ({ value: body[key] ?? "", onChange: (e) => p
 
 function Identity({ body, patch, isNew, nameKey = "name", nameHint, namePlaceholder, children }) {
   return (
-    <Section title="Details">
+    <Section icon="settings" title="Details">
       <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
         <Field label="Name" hint={isNew ? nameHint : "Fixed once created; other definitions refer to it by name."}>
           <input className="mono font-mono text-ui-sm" autoFocus={isNew} placeholder={namePlaceholder} {...text(body, nameKey, patch)} disabled={!isNew} />
@@ -66,7 +66,7 @@ function SchemaForm({ body, patch, refs, isNew }) {
   return (
     <>
       <Identity body={body} patch={patch} isNew={isNew} namePlaceholder="Address" nameHint="Starts with a letter; letters, digits and underscores." />
-      <Section title="Fields" description="Compiled to a Pydantic model and published in OpenAPI.">
+      <Section icon="resources" title="Fields" description="Compiled to a Pydantic model and published in OpenAPI.">
         <FieldsEditor value={body.fields || []} onChange={(fields) => patch({ fields })} schemas={refs.schemas.filter((s) => s !== body.name)} empty="No fields yet." />
       </Section>
     </>
@@ -88,7 +88,7 @@ function TransformerForm({ body, patch, isNew }) {
   return (
     <>
       <Identity body={body} patch={patch} isNew={isNew} namePlaceholder="public_user" />
-      <Section title="Steps" description="Applied in this order to every record a consumer receives.">
+      <Section icon="transformers" title="Steps" description="Applied in this order to every record a consumer receives.">
         <Field label="1 · Omit fields" hint="Removed from the output, e.g. password_hash.">
           <TagInput value={def.omit || []} onChange={(v) => step("omit", v)} placeholder="password_hash" />
         </Field>
@@ -116,7 +116,7 @@ function PolicyForm({ body, patch, isNew }) {
   return (
     <>
       <Identity body={body} patch={patch} isNew={isNew} namePlaceholder="own_rows" />
-      <Section title="Who passes" description="Checks on record fields are pushed down to SQL, so filtered lists stay paginated correctly. Secret keys always pass.">
+      <Section icon="policies" title="Who passes" description="Checks on record fields are pushed down to SQL, so filtered lists stay paginated correctly. Secret keys always pass.">
         <ConditionBuilder tree={tree} onChange={(t, condition) => { setTree(t); patch({ condition }); }} />
       </Section>
     </>
@@ -137,7 +137,7 @@ export function ResourceForm({ body, patch, refs, isNew, mode = "all" }) {
   const [openRelation, setOpenRelation] = useState(null);
   return (
     <>
-      {mode !== "columns" && <Section title="Details">
+      {mode !== "columns" && <Section icon="settings" title="Details">
         <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
           <Field label="Name" hint={isNew ? `Served at /rest/v1/${body.name || "<name>"}` : "The URL segment; fixed once created."}>
             <input className="mono font-mono text-ui-sm" autoFocus={isNew} placeholder="todos" {...text(body, "name", patch)} disabled={!isNew} />
@@ -157,13 +157,14 @@ export function ResourceForm({ body, patch, refs, isNew, mode = "all" }) {
         </div>
       </Section>}
       {mode !== "settings" && <Section
+        icon="resources"
         title="Columns"
         description={`The primary key${body.timestamps !== false ? " and created_at / updated_at are" : " is"} added for you.`}
         actions={fields.length > 0 ? <Badge tone="brand">{fields.length} column{fields.length === 1 ? "" : "s"}</Badge> : undefined}
       >
         <FieldsEditor value={fields} onChange={(next) => patch({ fields: next })} schemas={refs.schemas} indexable interactive empty="No columns yet — add one for each value the API should carry." />
       </Section>}
-      {mode !== "columns" && <Section title="Access" description="Which endpoints exist, and who may call each.">
+      {mode !== "columns" && <Section icon="secrets" title="Access" description="Which endpoints exist, and who may call each.">
         <div className="ops-table flex flex-col">
           {OPS.map(([op, method]) => {
             const setting = ops[op] || {};
@@ -185,6 +186,7 @@ export function ResourceForm({ body, patch, refs, isNew, mode = "all" }) {
         </div>
       </Section>}
       {mode !== "settings" && <Section
+        icon="link"
         title="Relations"
         description="Include related rows with ?expand=name."
         actions={relations.length > 0 ? <Badge tone="brand">{relations.length} relation{relations.length === 1 ? "" : "s"}</Badge> : undefined}
@@ -224,7 +226,7 @@ export function ResourceForm({ body, patch, refs, isNew, mode = "all" }) {
         })}
         <button type="button" className="add-row [border:1.5px_dashed_var(--line-2)] bg-none rounded-sm p-2.5 text-muted font-inherit font-semibold text-ui cursor-pointer flex items-center justify-center gap-1.5 [&:hover]:border-brand [&:hover]:text-brand-strong [&:hover]:bg-brand-soft [&_.icon]:w-4 [&_.icon]:h-4" onClick={() => { setRel([...relations, { name: "", type: "belongs_to", resource: "", field: "" }]); setOpenRelation(relations.length); }}><Icon name="plus" />Add relation</button>
       </Section>}
-      {mode !== "columns" && <Section title="Behaviour">
+      {mode !== "columns" && <Section icon="settings" title="Behaviour">
         <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
           <Switch checked={body.events !== false} onChange={(events) => patch({ events })} label="Emit events" hint={`${body.name || "name"}.created / updated / deleted`} />
           <Switch checked={!!body.realtime} onChange={(realtime) => patch({ realtime })} label="Broadcast changes" hint="Push row changes to realtime subscribers." />
@@ -254,7 +256,7 @@ function RouteForm({ body, patch, refs }) {
   const handlers = body.handler_type === "function" ? refs.functions : refs.flows;
   return (
     <>
-      <Section title="Endpoint">
+      <Section icon="routes" title="Endpoint">
         <Field label="Method and path" hint="Served under /rest/v1. Use {param} for path parameters.">
           <div className="input-group flex items-stretch [&_>_*]:rounded-none [&_>_:first-child]:rounded-[var(--r)_0_0_var(--r)] [&_>_:last-child]:rounded-[0_var(--r)_var(--r)_0] [&_>_:not(:first-child)]:ml-[-1px] [&_>_select]:w-auto [&_>_select]:shrink-0 [&_.addon]:grid [&_.addon]:place-items-center [&_.addon]:p-[0_12px] [&_.addon]:bg-head-bg [&_.addon]:[border:1px_solid_var(--line-2)] [&_.addon]:text-muted [&_.addon]:text-ui-sm [&_.addon]:whitespace-nowrap [&_.addon]:border-line-2">
             <select value={body.method || "POST"} onChange={(e) => patch({ method: e.target.value })} style={{ fontWeight: 700 }}>
@@ -270,7 +272,7 @@ function RouteForm({ body, patch, refs }) {
         </div>
         <Enabled body={body} patch={patch} hint="Disabled routes answer 404." />
       </Section>
-      <Section title="Handler" description="What runs when the endpoint is called.">
+      <Section icon="code" title="Handler" description="What runs when the endpoint is called.">
         <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
           <Field label="Type">
             <Segmented options={[["flow", "Flow"], ["function", "Function"]]} value={body.handler_type || "flow"} onChange={(handler_type) => patch({ handler_type, handler: "" })} />
@@ -284,10 +286,10 @@ function RouteForm({ body, patch, refs }) {
           </Field>
         </div>
       </Section>
-      <Section title="Access">
+      <Section icon="secrets" title="Access">
         <PolicyPicker value={body.policy} onChange={(policy) => patch({ policy })} policies={refs.policies} />
       </Section>
-      <Section title="Request & response">
+      <Section icon="send" title="Request & response">
         <Field label="Request body">
           <Segmented options={[["none", "Anything"], ["fields", "Define fields"], ["schema", "Use a schema"]]} value={inputMode} onChange={setInput} />
         </Field>
@@ -298,7 +300,7 @@ function RouteForm({ body, patch, refs }) {
           <Field label="Transformer" optional><RefSelect options={refs.transformers} value={typeof body.transformer === "string" ? body.transformer : null} onChange={(transformer) => patch({ transformer })} /></Field>
         </div>
       </Section>
-      <Section title="Limits">
+      <Section icon="clock" title="Limits">
         <RateLimit value={body.rate_limit} onChange={(rate_limit) => patch({ rate_limit })} />
         <CacheTtl value={body.cache_ttl} onChange={(cache_ttl) => patch({ cache_ttl })} />
         <Field label="Tags" optional><TagInput value={body.tags || []} onChange={(tags) => patch({ tags })} /></Field>
@@ -339,7 +341,7 @@ function SubscriptionForm({ body, patch, refs, isNew }) {
   return (
     <>
       <Identity body={body} patch={patch} isNew={isNew} namePlaceholder="on_signup" />
-      <Section title="When" description="Wildcards match a family: todos.* or user.*">
+      <Section icon="schedules" title="When" description="Wildcards match a family: todos.* or user.*">
         <Field label="Event">
           <input className="mono font-mono text-ui-sm" list="pb-events" placeholder="user.created" {...text(body, "event", patch)} />
           <datalist id="pb-events">{eventSuggestions(refs).map((e) => <option key={e} value={e} />)}</datalist>
@@ -347,7 +349,7 @@ function SubscriptionForm({ body, patch, refs, isNew }) {
         <Switch checked={conditional} onChange={(on) => { const t = toTree({ exists: "$event.data" }); setTree(t); patch({ condition: on ? { exists: "$event.data" } : null }); }} label="Only when…" hint="Filter on the event with rules over $event." />
         {conditional && <ConditionBuilder tree={tree} onChange={(t, condition) => { setTree(t); patch({ condition }); }} />}
       </Section>
-      <Section title="Then">
+      <Section icon="bolt" title="Then">
         <Target body={body} patch={patch} refs={refs} types={["flow", "function", "realtime"]} />
         <Enabled body={body} patch={patch} />
       </Section>
@@ -361,7 +363,7 @@ function WebhookForm({ body, patch, refs, isNew }) {
   return (
     <>
       <Identity body={body} patch={patch} isNew={isNew} namePlaceholder="crm" />
-      <Section title="Delivery">
+      <Section icon="send" title="Delivery">
         <Field label="Endpoint URL"><input className="mono font-mono text-ui-sm" type="url" placeholder="https://example.com/hooks/pawabase" {...text(body, "url", patch)} /></Field>
         <Field label="Events" hint="* sends everything.">
           <TagInput value={body.events || []} onChange={(events) => patch({ events })} suggestions={["*", "user.*", ...refs.resources.map((r) => `${r}.*`)]} />
@@ -370,7 +372,7 @@ function WebhookForm({ body, patch, refs, isNew }) {
           <KeyValue value={body.headers || {}} onChange={(headers) => patch({ headers })} keyLabel="Header" valueLabel="Value" addLabel="Add header" />
         </Field>
       </Section>
-      <Section title="Reliability & signing">
+      <Section icon="refresh" title="Reliability & signing">
         <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
           <Field label="Attempts" hint="Retries back off exponentially.">
             <input type="number" min="1" max="10" value={body.max_attempts ?? 5} onChange={(e) => patch({ max_attempts: Number(e.target.value) })} />
@@ -396,7 +398,7 @@ function InboundForm({ body, patch, refs, isNew, env }) {
       <Identity body={body} patch={patch} isNew={isNew} nameKey="slug" namePlaceholder="stripe" nameHint={`Received at /hooks/v1/${env}/${body.slug || "<slug>"}`}>
         <Field label="Display name" optional><input placeholder="Stripe" {...text(body, "name", patch)} /></Field>
       </Identity>
-      <Section title="Verification" description="Requests that fail verification are refused before anything runs.">
+      <Section icon="policies" title="Verification" description="Requests that fail verification are refused before anything runs.">
         <Segmented options={VERIFY} value={verification} onChange={(v) => patch({ verification: v })} />
         {verification !== "none" && (
           <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
@@ -410,7 +412,7 @@ function InboundForm({ body, patch, refs, isNew, env }) {
         )}
         {verification === "none" && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] warn">Anyone who knows the URL can trigger this hook.</div>}
       </Section>
-      <Section title="Then">
+      <Section icon="bolt" title="Then">
         <Target body={body} patch={patch} refs={refs} types={["event", "flow"]} />
         <Enabled body={body} patch={patch} />
       </Section>
@@ -438,7 +440,7 @@ function ScheduleForm({ body, patch, refs, isNew }) {
   return (
     <>
       <Identity body={body} patch={patch} isNew={isNew} namePlaceholder="nightly_cleanup" />
-      <Section title="When" description={body.cron ? `Cron times are read in ${body.timezone || "UTC"}.` : "Runs on a fixed interval."}>
+      <Section icon="schedules" title="When" description={body.cron ? `Cron times are read in ${body.timezone || "UTC"}.` : "Runs on a fixed interval."}>
         <Segmented options={[["cron", "On a schedule"], ["interval", "Every…"]]} value={mode} onChange={(m) => patch(m === "cron" ? { cron: body.cron || "0 3 * * *", interval_seconds: null } : { cron: null, interval_seconds: 3600 })} />
         {mode === "cron" ? (
           <>
@@ -460,14 +462,14 @@ function ScheduleForm({ body, patch, refs, isNew }) {
           </Field>
         )}
       </Section>
-      <Section title="Then">
+      <Section icon="bolt" title="Then">
         <Target body={body} patch={patch} refs={refs} types={["flow", "function", "event"]} />
         <Field label="Payload" optional hint="Free-form JSON passed as the input.">
           <JsonInput value={body.payload ?? undefined} rows={4} onChange={(payload) => patch({ payload })} />
         </Field>
         <Enabled body={body} patch={patch} />
       </Section>
-      <Section title="Behaviour" description="What happens when a run is still going, or when the scheduler was down.">
+      <Section icon="settings" title="Behaviour" description="What happens when a run is still going, or when the scheduler was down.">
         {mode === "cron" && (
           <Field label="Time zone" optional hint="An IANA zone such as Africa/Lagos or Europe/Berlin. Empty is UTC.">
             <input className="mono font-mono text-ui-sm" value={body.timezone || ""} placeholder="UTC" onChange={(e) => patch({ timezone: e.target.value || null })} />
@@ -497,7 +499,7 @@ export function BucketForm({ body, patch, refs, isNew }) {
   const number = (name, fallback) => (transforms[name] ?? fallback);
   return (
     <>
-      <Section title="Details">
+      <Section icon="settings" title="Details">
         <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
           <Field label="Name" hint="Lower-case letters, digits and dashes.">
             <input className="mono font-mono text-ui-sm" autoFocus={isNew} disabled={!isNew} placeholder="avatars" {...text(body, "name", patch)} />
@@ -505,7 +507,7 @@ export function BucketForm({ body, patch, refs, isNew }) {
           <Field label="Description" optional><input {...text(body, "description", patch)} /></Field>
         </div>
       </Section>
-      <Section title="Access" description="What your application's requests may do. Studio administrators can always manage objects, whatever is set here.">
+      <Section icon="secrets" title="Access" description="What your application's requests may do. Studio administrators can always manage objects, whatever is set here.">
         <Switch checked={!!body.public} onChange={(v) => patch({ public: v })} label="Public bucket" hint="Anyone with an object's URL may read it. Uploads, listing and deletes still follow the policies below." />
         <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
           {!body.public && (
@@ -527,7 +529,7 @@ export function BucketForm({ body, patch, refs, isNew }) {
           </Field>
         </div>
       </Section>
-      <Section title="Uploads">
+      <Section icon="upload" title="Uploads">
         <Field label="Accepted types" hint="MIME patterns. Empty accepts anything.">
           <TagInput value={body.accepts || []} onChange={(accepts) => patch({ accepts })} suggestions={MIME_PRESETS} placeholder="image/*" />
         </Field>
@@ -538,7 +540,7 @@ export function BucketForm({ body, patch, refs, isNew }) {
           </div>
         </Field>
       </Section>
-      <Section title="Delivery" description="How objects are served from your application's gateway.">
+      <Section icon="send" title="Delivery" description="How objects are served from your application's gateway.">
         <Field label="Browser cache" hint="Seconds a browser may reuse an object before asking again. 0 revalidates every time, which is safest when objects are replaced.">
           <div className="input-group flex items-stretch [&_>_*]:rounded-none [&_>_:first-child]:rounded-[var(--r)_0_0_var(--r)] [&_>_:last-child]:rounded-[0_var(--r)_var(--r)_0] [&_>_:not(:first-child)]:ml-[-1px] [&_>_select]:w-auto [&_>_select]:shrink-0 [&_.addon]:grid [&_.addon]:place-items-center [&_.addon]:p-[0_12px] [&_.addon]:bg-head-bg [&_.addon]:[border:1px_solid_var(--line-2)] [&_.addon]:text-muted [&_.addon]:text-ui-sm [&_.addon]:whitespace-nowrap [&_.addon]:border-line-2" style={{ maxWidth: 220 }}>
             <input type="number" min="0" value={body.cache_max_age ?? 0} onChange={(e) => patch({ cache_max_age: Math.max(0, Number(e.target.value) || 0) })} />
@@ -546,7 +548,7 @@ export function BucketForm({ body, patch, refs, isNew }) {
           </div>
         </Field>
       </Section>
-      <Section title="Image transformations" description="Resize, crop and convert images on request, without changing the stored original. Variants are served only to callers who may read the original.">
+      <Section icon="sparkle" title="Image transformations" description="Resize, crop and convert images on request, without changing the stored original. Variants are served only to callers who may read the original.">
         <Switch checked={transforms.enabled !== false} onChange={(enabled) => setTransform({ enabled })} label="Enable transformations" hint="Adds ?width=, ?height=, ?fit=, ?format=, ?quality= and ?rotate= to object URLs." />
         {transforms.enabled !== false && (
           <>

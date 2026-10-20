@@ -46,7 +46,7 @@ export function Metrics({ env }) {
         <span className="grow flex-1 min-w-0" />
         <Button size="sm" onClick={() => setAlarm({ metric, name: `${spec?.label || metric} alarm` })}><Icon name="subscriptions" size={14} /> Create alarm</Button>
       </div>
-      <Card title={spec?.label || metric} actions={<span className="muted text-muted small text-ui-sm">{spec?.description}</span>}>
+      <Card icon="usage" title={spec?.label || metric} actions={<span className="muted text-muted small text-ui-sm">{spec?.description}</span>}>
         <Loading state={data}>
           {() => d.instant ? (
             <p className="chart-sum flex items-baseline gap-1.5 flex-wrap m-[0_0_8px] text-muted text-body [&_b]:text-text [&_b]:text-display-sm [&_b]:font-bold-plus [&_b]:tracking-[-0.03em] [&_b_+_b]:text-heading [&_b:not(:first-child)]:text-heading"><b>{show(d.latest)}</b> right now. This measure has no history to chart; alarms can still watch it.</p>
@@ -126,7 +126,7 @@ export function Logs({ env, onTrace }) {
       <p className="hint text-xs font-book text-muted leading-[1.45]" style={{ margin: 0 }}>
         Filters: <code>level:</code> <code>source:</code> (use <code>*</code> for patterns) <code>status:5xx</code> <code>route:</code> <code>user:</code> <code>ip:</code> <code>method:</code> <code>request:</code>. Other words must all appear; put <code>-</code> before one to exclude it. Quotes keep a phrase together.
       </p>
-      <Card flush title={`${state.matched.toLocaleString()} match${state.matched === 1 ? "" : "es"}`} actions={<span className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ gap: 6 }}>{Object.entries(state.levels).map(([level, n]) => <button key={level} type="button" className="chip [border:1px_solid_var(--line)] bg-none text-muted rounded-xs p-[3px_11px] font-inherit text-xs cursor-pointer [&:hover]:border-brand [&:hover]:text-brand-strong [&.on]:border-solid [&.on]:border-brand [&.on]:bg-brand-soft [&.on]:text-brand-strong font-semibold [&.active]:bg-text [&.active]:text-surface [&.active]:border-text" onClick={() => narrow(level)}>{level} {n}</button>)}</span>}>
+      <Card icon="search" flush title={`${state.matched.toLocaleString()} match${state.matched === 1 ? "" : "es"}`} actions={<span className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ gap: 6 }}>{Object.entries(state.levels).map(([level, n]) => <button key={level} type="button" className="chip [border:1px_solid_var(--line)] bg-none text-muted rounded-xs p-[3px_11px] font-inherit text-xs cursor-pointer [&:hover]:border-brand [&:hover]:text-brand-strong [&.on]:border-solid [&.on]:border-brand [&.on]:bg-brand-soft [&.on]:text-brand-strong font-semibold [&.active]:bg-text [&.active]:text-surface [&.active]:border-text" onClick={() => narrow(level)}>{level} {n}</button>)}</span>}>
         {state.error && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error" style={{ margin: 16 }}>{state.error}</div>}
         {!state.error && rows.length === 0 && !state.loading && <div className="empty p-[40px_16px] text-center text-muted text-ui [&_>_.fw-empty]:p-[4px_0] [&_>_.fw-empty]:text-text">Nothing matches. Widen the time range or loosen the query.</div>}
         <div className="log-list grid gap-1.5 font-mono text-ui-sm">
@@ -167,7 +167,7 @@ export function Alarms({ env }) {
   const condition = (a) => `${COMPARE.find(([k]) => k === a.comparison)?.[1]} ${a.threshold}${a.unit === "count" ? "" : a.unit === "%" ? "%" : ` ${a.unit}`}${catalog.find((m) => m.name === a.metric)?.instant ? "" : ` over ${a.window_minutes} min`}${a.breaches_needed > 1 ? `, ${a.breaches_needed} checks in a row` : ""}`;
   return (
     <>
-      <Card flush title="Alarms" actions={<Button variant="primary" size="sm" onClick={() => setEditing({})}><Icon name="plus" size={14} /> Create alarm</Button>}>
+      <Card icon="bell" flush title="Alarms" actions={<Button variant="primary" size="sm" onClick={() => setEditing({})}><Icon name="plus" size={14} /> Create alarm</Button>}>
         <Loading state={alarms} empty="No alarms yet.">
           {() => (
             <Table

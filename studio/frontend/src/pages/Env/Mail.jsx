@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Layout, { sectionNav, useSection } from "../../components/Layout";
 import { Stat, StatStrip } from "./observability/kit";
 import { Icon } from "../../components/icons";
-import { Badge, Button, Card, EmptyState, Field, JsonInput, Loading, Modal, PageHead, Segmented, Sheet, Spinner, Status, Switch, Table, Tile, copyToClipboard, useAction, useToast, when } from "../../components/ui";
+import { Badge, Button, Card, EmptyState, Field, JsonInput, Loading, Modal, PageHead, Section, Segmented, Sheet, Spinner, Status, Switch, Table, Tile, copyToClipboard, useAction, useToast, when } from "../../components/ui";
 import { del, envPath, patch, post, put, useApi } from "../../lib/api";
 
 const PROVIDERS = [
@@ -72,7 +72,7 @@ export default function Mail({ env }) {
       )}
 
 
-      <Card flush title="Sent mail" actions={<Segmented value={filter} onChange={setFilter} options={STATUSES} />}>
+      <Card icon="mail" flush title="Sent mail" actions={<Segmented value={filter} onChange={setFilter} options={STATUSES} />}>
         <Loading state={log} empty="Nothing has been sent from this environment yet.">
           {() => (
             <Table
@@ -196,24 +196,26 @@ function Delivery({ base, environment, onSaved }) {
 
   return (
     <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
-      <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
-        <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Mail server</h3><p>Any SMTP service. Without a host, mail is recorded as suppressed and not delivered.</p></div></div>
+      <Section icon="mail" title="Server" description="Any SMTP service. Without a host, mail is recorded as suppressed and not delivered.">
         <Field label="Provider"><Segmented value={provider} onChange={choose} options={PROVIDERS.map(([k, label]) => [k, label])} /></Field>
         <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 top" style={{ gap: 12 }}>
           <Field label="Host" className="grow flex-1 min-w-0"><input value={form.host} onChange={(e) => set("host", e.target.value)} placeholder="smtp.example.com" /></Field>
           <Field label="Port" hint="465 uses SSL, 587 uses STARTTLS."><input type="number" value={form.port} onChange={(e) => set("port", e.target.value)} style={{ width: 96 }} /></Field>
         </div>
+      </Section>
+      <Section icon="keys" title="Credentials" description="How Studio signs in to the server. The password is stored encrypted and never shown again.">
         <Field label="Username"><input value={form.username} onChange={(e) => set("username", e.target.value)} autoComplete="off" /></Field>
         <Field label="Password or API key" hint={form.has_password ? "A password is stored (encrypted). Leave empty to keep it." : "Stored as an encrypted secret, never shown again."}>
           <input type="password" value={form.password} onChange={(e) => set("password", e.target.value)} placeholder={form.has_password ? "••••••••" : ""} autoComplete="new-password" />
         </Field>
-      </section>
-      <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
-        <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Sender</h3><p>The sender's domain must be verified with your provider (SPF and DKIM), or mail lands in spam.</p></div></div>
+      </Section>
+      <Section icon="send" title="Sender" description="The sender's domain must be verified with your provider (SPF and DKIM), or mail lands in spam.">
         <Field label="From"><input value={form.from} onChange={(e) => set("from", e.target.value)} placeholder="Sell4me <orders@yourdomain.com>" /></Field>
         <Field label="Reply to" optional><input value={form.reply_to} onChange={(e) => set("reply_to", e.target.value)} placeholder="support@yourdomain.com" /></Field>
+      </Section>
+      <Section icon="pulse" title="Delivery" description="What happens to a message when it is handed to Studio.">
         <Switch checked={form.suppress} onChange={(v) => set("suppress", v)} label="Pause delivery" hint="Keep the settings but record messages as suppressed (useful while testing)." />
-      </section>
+      </Section>
       <div><Button variant="primary" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save mail settings"}</Button></div>
     </div>
   );

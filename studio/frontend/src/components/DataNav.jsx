@@ -13,7 +13,7 @@ export function tablesHref(env, table) {
 
 // Fetches the environment's tables once and shapes the Data secondary sidebar.
 // Callers: const { subnav, tables, loading, reload } = useDataSubnav(env, active, { action });
-export function useDataSubnav(env, active, { action, tools = DATA_TOOLS } = {}) {
+export function useDataSubnav(env, active, { action, create, tools = DATA_TOOLS } = {}) {
   const overview = useApi(env ? envPath(env, "/database") : null);
   const [search, setSearch] = useState("");
   const tables = overview.data?.tables || [];
@@ -24,10 +24,15 @@ export function useDataSubnav(env, active, { action, tools = DATA_TOOLS } = {}) 
       loading: overview.loading,
       empty: "This database has no tables yet.",
       search: { value: search, onChange: setSearch, placeholder: "Search tables…" },
+      create,
       action,
       active,
       groups: [
-        { title: `Tables · ${tables.length}`, items: shown.map((t) => ({ key: t.name, label: t.name, mono: true, icon: "resources", href: tablesHref(env, t.name), tag: t.resource ? "resource" : undefined })) },
+        {
+          title: tables.length ? `Tables \u00b7 ${tables.length}` : "Tables",
+          items: shown.map((t) => ({ key: t.name, label: t.name, mono: true, icon: "resources", href: tablesHref(env, t.name), tag: t.resource ? "resource" : undefined })),
+          empty: overview.loading ? undefined : shown.length ? undefined : search.trim() ? "No tables match." : "No tables yet.",
+        },
         { title: "Tools", pinned: true, items: tools.map(([key, label, icon]) => ({ key, label, icon, href: envHref(env, key) })) },
       ],
     },

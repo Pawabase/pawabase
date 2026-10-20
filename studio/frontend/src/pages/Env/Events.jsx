@@ -30,7 +30,7 @@ function EventList({ base, onOpen }) {
   const [name, setName] = useState("");
   const events = useApi(`${base}/events`, { params: { name, limit: 100 }, interval: 5000 });
   return (
-    <Card flush title={<input placeholder="Filter by exact name, e.g. resource.todos.created" value={name} onChange={(e) => setName(e.target.value)} style={{ width: 360 }} />}>
+    <Card icon="events" flush title={<input placeholder="Filter by exact name, e.g. resource.todos.created" value={name} onChange={(e) => setName(e.target.value)} style={{ width: 360 }} />}>
       <Loading state={events} empty="No events yet.">
         {(data) => <Table rows={data.data} onRowClick={onOpen} columns={[{ label: "Event", render: (e) => <code>{e.name}</code> }, { label: "Source", key: "source" }, { label: "Actor", key: "actor" }, { label: "Payload", key: "payload" }, { label: "When", render: (e) => when(e.created_at) }]} />}
       </Loading>
@@ -57,7 +57,7 @@ function Runs({ base, env, onOpen }) {
   const [status, setStatus] = useState("");
   const runs = useApi(`${base}/flow-runs`, { params: { status, limit: 100 }, interval: 5000 });
   return (
-    <Card flush title={<select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 160 }}><option value="">every status</option><option>succeeded</option><option>failed</option><option>running</option></select>}>
+    <Card icon="search" flush title={<select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 160 }}><option value="">every status</option><option>succeeded</option><option>failed</option><option>running</option></select>}>
       <Loading state={runs} empty="No runs yet.">
         {(data) => <Table rows={data.data} onRowClick={onOpen} columns={[
           { label: "Flow", render: (r) => <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.visit(`/envs/${env}/flows/${r.flow}`); }} style={{ color: "var(--brand)" }}>{r.flow}</a> },
@@ -76,10 +76,10 @@ function Mail({ base }) {
   const [run, busy] = useAction();
   return (
     <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
-      <Card title="Send a test message">
+      <Card icon="mail" title="Send a test message">
         <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5"><input placeholder="you@example.com" value={to} onChange={(e) => setTo(e.target.value)} /><Button disabled={busy || !to} onClick={() => run(() => post(`${base}/mail/test`, { to: [to] }), "Test message queued")}>Send</Button></div>
       </Card>
-      <Card flush title="Mail log">
+      <Card icon="mail" flush title="Mail log">
         <Loading state={log} empty="Nothing sent yet.">
           {(data) => <Table rows={data.data} columns={[{ label: "To", key: "to" }, { label: "Subject", key: "subject" }, { label: "Template", key: "template" }, { label: "Status", render: (m) => <Status value={m.status} /> }, { label: "Error", key: "error" }, { label: "When", render: (m) => when(m.created_at) }]} />}
         </Loading>

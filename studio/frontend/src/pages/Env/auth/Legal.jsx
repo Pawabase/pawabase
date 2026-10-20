@@ -20,7 +20,7 @@ export default function Legal({ env }) {
     <Loading state={config.state}>
       {() => (
         <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
-          <SettingsPanel title="Legal documents" description="Link to your terms, privacy policy and anything else people should see. Every document is linked at the foot of the sign-in screens; a required one is a box to tick when creating an account, on the hosted page and in the sign-up API (accepted_terms)." config={config}>
+          <SettingsPanel icon="book" title="Legal documents" description="Link to your terms, privacy policy and anything else people should see. Every document is linked at the foot of the sign-in screens; a required one is a box to tick when creating an account, on the hosted page and in the sign-up API (accepted_terms)." config={config}>
             <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
               {docs.length === 0 && <p className="hint text-xs font-book text-muted leading-[1.45]" style={{ margin: 0 }}>No documents yet. Add your terms and privacy policy to get started.</p>}
               {docs.map((doc, index) => (
@@ -40,7 +40,7 @@ export default function Legal({ env }) {
             </div>
           </SettingsPanel>
 
-          <SettingsPanel title="Consent record" description="When someone accepts, Pawabase records which documents, which version and when, on their account (app metadata, so they cannot edit it)." config={config}>
+          <SettingsPanel icon="audit" title="Consent record" description="When someone accepts, Pawabase records which documents, which version and when, on their account (app metadata, so they cannot edit it)." config={config}>
             <Field label="Version" hint="Anything you like: a date or a number. Change it when your terms change, so you can tell who accepted which.">
               <input value={legal.version} onChange={(e) => set({ version: e.target.value })} placeholder="2026-10-01" maxLength={40} style={{ maxWidth: 260 }} />
             </Field>

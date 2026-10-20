@@ -45,13 +45,12 @@ export function useAuthConfig(env) {
 }
 
 /** A settings card with its own Save bar, for a page that edits part of the auth configuration. */
-export function SettingsPanel({ title, description, config, children }) {
+export function SettingsPanel({ title, description, icon, config, children }) {
   return (
-    <Card title={title} actions={config.dirty && <>
+    <Card icon={icon} title={title} description={description} actions={config.dirty && <>
       <Button size="sm" disabled={config.busy} onClick={config.discard}>Discard</Button>
       <Button size="sm" variant="primary" disabled={config.busy} onClick={config.save}>Save changes</Button>
     </>}>
-      {description && <p className="muted text-muted" style={{ margin: "0 0 16px", maxWidth: 640 }}>{description}</p>}
       <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">{children}</div>
     </Card>
   );

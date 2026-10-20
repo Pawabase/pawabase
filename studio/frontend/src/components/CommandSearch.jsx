@@ -129,11 +129,11 @@ export default function CommandSearch() {
                   type="button"
                   role="option"
                   aria-selected={i === active}
-                  className={`cmd-item flex items-center gap-2.5 w-full border-0 bg-none font-inherit text-body text-text text-left p-[8px_10px] rounded-xs cursor-pointer [&.active]:bg-press [&.active_.cmd-icon]:bg-surface [&.active_.cmd-icon]:text-brand-strong ${i === active ? "active" : ""}`}
+                  className={`cmd-item flex items-center gap-2.5 w-full border-0 bg-none font-inherit text-body text-text text-left p-[8px_10px] rounded-xs cursor-pointer [&.active]:bg-press [&.active_.cmd-icon]:text-brand-strong ${i === active ? "active" : ""}`}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => go(item)}
                 >
-                  <span className="cmd-icon w-[28px] h-[28px] rounded-xs bg-transparent grid place-items-center flex-none text-muted [border:1px_solid_var(--line-2)]"><Icon name={item.icon} size={16} /></span>
+                  <span className="cmd-icon grid place-items-center flex-none text-brand"><Icon name={item.icon} size={19} /></span>
                   <span className="grow flex-1 min-w-0">{item.label}</span>
                   <span className="cmd-hint text-xs text-faint whitespace-nowrap">{item.hint}</span>
                   {i === active && <Icon name="enter" size={14} className="faint text-faint" />}

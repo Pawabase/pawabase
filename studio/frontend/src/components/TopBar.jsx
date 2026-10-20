@@ -259,8 +259,6 @@ export default function TopBar({ runtime, envs, env, section, confined, crumbs =
       <button type="button" className="appbar-icon grid place-items-center w-control h-control border-0 rounded-[calc(var(--r)_-_1px)] bg-none text-muted cursor-pointer [&:hover]:bg-brand-soft [&:hover]:text-brand-strong [&:focus-visible]:outline-[2px_solid_var(--brand)] [&:focus-visible]:outline-offset-[1px] relative menu-btn hidden max-navigation:grid" onClick={onMenu} aria-label="Open navigation"><Icon name="menu" size={16} /></button>
       <Link href="/" className="appbar-brand flex place-items-center w-auto h-auto shrink-0 border-r-0 max-navigation:w-auto! max-navigation:p-[0_8px]! max-navigation:border-r-0 gap-[9px] items-center justify-start flex-row p-[0_6px_0_0]" title="Pawabase Studio">
         <LogoMark size={24} />
-        <span className="appbar-wordmark font-bold-plus text-title tracking-[-0.03em] text-text max-wide:hidden inline">pawabase</span>
-        <span className="appbar-studio p-[2px_6px] [border:1px_solid_var(--line-2)] rounded-xs text-muted text-3xs font-semibold-plus tracking-[0.06em] leading-[1.2] uppercase max-wide:hidden">Studio</span>
       </Link>
       <nav className="appbar-context flex items-center gap-0.5 min-w-0 pl-2.5 ml-1 [border-left:1px_solid_var(--line)] h-[28px] shrink [flex:0_1_auto] overflow-visible [&_.popover-wrap]:shrink [&_.popover-wrap]:min-w-0 [&_.ctx-btn]:max-w-[100%]" aria-label="Location">
         <ProjectMenu runtime={runtime} envs={envs} env={env} section={section} confined={confined} />

@@ -70,7 +70,7 @@ function Objects({ base, bucket, env, onEdit }) {
     if (confirm(`Delete the folder ${name}/? It must be empty.`) && await run(() => del(`${base}/${bucket.name}/folders/${name}`), "Folder deleted")) objects.reload();
   };
   return (
-    <Card flush title={<span>{bucket.name} <span className="faint text-faint" style={{ fontWeight: 400 }}>/{prefix}</span></span>} actions={<>
+    <Card icon="buckets" flush title={<span>{bucket.name} <span className="faint text-faint" style={{ fontWeight: 400 }}>/{prefix}</span></span>} actions={<>
       {prefix && <Button size="sm" onClick={up}><Icon name="arrowUp" size={14} /> Up</Button>}
       <Button size="sm" onClick={newFolder}><Icon name="plus" size={14} /> New folder</Button>
       <label className="btn inline-flex items-center justify-center gap-1.5 [border:1px_solid_var(--line-2)] bg-transparent text-text rounded-sm p-[0_12px] font-inherit font-medium-plus text-ui cursor-pointer whitespace-nowrap transition-[background_0.12s,_border-color_0.12s] [&:hover]:border-line-hover [&:active]:transform-[none] [&:disabled]:opacity-45 [&:disabled]:cursor-not-allowed [&.primary]:bg-brand [&.primary]:border-transparent [&.primary]:text-text [&.primary:hover]:filter-none [&.soft]:bg-transparent [&.soft]:border-line-2 [&.soft]:text-text [&.danger]:text-danger [&.danger]:border-line-2 [&.danger]:bg-transparent [&.ghost]:bg-transparent [&.ghost]:border-transparent [&.ghost]:text-muted [&.ghost:hover]:text-text [&.ghost:hover]:bg-hover [&.sm]:p-[0_10px] [&.sm]:text-ui-sm [&.icon-only]:p-0 [&.icon-only]:w-control [&.icon-only]:h-[30px] [&_.icon]:w-4 [&_.icon]:h-4 h-control shadow-none [&:hover]:bg-hover [&:active]:bg-press [&:focus-visible]:outline-[2px_solid_var(--brand)] [&:focus-visible]:outline-offset-[1px] [&.primary:hover]:bg-brand [&.primary:hover]:border-line-hover [&.danger:hover]:bg-danger-soft [&.sm]:h-control-sm [&.sm.icon-only]:w-control-sm [label&]:inline-flex filter-none [&.soft]:shadow-none [&.soft]:filter-none [&.primary]:shadow-none [&.primary]:filter-none [label&]:bg-transparent [label&]:shadow-none [label&]:filter-none [label&.primary]:bg-transparent [label&.primary]:shadow-none [label&.primary]:filter-none [label&.primary]:border-line-2 [label&.primary]:text-text [label&.primary:hover]:bg-hover [label&.primary:hover]:border-line-hover [&.soft:hover]:bg-hover [&:disabled]:bg-transparent [&.primary:disabled]:bg-transparent [&.primary:disabled]:opacity-45 border-line-2 [label&]:border-line-2 [&.soft:hover]:border-line-hover [&.danger:hover]:border-line-hover [&.on]:border-brand [&.on]:text-text sm primary" style={{ opacity: busy ? 0.55 : 1 }}><Icon name="upload" size={14} /> Upload<input type="file" hidden onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; if (f) upload(f); }} /></label>
@@ -83,7 +83,12 @@ function Objects({ base, bucket, env, onEdit }) {
             empty="No objects here."
             onRowClick={(o) => (o.folder ? setPrefix(o.key) : setSelected(o))}
             columns={[
-              { label: "Name", render: (o) => <span style={{ color: "var(--brand)" }}><Icon name={o.folder ? "storage" : "link"} size={14} /> {o.key.slice(prefix.length)}</span> },
+              { label: "Name", render: (o) => (
+                <span className="inline-flex items-center gap-2 min-w-0" style={{ color: "var(--brand)" }}>
+                  <Icon name={o.folder ? "storage" : "link"} size={14} className="shrink-0" />
+                  <span className="clip">{o.key.slice(prefix.length)}</span>
+                </span>
+              ) },
               { label: "Type", render: (o) => (o.folder ? "" : o.content_type) },
               { label: "Size", render: (o) => (o.folder ? "" : bytes(o.size)) },
               { label: "Modified", render: (o) => (o.folder || !o.modified ? "" : when(new Date(o.modified * 1000).toISOString())) },
@@ -164,7 +169,7 @@ function Overview({ base, env, bucket, object, run, busy, onChanged, onDeleted }
   return (
     <>
       <Preview url={view} object={object} />
-      <Section title="Object">
+      <Section icon="resources" title="Object">
         <dl className="kv grid grid-cols-[160px_minmax(0,_1fr)] gap-0 text-ui [&_dt]:text-muted [&_dd]:m-0 [&_dd]:min-w-0 [&_dd]:wrap-anywhere [border-top:1px_solid_var(--line)] [&_dt]:p-[10px_0] [&_dt]:[border-bottom:1px_solid_var(--line)] [&_dd]:p-[10px_0] [&_dd]:[border-bottom:1px_solid_var(--line)]">
           <Row label="File name" value={object.name} />
           <Row label="Key" value={<span className="mono font-mono text-ui-sm">{object.key}</span>} />
@@ -177,10 +182,10 @@ function Overview({ base, env, bucket, object, run, busy, onChanged, onDeleted }
           <Row label="Visibility" value={object.visibility === "public" ? <Badge tone="green">Public</Badge> : <Badge>Restricted by policy</Badge>} />
         </dl>
       </Section>
-      <Section title="Address" description={object.visibility === "public" ? "Works directly in <img>, <video> and links." : "Readable only by requests that satisfy the bucket's read policy."}>
+      <Section icon="link" title="Address" description={object.visibility === "public" ? "Works directly in <img>, <video> and links." : "Readable only by requests that satisfy the bucket's read policy."}>
         <Field label="Gateway URL"><CopyText text={object.url} /></Field>
       </Section>
-      <Section title="Actions">
+      <Section icon="bolt" title="Actions">
         <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ flexWrap: "wrap", gap: 8 }}>
           <a className="btn inline-flex items-center justify-center gap-1.5 [border:1px_solid_var(--line-2)] bg-transparent text-text rounded-sm p-[0_12px] font-inherit font-medium-plus text-ui cursor-pointer whitespace-nowrap transition-[background_0.12s,_border-color_0.12s] [&:hover]:border-line-hover [&:active]:transform-[none] [&:disabled]:opacity-45 [&:disabled]:cursor-not-allowed [&.primary]:bg-brand [&.primary]:border-transparent [&.primary]:text-text [&.primary:hover]:filter-none [&.soft]:bg-transparent [&.soft]:border-line-2 [&.soft]:text-text [&.danger]:text-danger [&.danger]:border-line-2 [&.danger]:bg-transparent [&.ghost]:bg-transparent [&.ghost]:border-transparent [&.ghost]:text-muted [&.ghost:hover]:text-text [&.ghost:hover]:bg-hover [&.sm]:p-[0_10px] [&.sm]:text-ui-sm [&.icon-only]:p-0 [&.icon-only]:w-control [&.icon-only]:h-[30px] [&_.icon]:w-4 [&_.icon]:h-4 h-control shadow-none [&:hover]:bg-hover [&:active]:bg-press [&:focus-visible]:outline-[2px_solid_var(--brand)] [&:focus-visible]:outline-offset-[1px] [&.primary:hover]:bg-brand [&.primary:hover]:border-line-hover [&.danger:hover]:bg-danger-soft [&.sm]:h-control-sm [&.sm.icon-only]:w-control-sm [label&]:inline-flex filter-none [&.soft]:shadow-none [&.soft]:filter-none [&.primary]:shadow-none [&.primary]:filter-none [label&]:bg-transparent [label&]:shadow-none [label&]:filter-none [label&.primary]:bg-transparent [label&.primary]:shadow-none [label&.primary]:filter-none [label&.primary]:border-line-2 [label&.primary]:text-text [label&.primary:hover]:bg-hover [label&.primary:hover]:border-line-hover [&.soft:hover]:bg-hover [&:disabled]:bg-transparent [&.primary:disabled]:bg-transparent [&.primary:disabled]:opacity-45 border-line-2 [label&]:border-line-2 [&.soft:hover]:border-line-hover [&.danger:hover]:border-line-hover [&.on]:border-brand [&.on]:text-text sm" href={studioObjectUrl(env, bucket.name, object.key, "?download=1")}>Download</a>
           <label className="btn inline-flex items-center justify-center gap-1.5 [border:1px_solid_var(--line-2)] bg-transparent text-text rounded-sm p-[0_12px] font-inherit font-medium-plus text-ui cursor-pointer whitespace-nowrap transition-[background_0.12s,_border-color_0.12s] [&:hover]:border-line-hover [&:active]:transform-[none] [&:disabled]:opacity-45 [&:disabled]:cursor-not-allowed [&.primary]:bg-brand [&.primary]:border-transparent [&.primary]:text-text [&.primary:hover]:filter-none [&.soft]:bg-transparent [&.soft]:border-line-2 [&.soft]:text-text [&.danger]:text-danger [&.danger]:border-line-2 [&.danger]:bg-transparent [&.ghost]:bg-transparent [&.ghost]:border-transparent [&.ghost]:text-muted [&.ghost:hover]:text-text [&.ghost:hover]:bg-hover [&.sm]:p-[0_10px] [&.sm]:text-ui-sm [&.icon-only]:p-0 [&.icon-only]:w-control [&.icon-only]:h-[30px] [&_.icon]:w-4 [&_.icon]:h-4 h-control shadow-none [&:hover]:bg-hover [&:active]:bg-press [&:focus-visible]:outline-[2px_solid_var(--brand)] [&:focus-visible]:outline-offset-[1px] [&.primary:hover]:bg-brand [&.primary:hover]:border-line-hover [&.danger:hover]:bg-danger-soft [&.sm]:h-control-sm [&.sm.icon-only]:w-control-sm [label&]:inline-flex filter-none [&.soft]:shadow-none [&.soft]:filter-none [&.primary]:shadow-none [&.primary]:filter-none [label&]:bg-transparent [label&]:shadow-none [label&]:filter-none [label&.primary]:bg-transparent [label&.primary]:shadow-none [label&.primary]:filter-none [label&.primary]:border-line-2 [label&.primary]:text-text [label&.primary:hover]:bg-hover [label&.primary:hover]:border-line-hover [&.soft:hover]:bg-hover [&:disabled]:bg-transparent [&.primary:disabled]:bg-transparent [&.primary:disabled]:opacity-45 border-line-2 [label&]:border-line-2 [&.soft:hover]:border-line-hover [&.danger:hover]:border-line-hover [&.on]:border-brand [&.on]:text-text sm" style={{ opacity: busy ? 0.55 : 1 }}>Replace<input type="file" hidden onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; if (f) replace(f); }} /></label>
@@ -254,7 +259,7 @@ function Sharing({ base, bucket, object, run }) {
   };
   return (
     <>
-      <Section title="New temporary link" description="Anyone with the link can open this object until it expires or you revoke it. It never grants access to anything else.">
+      <Section icon="link" title="New temporary link" description="Anyone with the link can open this object until it expires or you revoke it. It never grants access to anything else.">
         <Field label="Expires after">
           <Segmented options={DURATIONS} value={duration} onChange={setDuration} />
         </Field>
@@ -270,7 +275,7 @@ function Sharing({ base, bucket, object, run }) {
         <div><Button variant="primary" size="sm" onClick={create}>Create link</Button></div>
         {fresh && <Field label={`Expires ${new Date(fresh.expires_at).toLocaleString()}`}><CopyText text={fresh.url} /></Field>}
       </Section>
-      <Section title="Links for this object">
+      <Section icon="link" title="Links for this object">
         <Loading state={shares}>
           {(data) => (
             <Table
@@ -301,10 +306,10 @@ function Transform({ env, bucket, object }) {
   const [opts, setOpts] = useState({ width: 400, height: 400, fit: "cover", format: "webp", quality: 80, rotate: 0 });
   const cfg = object.transforms || {};
   if (!object.transformable) {
-    return <Section title="Transformations"><p className="hint text-xs font-book text-muted leading-[1.45]">Only PNG, JPEG, WebP, GIF, AVIF and BMP images can be transformed. This object is {object.content_type}.</p></Section>;
+    return <Section icon="sparkle" title="Transformations"><p className="hint text-xs font-book text-muted leading-[1.45]">Only PNG, JPEG, WebP, GIF, AVIF and BMP images can be transformed. This object is {object.content_type}.</p></Section>;
   }
   if (cfg.enabled === false) {
-    return <Section title="Transformations"><p className="hint text-xs font-book text-muted leading-[1.45]">Transformations are turned off for this bucket. Enable them in the bucket's settings.</p></Section>;
+    return <Section icon="sparkle" title="Transformations"><p className="hint text-xs font-book text-muted leading-[1.45]">Transformations are turned off for this bucket. Enable them in the bucket's settings.</p></Section>;
   }
   const query = new URLSearchParams(Object.entries(opts).filter(([, v]) => v !== "" && v !== 0 && v !== null)).toString();
   const preview = studioObjectUrl(env, bucket.name, object.key, `?${query}`);
@@ -313,7 +318,7 @@ function Transform({ env, bucket, object }) {
   const numeric = (name) => (e) => set({ [name]: e.target.value === "" ? "" : Number(e.target.value) });
   return (
     <>
-      <Section title="Try a transformation" description="The stored original is never changed. Settings here only build a URL.">
+      <Section icon="sparkle" title="Try a transformation" description="The stored original is never changed. Settings here only build a URL.">
         <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
           <Field label="Width"><input type="number" min="1" value={opts.width} onChange={numeric("width")} /></Field>
           <Field label="Height"><input type="number" min="1" value={opts.height} onChange={numeric("height")} /></Field>
@@ -323,7 +328,7 @@ function Transform({ env, bucket, object }) {
           <Field label="Rotate"><Segmented options={[[0, "0°"], [90, "90°"], [180, "180°"], [270, "270°"]]} value={opts.rotate} onChange={(rotate) => set({ rotate })} /></Field>
         </div>
       </Section>
-      <Section title="Result">
+      <Section icon="eye" title="Result">
         <img src={preview} alt="Transformed preview" style={{ maxWidth: "100%", maxHeight: "40vh", borderRadius: "var(--r)", background: "var(--sunken)" }} />
         <Field label="URL"><CopyText text={gateway} /></Field>
       </Section>
@@ -346,7 +351,7 @@ function Metadata({ object }) {
     active_share_links: object.shares,
   };
   return (
-    <Section title="Metadata" description="What the storage provider and the platform know about this object.">
+    <Section icon="database" title="Metadata" description="What the storage provider and the platform know about this object.">
       <Table rows={Object.entries(rows).map(([k, v]) => ({ k, v: v === null ? "—" : String(v) }))} columns={[{ label: "Field", key: "k" }, { label: "Value", render: (r) => <span className="mono font-mono text-ui-sm" style={{ wordBreak: "break-all" }}>{r.v}</span> }]} />
     </Section>
   );

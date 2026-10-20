@@ -23,12 +23,12 @@ export default function Restrictions({ env }) {
     <Loading state={config.state}>
       {() => (
         <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
-          <SettingsPanel title="Sign-up" description="Whether strangers can create an account, and what they get when they do." config={config}>
+          <SettingsPanel icon="users" title="Sign-up" description="Whether strangers can create an account, and what they get when they do." config={config}>
             <Switch checked={value.signup_enabled} onChange={(v) => set({ signup_enabled: v })} label="Allow sign-ups" hint="Off makes the environment invitation-only: only operators create accounts." />
             <Switch checked={value.require_email_verification} onChange={(v) => set({ require_email_verification: v })} label="Require a verified email" hint="Unverified people cannot sign in until they confirm their address." />
             <Field label="Roles for new accounts" hint="Granted automatically at sign-up."><TagInput value={value.default_roles || []} onChange={(v) => set({ default_roles: v })} placeholder="customer" /></Field>
           </SettingsPanel>
-          <SettingsPanel title="Email domains" description="Limit sign-ups to the companies you work with, or turn away throwaway mailboxes. Applies to every way of signing up: password, magic link and social sign-in." config={config}>
+          <SettingsPanel icon="mail" title="Email domains" description="Limit sign-ups to the companies you work with, or turn away throwaway mailboxes. Applies to every way of signing up: password, magic link and social sign-in." config={config}>
             <Field label="Only allow these domains" hint="Leave empty to allow any domain."><TagInput value={value.allowed_email_domains || []} onChange={(v) => set({ allowed_email_domains: clean(v) })} placeholder="acme.com" /></Field>
             <Field label="Always block these domains" hint="A blocked domain is refused even when the allow list is empty."><TagInput value={value.blocked_email_domains || []} onChange={(v) => set({ blocked_email_domains: clean(v) })} placeholder="mailinator.com" /></Field>
             <Field label="Try an address" hint="Checks the rules above, including changes you have not saved yet.">

@@ -262,7 +262,7 @@ function HttpStats({ env, fn }) {
     <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
       <Loading state={detail}>
         {(d) => (
-          <Card title={`Last ${d.stats.hours} hours`}>
+          <Card icon="usage" title={`Last ${d.stats.hours} hours`}>
             <dl className="fn-facts m-0 grid gap-0 [&_>_div]:flex [&_>_div]:gap-5 [&_>_div]:p-[10px_0] [&_>_div]:[border-bottom:1px_solid_var(--line)] [&_>_div]:text-body [&_dt]:w-[120px] [&_dt]:text-muted [&_dt]:flex-none [&_dd]:m-0">
               <div><dt>Requests</dt><dd>{d.stats.requests}</dd></div>
               <div><dt>Failed</dt><dd>{d.stats.failed ? <Badge tone="red">{d.stats.failed}</Badge> : 0}</dd></div>
@@ -325,7 +325,7 @@ function FunctionLimits({ env, fn }) {
           <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
             <p className="hint text-xs font-book text-muted leading-[1.45]">Every run of every function is held to these limits, so no project can starve another. They are this project's limits, set when it was created and changed by whoever operates this installation; they cannot be changed here.</p>
             {!data.enforced.cpu_and_memory && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)]">This server cannot measure CPU and memory (it is not Linux): only the timeout and runs at once are enforced here.</div>}
-            <Card flush title="Every run gets">
+            <Card icon="jobs" flush title="Every run gets">
               <Table
                 rows={shown}
                 columns={[
@@ -350,7 +350,7 @@ function FunctionPanel({ env, fn, base, branch, stats, onRun }) {
   return (
     <div>
       <div className="fn-head flex items-start gap-4 mb-1.5 [&_.grow_h1]:m-0 [&_.grow_h1]:text-[20px] [&_.grow_p]:m-[4px_0_0] [&_.grow_p]:text-muted [&_.grow_p]:text-ui">
-        <span className="tile-icon pastel text-text pastel-contrast [&.lavender]:bg-lavender [&.peach]:bg-peach [&.mint]:bg-mint [&.butter]:bg-butter [&.sky]:bg-sky [&.rose]:bg-rose [&.lavender]:text-text [&.peach]:text-text [&.mint]:text-text [&.butter]:text-text [&.sky]:text-text [&.rose]:text-text sky" style={{ width: 40, height: 40, display: "grid", placeItems: "center", borderRadius: "var(--r)" }}><Icon name="functions" size={18} /></span>
+        <span className="tile-icon text-sky" style={{ display: "grid", placeItems: "center" }}><Icon name="functions" size={28} /></span>
         <div className="grow flex-1 min-w-0">
           <h1 className="mono font-mono text-ui-sm">{fn.name}</h1>
           <p>{fn.description || fn.module || <code>{fn.kind === "http" ? `ANY /functions/v1/${fn.name}/*` : `POST /functions/v1/${fn.name}`}</code>}</p>
@@ -395,7 +395,7 @@ function FunctionPanel({ env, fn, base, branch, stats, onRun }) {
             </dl>
           </Card>
           {fn.input_fields?.length > 0 && (
-            <Card flush title="Input fields">
+            <Card icon="resources" flush title="Input fields">
               <Table rows={fn.input_fields} columns={[{ label: "Name", render: (f) => <b>{f.name}</b> }, { label: "Type", key: "type" }, { label: "Required", render: (f) => (f.required ? "Yes" : "—") }, { label: "Limits", render: (f) => [f.max_length && `max ${f.max_length}`, f.minimum != null && `min ${f.minimum}`, f.maximum != null && `max ${f.maximum}`].filter(Boolean).join(", ") || "—" }]} />
             </Card>
           )}
@@ -461,6 +461,64 @@ function Source({ env, branch }) {
   );
 }
 
+// ── the all-functions list: one row per function, readable at a glance ────────────────────────────────────────────────
+const ACCESS_LABEL = {
+  public: ["Public", "amber"],
+  anyone: ["Anyone", "amber"],
+  authenticated: ["Signed in", "blue"],
+  in_org: ["Org members", "blue"],
+  service: ["Service", ""],
+  admin: ["Admins", "brand"],
+  owner: ["Owner", "brand"],
+};
+
+function Access({ policy }) {
+  if (policy == null || policy === "") return <span className="fn-dash">—</span>;
+  const known = typeof policy === "string" ? ACCESS_LABEL[policy] : null;
+  if (known) return <Badge tone={known[1]}>{known[0]}</Badge>;
+  const text = typeof policy === "string" ? policy : JSON.stringify(policy);
+  return <code className="fn-code" title={text}>{text}</code>;
+}
+
+function FilePath({ path, line }) {
+  if (!path) return <span className="fn-dash">—</span>;
+  const cut = path.lastIndexOf("/");
+  return (
+    <span className="fn-file" title={`${path}${line ? `:${line}` : ""}`}>
+      {cut === -1 ? null : <span className="fn-dir">{path.slice(0, cut + 1)}</span>}
+      {cut === -1 ? path : path.slice(cut + 1)}
+      {line ? <span className="fn-dir">:{line}</span> : null}
+    </span>
+  );
+}
+
+function FunctionName({ fn }) {
+  const http = fn.kind === "http";
+  return (
+    <div className="fn-name">
+      <span className={`fn-tile ${http ? "http" : "call"}`} aria-hidden="true"><Icon name={http ? "braces" : "functions"} size={16} /></span>
+      <div className="fn-name-text">
+        <div className="fn-name-row">
+          <b className="fn-title">{fn.name}</b>
+          {http ? <Badge tone="blue">HTTP</Badge> : null}
+          {(fn.tags || []).slice(0, 2).map((tag) => <Badge key={tag} tone="brand">{tag}</Badge>)}
+        </div>
+        <div className="fn-desc" title={fn.description || undefined}>{fn.description || <span className="fn-dash">No description</span>}</div>
+      </div>
+    </div>
+  );
+}
+
+function Activity({ buckets }) {
+  return (
+    <span className="fn-spark" aria-hidden="true">
+      {(buckets || Array.from({ length: 12 }, () => ({ n: 0, failed: 0 }))).map((b, i) => (
+        <i key={i} className={b.failed ? "bad" : b.n ? "on" : ""} style={{ height: b.n ? Math.min(14, 4 + b.n * 3) : 2 }} />
+      ))}
+    </span>
+  );
+}
+
 const FUNCTION_SECTIONS = ["all", "runs", "deployments", "source"];
 
 export default function Functions({ env }) {
@@ -470,6 +528,7 @@ export default function Functions({ env }) {
   const [section, setSection] = useSection((value) => FUNCTION_SECTIONS.includes(value) || value.startsWith("fn:"), "all");
   const [openRun, setOpenRun] = useState(null);
   const [query, setQuery] = useState("");
+  const [kind, setKind] = useState("all");
   const [run, busy] = useAction();
 
   const stats = useMemo(() => {
@@ -478,6 +537,20 @@ export default function Functions({ env }) {
       const s = (out[r.function] ||= { total: 0, failed: 0, last: r.created_at });
       s.total += 1;
       if (r.status === "failed") s.failed += 1;
+    }
+    return out;
+  }, [runs.data]);
+
+  const activity = useMemo(() => {
+    const out = {};
+    const now = Date.now();
+    for (const r of runs.data?.data || []) {
+      const hours = Math.floor((now - new Date(r.created_at).getTime()) / 3600000);
+      if (hours < 0 || hours > 11) continue;
+      const a = (out[r.function] ||= Array.from({ length: 12 }, () => ({ n: 0, failed: 0 })));
+      const bucket = a[11 - hours];
+      bucket.n += 1;
+      if (r.status === "failed") bucket.failed += 1;
     }
     return out;
   }, [runs.data]);
@@ -513,35 +586,54 @@ export default function Functions({ env }) {
             actions={<Button disabled={busy} onClick={async () => { if (await run(() => post(`/code/reload`), "Code reloaded")) reloadAll(); }}>Reload code</Button>}
           />
           <Loading state={list}>
-            {(data) => (
-              <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
-                {data.errors?.length > 0 && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error"><b>Code failed to load</b><pre>{data.errors.join("\n")}</pre></div>}
-                <Card flush>
-                  <Table
-                    rows={shown}
-                    empty="No functions loaded. Add a module under functions/ and deploy, or reload."
-                    onRowClick={(f) => setSection(`fn:${f.name}`)}
-                    columns={[
-                      { label: "Name", render: (f) => <div><b>{f.name}</b>{f.description ? <div className="hint text-xs font-book text-muted leading-[1.45]">{f.description}</div> : null}</div> },
-                      { label: "Kind", render: (f) => (f.kind === "http" ? <Badge tone="blue">HTTP</Badge> : <Badge>fn()</Badge>) },
-                      { label: "File", render: (f) => (f.file ? <code>{f.file}{f.line ? `:${f.line}` : ""}</code> : "—") },
-                      { label: "Who may", render: (f) => <code>{typeof f.policy === "string" ? f.policy : JSON.stringify(f.policy ?? null)}</code> },
-                      { label: "Timeout", render: (f) => (f.timeout ? `${f.timeout}s` : "—") },
-                      { label: "Recent runs", render: (f) => { const s = stats[f.name]; return s ? <span>{s.total}{s.failed ? <Badge tone="red">{s.failed} failed</Badge> : null}</span> : <span className="muted text-muted">none</span>; } },
-                    ]}
-                  />
-                </Card>
-                <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">{(data.modules || []).map((m) => <Badge key={m}>{m}</Badge>)}{data.router && <Badge tone="blue">routes.py router</Badge>}</div>
-              </div>
-            )}
+            {(data) => {
+              const visible = kind === "all" ? shown : shown.filter((f) => (kind === "http" ? f.kind === "http" : f.kind !== "http"));
+              const failing = shown.filter((f) => stats[f.name]?.failed).length;
+              const count = (wanted) => shown.filter((f) => (wanted === "http" ? f.kind === "http" : f.kind !== "http")).length;
+              return (
+                <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
+                  {data.errors?.length > 0 && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error"><b>Code failed to load</b><pre>{data.errors.join("\n")}</pre></div>}
+                  <Card
+                    flush
+                    title="All functions"
+                    description={`${shown.length} loaded${failing ? ` · ${failing} with failures` : ""}`}
+                    actions={
+                      <div className="chips">
+                        {[["all", "All", shown.length], ["call", "fn()", count("call")], ["http", "HTTP", count("http")]].map(([value, label, n]) => (
+                          <button key={value} type="button" className={`chip ${kind === value ? "on" : ""}`} aria-pressed={kind === value} onClick={() => setKind(value)}>
+                            {label}<span className="fn-chip-n">{n}</span>
+                          </button>
+                        ))}
+                      </div>
+                    }
+                  >
+                    <div className="fn-table">
+                      <Table
+                        rows={visible}
+                        empty="No functions loaded. Add a module under functions/ and deploy, or reload."
+                        onRowClick={(f) => setSection(`fn:${f.name}`)}
+                        columns={[
+                          { label: "Function", render: (f) => <FunctionName fn={f} /> },
+                          { label: "Access", render: (f) => <Access policy={f.policy} /> },
+                          { label: "Source", render: (f) => <FilePath path={f.file} line={f.line} /> },
+                          { label: "Timeout", render: (f) => (f.timeout ? <span className="fn-time">{Math.round(f.timeout)}<span className="fn-unit">s</span></span> : <span className="fn-dash">—</span>) },
+                          { label: "Recent runs", render: (f) => { const s = stats[f.name]; if (!s) return <span className="fn-dash">—</span>; return <span className="fn-runs"><Activity buckets={activity[f.name]} /><b className={`fn-count${s.total ? "" : " zero"}`}>{s.total}</b>{s.failed ? <Badge tone="red">{s.failed}</Badge> : null}</span>; } },
+                        ]}
+                      />
+                    </div>
+                  </Card>
+                  <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">{(data.modules || []).map((m) => <Badge key={m}>{m}</Badge>)}{data.router && <Badge tone="blue">routes.py router</Badge>}</div>
+                </div>
+              );
+            }}
           </Loading>
         </>
       )}
       {selected && <FunctionPanel key={selected.name} env={env} fn={selected} base={base} branch="main" stats={stats[selected.name]} onRun={setOpenRun} />}
       {section.startsWith("fn:") && !selected && list.data && <PageHead title="Function not found" description={`No function named ${section.slice(3)} is loaded in this environment.`} />}
-      {section === "runs" && <><PageHead title="Runs" description="Every function call, newest first." /><Card><RunsTable env={env} onOpen={setOpenRun} /></Card></>}
-      {section === "deployments" && <><PageHead title="Deployments" description="What pawabase deploy shipped. Activate an older one to roll back." /><Card flush><Deployments env={env} onChanged={reloadAll} /></Card></>}
-      {section === "source" && <><PageHead title="Source files" description="The code the running deployment was built from." /><Card><Source env={env} branch="main" /></Card></>}
+      {section === "runs" && <><PageHead title="Runs" description="Every function call, newest first." /><Card icon="play"><RunsTable env={env} onOpen={setOpenRun} /></Card></>}
+      {section === "deployments" && <><PageHead title="Deployments" description="What pawabase deploy shipped. Activate an older one to roll back." /><Card icon="releases" flush><Deployments env={env} onChanged={reloadAll} /></Card></>}
+      {section === "source" && <><PageHead title="Source files" description="The code the running deployment was built from." /><Card icon="code"><Source env={env} branch="main" /></Card></>}
 
       {openRun && <RunDetail env={env} id={openRun} onClose={() => setOpenRun(null)} />}
     </Layout>

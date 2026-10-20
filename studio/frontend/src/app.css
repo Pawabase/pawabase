@@ -2,12 +2,12 @@
 
 @theme {
   /* surfaces */
-  --color-frame: #0c0c10;
-  --color-canvas: #111116;
-  --color-surface: #191920;
-  --color-sunken: #22212a;
-  --color-line: #24232c;
-  --color-line-2: #312f3a;
+  --color-frame: #121117;
+  --color-canvas: #1b1922;
+  --color-surface: #211f2a;
+  --color-sunken: #292633;
+  --color-line: #302d39;
+  --color-line-2: #3c3847;
 
   /* text */
   --color-ink: #f7f6fb;
@@ -392,7 +392,7 @@ html, body { background: var(--canvas); }
 :root {
   --r-xl: 36px; --r-lg: 28px; --r-md: 20px; --r-sm: 12px;
   --ink: #f7f6fb; --text: #f7f6fb; --muted: #aaa8b8; --faint: #747180;
-  --canvas: #111116; --sunken: #22212a; --line: #24232c; --line-2: #312f3a;
+  --canvas: var(--color-canvas); --sunken: var(--color-sunken); --line: var(--color-line); --line-2: var(--color-line-2);
 }
 
 /* Project-scoped usage and plan limits. */
@@ -472,8 +472,7 @@ a.metric:hover::after { content: ""; position: absolute; left: 0; right: 0; bott
 /* Settings are independent controls, not a responsive form grid. Keeping
    them in a single ruled list prevents a switch from recalculating a grid row
    and shifting the whole table workspace. */
-.resource-settings-operations { display: flex; flex-direction: column; gap: 0; }
-.resource-settings-operations .card { padding: 24px 0 28px !important; border: 0 !important; border-top: 1px solid var(--line) !important; border-radius: 0; background: transparent; }
+.resource-settings-operations { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
 
 /* ── fields ─────────────────────────────────────────────────────────────── */
 input, select, textarea { height: var(--control); padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--canvas); color: var(--text); font: inherit; font-size: 13px; box-shadow: none; }
@@ -563,6 +562,7 @@ kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; 
 
 /* ── API Explorer workbench ───────────────────────────────────────────── */
 
+
 /* API Explorer: where requests go, groups to pick from, a group's endpoints. */
 /* API context is the first row in the workbench. Give it the same inset as
    the endpoint header so it never sits flush against the secondary bar. */
@@ -606,3 +606,81 @@ input, select, textarea { border-radius: var(--r); }
 }
 @keyframes blink { 50% { opacity: 0.35; } }
 }
+
+/* API Explorer: the builder and the inspector are one framed region, divided
+   inside — not a stack of individually boxed cards. One border around each
+   column, a single rule between sections, a single rule between the columns;
+   nothing repeats an edge it shares with a neighbour. Scoped to the Explorer
+   (ex-columns / ex-stack appear nowhere else).
+
+   Lives OUTSIDE @layer components: the card's radius and the header strip's
+   radius are Tailwind utilities, which beat anything inside that layer no
+   matter how specific the selector is. */
+.ex-workbench { border: 1px solid var(--line-2); border-radius: 0; }
+.ex-columns { border: 0; }
+.ex-stack > .card { margin: 0; padding: 18px var(--gutter); border: 0; border-radius: 0; background: transparent; }
+.ex-stack > .card + .card,
+.ex-stack > .card + .alert,
+.ex-stack > .alert + .card,
+.ex-stack > .alert + .alert { border-top: 1px solid var(--line); }
+.ex-stack > .card > .card-head { margin: 0 calc(var(--gutter) * -1) 14px; padding: 0 var(--gutter); background: transparent; border-radius: 0; }
+.ex-stack > .alert { margin: 0; padding: 18px var(--gutter); border: 0; border-radius: 0; background: transparent; }
+
+/* ── functions: the all-functions list ─────────────────────────────────── */
+.fn-table table { table-layout: fixed; }
+.fn-table th, .fn-table td { height: auto; padding: 11px 18px; }
+.fn-table th:nth-child(2) { width: 120px; }
+.fn-table th:nth-child(3) { width: 234px; }
+.fn-table th:nth-child(4) { width: 86px; text-align: right; }
+.fn-table th:nth-child(5) { width: 150px; text-align: right; }
+.fn-table td:nth-child(4), .fn-table td:nth-child(5) { text-align: right; }
+.fn-table tbody tr:hover td:first-child { box-shadow: inset 2px 0 var(--brand); }
+.fn-table tbody tr:hover .fn-title { color: var(--brand-strong); }
+
+.fn-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.fn-tile { flex: none; display: grid; place-items: center; width: 18px; height: 24px; background: none; border: 0; border-radius: 0; color: var(--muted); }
+.fn-tile.call { color: var(--brand-strong); }
+.fn-tile.http { color: var(--info); }
+.fn-name-text { min-width: 0; }
+.fn-name-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.fn-title { font-family: var(--mono); font-size: 12.5px; font-weight: 650; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color 0.12s; }
+.fn-desc { margin-top: 2px; font-size: 12px; line-height: 1.4; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fn-file { display: block; font-family: var(--mono); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fn-dir { color: var(--faint); }
+.fn-code { font-size: 12px; color: var(--muted); }
+.fn-dash { color: var(--faint); }
+.fn-time { font-variant-numeric: tabular-nums; }
+.fn-unit { margin-left: 2px; color: var(--faint); }
+.fn-runs { display: inline-flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.fn-spark { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+.fn-spark i { width: 3px; border-radius: 1px; background: color-mix(in srgb, var(--brand) 28%, transparent); }
+.fn-spark i.on { background: color-mix(in srgb, var(--brand) 85%, transparent); }
+.fn-spark i.bad { background: var(--danger); }
+.fn-count { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 12.5px; min-width: 18px; text-align: right; }
+.fn-count.zero { color: var(--faint); font-weight: 500; }
+.fn-chip-n { margin-left: 6px; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+/* a table sits flush in its card: keep the board square where the table starts */
+.card:has(.table-wrap) { border-top-left-radius: 0; border-top-right-radius: 0; }
+.card:has(.table-wrap) > .card-head { border-radius: 0; }
+
+/* boards are square where they open: a head or a table never starts inside a curve */
+.card:has(> .card-head) { border-top-left-radius: 0; border-top-right-radius: 0; }
+.card:has(> .card-head) > .card-head { border-radius: 0; }
+
+/* flush boards (tables, lists) are square all the way out */
+.card.flush { border-radius: 0; }
+.card.flush > .card-head { border-radius: 0; }
+
+/* observability carries one frame: every panel, chart or table, is the same bordered card */
+.obs .card { border: 1px solid var(--line-2); border-radius: calc(var(--r) + 2px); overflow: hidden; background: color-mix(in srgb, var(--surface) 58%, var(--canvas)); }
+.obs .card > .card-head { border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 72%, var(--canvas)); }
+.obs .card.flush { border-radius: calc(var(--r) + 2px); }
+.obs .card.flush > .card-head { border-radius: 0; }
+.obs .banner { border: 1px solid color-mix(in srgb, currentColor 22%, transparent); border-radius: calc(var(--r) + 2px); }
+
+/* tables cover their frame edge to edge, like the policy table */
+.card:not(.flush) > .table-wrap { margin: 0 -18px; }
+.card:not(.flush) > .table-wrap:last-child { margin: 0 -18px -18px; }
+.form-section > div > .table-wrap { margin: 0 -16px; }
+.form-section > div > .table-wrap:last-child { margin: 0 -16px -16px; }

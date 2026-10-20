@@ -21,7 +21,7 @@ export default function PasswordPolicy({ env }) {
     <Loading state={config.state}>
       {() => (
         <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
-          <SettingsPanel title="Strength" description="Applied when someone signs up, resets a password, changes it, or an operator sets one. Existing passwords keep working until they are changed." config={config}>
+          <SettingsPanel icon="policies" title="Strength" description="Applied when someone signs up, resets a password, changes it, or an operator sets one. Existing passwords keep working until they are changed." config={config}>
             <Field label="Policy"><Segmented options={[["basic", "Length and character rules"], ["strict", "Also refuse common passwords"]]} value={value.password_policy} onChange={(v) => set({ password_policy: v })} /></Field>
             <div className="grid grid gap-3.5 grid-cols-[repeat(auto-fill,_minmax(220px,_1fr))] [&.wide]:grid-cols-[repeat(auto-fill,_minmax(320px,_1fr))] [&.two]:grid-cols-2 [&.three]:grid-cols-3 max-wide:[&.three.insights]:grid-cols-2 max-navigation:[&.two]:grid-cols-1 max-navigation:[&.three]:grid-cols-1 max-navigation:[&.three.insights]:grid-cols-1 [&:has(>_.tile)]:grid [&:has(>_.tile)]:grid-cols-[repeat(auto-fit,_minmax(160px,_1fr))] [&:has(>_.tile)]:gap-0 [&:has(>_.tile)]:[border:1px_solid_var(--line)] [&:has(>_.tile)]:rounded-sm [&:has(>_.tile)]:overflow-hidden [&:has(>_.tile)]:mb-4 [&:has(>_.stat-tile)]:grid [&:has(>_.stat-tile)]:grid-cols-[repeat(auto-fit,_minmax(160px,_1fr))] [&:has(>_.stat-tile)]:gap-0 [&:has(>_.stat-tile)]:[border:1px_solid_var(--line)] [&:has(>_.stat-tile)]:rounded-sm [&:has(>_.stat-tile)]:overflow-hidden [&:has(>_.stat-tile)]:mb-4 two">
               <Number_ label="Minimum length" hint="Characters." value={value.password_min_length} min={6} max={128} onChange={(v) => set({ password_min_length: v || 8 })} />
@@ -35,12 +35,12 @@ export default function PasswordPolicy({ env }) {
             <Number_ label="Different characters" hint="At least this many distinct characters, so “aaaaaaaa1” does not pass. 0 turns it off." value={policy.min_unique} max={32} onChange={(v) => setPolicy({ min_unique: v })} />
           </SettingsPanel>
 
-          <SettingsPanel title="Reuse and expiry" config={config}>
+          <SettingsPanel icon="clock" title="Reuse and expiry" config={config}>
             <Number_ label="Remember previous passwords" hint="A person cannot go back to one of their last N passwords. 0 turns it off." value={policy.history} max={24} onChange={(v) => setPolicy({ history: v })} />
             <Number_ label="Passwords expire after" hint="After this many days a person must choose a new password through “Forgot password” before signing in. 0 means never." value={policy.max_age_days} max={3650} unit="days" onChange={(v) => setPolicy({ max_age_days: v })} />
           </SettingsPanel>
 
-          <SettingsPanel title="Guessable passwords" config={config}>
+          <SettingsPanel icon="secrets" title="Guessable passwords" config={config}>
             <Switch checked={policy.forbid_personal} onChange={(v) => setPolicy({ forbid_personal: v })} label="Refuse passwords containing the person's name, username or email" />
             <Switch checked={policy.breach_check} onChange={(v) => setPolicy({ breach_check: v })} label="Refuse passwords found in known data breaches" hint="Checked with haveibeenpwned's range service: only the first five characters of a hash leave your server. If the service is unreachable the password is accepted." />
           </SettingsPanel>

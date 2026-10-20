@@ -44,7 +44,7 @@ export default function Attributes({ env }) {
     <Loading state={config.state}>
       {() => (
         <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
-          <SettingsPanel title="Standard attributes" description="Choose, for each detail, whether sign-up asks for it. Email and password are always asked. Everything is enforced on the sign-up API as well as the hosted page." config={config}>
+          <SettingsPanel icon="braces" title="Standard attributes" description="Choose, for each detail, whether sign-up asks for it. Email and password are always asked. Everything is enforced on the sign-up API as well as the hosted page." config={config}>
             <div className="attr-list flex flex-col">
               {ATTRIBUTES.map(([key, label]) => (
                 <div key={key} className="attr-row flex items-center justify-between gap-4 p-[12px_0] [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0 [&.fixed_span:first-child]:text-muted">
@@ -97,7 +97,7 @@ export default function Attributes({ env }) {
             </div>
           </Card>
 
-          <SettingsPanel title="Access token contents" description="Which profile attributes are copied into the access token, so policies and your API can read them without a lookup." config={config}>
+          <SettingsPanel icon="keys" title="Access token contents" description="Which profile attributes are copied into the access token, so policies and your API can read them without a lookup." config={config}>
             <Field label="Attributes in the token">
               <Segmented options={[["all", "Everything on the profile"], ["listed", "Only attributes marked “In token”"]]} value={config.value.directory?.claims?.mode || "all"} onChange={(mode) => config.set({ directory: { ...(config.value.directory || {}), claims: { mode } } })} />
             </Field>

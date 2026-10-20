@@ -44,7 +44,7 @@ export function Overview({ env, socket }) {
           </StatStrip>
         )}
       </Loading>
-      <Card flush title="Live activity" actions={<span className="live-dot w-2 h-2 rounded-full bg-ok shadow-none [&.busy]:bg-brand [&.busy]:animate-[blink_0.9s_ease-in-out_infinite] [&.off]:bg-[var(--faint)] [&.off]:shadow-none" title="Refreshing" />}>
+      <Card icon="pulse" flush title="Live activity" actions={<span className="live-dot w-2 h-2 rounded-full bg-ok shadow-none [&.busy]:bg-brand [&.busy]:animate-[blink_0.9s_ease-in-out_infinite] [&.off]:bg-[var(--faint)] [&.off]:shadow-none" title="Refreshing" />}>
         <Loading state={activity} empty="Nothing delivered yet.">
           {(data) => (
             <Table
@@ -78,7 +78,7 @@ export function Channels({ env, onWatch }) {
   return (
     <>
       <PageHead title="Channels" description="Durable rules Studio and the API both read — the DB-backed sibling of the hand-edited channel list in Settings. Patterns support * and {{ auth.* }} templates." actions={<Button variant="primary" onClick={() => setEditing(blankRule())}><Icon name="plus" />New channel rule</Button>} />
-      <Card flush title="Channel rules">
+      <Card icon="realtime" flush title="Channel rules">
         <Loading state={rules} empty={
           <EmptyState icon="layers" title="No channel rules yet" action={<Button variant="primary" onClick={() => setEditing(blankRule())}><Icon name="plus" />New channel rule</Button>}>
             Every channel falls back to the environment's default policy (Settings → Realtime) until you add a rule here.
@@ -101,7 +101,7 @@ export function Channels({ env, onWatch }) {
           )}
         </Loading>
       </Card>
-      <Card flush title="Live now" actions={<span className="live-dot w-2 h-2 rounded-full bg-ok shadow-none [&.busy]:bg-brand [&.busy]:animate-[blink_0.9s_ease-in-out_infinite] [&.off]:bg-[var(--faint)] [&.off]:shadow-none" title="Refreshing" />}>
+      <Card icon="pulse" flush title="Live now" actions={<span className="live-dot w-2 h-2 rounded-full bg-ok shadow-none [&.busy]:bg-brand [&.busy]:animate-[blink_0.9s_ease-in-out_infinite] [&.off]:bg-[var(--faint)] [&.off]:shadow-none" title="Refreshing" />}>
         <Loading state={live} empty="No active channels. Watch one by name above, or subscribe from a client.">
           {(data) => (
             <Table
@@ -233,7 +233,7 @@ const UNAVAILABLE = [
 ];
 
 function ProtocolIcon({ icon, tone }) {
-  return <span className={`tile-icon pastel text-text pastel-contrast [&.lavender]:bg-lavender [&.peach]:bg-peach [&.mint]:bg-mint [&.butter]:bg-butter [&.sky]:bg-sky [&.rose]:bg-rose [&.lavender]:text-text [&.peach]:text-text [&.mint]:text-text [&.butter]:text-text [&.sky]:text-text [&.rose]:text-text ${tone || ""}`} style={{ width: 32, height: 32 }}><Icon name={icon} size={16} /></span>;
+  return <span className={`tile-icon pastel-contrast [&.lavender]:text-lavender [&.peach]:text-peach [&.mint]:text-mint [&.butter]:text-butter [&.sky]:text-sky [&.rose]:text-rose ${tone || ""}`}><Icon name={icon} size={24} /></span>;
 }
 
 export function Protocols({ env }) {
@@ -289,7 +289,7 @@ export function Subscriptions({ env, onWatch }) {
   return (
     <>
       <PageHead title="Subscriptions" description="Two ways something outside a channel finds out about an event: database-change broadcasting, and webhooks that fire on every publish." />
-      <Card flush title="Database changes">
+      <Card icon="database" flush title="Database changes">
         <Loading state={resources} empty="No resources defined yet.">
           {(data) => (
             <Table
@@ -304,8 +304,7 @@ export function Subscriptions({ env, onWatch }) {
           )}
         </Loading>
       </Card>
-      <p className="hint text-xs font-book text-muted leading-[1.45]" style={{ margin: "-4px 2px 8px" }}>Turning this on pushes every create, update and delete on the resource's table to subscribers of <code>resource:&lt;name&gt;</code> — the same toggle lives on the table's own Settings tab in Data.</p>
-      <Card flush title="Webhook subscriptions" actions={<Button variant="primary" size="sm" onClick={() => setNewHook({ name: "", url: "" })}><Icon name="plus" />New webhook</Button>}>
+      <Card icon="webhooks" flush title="Webhook subscriptions" actions={<Button variant="primary" size="sm" onClick={() => setNewHook({ name: "", url: "" })}><Icon name="plus" />New webhook</Button>}>
         <Loading state={webhooks} empty="No webhooks yet.">
           {() => (
             realtimeHooks.length === 0 ? (
@@ -556,7 +555,7 @@ function MessageCard({ message }) {
   return (
     <div className="rtp-msg bg-sunken [border:1px_solid_var(--line)] rounded-sm p-[10px_12px] min-w-0 max-w-[100%]">
       <div className="rtp-msg-head flex items-center gap-2 mb-2">
-        <span className="rtp-msg-icon inline-flex items-center justify-center w-[22px] h-[22px] rounded-full bg-surface [border:1px_solid_var(--line-2)] text-muted shrink-0"><Icon name={eventIcon(message.event)} size={13} /></span>
+        <span className="rtp-msg-icon inline-flex items-center justify-center text-brand shrink-0"><Icon name={eventIcon(message.event)} size={16} /></span>
         <Badge tone="lavender">{message.event || "message"}</Badge>
         <span className="rtp-msg-meta text-caption text-muted text-right grow flex-1 min-w-0">{message.from ? `from ${message.from}` : "server"} · {when(message.sent_at)}</span>
         <RawToggle raw={raw} onChange={setRaw} />

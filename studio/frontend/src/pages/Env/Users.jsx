@@ -142,7 +142,7 @@ function Providers({ env, kind }) {
             ))}
           </div>
         ) : (
-          <Card flush title="OAuth servers" actions={<Button variant="primary" size="sm" onClick={() => setEditing({ name: "", isNew: true })}><Icon name="plus" size={14} /> Add OAuth server</Button>}>
+          <Card icon="enter" flush title="OAuth servers" actions={<Button variant="primary" size="sm" onClick={() => setEditing({ name: "", isNew: true })}><Icon name="plus" size={14} /> Add OAuth server</Button>}>
             <Table
               rows={customNames.map((name) => ({ name, ...providers[name] }))}
               onRowClick={(row) => setEditing({ name: row.name })}
@@ -288,36 +288,31 @@ function UserDetail({ base, id, onClose }) {
             {tab === "profile" && <UserProfile base={base} id={id} u={u} act={act} busy={busy} />}
             {tab === "security" && (
               <>
-                <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
-                  <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Account</h3><p><UserStatus u={u} /></p></div></div>
+                <Section title="Account" description={<><UserStatus u={u} /></>} icon="settings">
                   <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">
                     <Button disabled={busy} onClick={() => act(() => patch(`${base}/users/${id}`, { disabled: !u.disabled }, AUTH), u.disabled ? "Enabled" : "Disabled")}>{u.disabled ? "Enable account" : "Disable account"}</Button>
                     {locked && <Button disabled={busy} onClick={() => act(() => patch(`${base}/users/${id}`, { unlock: true }, AUTH), "Unlocked")}>Unlock</Button>}
                     {!u.email_verified && <Button disabled={busy} onClick={() => act(() => patch(`${base}/users/${id}`, { email_verified: true }, AUTH), "Marked verified")}>Mark email verified</Button>}
                   </div>
                   {locked && <p className="hint text-xs font-book text-muted leading-[1.45]" style={{ margin: "10px 0 0" }}>Locked until {when(u.locked_until)} after repeated failed sign-ins.</p>}
-                </section>
-                <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
-                  <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Password</h3><p>{u.has_password ? "This person signs in with a password." : "No password is set. They sign in with a link or a social account."}</p></div></div>
+                </Section>
+                <Section icon="secrets" title="Password" description={<>{u.has_password ? "This person signs in with a password." : "No password is set. They sign in with a link or a social account."}</>} icon="settings">
                   <SetPassword busy={busy} onSet={(password) => act(() => patch(`${base}/users/${id}`, { password }, AUTH), "Password set")} />
-                </section>
-                <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
-                  <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Second factor</h3><p>{u.mfa_enabled ? "An authenticator app is set up." : "None set up."}</p></div></div>
+                </Section>
+                <Section icon="policies" title="Second factor" description={<>{u.mfa_enabled ? "An authenticator app is set up." : "None set up."}</>} icon="settings">
                   {u.mfa_enabled && <Button disabled={busy} onClick={() => confirm("Remove this person's second factors?") && act(() => post(`${base}/users/${id}/mfa/reset`, {}, AUTH), "Second factors removed")}>Remove second factors</Button>}
-                </section>
-                <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
-                  <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Sessions</h3><p>Where this person is signed in.</p></div><Button size="sm" disabled={busy || !(u.sessions || []).length} onClick={() => act(() => post(`${base}/users/${id}/sessions/revoke`, {}, AUTH), "Signed out everywhere")}>Sign out everywhere</Button></div>
+                </Section>
+                <Section title="Sessions" description={<>Where this person is signed in.</>} icon="terminal" actions={<Button size="sm" disabled={busy || !(u.sessions || []).length} onClick={() => act(() => post(`${base}/users/${id}/sessions/revoke`, {}, AUTH), "Signed out everywhere")}>Sign out everywhere</Button>}>
                   <Table rows={u.sessions || []} empty="No active sessions." columns={[
                     { label: "Device", render: (s) => device(s.user_agent) },
                     { label: "IP", render: (s) => <code>{s.ip || "—"}</code> },
                     { label: "Last active", render: (s) => when(s.last_seen_at || s.created_at) },
                     { label: "", render: (s) => <Button size="sm" disabled={busy} onClick={() => act(() => del(`${base}/users/${id}/sessions/${s.id}`, AUTH), "Session ended")}>End</Button> },
                   ]} />
-                </section>
-                <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
-                  <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Delete user</h3><p>Signs them out, removes their linked accounts and releases the email address. Their history stays.</p></div></div>
+                </Section>
+                <Section icon="trash" title="Delete user" description={<>Signs them out, removes their linked accounts and releases the email address. Their history stays.</>} icon="settings">
                   <Button variant="danger" disabled={busy} onClick={async () => { if (confirm(`Delete ${u.email}?`) && await run(() => del(`${base}/users/${id}`, AUTH), "Deleted")) onClose(); }}>Delete user</Button>
-                </section>
+                </Section>
               </>
             )}
             {tab === "access" && <Grants base={base} id={id} user={u} onDone={user.reload} />}
@@ -356,8 +351,7 @@ function UserProfile({ base, id, u, act, busy }) {
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   return (
     <>
-      <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
-        <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Profile</h3><p>{u.email}{u.email_verified ? " · verified" : " · not verified"}</p></div></div>
+      <Section title="Profile" description={<>{u.email}{u.email_verified ? " · verified" : " · not verified"}</>} icon="settings">
         <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5">
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" aria-label="Name" />
           <Button disabled={busy || name === (u.name || "")} onClick={() => act(() => patch(`${base}/users/${id}`, { name }, AUTH), "Saved")}>Save name</Button>
@@ -368,17 +362,15 @@ function UserProfile({ base, id, u, act, busy }) {
           <dt>Last sign-in</dt><dd>{u.last_sign_in_at ? `${when(u.last_sign_in_at)}${u.last_sign_in_ip ? ` from ${u.last_sign_in_ip}` : ""}` : "never"}</dd>
           <dt>Linked accounts</dt><dd>{(u.identities || []).length ? <span className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap" style={{ gap: 6 }}>{u.identities.map((i) => <Badge key={i.id}>{i.provider}</Badge>)}</span> : "none"}</dd>
         </dl>
-      </section>
-      <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
-        <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Public metadata</h3><p>Their own profile data. The person and your application can read and change it.</p></div></div>
+      </Section>
+      <Section title="Public metadata" description={<>Their own profile data. The person and your application can read and change it.</>} icon="users">
         <JsonInput value={meta.user} onChange={(v) => setMeta((m) => ({ ...m, user: v }))} rows={6} />
         <div style={{ marginTop: 10 }}><Button disabled={busy || same(meta.user, u.user_metadata || {})} onClick={() => act(() => patch(`${base}/users/${id}`, { user_metadata: meta.user }, AUTH), "Metadata saved")}>Save public metadata</Button></div>
-      </section>
-      <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
-        <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Private metadata</h3><p>Only your servers can change this. It travels in the person's access token, so keep it small.</p></div></div>
+      </Section>
+      <Section title="Private metadata" description={<>Only your servers can change this. It travels in the person's access token, so keep it small.</>} icon="database">
         <JsonInput value={meta.app} onChange={(v) => setMeta((m) => ({ ...m, app: v }))} rows={6} />
         <div style={{ marginTop: 10 }}><Button disabled={busy || same(meta.app, u.app_metadata || {})} onClick={() => act(() => patch(`${base}/users/${id}`, { app_metadata: meta.app }, AUTH), "Metadata saved")}>Save private metadata</Button></div>
-      </section>
+      </Section>
     </>
   );
 }
@@ -432,7 +424,7 @@ function Roles({ base }) {
   const [editing, setEditing] = useState(null);
   const [run, busy] = useAction();
   return (
-    <Card flush title="Roles" actions={<Button size="sm" variant="primary" onClick={() => setEditing({ isNew: true, name: "", description: "", permissions: [] })}>New role</Button>}>
+    <Card icon="policies" flush title="Roles" actions={<Button size="sm" variant="primary" onClick={() => setEditing({ isNew: true, name: "", description: "", permissions: [] })}>New role</Button>}>
       <Loading state={roles} empty="No roles yet.">
         {(data) => <Table rows={data.data} onRowClick={(r) => setEditing({ ...r, permissions: r.permissions || [] })} columns={[
           { label: "Role", render: (r) => <b>{r.name}</b> }, { label: "Description", key: "description" },
@@ -469,7 +461,7 @@ function Orgs({ base }) {
   const [creating, setCreating] = useState(false);
   return (
     <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
-      <Card flush title="Organizations" actions={<Button variant="primary" size="sm" onClick={() => setCreating(true)}><Icon name="plus" size={14} /> New organization</Button>}>
+      <Card icon="org" flush title="Organizations" actions={<Button variant="primary" size="sm" onClick={() => setCreating(true)}><Icon name="plus" size={14} /> New organization</Button>}>
         <Loading state={orgs} empty="No organizations yet. Create one here, or users create them through /auth/v1/orgs.">
           {(data) => <Table rows={data.data} onRowClick={(o) => setSelected(o.slug)} empty="No organizations yet. Create one here, or users create them through /auth/v1/orgs." columns={[{ label: "Name", render: (o) => <b>{o.name}</b> }, { label: "Slug", render: (o) => <code>{o.slug}</code> }, { label: "Members", key: "members" }, { label: "Created", render: (o) => when(o.created_at) }]} />}
         </Loading>
@@ -515,15 +507,13 @@ function OrgDetail({ base, slug, onClose }) {
       <Loading state={org}>
         {() => (
           <>
-            <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
-              <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Details</h3><p>The slug <code>{slug}</code> cannot change.</p></div></div>
+            <Section title="Details" description={<>The slug <code>{slug}</code> cannot change.</>} icon="secrets">
               <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5">
                 <input value={name ?? o.name} onChange={(e) => setName(e.target.value)} aria-label="Organization name" />
                 <Button variant="primary" disabled={busy || name === null || !name.trim() || name === o.name} onClick={() => act(async () => { await patch(`${base}/orgs/${slug}`, { name: name.trim() }, AUTH); setName(null); }, "Renamed")}>Rename</Button>
               </div>
-            </section>
-            <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
-              <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Members</h3><p>Owners and admins manage the organization from the application. Here an operator can change roles directly.</p></div><Button size="sm" onClick={() => setInviting(true)}>Invite by email</Button></div>
+            </Section>
+            <Section title="Members" description={<>Owners and admins manage the organization from the application. Here an operator can change roles directly.</>} icon="users" actions={<Button size="sm" onClick={() => setInviting(true)}>Invite by email</Button>}>
               <Table
                 rows={o.members}
                 empty="No members yet."
@@ -539,17 +529,15 @@ function OrgDetail({ base, slug, onClose }) {
                 <select value={add.role} onChange={(e) => setAdd({ ...add, role: e.target.value })} style={{ width: 130 }}>{ORG_ROLES.map((r) => <option key={r}>{r}</option>)}</select>
                 <Button variant="primary" disabled={busy || !add.email.trim()} onClick={() => act(async () => { await post(`${base}/orgs/${slug}/members`, { email: add.email.trim(), role: add.role }, AUTH); setAdd({ email: "", role: "member" }); }, "Member added")}>Add member</Button>
               </div>
-            </section>
+            </Section>
             {o.teams?.length > 0 && (
-              <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
-                <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Teams</h3></div></div>
+              <Section title="Teams" icon="team">
                 <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">{o.teams.map((t) => <Badge key={t.slug}>{t.name}</Badge>)}</div>
-              </section>
+              </Section>
             )}
-            <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
-              <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Delete organization</h3><p>Removes its memberships, teams and invitations for good. The users stay.</p></div></div>
+            <Section title="Delete organization" description={<>Removes its memberships, teams and invitations for good. The users stay.</>} icon="trash">
               <Button variant="danger" disabled={busy} onClick={async () => { if (confirm(`Delete ${o.name}? This cannot be undone.`) && await run(() => del(`${base}/orgs/${slug}`, AUTH), "Organization deleted")) onClose(); }}>Delete organization</Button>
-            </section>
+            </Section>
           </>
         )}
       </Loading>
@@ -562,7 +550,7 @@ function Events({ base }) {
   const [failed, setFailed] = useState(false);
   const events = useApi(`${base}/events`, { ...AUTH, params: { failed: failed ? "true" : "" } });
   return (
-    <Card flush title="Sign-in activity" actions={<label className="check [label&]:flex [label&]:items-center [label&]:gap-2 [label&]:text-text [label&]:text-ui"><input type="checkbox" checked={failed} onChange={(e) => setFailed(e.target.checked)} /> failures only</label>}>
+    <Card icon="enter" flush title="Sign-in activity" actions={<label className="check [label&]:flex [label&]:items-center [label&]:gap-2 [label&]:text-text [label&]:text-ui"><input type="checkbox" checked={failed} onChange={(e) => setFailed(e.target.checked)} /> failures only</label>}>
       <Loading state={events} empty="No activity yet.">
         {(data) => <Table rows={data.data} columns={[{ label: "When", render: (e) => when(e.created_at) }, { label: "Event", key: "kind" }, { label: "Email", key: "email" }, { label: "Result", render: (e) => <Badge tone={e.success ? "green" : "red"}>{e.success ? "ok" : e.reason || "failed"}</Badge> }, { label: "IP", key: "ip" }]} />}
       </Loading>
@@ -596,7 +584,7 @@ function AuthConfig({ env, parts = ['general', 'providers', 'emails'], title = '
         {() => (
           <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
             {parts.includes("general") && <>
-            <Section title="Sign-up" description="Who can create an account, and whether their email must be confirmed first.">
+            <Section icon="users" title="Sign-up" description="Who can create an account, and whether their email must be confirmed first.">
               <div className="grid grid gap-3.5 grid-cols-[repeat(auto-fill,_minmax(220px,_1fr))] [&.wide]:grid-cols-[repeat(auto-fill,_minmax(320px,_1fr))] [&.two]:grid-cols-2 [&.three]:grid-cols-3 max-wide:[&.three.insights]:grid-cols-2 max-navigation:[&.two]:grid-cols-1 max-navigation:[&.three]:grid-cols-1 max-navigation:[&.three.insights]:grid-cols-1 [&:has(>_.tile)]:grid [&:has(>_.tile)]:grid-cols-[repeat(auto-fit,_minmax(160px,_1fr))] [&:has(>_.tile)]:gap-0 [&:has(>_.tile)]:[border:1px_solid_var(--line)] [&:has(>_.tile)]:rounded-sm [&:has(>_.tile)]:overflow-hidden [&:has(>_.tile)]:mb-4 [&:has(>_.stat-tile)]:grid [&:has(>_.stat-tile)]:grid-cols-[repeat(auto-fit,_minmax(160px,_1fr))] [&:has(>_.stat-tile)]:gap-0 [&:has(>_.stat-tile)]:[border:1px_solid_var(--line)] [&:has(>_.stat-tile)]:rounded-sm [&:has(>_.stat-tile)]:overflow-hidden [&:has(>_.stat-tile)]:mb-4 two">
                 <Switch checked={field("signup_enabled")} onChange={(v) => set({ signup_enabled: v })} label="Sign-up enabled" hint="Turn off to invite-only new accounts." />
                 <Switch checked={field("require_email_verification")} onChange={(v) => set({ require_email_verification: v })} label="Require email verification" hint="Unverified users can't sign in until they confirm." />
@@ -606,7 +594,7 @@ function AuthConfig({ env, parts = ['general', 'providers', 'emails'], title = '
               </Field>
             </Section>
 
-            <Section title="Passwords" description="Password strength and how long sessions last.">
+            <Section icon="secrets" title="Passwords" description="Password strength and how long sessions last.">
               <div className="grid grid gap-3.5 grid-cols-[repeat(auto-fill,_minmax(220px,_1fr))] [&.wide]:grid-cols-[repeat(auto-fill,_minmax(320px,_1fr))] [&.two]:grid-cols-2 [&.three]:grid-cols-3 max-wide:[&.three.insights]:grid-cols-2 max-navigation:[&.two]:grid-cols-1 max-navigation:[&.three]:grid-cols-1 max-navigation:[&.three.insights]:grid-cols-1 [&:has(>_.tile)]:grid [&:has(>_.tile)]:grid-cols-[repeat(auto-fit,_minmax(160px,_1fr))] [&:has(>_.tile)]:gap-0 [&:has(>_.tile)]:[border:1px_solid_var(--line)] [&:has(>_.tile)]:rounded-sm [&:has(>_.tile)]:overflow-hidden [&:has(>_.tile)]:mb-4 [&:has(>_.stat-tile)]:grid [&:has(>_.stat-tile)]:grid-cols-[repeat(auto-fit,_minmax(160px,_1fr))] [&:has(>_.stat-tile)]:gap-0 [&:has(>_.stat-tile)]:[border:1px_solid_var(--line)] [&:has(>_.stat-tile)]:rounded-sm [&:has(>_.stat-tile)]:overflow-hidden [&:has(>_.stat-tile)]:mb-4 two">
                 <Field label="Policy">
                   <Segmented options={[["basic", "Basic"], ["strict", "Strict"]]} value={field("password_policy")} onChange={(v) => set({ password_policy: v })} />
@@ -623,14 +611,14 @@ function AuthConfig({ env, parts = ['general', 'providers', 'emails'], title = '
               </div>
             </Section>
 
-            <Section title="Sign-in methods">
+            <Section icon="enter" title="Sign-in methods">
               <div className="grid grid gap-3.5 grid-cols-[repeat(auto-fill,_minmax(220px,_1fr))] [&.wide]:grid-cols-[repeat(auto-fill,_minmax(320px,_1fr))] [&.two]:grid-cols-2 [&.three]:grid-cols-3 max-wide:[&.three.insights]:grid-cols-2 max-navigation:[&.two]:grid-cols-1 max-navigation:[&.three]:grid-cols-1 max-navigation:[&.three.insights]:grid-cols-1 [&:has(>_.tile)]:grid [&:has(>_.tile)]:grid-cols-[repeat(auto-fit,_minmax(160px,_1fr))] [&:has(>_.tile)]:gap-0 [&:has(>_.tile)]:[border:1px_solid_var(--line)] [&:has(>_.tile)]:rounded-sm [&:has(>_.tile)]:overflow-hidden [&:has(>_.tile)]:mb-4 [&:has(>_.stat-tile)]:grid [&:has(>_.stat-tile)]:grid-cols-[repeat(auto-fit,_minmax(160px,_1fr))] [&:has(>_.stat-tile)]:gap-0 [&:has(>_.stat-tile)]:[border:1px_solid_var(--line)] [&:has(>_.stat-tile)]:rounded-sm [&:has(>_.stat-tile)]:overflow-hidden [&:has(>_.stat-tile)]:mb-4 two">
                 <Switch checked={field("magic_link_enabled")} onChange={(v) => set({ magic_link_enabled: v })} label="Magic links" hint="Passwordless sign-in by emailed one-time link." />
                 <Switch checked={field("mfa_enabled")} onChange={(v) => set({ mfa_enabled: v })} label="MFA (TOTP)" hint="Let users add an authenticator app for aal2." />
               </div>
             </Section>
 
-            <Section title="Security" description="Lockout and session limits.">
+            <Section icon="policies" title="Security" description="Lockout and session limits.">
               <div className="grid grid gap-3.5 grid-cols-[repeat(auto-fill,_minmax(220px,_1fr))] [&.wide]:grid-cols-[repeat(auto-fill,_minmax(320px,_1fr))] [&.two]:grid-cols-2 [&.three]:grid-cols-3 max-wide:[&.three.insights]:grid-cols-2 max-navigation:[&.two]:grid-cols-1 max-navigation:[&.three]:grid-cols-1 max-navigation:[&.three.insights]:grid-cols-1 [&:has(>_.tile)]:grid [&:has(>_.tile)]:grid-cols-[repeat(auto-fit,_minmax(160px,_1fr))] [&:has(>_.tile)]:gap-0 [&:has(>_.tile)]:[border:1px_solid_var(--line)] [&:has(>_.tile)]:rounded-sm [&:has(>_.tile)]:overflow-hidden [&:has(>_.tile)]:mb-4 [&:has(>_.stat-tile)]:grid [&:has(>_.stat-tile)]:grid-cols-[repeat(auto-fit,_minmax(160px,_1fr))] [&:has(>_.stat-tile)]:gap-0 [&:has(>_.stat-tile)]:[border:1px_solid_var(--line)] [&:has(>_.stat-tile)]:rounded-sm [&:has(>_.stat-tile)]:overflow-hidden [&:has(>_.stat-tile)]:mb-4 two">
                 <Field label="Failed attempts before a lock" hint="Empty uses the installation default."><input type="number" min={2} max={100} value={field("lockout_threshold") ?? ""} onChange={(e) => set({ lockout_threshold: e.target.value ? Number(e.target.value) : null })} /></Field>
                 <Field label="Lock for (minutes)" hint="Empty uses the installation default."><input type="number" min={1} max={1440} value={field("lockout_minutes") ?? ""} onChange={(e) => set({ lockout_minutes: e.target.value ? Number(e.target.value) : null })} /></Field>
@@ -640,7 +628,7 @@ function AuthConfig({ env, parts = ['general', 'providers', 'emails'], title = '
               <Field label="Always block these email domains"><TagInput value={field("blocked_email_domains") || []} onChange={(v) => set({ blocked_email_domains: v })} placeholder="mailinator.com" /></Field>
             </Section>
 
-            <Section title="URLs" description="Where a browser is allowed to land after an OAuth or magic-link redirect.">
+            <Section icon="link" title="URLs" description="Where a browser is allowed to land after an OAuth or magic-link redirect.">
               <Field label="Site URL"><input value={field("site_url")} onChange={(e) => set({ site_url: e.target.value })} placeholder="https://app.example.com" /></Field>
               <Field label="Additional allowed redirect URLs">
                 <TagInput value={field("redirect_urls")} onChange={(v) => set({ redirect_urls: v })} placeholder="https://staging.example.com/auth/callback" />
@@ -665,7 +653,7 @@ function ProvidersSection({ value, onChange }) {
   const add = (name) => { if (name && !value[name]) onChange({ ...value, [name]: { client_id: "", client_secret: "", enabled: true } }); setAdding(""); };
   const options = KNOWN_PROVIDERS.filter((p) => !names.includes(p));
   return (
-    <Section title="OAuth providers" description="Social sign-in. Reference credentials as secret://NAME rather than pasting them here.">
+    <Section icon="enter" title="OAuth providers" description="Social sign-in. Reference credentials as secret://NAME rather than pasting them here.">
       {names.length === 0 && <p className="muted text-muted" style={{ margin: 0 }}>No providers configured.</p>}
       <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 10 }}>
         {names.map((name) => {
@@ -719,7 +707,7 @@ function EmailsSection({ value, onChange }) {
   const set = (patch) => onChange({ ...value, [kind]: { ...override, ...patch } });
   const reset = () => { const next = { ...value }; delete next[kind]; onChange(next); };
   return (
-    <Section title="Email templates" description="Subject and body for each auth email. Leave blank to use the built-in default.">
+    <Section icon="mail-templates" title="Email templates" description="Subject and body for each auth email. Leave blank to use the built-in default.">
       <div className="split-pane grid grid-cols-[188px_minmax(0,_1fr)] gap-5 items-start [&_>_.side-menu-list]:sticky [&_>_.side-menu-list]:top-0 [&_>_.side-menu-list]:pr-3 [&_>_.side-menu-list]:[border-right:1px_solid_var(--line-2)] max-tablet:grid-cols-1 max-tablet:[&_>_.side-menu-list]:static max-tablet:[&_>_.side-menu-list]:flex-row max-tablet:[&_>_.side-menu-list]:overflow-auto max-tablet:[&_>_.side-menu-list]:border-r-0 max-tablet:[&_>_.side-menu-list]:p-[0_0_8px] max-tablet:[&_>_.side-menu-list]:[border-bottom:1px_solid_var(--line-2)]">
       <SideMenu label="Emails" items={EMAIL_KINDS.map(([v, label]) => ({ value: v, label, sub: value[v] ? "Customised" : undefined }))} value={kind} onChange={setKind} />
       <div>

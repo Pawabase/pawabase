@@ -189,7 +189,7 @@ export default function Tour({ env, section }) {
           })}
         </div>
         <div className="tour-meta flex items-center gap-2">
-          <span className={`tour-badge w-[30px] h-[30px] rounded-sm inline-flex items-center justify-center pastel text-text pastel-contrast [&.lavender]:bg-lavender [&.peach]:bg-peach [&.mint]:bg-mint [&.butter]:bg-butter [&.sky]:bg-sky [&.rose]:bg-rose [&.lavender]:text-text [&.peach]:text-text [&.mint]:text-text [&.butter]:text-text [&.sky]:text-text [&.rose]:text-text ${chapter.tone}`}><Icon name={step.icon} size={16} /></span>
+          <span className={`tour-badge inline-flex items-center justify-center pastel-contrast [&.lavender]:text-lavender [&.peach]:text-peach [&.mint]:text-mint [&.butter]:text-butter [&.sky]:text-sky [&.rose]:text-rose ${chapter.tone}`}><Icon name={step.icon} size={22} /></span>
           <span className="tour-chapter text-caption font-semibold-plus tracking-[.06em] uppercase text-muted">{chapter.label}</span>
           <span className="tour-count ml-auto [font:600_12px_var(--mono)] text-faint">{index + 1} / {STEPS.length}</span>
         </div>

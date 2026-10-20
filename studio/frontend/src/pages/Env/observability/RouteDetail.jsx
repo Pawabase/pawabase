@@ -20,7 +20,7 @@ export default function RouteDetail({ env, route, minutes, onClose, onTrace }) {
               <Stat label="Slowest" value={ms(d.summary.max_ms)} />
             </div>
 
-            <Card title="Traffic and failures">
+            <Card icon="usage" title="Traffic and failures">
               <Timeline points={d.timeline} />
               <div className="legend flex flex-wrap gap-3.5 text-xs text-muted [&_span]:inline-flex [&_span]:items-center [&_span]:gap-1.5 mt-2 [&_i]:inline-block [&_i]:w-2.5 [&_i]:h-2.5 [&_i]:rounded-xs [&_i]:mr-1 row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap faint text-faint">
                 <span><i style={{ background: "var(--lavender)" }} /> ok</span>
@@ -32,11 +32,11 @@ export default function RouteDetail({ env, route, minutes, onClose, onTrace }) {
               </div>
             </Card>
 
-            <Card title="Where the time goes">
+            <Card icon="clock" title="Where the time goes">
               <KindBars items={d.time_by_kind} />
             </Card>
 
-            <Card flush title={`What went wrong (${d.errors.length})`}>
+            <Card icon="pulse" flush title={`What went wrong (${d.errors.length})`}>
               <Table rows={d.errors} empty="No failures in this window." onRowClick={(g) => onTrace(g.sample_request_id)} columns={[
                 { label: "Status", render: (g) => <Badge tone={statusTone(g.status)}>{g.status}</Badge> },
                 { label: "Problem", render: (g) => <code>{g.problem}</code> },
@@ -57,7 +57,7 @@ export default function RouteDetail({ env, route, minutes, onClose, onTrace }) {
 
 function RequestList({ title, rows, onTrace }) {
   return (
-    <Card flush title={title}>
+    <Card icon="routes" flush title={title}>
       {rows.length === 0 ? <Empty>Nothing to show.</Empty> : (
         <Table rows={rows} onRowClick={(r) => onTrace(r.request_id)} columns={[
           { label: "When", render: (r) => when(r.started_at) },

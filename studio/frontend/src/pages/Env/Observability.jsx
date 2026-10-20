@@ -114,8 +114,8 @@ export default function Observability({ env }) {
           {NEEDS_WINDOW.has(section) && <Segmented options={WINDOWS} value={minutes} onChange={setMinutes} />}
         </>}
       />
-      <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
-        <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg" style={{ minWidth: 0 }}>
+      <div className="obs stack flex flex-col gap-3 [&.lg]:gap-4 lg">
+        <div className="stack flex flex-col gap-3 [&.lg]:gap-4 lg" style={{ minWidth: 0 }}>
           {section === "overview" && <Overview {...shared} />}
           {section === "routes" && <Routes env={env} minutes={minutes} onRoute={setRoute} onTrace={openTrace} />}
           {section === "errors" && <Errors env={env} minutes={minutes} onRoute={setRoute} onTrace={openTrace} />}

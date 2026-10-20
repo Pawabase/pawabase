@@ -16,7 +16,7 @@ export default function Workers({ env, system }) {
         const overdue = s.schedules.filter((x) => x.overdue).length;
         return (
           <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
-            <Card flush title="Workers and schedulers" actions={<span className="muted text-muted small text-ui-sm">a process is alive when it reported in within 45 seconds</span>}>
+            <Card icon="jobs" flush title="Workers and schedulers" actions={<span className="muted text-muted small text-ui-sm">a process is alive when it reported in within 45 seconds</span>}>
               {stale.length > 0 && <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ padding: "12px 16px", justifyContent: "space-between" }}>
                 <span className="muted text-muted small text-ui-sm">{stale.length} process{stale.length > 1 ? "es" : ""} have not reported in for over an hour — usually old runs that were stopped without a clean shutdown.</span>
                 <button type="button" className="chip [border:1px_solid_var(--line)] bg-none text-muted rounded-xs p-[3px_11px] font-inherit text-xs cursor-pointer [&:hover]:border-brand [&:hover]:text-brand-strong [&.on]:border-solid [&.on]:border-brand [&.on]:bg-brand-soft [&.on]:text-brand-strong font-semibold [&.active]:bg-text [&.active]:text-surface [&.active]:border-text" onClick={() => setShowStale(!showStale)}>{showStale ? "Hide" : "Show"} stale</button>
@@ -28,7 +28,7 @@ export default function Workers({ env, system }) {
                 { label: "Last seen", render: (x) => x.last_seen ? when(x.last_seen) : <span className="faint text-faint">—</span> },
               ]} />
             </Card>
-            <Card flush title="Schedules" actions={<Link className="link-more inline-flex items-center gap-0.5 text-ui-sm font-semibold text-muted [&:hover]:text-text" href={envHref(env, "schedules")}>Manage schedules</Link>}>
+            <Card icon="schedules" flush title="Schedules" actions={<Link className="link-more inline-flex items-center gap-0.5 text-ui-sm font-semibold text-muted [&:hover]:text-text" href={envHref(env, "schedules")}>Manage schedules</Link>}>
               <Table rows={s.schedules} empty="No schedules defined." columns={[
                 { label: "Name", render: (x) => <b>{x.name}</b> },
                 { label: "When", render: (x) => <code>{x.cron || (x.interval_seconds ? `every ${x.interval_seconds}s` : "—")}</code> },

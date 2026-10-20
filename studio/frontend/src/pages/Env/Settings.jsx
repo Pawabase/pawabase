@@ -2,7 +2,7 @@ import { Link, router } from "@inertiajs/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Layout, { useSection, envHref } from "../../components/Layout";
 import { Icon } from "../../components/icons";
-import { Badge, Button, Card, Field, IconButton, KeyValue, Loading, Modal, PageHead, Section, Switch, TagInput, useAction } from "../../components/ui";
+import { Badge, Button, Card, Field, IconButton, KeyValue, Loading, Modal, Section, Switch, TagInput, useAction } from "../../components/ui";
 import { PolicyPicker } from "../../components/definitions/PolicyPicker";
 import { del, envPath, patch, useApi } from "../../lib/api";
 
@@ -85,7 +85,6 @@ export default function Settings({ env }) {
   const policyNames = (policiesState.data?.data || []).map((p) => p.name);
   return (
     <Layout title="Settings" subnav={{ title: "Settings", groups: [{ items: SETTINGS_SECTIONS.map(([key, label, icon]) => ({ key, label, icon })) }], active, onSelect: setActive }}>
-      <PageHead title={SETTINGS_SECTIONS.find(([key]) => key === active)?.[1] || "Settings"} description={`Behaviour, access and defaults for the ${env} environment. Infrastructure and limits come from environment variables, not from here.`} />
       <Loading state={state}>
         {(data) => <SettingsBody active={active} key={data.version + ":" + JSON.stringify(data.settings)} env={env} path={path} data={data} usage={usage.data} configuration={configuration.data} policyNames={policyNames} reload={state.reload} />}
       </Loading>
@@ -133,14 +132,17 @@ function SettingsBody({ active, env, path, data, usage, configuration, policyNam
     maintenance: maintenance.enabled ? <Badge tone="yellow">on</Badge> : null,
   };
 
-  const title = SETTINGS_SECTIONS.find(([key]) => key === active)?.[1];
+  const section = SETTINGS_SECTIONS.find(([key]) => key === active);
+  const title = section?.[1] || "Settings";
+  const icon = section?.[2];
+  const description = `Behaviour, access and defaults for the ${env} environment. Infrastructure and limits come from environment variables, not from here.`;
   const editable = !["infrastructure", "limits", "advanced"].includes(active);
 
   return <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
     {data.settings?.deletion_pending && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error"><b>Deletion queued.</b> This environment is being purged in the background.</div>}
     {maintenance.enabled && !dirty && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] warn"><b>Maintenance mode is on.</b> Publishable keys get 503 responses{maintenance.allow_secret_keys ? "; secret keys still work" : " and so do secret keys"}.</div>}
     <div style={{ display: "flex", gap: 18, alignItems: "flex-start" }}>
-      <Card title={title} className="grow flex-1 min-w-0" actions={editable && <>
+      <Card title={title} description={description} icon={icon} className="grow flex-1 min-w-0" actions={editable && <>
         {dirty && <Button size="sm" disabled={busy} onClick={() => setDraft(original)}>Discard</Button>}
         <Button variant="primary" size="sm" disabled={busy || !dirty} onClick={save}>{dirty ? `Save ${changedKeys.length} change${changedKeys.length === 1 ? "" : "s"}` : "Save changes"}</Button>
       </>}>
@@ -171,7 +173,7 @@ function SettingsBody({ active, env, path, data, usage, configuration, policyNam
         {active === "realtime" && <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 16 }}>
           <Switch checked={realtime.allow_client_publish !== false} onChange={(v) => setRealtime({ allow_client_publish: v })} label="Clients may publish" hint="Off restricts publishing to servers and flows; clients can still subscribe." />
           <Field label="Default policy" hint="Used by any channel that matches no rule below."><PolicyPicker value={realtime.default_policy ?? null} onChange={(v) => setRealtime({ default_policy: v })} policies={policyNames} nullLabel="Default (authenticated)" /></Field>
-          <Section title="Channel rules" description="Rules are matched top to bottom. Patterns support {{ auth.org }} templates and * wildcards.">
+          <Section icon="realtime" title="Channel rules" description="Rules are matched top to bottom. Patterns support {{ auth.org }} templates and * wildcards.">
             {rules.length === 0 && <p className="muted text-muted" style={{ margin: 0 }}>No rules yet — every channel uses the default policy.</p>}
             <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 10 }}>{rules.map((rule, i) => <div key={i} className="card bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-md p-4 [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [&.flush_.card-head_+_*]:[border-top:1px_solid_var(--line)] [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:transform-[none]! [a&:hover]:shadow-none [border:1px_solid_var(--line)] shadow-none [&_>_.spread:first-child]:mb-3! [&_>_.spread_h2]:text-base [&_>_.spread_h2]:font-semibold [&_>_.spread_h2]:tracking-[-0.01em] [&.flush_>_.card-head_+_*]:border-t-0 [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&_>_.spread_.chips]:gap-0 [&_>_.spread_.chips]:flex-nowrap [&_>_.spread_.chips]:[border:1px_solid_var(--line-2)] [&_>_.spread_.chips]:rounded-sm [&_>_.spread_.chips]:overflow-hidden [&_>_.spread_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_>_.spread_.chip]:p-[0_10px] [&_>_.spread_.chip]:border-0 [&_>_.spread_.chip]:[border-left:1px_solid_var(--line-2)] [&_>_.spread_.chip]:rounded-none [&_>_.spread_.chip]:bg-transparent [&_>_.spread_.chip]:text-muted [&_>_.spread_.chip]:text-xs [&_>_.spread_.chip]:font-medium-plus [&_>_.spread_.chip:first-child]:border-l-0 [&_>_.spread_.chip.active]:bg-press [&_>_.spread_.chip.active]:text-text [&_>_.spread_.chip.on]:bg-press [&_>_.spread_.chip.on]:text-text [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100 sunken" style={{ padding: 14 }}>
               <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ justifyContent: "space-between", alignItems: "flex-end" }}><Field label="Pattern" className="grow flex-1 min-w-0"><input value={rule.pattern || ""} onChange={(e) => setRules(rules.map((r, j) => j === i ? { ...r, pattern: e.target.value } : r))} placeholder="org:{{ auth.org }}" /></Field><IconButton icon="trash" label="Remove rule" onClick={() => setRules(rules.filter((_, j) => j !== i))} /></div>
@@ -290,13 +292,13 @@ function Advanced({ env, path, data, settings, draftDirty, onImport, onDelete, r
     }
   };
   return <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 22 }}>
-    <Section title="Environment" description="The default environment answers requests that name no environment.">
+    <Section icon="networking" title="Environment" description="The default environment answers requests that name no environment.">
       <div className="spread flex items-center justify-between gap-3">
         <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5">{data.is_default ? <Badge tone="green">default environment</Badge> : <Button disabled={busy} onClick={async () => { if (await run(() => patch(path, { is_default: true }), "Now the default")) reload(); }}>Make default</Button>}<span className="muted text-muted">Definitions version {data.version}</span></div>
         <Link className="link-more inline-flex items-center gap-0.5 text-ui-sm font-semibold text-muted [&:hover]:text-text" href={envHref(env, "releases")}>Releases <Icon name="chevronRight" size={14} /></Link>
       </div>
     </Section>
-    <Section title="Export and import" description="Move settings between environments. Importing fills the form; nothing changes until you review it and press Save.">
+    <Section icon="upload" title="Export and import" description="Move settings between environments. Importing fills the form; nothing changes until you review it and press Save.">
       <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 10 }}>
         <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5"><Button size="sm" onClick={download}><Icon name="upload" />Download settings.json</Button></div>
         <Field label="Import settings" hint={draftDirty ? "You have unsaved changes; importing merges over them." : "Paste an exported settings.json. Keys not in the file are left alone."} error={error}>
@@ -305,7 +307,7 @@ function Advanced({ env, path, data, settings, draftDirty, onImport, onDelete, r
         <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5"><Button size="sm" disabled={!text.trim()} onClick={load}>Load into form</Button></div>
       </div>
     </Section>
-    {!data.is_default && <Section title="Danger zone" description="Deleting an environment removes its data, keys, secrets and users for good.">
+    {!data.is_default && <Section icon="trash" title="Danger zone" description="Deleting an environment removes its data, keys, secrets and users for good.">
       <Button variant="danger" disabled={data.settings?.deletion_pending} onClick={onDelete}>{data.settings?.deletion_pending ? "Deletion queued" : "Delete environment"}</Button>
     </Section>}
   </div>;

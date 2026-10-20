@@ -33,11 +33,10 @@ export default function Transfer({ env, base }) {
   };
   return (
     <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
-      <Card title="Export" actions={<Button variant="primary" size="sm" disabled={busy} onClick={download}>Download file</Button>}>
-        <p className="muted text-muted" style={{ margin: 0, maxWidth: 640 }}>Roles with their permissions, users with their password hashes, linked social sign-ins, authenticator apps, and organizations with members and teams. User ids are kept, so records that point at a user still do.</p>
+      <Card icon="upload" title="Export" description={<>Roles with their permissions, users with their password hashes, linked social sign-ins, authenticator apps, and organizations with members and teams. User ids are kept, so records that point at a user still do.</>} actions={<Button variant="primary" size="sm" disabled={busy} onClick={download}>Download file</Button>}>
         <p className="hint text-xs font-book text-muted leading-[1.45]" style={{ margin: "10px 0 0" }}>Left out: sessions, tokens, sign-in history and pending invitations. Everyone signs in again after an import. The file holds password hashes, so keep it private.</p>
       </Card>
-      <Card title="Import">
+      <Card icon="upload" title="Import">
         <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
           <Field label="Identities file"><input type="file" accept="application/json,.json" onChange={(e) => read(e.target.files[0])} /></Field>
           {file?.invalid && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error">That file is not valid JSON.</div>}

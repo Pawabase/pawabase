@@ -41,7 +41,7 @@ export default function RequestTrace({ value, onClose }) {
           {summary.slowest_span && <div className="faint text-faint">Slowest step: <b>{summary.slowest_span.kind}</b> <code>{summary.slowest_span.name.slice(0, 80)}</code> took {ms(summary.slowest_span.duration_ms)}.</div>}
         </section>
 
-        <Section title={`Logs (${(value.logs || []).length})`} empty={!value.logs?.length}>
+        <Section icon="terminal" title={`Logs (${(value.logs || []).length})`} empty={!value.logs?.length}>
           <div className="log-list grid gap-1.5 font-mono text-ui-sm">
             {(value.logs || []).map((log, index) => (
               <div key={`${log.run_id || "request"}-${index}`} className="log-line flex items-baseline gap-2.5 flex-wrap p-[6px_10px] rounded-sm bg-sunken">
@@ -54,9 +54,9 @@ export default function RequestTrace({ value, onClose }) {
           </div>
         </Section>
 
-        <Section title={`Functions (${(value.function_runs || []).length})`} empty={!value.function_runs?.length}>
+        <Section icon="functions" title={`Functions (${(value.function_runs || []).length})`} empty={!value.function_runs?.length}>
           {(value.function_runs || []).map((run) => (
-            <Card key={run.id} title={run.function} actions={<Status value={run.status} />}>
+            <Card icon="functions" key={run.id} title={run.function} actions={<Status value={run.status} />}>
               <div className="faint text-faint">{run.trigger} · {ms(run.duration_ms)} · run <code>{run.id}</code></div>
               {run.error && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error">{run.error}</div>}
               <details><summary>Input and output</summary><Json value={{ input: run.input, output: run.output }} /></details>
@@ -64,9 +64,9 @@ export default function RequestTrace({ value, onClose }) {
           ))}
         </Section>
 
-        <Section title={`Flow runs (${(value.flow_runs || []).length})`} empty={!value.flow_runs?.length}>
+        <Section icon="flows" title={`Flow runs (${(value.flow_runs || []).length})`} empty={!value.flow_runs?.length}>
           {(value.flow_runs || []).map((run) => (
-            <Card key={run.id} title={run.flow} actions={<Status value={run.status} />}>
+            <Card icon="flows" key={run.id} title={run.flow} actions={<Status value={run.status} />}>
               <div className="faint text-faint">{run.trigger} · {ms(run.duration_ms)} · run <code>{run.id}</code></div>
               {run.error && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error">{run.error}</div>}
               <details><summary>Input and output</summary><Json value={{ input: run.input, output: run.output }} /></details>
@@ -75,12 +75,12 @@ export default function RequestTrace({ value, onClose }) {
           ))}
         </Section>
 
-        <Section title={`Events (${(value.events || []).length})`} empty={!value.events?.length}>
-          {(value.events || []).map((event) => <Card key={event.id} title={<code>{event.name}</code>}><Json value={event} /></Card>)}
+        <Section icon="events" title={`Events (${(value.events || []).length})`} empty={!value.events?.length}>
+          {(value.events || []).map((event) => <Card icon="events" key={event.id} title={<code>{event.name}</code>}><Json value={event} /></Card>)}
         </Section>
 
-        <Section title={`Jobs (${(value.jobs || []).length})`} empty={!value.jobs?.length}>
-          {(value.jobs || []).map((job) => <Card key={job.id} title={job.job} actions={<Status value={job.status} />}><Json value={job} /></Card>)}
+        <Section icon="jobs" title={`Jobs (${(value.jobs || []).length})`} empty={!value.jobs?.length}>
+          {(value.jobs || []).map((job) => <Card icon="jobs" key={job.id} title={job.job} actions={<Status value={job.status} />}><Json value={job} /></Card>)}
         </Section>
 
         {request && (

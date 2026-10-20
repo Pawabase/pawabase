@@ -13,7 +13,7 @@ export default function Devices({ env, base }) {
     <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
       <Loading state={config.state}>
         {() => (
-          <SettingsPanel title="Device tracking" description="Pawabase remembers the browsers and apps a person signs in from." config={config}>
+          <SettingsPanel icon="terminal" title="Device tracking" description="Pawabase remembers the browsers and apps a person signs in from." config={config}>
             <Switch checked={policy.track} onChange={(v) => setPolicy({ track: v })} label="Track devices" hint="Recorded at sign-in, by the id the app or hosted page keeps." />
             <Switch checked={policy.notify_new} onChange={(v) => setPolicy({ notify_new: v })} label="Email when a new device signs in" hint="Not sent for a person's first ever sign-in." />
             <div className="grid grid gap-3.5 grid-cols-[repeat(auto-fill,_minmax(220px,_1fr))] [&.wide]:grid-cols-[repeat(auto-fill,_minmax(320px,_1fr))] [&.two]:grid-cols-2 [&.three]:grid-cols-3 max-wide:[&.three.insights]:grid-cols-2 max-navigation:[&.two]:grid-cols-1 max-navigation:[&.three]:grid-cols-1 max-navigation:[&.three.insights]:grid-cols-1 [&:has(>_.tile)]:grid [&:has(>_.tile)]:grid-cols-[repeat(auto-fit,_minmax(160px,_1fr))] [&:has(>_.tile)]:gap-0 [&:has(>_.tile)]:[border:1px_solid_var(--line)] [&:has(>_.tile)]:rounded-sm [&:has(>_.tile)]:overflow-hidden [&:has(>_.tile)]:mb-4 [&:has(>_.stat-tile)]:grid [&:has(>_.stat-tile)]:grid-cols-[repeat(auto-fit,_minmax(160px,_1fr))] [&:has(>_.stat-tile)]:gap-0 [&:has(>_.stat-tile)]:[border:1px_solid_var(--line)] [&:has(>_.stat-tile)]:rounded-sm [&:has(>_.stat-tile)]:overflow-hidden [&:has(>_.stat-tile)]:mb-4 two">
@@ -27,7 +27,7 @@ export default function Devices({ env, base }) {
           </SettingsPanel>
         )}
       </Loading>
-      <Card flush title="Recent devices">
+      <Card icon="terminal" flush title="Recent devices">
         <Loading state={devices} empty="No devices yet.">
           {() => (
             <Table

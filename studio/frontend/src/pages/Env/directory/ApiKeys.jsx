@@ -13,7 +13,7 @@ export default function ApiKeys({ env, base }) {
     <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
       <Loading state={config.state}>
         {() => (
-          <SettingsPanel title="User API keys" description="A person creates a key, then sends it as Authorization: Bearer pbu_… along with your project key. It acts as them, with their roles and permissions, narrowed to the scopes they choose. Keys stop working when their owner is disabled." config={config}>
+          <SettingsPanel icon="keys" title="User API keys" description="A person creates a key, then sends it as Authorization: Bearer pbu_… along with your project key. It acts as them, with their roles and permissions, narrowed to the scopes they choose. Keys stop working when their owner is disabled." config={config}>
             <Switch checked={policy.enabled} onChange={(v) => setPolicy({ enabled: v })} label="Let people create API keys" hint="Off, existing keys stop working too." />
             <div className="grid grid gap-3.5 grid-cols-[repeat(auto-fill,_minmax(220px,_1fr))] [&.wide]:grid-cols-[repeat(auto-fill,_minmax(320px,_1fr))] [&.two]:grid-cols-2 [&.three]:grid-cols-3 max-wide:[&.three.insights]:grid-cols-2 max-navigation:[&.two]:grid-cols-1 max-navigation:[&.three]:grid-cols-1 max-navigation:[&.three.insights]:grid-cols-1 [&:has(>_.tile)]:grid [&:has(>_.tile)]:grid-cols-[repeat(auto-fit,_minmax(160px,_1fr))] [&:has(>_.tile)]:gap-0 [&:has(>_.tile)]:[border:1px_solid_var(--line)] [&:has(>_.tile)]:rounded-sm [&:has(>_.tile)]:overflow-hidden [&:has(>_.tile)]:mb-4 [&:has(>_.stat-tile)]:grid [&:has(>_.stat-tile)]:grid-cols-[repeat(auto-fit,_minmax(160px,_1fr))] [&:has(>_.stat-tile)]:gap-0 [&:has(>_.stat-tile)]:[border:1px_solid_var(--line)] [&:has(>_.stat-tile)]:rounded-sm [&:has(>_.stat-tile)]:overflow-hidden [&:has(>_.stat-tile)]:mb-4 two">
               <Field label="Keys per person"><input type="number" min={1} max={100} value={policy.max_per_user} onChange={(e) => setPolicy({ max_per_user: Math.min(100, Math.max(1, Number(e.target.value) || 10)) })} style={{ maxWidth: 140 }} /></Field>
@@ -23,7 +23,7 @@ export default function ApiKeys({ env, base }) {
           </SettingsPanel>
         )}
       </Loading>
-      <Card flush title="Keys in this environment">
+      <Card icon="keys" flush title="Keys in this environment">
         <Loading state={keys} empty="Nobody has created a key.">
           {() => (
             <Table

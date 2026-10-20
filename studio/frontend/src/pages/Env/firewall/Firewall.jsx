@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../../../components/icons";
-import { Badge, Button, Card, EmptyState, Field, JsonInput, Loading, Modal, PageHead, Segmented, Sheet, Switch, Table, TagInput, useAction, when } from "../../../components/ui";
+import { Badge, Button, Card, EmptyState, Field, JsonInput, Loading, Modal, PageHead, Section, Segmented, Sheet, Switch, Table, TagInput, useAction, when } from "../../../components/ui";
 import { del, patch, post, put, useApi } from "../../../lib/api";
 import { Stat, StatStrip } from "../observability/kit";
 
@@ -87,7 +87,7 @@ export function FirewallOverview({ base, onBan, onNewRule }) {
                 <Stat value={s.active_bans} label="Active bans" />
               </StatStrip>
               {Object.keys(hourly).length > 0 && (
-                <Card title="Activity">
+                <Card icon="events" title="Activity">
                   <div className="fw-bars flex items-end gap-[3px] h-[96px] [&_i]:flex-1 [&_i]:min-w-[3px] [&_i]:bg-danger [&_i]:opacity-[0.75] [&_i]:rounded-[2px_2px_0_0]">{Object.entries(hourly).map(([hour, count]) => <i key={hour} title={`${new Date(hour).toLocaleString()} · ${count}`} style={{ height: `${Math.max(4, (count / peak) * 100)}%` }} />)}</div>
                 </Card>
               )}
@@ -118,7 +118,7 @@ export function FirewallOverview({ base, onBan, onNewRule }) {
 function TopList({ title, rows, action, mono, empty = "Nothing yet." }) {
   const max = Math.max(1, ...(rows || []).map((r) => r.count));
   return (
-    <Card title={title} flush>
+    <Card icon="policies" title={title} flush>
       {!rows?.length ? <p className="muted text-muted" style={{ padding: 16 }}>{empty}</p> : (
         <div className="fw-top flex flex-col">
           {rows.map((r) => (
@@ -303,7 +303,7 @@ export function Bans({ base, prefill, onPrefilled }) {
   return (
     <>
       <PageHead title="IP bans" description="Addresses and ranges refused before any rule runs. Rate-limit rules and automatic bans add to this list; an allow rule still lets an address through." actions={<Button variant="primary" onClick={() => setAdding({ ip: "", seconds: 86400, reason: "" })}><Icon name="plus" />Ban an address</Button>} />
-      <Card flush title={<Segmented options={[[false, "Active"], [true, "All, with expired"]]} value={history} onChange={setHistory} />}>
+      <Card icon="clock" flush title={<Segmented options={[[false, "Active"], [true, "All, with expired"]]} value={history} onChange={setHistory} />}>
         <Loading state={bans} empty="No address is banned.">
           {(data) => (
             <Table rows={data.data} empty="No address is banned." columns={[
@@ -372,9 +372,9 @@ export function FirewallTester({ base }) {
   return (
     <>
       <PageHead title="Test a request" description="Describe a request and see, step by step, what the firewall would do with it. Nothing is sent and nothing is counted." />
-      <div className="fw-tester grid grid-cols-[minmax(0,_1.2fr)_minmax(0,_1fr)] gap-3.5 items-start max-workbench:grid-cols-1 [&.fw-flat]:gap-0 [&.fw-flat_>_.card]:p-[20px_var(--gutter)] [&.fw-flat_>_.card:first-child]:[border-right:1px_solid_var(--line)] max-workbench:[&.fw-flat_>_.card:first-child]:border-r-0 max-workbench:[&.fw-flat_>_.card:first-child]:[border-bottom:1px_solid_var(--line)] fw-flat [&_>_.card]:m-0 [&_>_.card]:border-0 [&_>_.card]:rounded-none [&_>_.card]:bg-transparent [&_>_.card_>_.card-head]:p-[0_var(--gutter)]">
-        <Card title="Request">
-          <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
+      <div className="grid grid-cols-[minmax(0,_1.15fr)_minmax(0,_1fr)] gap-3 items-start max-workbench:grid-cols-1">
+        <Section icon="send" title="Request" actions={<Button variant="primary" disabled={busy || !probe.ip} onClick={async () => { const r = await run(() => post(`${base}/firewall-test`, probe)); if (r && r !== true) setResult(r); }}>Test</Button>}>
+          <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-tablet:grid-cols-1">
             <Field label="IP address"><input className="mono font-mono text-ui-sm" value={probe.ip} onChange={(e) => set({ ip: e.target.value })} /></Field>
             <Field label="Method"><select value={probe.method} onChange={(e) => set({ method: e.target.value })}>{["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE"].map((m) => <option key={m}>{m}</option>)}</select></Field>
             <Field label="Path" className="span-2"><input className="mono font-mono text-ui-sm" value={probe.path} onChange={(e) => set({ path: e.target.value })} /></Field>
@@ -384,18 +384,17 @@ export function FirewallTester({ base }) {
             <Field label="Key role"><select value={probe.role} onChange={(e) => set({ role: e.target.value })}><option value="none">No key</option><option value="anon">Publishable key</option><option value="service">Secret key</option></select></Field>
             <Field label="Headers" optional className="span-2"><JsonInput value={probe.headers} rows={3} onChange={(headers) => set({ headers: headers || {} })} /></Field>
           </div>
-          <Button variant="primary" disabled={busy || !probe.ip} onClick={async () => { const r = await run(() => post(`${base}/firewall-test`, probe)); if (r && r !== true) setResult(r); }}>Test</Button>
-        </Card>
-        <Card title="What happens">
-          {!result ? <p className="muted text-muted">Run a test to see the verdict.</p> : (
-            <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
+        </Section>
+        <Section icon="bolt" title="What happens">
+          {!result ? <p className="m-0 text-ui-sm text-muted">Run a test to see the verdict.</p> : (
+            <div className="flex flex-col gap-3">
               <div className={`fw-verdict flex items-center gap-2.5 p-[12px_14px] rounded-sm text-heading [&.block]:bg-danger-soft [&.block]:text-danger [&.allow]:bg-ok-soft [&.allow]:text-ok ${result.outcome}`}><Icon name={result.outcome === "block" ? "x" : "check"} size={18} /><b>{result.outcome === "block" ? "Blocked" : "Allowed through"}</b></div>
-              {result.steps.length === 0 ? <p className="muted text-muted">No ban, rule or managed signature applies.</p> : (
+              {result.steps.length === 0 ? <p className="m-0 text-ui-sm text-muted">No ban, rule or managed signature applies.</p> : (
                 <ol className="fw-steps m-0 pl-5 flex flex-col gap-2 text-ui">{result.steps.map((s, i) => <li key={i}><Badge>{s.step}</Badge> <b>{s.rule}</b> <span className="muted text-muted">— {s.result}</span></li>)}</ol>
               )}
             </div>
           )}
-        </Card>
+        </Section>
       </div>
     </>
   );

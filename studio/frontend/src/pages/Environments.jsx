@@ -26,7 +26,7 @@ export default function Environments({ runtime, envs }) {
           <Button variant="primary" onClick={() => setModal("env")}>New environment</Button>
         </>}
       />
-      <Card flush title="Environments" actions={<Button size="sm" onClick={() => setModal("promote")}>Promote…</Button>}>
+      <Card icon="org" flush title="Environments" actions={<Button size="sm" onClick={() => setModal("promote")}>Promote…</Button>}>
         <Table
           rows={envs}
           onRowClick={(e) => router.visit(`/envs/${e.name}`)}

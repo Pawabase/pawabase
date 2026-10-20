@@ -161,7 +161,7 @@ function SqlConsole({ env, base, tables, dialect }) {
         </div>
       ))}
       {result && (
-        <Card flush title="Result" actions={result.rows ? <span className="muted text-muted small text-ui-sm">{result.rows.length} row{result.rows.length === 1 ? "" : "s"}</span> : undefined}>
+        <Card icon="eye" flush title="Result" actions={result.rows ? <span className="muted text-muted small text-ui-sm">{result.rows.length} row{result.rows.length === 1 ? "" : "s"}</span> : undefined}>
           {result.affected !== undefined ? (
             <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] ok" style={{ margin: 16 }}>{result.affected} row(s) affected.</div>
           ) : (

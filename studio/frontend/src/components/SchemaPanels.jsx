@@ -77,7 +77,7 @@ export function SchemaPanel({ env, name, onChanged, onAdopted }) {
       {() => report && (
         <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
           {(report.external || []).length > 0 && (
-            <Card title="Changed outside Pawabase">
+            <Card icon="refresh" title="Changed outside Pawabase">
               <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
                 <p className="muted text-muted">
                   The table was changed by something other than Pawabase (the SQL console, a migration tool, another app)
@@ -137,7 +137,7 @@ export function SchemaPanel({ env, name, onChanged, onAdopted }) {
             )}
           </Card>
           {(report.retained || []).length > 0 && (
-            <Card title="Kept for rollbacks">
+            <Card icon="backups" title="Kept for rollbacks">
               <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
                 <p className="muted text-muted">These columns and tables are hidden from your API and held so a rollback can restore them. Removing them frees the space and makes those rollbacks impossible.</p>
                 {(report.retained || []).map((item) => (
@@ -153,7 +153,7 @@ export function SchemaPanel({ env, name, onChanged, onAdopted }) {
             </Card>
           )}
           {report.exists && (
-            <Card title="Columns in the table">
+            <Card icon="resources" title="Columns in the table">
               <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">
                 {(report.columns || []).map((column) => <Badge key={column.name}>{column.name} · {String(column.type).toLowerCase()}</Badge>)}
               </div>
@@ -408,7 +408,7 @@ export function IndexesPanel({ env, name, onChanged }) {
       {() => data && (
         <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
           {(data.pending || []).length > 0 && (
-            <Card title="Waiting to be applied">
+            <Card icon="clock" title="Waiting to be applied">
               <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
                 <p className="muted text-muted">Saving an index changes the definition, not the table. Building one reads the whole table, so on a large table it takes a while{data.capabilities?.concurrent ? " (choose “build without blocking writes” to keep writes flowing)" : " and may block writes"}.</p>
                 {data.pending.map((c) => (

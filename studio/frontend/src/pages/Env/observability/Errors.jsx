@@ -6,7 +6,7 @@ export default function Errors({ env, minutes, onTrace, onRoute }) {
   const base = envPath(env);
   const state = useApi(`${base}/observability/errors`, { params: { minutes }, interval: 15000 });
   return (
-    <Card flush title="Failures grouped by what went wrong" actions={state.data ? <span className="faint text-faint">{state.data.failures.toLocaleString()} failed requests</span> : null}>
+    <Card icon="pulse" flush title="Failures grouped by what went wrong" actions={state.data ? <span className="faint text-faint">{state.data.failures.toLocaleString()} failed requests</span> : null}>
       <Loading state={state}>
         {(d) => <Table rows={d.groups} empty="No failures in this window." onRowClick={(g) => onTrace(g.sample_request_id)} columns={[
           { label: "Status", render: (g) => <Badge tone={statusTone(g.status)}>{g.status}</Badge> },

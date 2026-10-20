@@ -87,7 +87,7 @@ export default function Backups({ env }) {
       <PageHead title="Backups" description="Save everything that makes up this environment, on a schedule or on demand, and restore from it later. Or download it as one file to restore into another environment." />
       <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
         <Snapshots env={env} base={base} list={snapshots} />
-        <Card title="Download a backup">
+        <Card icon="backups" title="Download a backup">
           <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
             {PARTS.map(([key, label, hint]) => (
               <label className="check [label&]:flex [label&]:items-center [label&]:gap-2 [label&]:text-text [label&]:text-ui" key={key} style={{ alignItems: "flex-start" }}>
@@ -102,7 +102,7 @@ export default function Backups({ env }) {
           </div>
         </Card>
 
-        <Card title="Restore from a backup">
+        <Card icon="backups" title="Restore from a backup">
           <div className="restore-step grid gap-3.5">
             <label className={`dropzone grid gap-1 justify-items-center text-center p-[26px_18px] [border:2px_dashed_var(--line-strong,_var(--line))] rounded-sm bg-sunken cursor-pointer transition-[border-color_0.15s,_background_0.15s] [&:hover]:[border-color:var(--brand,_#7c6ee6)] [&:hover]:bg-lavender [&.over]:[border-color:var(--brand,_#7c6ee6)] [&.over]:bg-lavender [&_b]:text-base [&_input]:hidden ${over ? "over" : ""}`} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); setOver(false); const dropped = e.dataTransfer.files?.[0]; if (dropped) readFile(dropped); }}>
               <input ref={input} type="file" accept="application/json,.json" onChange={(e) => e.target.files?.[0] && readFile(e.target.files[0])} />

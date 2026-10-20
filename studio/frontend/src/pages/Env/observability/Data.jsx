@@ -29,7 +29,7 @@ export function Database({ env }) {
   const infra = overview.data?.infrastructure || {};
   return (
     <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
-      <Card title="Infrastructure" actions={<Link className="link-more inline-flex items-center gap-0.5 text-ui-sm font-semibold text-muted [&:hover]:text-text" href={envHref(env, "database")}>Open database console</Link>}>
+      <Card icon="database" title="Infrastructure" actions={<Link className="link-more inline-flex items-center gap-0.5 text-ui-sm font-semibold text-muted [&:hover]:text-text" href={envHref(env, "database")}>Open database console</Link>}>
         <Loading state={overview}>
           {() => <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap" style={{ gap: 28 }}>
             {[["Database", `${infra.database}${database.data?.dialect ? ` (${database.data.dialect})` : ""}`], ["Storage", infra.storage], ["Mail", infra.mail], ["Cache", infra.cache], ["Queue", infra.queue], ["Event bus", infra.events]].map(([label, value]) => (
@@ -38,16 +38,16 @@ export function Database({ env }) {
           </div>}
         </Loading>
       </Card>
-      {overview.data?.problems?.length > 0 && <Card title="Definition problems" actions={<Badge tone="yellow">{overview.data.problems.length}</Badge>}>
+      {overview.data?.problems?.length > 0 && <Card icon="policies" title="Definition problems" actions={<Badge tone="yellow">{overview.data.problems.length}</Badge>}>
         <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 6 }}>{overview.data.problems.slice(0, 10).map((p, i) => <div key={i} className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] warn">{typeof p === "string" ? p : JSON.stringify(p)}</div>)}</div>
       </Card>}
-      <Card flush title="Tables" actions={<span className="muted text-muted small text-ui-sm">{tables.length} total</span>}>
+      <Card icon="resources" flush title="Tables" actions={<span className="muted text-muted small text-ui-sm">{tables.length} total</span>}>
         <Table rows={tables.map((t) => ({ ...t, id: t.name }))} empty="No tables yet." columns={[
           { label: "Table", render: (t) => <code>{t.name}</code> },
           { label: "Resource", render: (t) => t.resource ? <Badge tone="blue">{t.resource}</Badge> : <span className="faint text-faint">unmanaged</span> },
         ]} />
       </Card>
-      <Card flush title="Buckets" actions={<Link className="link-more inline-flex items-center gap-0.5 text-ui-sm font-semibold text-muted [&:hover]:text-text" href={envHref(env, "storage")}>Open storage</Link>}>
+      <Card icon="buckets" flush title="Buckets" actions={<Link className="link-more inline-flex items-center gap-0.5 text-ui-sm font-semibold text-muted [&:hover]:text-text" href={envHref(env, "storage")}>Open storage</Link>}>
         <Loading state={buckets} empty="No buckets defined.">
           {(d) => <Table rows={(d.data || d).map((b) => ({ ...b, id: b.name }))} columns={[
             { label: "Bucket", render: (b) => <b>{b.name}</b> }, { label: "Access", render: (b) => <Badge>{b.access || b.policy || "private"}</Badge> },
@@ -72,7 +72,7 @@ export function CacheAndMetrics({ env, minutes }) {
   const flat = Object.entries(stats).filter(([, v]) => typeof v === "number" || typeof v === "string");
   return (
     <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
-      <Card title="Cache" actions={<InvalidateCache base={base} />}>
+      <Card icon="refresh" title="Cache" actions={<InvalidateCache base={base} />}>
         <Loading state={cache}>
           {() => flat.length
             ? <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap" style={{ gap: 28 }}>{flat.map(([k, v]) => <span key={k}><span className="muted text-muted">{k.replace(/_/g, " ")}</span><div><b>{typeof v === "number" ? num(v) : v}</b></div></span>)}</div>
@@ -86,7 +86,7 @@ export function CacheAndMetrics({ env, minutes }) {
               const max = Math.max(...rows.map((r) => r.value), 1);
               const total = rows.reduce((s, r) => s + r.value, 0);
               return (
-                <Card key={name} title={<code>{name}</code>} actions={<b>{Math.round(total * 100) / 100}</b>}>
+                <Card icon="database" key={name} title={<code>{name}</code>} actions={<b>{Math.round(total * 100) / 100}</b>}>
                   <div className="bar-chart flex items-end gap-[3px] h-[80px] [&_div]:flex-1 [&_div]:bg-lavender [&_div]:rounded-[var(--r-xs)_var(--r-xs)_var(--r-xs)_var(--r-xs)] [&_div]:min-h-0.5 [&_div:hover]:bg-brand">{rows.map((r, i) => <div key={i} title={`${r.window}: ${r.value}`} style={{ height: `${(r.value / max) * 100}%` }} />)}</div>
                 </Card>
               );

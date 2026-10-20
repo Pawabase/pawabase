@@ -12,7 +12,7 @@ export default function Sessions({ env, base }) {
   const end = async (row) => { if (await run(() => del(`${base}/sessions/${row.id}`, AUTH), "Session ended")) sessions.reload(); };
   return (
     <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
-      <Card flush title="Active sessions" actions={<span className="muted text-muted small text-ui-sm">{rows.length} signed in</span>}>
+      <Card icon="terminal" flush title="Active sessions" actions={<span className="muted text-muted small text-ui-sm">{rows.length} signed in</span>}>
         <Loading state={sessions} empty="Nobody is signed in.">
           {() => (
             <Table
@@ -34,7 +34,7 @@ export default function Sessions({ env, base }) {
       </Card>
       <Loading state={config.state}>
         {() => (
-          <SettingsPanel title="Session lifetime" description="Access tokens are short and refresh quietly. A refresh token that is used twice ends the whole session, on the assumption it was stolen." config={config}>
+          <SettingsPanel icon="clock" title="Session lifetime" description="Access tokens are short and refresh quietly. A refresh token that is used twice ends the whole session, on the assumption it was stolen." config={config}>
             <div className="grid grid gap-3.5 grid-cols-[repeat(auto-fill,_minmax(220px,_1fr))] [&.wide]:grid-cols-[repeat(auto-fill,_minmax(320px,_1fr))] [&.two]:grid-cols-2 [&.three]:grid-cols-3 max-wide:[&.three.insights]:grid-cols-2 max-navigation:[&.two]:grid-cols-1 max-navigation:[&.three]:grid-cols-1 max-navigation:[&.three.insights]:grid-cols-1 [&:has(>_.tile)]:grid [&:has(>_.tile)]:grid-cols-[repeat(auto-fit,_minmax(160px,_1fr))] [&:has(>_.tile)]:gap-0 [&:has(>_.tile)]:[border:1px_solid_var(--line)] [&:has(>_.tile)]:rounded-sm [&:has(>_.tile)]:overflow-hidden [&:has(>_.tile)]:mb-4 [&:has(>_.stat-tile)]:grid [&:has(>_.stat-tile)]:grid-cols-[repeat(auto-fit,_minmax(160px,_1fr))] [&:has(>_.stat-tile)]:gap-0 [&:has(>_.stat-tile)]:[border:1px_solid_var(--line)] [&:has(>_.stat-tile)]:rounded-sm [&:has(>_.stat-tile)]:overflow-hidden [&:has(>_.stat-tile)]:mb-4 two">
               <Field label="Access token lifetime" hint={`Seconds. Now ${duration(config.value.access_ttl)}.`}><input type="number" min={60} value={config.value.access_ttl} onChange={(e) => config.set({ access_ttl: Number(e.target.value) || 900 })} /></Field>
               <Field label="Refresh token lifetime" hint={`Seconds. Now ${duration(config.value.refresh_ttl)}. This is how long someone stays signed in without activity.`}><input type="number" min={3600} value={config.value.refresh_ttl} onChange={(e) => config.set({ refresh_ttl: Number(e.target.value) || 2592000 })} /></Field>

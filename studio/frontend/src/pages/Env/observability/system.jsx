@@ -32,7 +32,7 @@ export function Legend({ items }) {
 /** A titled time-series card. `lines` are [key, label, color, type] tuples. */
 export function SeriesCard({ title, window, data, lines, height = 200, empty }) {
   return (
-    <Card title={title} className="chart-card [&_h2]:text-heading" actions={<Legend items={lines.map(([, label, color]) => [label, color])} />}>
+    <Card icon="usage" title={title} className="chart-card [&_h2]:text-heading" actions={<Legend items={lines.map(([, label, color]) => [label, color])} />}>
       <Chart
         height={height}
         stepSeconds={window?.step_seconds}

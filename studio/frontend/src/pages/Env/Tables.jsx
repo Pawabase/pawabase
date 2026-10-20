@@ -1,5 +1,6 @@
+import { router } from "@inertiajs/react";
 import { useEffect, useMemo, useState } from "react";
-import Layout from "../../components/Layout";
+import Layout, { envHref } from "../../components/Layout";
 import { useDataSubnav } from "../../components/DataNav";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Field, PageTabs, Popover, Sheet, Spinner, Switch, copyToClipboard, useAction, useToast } from "../../components/ui";
@@ -45,7 +46,8 @@ export default function Tables({ env }) {
     const params = new URLSearchParams(window.location.search);
     return { table: params.get("table"), tab: normaliseView(params.get("tab") || "data") };
   });
-  const { subnav: dataSubnav, tables, loading, reload } = useDataSubnav(env, tabs.active);
+  const createTable = () => router.visit(`${envHref(env, "schemas")}?new`);
+  const { subnav: dataSubnav, tables, loading, reload } = useDataSubnav(env, tabs.active, { create: { label: "New table", onClick: createTable } });
   const [expanded, setExpanded] = useState(false);
   const open = (name) => setTabs((current) => ({ open: current.open.includes(name) ? current.open : [...current.open, name], active: name }));
   const close = (name) => setTabs((current) => {
@@ -110,7 +112,7 @@ export default function Tables({ env }) {
         {tabs.active ? (
           <TableTab key={tabs.active} env={env} base={base} table={tabs.active} resource={tables.find((t) => t.name === tabs.active)?.resource} initialView={tabs.active === deepLink.table ? deepLink.tab : "data"} onTablesChanged={reload} onClose={() => { reload(); close(tabs.active); }} />
         ) : (
-          <Welcome tables={tables} loading={loading} onPick={open} />
+          <Welcome env={env} tables={tables} loading={loading} onPick={open} />
         )}
       </div>
     </Layout>
@@ -144,13 +146,18 @@ function TablePicker({ tables, onPick }) {
   );
 }
 
-function Welcome({ tables, loading, onPick }) {
+function Welcome({ env, tables, loading, onPick }) {
+  const empty = !loading && tables.length === 0;
   return (
-    <div className="tbl-welcome flex-1 flex flex-col items-center justify-center gap-2 p-10 text-center [&_h2]:text-title [&_h2]:font-semibold [&_p]:m-0 [&_p]:text-muted [&_p]:text-ui">
-      <span className="tbl-welcome-icon grid place-items-center w-10 h-10 [border:1px_solid_var(--line-2)] rounded-sm text-muted"><Icon name="resources" size={20} /></span>
-      <h2>Open a table</h2>
-      <p>Pick a table on the left, or from the list below. Each one opens in its own tab.</p>
-      {loading ? <Spinner /> : (
+    <div className="tbl-welcome flex-1 flex flex-col items-center justify-center gap-2 p-10 text-center [&_h2]:text-title [&_h2]:font-semibold [&_p]:m-0 [&_p]:text-muted [&_p]:text-ui [&_p]:max-w-[440px]">
+      <span className="tbl-welcome-icon grid place-items-center text-brand"><Icon name={empty ? "database" : "resources"} size={28} /></span>
+      <h2>{empty ? "No tables yet" : "Open a table"}</h2>
+      <p>{empty ? "This environment has no tables. Create one from a resource definition, then apply it to the database." : "Pick a table on the left, or from the list below. Each one opens in its own tab."}</p>
+      {loading ? <Spinner /> : empty ? (
+        <div className="mt-3">
+          <Button variant="primary" onClick={() => router.visit(`${envHref(env, "schemas")}?new`)}><Icon name="plus" />Create table</Button>
+        </div>
+      ) : (
         <div className="tbl-welcome-list flex flex-wrap justify-center gap-1.5 max-w-[640px] mt-2.5 [&_button]:inline-flex [&_button]:items-center [&_button]:gap-1.5 [&_button]:h-[28px] [&_button]:p-[0_10px] [&_button]:[border:1px_solid_var(--line-2)] [&_button]:rounded-sm [&_button]:bg-none [&_button]:text-muted [&_button]:text-xs [&_button]:cursor-pointer [&_button:hover]:text-text [&_button:hover]:bg-hover">
           {tables.slice(0, 12).map((t) => (
             <button key={t.name} type="button" onClick={() => onPick(t.name)}><Icon name="resources" size={13} /><span className="mono font-mono text-ui-sm">{t.name}</span></button>
@@ -399,7 +406,7 @@ function ResourceColumns({ env, resource, onRowsChanged, onTablesChanged }) {
             <Button size="sm" variant="primary" disabled={busy || !!issue} onClick={save}>Save columns</Button>
           </div>
         </div>
-        <div className="resource-columns-form [&_.form-section]:p-[26px_0_30px] [&_.form-section]:border-0 [&_.form-section]:[border-top:1px_solid_var(--line)] [&_.form-section]:rounded-none [&_.form-section]:bg-transparent [&_.form-section:last-child]:border-b-0 [&_.field-card]:bg-canvas">
+        <div className="resource-columns-form [&_.form-section:last-child]:border-b-0 [&_.field-card]:bg-canvas">
           <ResourceForm body={draft} patch={(changes) => setDraft((current) => ({ ...current, ...changes }))} refs={refs} isNew={false} mode="columns" />
         </div>
         <SchemaPanel env={env} name={resource} onChanged={() => { item.reload(); onRowsChanged?.(); }} onAdopted={() => item.reload()} />
@@ -428,7 +435,7 @@ function ResourceSettings({ env, table, resource, onRowsChanged, onTablesChanged
           <div><b>Settings</b><span className="muted text-muted">Configure access, behaviour, limits and resource details.</span></div>
           <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5"><span className="hint text-xs font-book text-muted leading-[1.45]">{issue}</span><Button size="sm" variant="primary" disabled={busy || !!issue} onClick={save}>Save settings</Button></div>
         </div>
-        <div className="resource-settings-form [&_.form-section]:p-[26px_0_30px] [&_.form-section]:border-0 [&_.form-section]:[border-top:1px_solid_var(--line)] [&_.form-section]:rounded-none [&_.form-section]:bg-transparent [&_.form-grid]:flex [&_.form-grid]:flex-col [&_.form-grid]:gap-0 [&_.form-grid_>_*]:w-full [&_.form-grid_>_*]:p-[14px_0] [&_.form-grid_>_*]:[border-bottom:1px_solid_var(--line)] [&_.form-grid_>_:first-child]:pt-0 [&_.form-grid_>_:last-child]:pb-0 [&_.form-grid_>_:last-child]:border-b-0 [&_.switch]:min-h-10 [&_.switch]:items-center [&_.switch_.switch-text]:min-w-0">
+        <div className="resource-settings-form [&_.form-grid]:flex [&_.form-grid]:flex-col [&_.form-grid]:gap-0 [&_.form-grid_>_*]:w-full [&_.form-grid_>_*]:p-[14px_0] [&_.form-grid_>_*]:[border-bottom:1px_solid_var(--line)] [&_.form-grid_>_:first-child]:pt-0 [&_.form-grid_>_:last-child]:pb-0 [&_.form-grid_>_:last-child]:border-b-0 [&_.switch]:min-h-10 [&_.switch]:items-center [&_.switch_.switch-text]:min-w-0">
           <ResourceForm body={draft} patch={(changes) => setDraft((current) => current ? { ...current, ...changes } : current)} refs={refs} isNew={false} mode="settings" />
         </div>
         <TableSettings env={env} table={table} resource={resource} onDeleted={onDeleted} onDisabled={onTablesChanged} embedded />
@@ -519,7 +526,7 @@ function TableSettings({ env, table, resource, onDeleted, onDisabled, embedded =
     <div className={embedded ? "resource-settings-operations" : "stack"} style={embedded ? undefined : { padding: 16, maxWidth: 560 }}>
       {resource && (
         <>
-          <div className="card bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-md p-4 [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [&.flush_.card-head_+_*]:[border-top:1px_solid_var(--line)] [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:transform-[none]! [a&:hover]:shadow-none [border:1px_solid_var(--line)] shadow-none [&_>_.spread:first-child]:mb-3! [&_>_.spread_h2]:text-base [&_>_.spread_h2]:font-semibold [&_>_.spread_h2]:tracking-[-0.01em] [&.flush_>_.card-head_+_*]:border-t-0 [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&_>_.spread_.chips]:gap-0 [&_>_.spread_.chips]:flex-nowrap [&_>_.spread_.chips]:[border:1px_solid_var(--line-2)] [&_>_.spread_.chips]:rounded-sm [&_>_.spread_.chips]:overflow-hidden [&_>_.spread_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_>_.spread_.chip]:p-[0_10px] [&_>_.spread_.chip]:border-0 [&_>_.spread_.chip]:[border-left:1px_solid_var(--line-2)] [&_>_.spread_.chip]:rounded-none [&_>_.spread_.chip]:bg-transparent [&_>_.spread_.chip]:text-muted [&_>_.spread_.chip]:text-xs [&_>_.spread_.chip]:font-medium-plus [&_>_.spread_.chip:first-child]:border-l-0 [&_>_.spread_.chip.active]:bg-press [&_>_.spread_.chip.active]:text-text [&_>_.spread_.chip.on]:bg-press [&_>_.spread_.chip.on]:text-text [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100" style={{ padding: 14 }}>
+          <div className="card bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-[calc(var(--r)_+_4px)] p-4 [border:1px_solid_var(--line-2)] [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [&.flush_.card-head_+_*]:[border-top:1px_solid_var(--line)] [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:transform-[none]! [a&:hover]:shadow-none [border:1px_solid_var(--line)] shadow-none [&_>_.spread:first-child]:mb-3! [&_>_.spread_h2]:text-base [&_>_.spread_h2]:font-semibold [&_>_.spread_h2]:tracking-[-0.01em] [&.flush_>_.card-head_+_*]:border-t-0 [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&_>_.spread_.chips]:gap-0 [&_>_.spread_.chips]:flex-nowrap [&_>_.spread_.chips]:[border:1px_solid_var(--line-2)] [&_>_.spread_.chips]:rounded-sm [&_>_.spread_.chips]:overflow-hidden [&_>_.spread_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_>_.spread_.chip]:p-[0_10px] [&_>_.spread_.chip]:border-0 [&_>_.spread_.chip]:[border-left:1px_solid_var(--line-2)] [&_>_.spread_.chip]:rounded-none [&_>_.spread_.chip]:bg-transparent [&_>_.spread_.chip]:text-muted [&_>_.spread_.chip]:text-xs [&_>_.spread_.chip]:font-medium-plus [&_>_.spread_.chip:first-child]:border-l-0 [&_>_.spread_.chip.active]:bg-press [&_>_.spread_.chip.active]:text-text [&_>_.spread_.chip.on]:bg-press [&_>_.spread_.chip.on]:text-text [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100" style={{ padding: 14 }}>
             <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ justifyContent: "space-between" }}>
               <div>
                 <b>Disable the API</b>
@@ -528,7 +535,7 @@ function TableSettings({ env, table, resource, onDeleted, onDisabled, embedded =
               <Button disabled={busy} onClick={disable}>Disable</Button>
             </div>
           </div>
-          <div className="card bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-md p-4 [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [&.flush_.card-head_+_*]:[border-top:1px_solid_var(--line)] [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:transform-[none]! [a&:hover]:shadow-none [border:1px_solid_var(--line)] shadow-none [&_>_.spread:first-child]:mb-3! [&_>_.spread_h2]:text-base [&_>_.spread_h2]:font-semibold [&_>_.spread_h2]:tracking-[-0.01em] [&.flush_>_.card-head_+_*]:border-t-0 [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&_>_.spread_.chips]:gap-0 [&_>_.spread_.chips]:flex-nowrap [&_>_.spread_.chips]:[border:1px_solid_var(--line-2)] [&_>_.spread_.chips]:rounded-sm [&_>_.spread_.chips]:overflow-hidden [&_>_.spread_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_>_.spread_.chip]:p-[0_10px] [&_>_.spread_.chip]:border-0 [&_>_.spread_.chip]:[border-left:1px_solid_var(--line-2)] [&_>_.spread_.chip]:rounded-none [&_>_.spread_.chip]:bg-transparent [&_>_.spread_.chip]:text-muted [&_>_.spread_.chip]:text-xs [&_>_.spread_.chip]:font-medium-plus [&_>_.spread_.chip:first-child]:border-l-0 [&_>_.spread_.chip.active]:bg-press [&_>_.spread_.chip.active]:text-text [&_>_.spread_.chip.on]:bg-press [&_>_.spread_.chip.on]:text-text [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100" style={{ padding: 14 }}>
+          <div className="card bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-[calc(var(--r)_+_4px)] p-4 [border:1px_solid_var(--line-2)] [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [&.flush_.card-head_+_*]:[border-top:1px_solid_var(--line)] [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:transform-[none]! [a&:hover]:shadow-none [border:1px_solid_var(--line)] shadow-none [&_>_.spread:first-child]:mb-3! [&_>_.spread_h2]:text-base [&_>_.spread_h2]:font-semibold [&_>_.spread_h2]:tracking-[-0.01em] [&.flush_>_.card-head_+_*]:border-t-0 [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&_>_.spread_.chips]:gap-0 [&_>_.spread_.chips]:flex-nowrap [&_>_.spread_.chips]:[border:1px_solid_var(--line-2)] [&_>_.spread_.chips]:rounded-sm [&_>_.spread_.chips]:overflow-hidden [&_>_.spread_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_>_.spread_.chip]:p-[0_10px] [&_>_.spread_.chip]:border-0 [&_>_.spread_.chip]:[border-left:1px_solid_var(--line-2)] [&_>_.spread_.chip]:rounded-none [&_>_.spread_.chip]:bg-transparent [&_>_.spread_.chip]:text-muted [&_>_.spread_.chip]:text-xs [&_>_.spread_.chip]:font-medium-plus [&_>_.spread_.chip:first-child]:border-l-0 [&_>_.spread_.chip.active]:bg-press [&_>_.spread_.chip.active]:text-text [&_>_.spread_.chip.on]:bg-press [&_>_.spread_.chip.on]:text-text [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100" style={{ padding: 14 }}>
             <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ justifyContent: "space-between" }}>
               <div>
                 <b>Broadcast changes</b>
@@ -539,7 +546,7 @@ function TableSettings({ env, table, resource, onDeleted, onDisabled, embedded =
           </div>
         </>
       )}
-      <div className="card bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-md p-4 [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [&.flush_.card-head_+_*]:[border-top:1px_solid_var(--line)] [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:transform-[none]! [a&:hover]:shadow-none [border:1px_solid_var(--line)] shadow-none [&_>_.spread:first-child]:mb-3! [&_>_.spread_h2]:text-base [&_>_.spread_h2]:font-semibold [&_>_.spread_h2]:tracking-[-0.01em] [&.flush_>_.card-head_+_*]:border-t-0 [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&_>_.spread_.chips]:gap-0 [&_>_.spread_.chips]:flex-nowrap [&_>_.spread_.chips]:[border:1px_solid_var(--line-2)] [&_>_.spread_.chips]:rounded-sm [&_>_.spread_.chips]:overflow-hidden [&_>_.spread_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_>_.spread_.chip]:p-[0_10px] [&_>_.spread_.chip]:border-0 [&_>_.spread_.chip]:[border-left:1px_solid_var(--line-2)] [&_>_.spread_.chip]:rounded-none [&_>_.spread_.chip]:bg-transparent [&_>_.spread_.chip]:text-muted [&_>_.spread_.chip]:text-xs [&_>_.spread_.chip]:font-medium-plus [&_>_.spread_.chip:first-child]:border-l-0 [&_>_.spread_.chip.active]:bg-press [&_>_.spread_.chip.active]:text-text [&_>_.spread_.chip.on]:bg-press [&_>_.spread_.chip.on]:text-text [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100" style={{ padding: 14, borderColor: "var(--danger)" }}>
+      <div className="card bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-[calc(var(--r)_+_4px)] p-4 [border:1px_solid_var(--line-2)] [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [&.flush_.card-head_+_*]:[border-top:1px_solid_var(--line)] [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:transform-[none]! [a&:hover]:shadow-none [border:1px_solid_var(--line)] shadow-none [&_>_.spread:first-child]:mb-3! [&_>_.spread_h2]:text-base [&_>_.spread_h2]:font-semibold [&_>_.spread_h2]:tracking-[-0.01em] [&.flush_>_.card-head_+_*]:border-t-0 [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&_>_.spread_.chips]:gap-0 [&_>_.spread_.chips]:flex-nowrap [&_>_.spread_.chips]:[border:1px_solid_var(--line-2)] [&_>_.spread_.chips]:rounded-sm [&_>_.spread_.chips]:overflow-hidden [&_>_.spread_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_>_.spread_.chip]:p-[0_10px] [&_>_.spread_.chip]:border-0 [&_>_.spread_.chip]:[border-left:1px_solid_var(--line-2)] [&_>_.spread_.chip]:rounded-none [&_>_.spread_.chip]:bg-transparent [&_>_.spread_.chip]:text-muted [&_>_.spread_.chip]:text-xs [&_>_.spread_.chip]:font-medium-plus [&_>_.spread_.chip:first-child]:border-l-0 [&_>_.spread_.chip.active]:bg-press [&_>_.spread_.chip.active]:text-text [&_>_.spread_.chip.on]:bg-press [&_>_.spread_.chip.on]:text-text [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100" style={{ padding: 14, borderColor: "var(--danger)" }}>
         <b>Delete table</b>
         <p className="muted text-muted">
           {resource

@@ -100,7 +100,7 @@ export default function Usage({ env }) {
         <div><span className="eyebrow text-2xs font-bold uppercase tracking-[0.09em] text-faint">FOCUS</span><h3>{active.label}</h3><p>{active.context}</p></div>
         <div className="usage-detail-reading flex-none text-right [&_strong]:block [&_strong]:text-[19px] [&_strong]:tabular-nums [&_span]:text-muted [&_span]:text-xs max-wide-tablet:text-left"><strong>{number(active.limit) ? `${fmt(active.used)} / ${fmt(active.limit)}` : "Unlimited"}</strong><span>{number(active.limit) ? `${Math.min(100, Math.round((number(active.used) / number(active.limit)) * 100))}% used` : `${fmt(active.used)} used`}</span></div>
       </section>
-      <Card title="Request policy" className="usage-policy-card m-0">
+      <Card icon="policies" title="Request policy" className="usage-policy-card m-0">
         <div className="usage-policy-grid grid grid-cols-3 gap-0 max-wide-tablet:grid-cols-1">
           <Policy label="Rate limit" value={limits.rate_limit} suffix={` / ${window}s`} description="Per API key or client address." />
           <Policy label="Daily allowance" value={limits.daily_request_limit} suffix=" requests" description="Resets at the next UTC day." />
@@ -108,7 +108,7 @@ export default function Usage({ env }) {
         </div>
         <p className="usage-note m-[20px_0_0] pt-4 [border-top:1px_solid_var(--line)] text-muted text-ui">Plan limits are set by Pawabase Cloud. Contact your organization administrator to change a plan.</p>
       </Card>
-      <Card title="Plan entitlements" className="usage-policy-card m-0" actions={<span className="usage-entitlement-count text-muted text-xs">{visibleEntitlements.length} shown</span>}>
+      <Card icon="usage" title="Plan entitlements" className="usage-policy-card m-0" actions={<span className="usage-entitlement-count text-muted text-xs">{visibleEntitlements.length} shown</span>}>
         <div className="usage-filters [&_button:focus-visible]:[outline:3px_solid_color-mix(in_srgb,_var(--brand)_30%,_transparent)] [&_button:focus-visible]:outline-offset-[2px] flex flex-wrap gap-2 m-[2px_0_18px] [&_button]:p-[7px_12px] [&_button]:[border:1px_solid_var(--line)] [&_button]:rounded-sm [&_button]:bg-surface [&_button]:text-muted [&_button]:[font:600_12px_inherit] [&_button]:cursor-pointer [&_button]:transition-[background_.15s,_border-color_.15s,_color_.15s] [&_button:hover]:border-brand [&_button:hover]:text-brand-strong [&_button.active]:border-brand [&_button.active]:bg-brand-soft [&_button.active]:text-brand-strong" role="tablist" aria-label="Entitlement category">
           {["All", "Access", "Automation", "Data", "Infrastructure"].map((item) => <button key={item} type="button" role="tab" aria-selected={category === item} className={category === item ? "active" : ""} onClick={() => setCategory(item)}>{item}</button>)}
         </div>
