@@ -77,8 +77,7 @@ export const ENV_NAV = [
   { title: "Access", items: [["users", "Users & auth"], ["policies", "Policies"], ["keys", "API keys"], ["secrets", "Secrets"], ["networking", "Networking"]] },
   { title: "Logic", items: [["functions", "Functions"], ["flows", "Flows"], ["routes", "Routes"], ["schedules", "Schedules"], ["subscriptions", "Event subscriptions"], ["webhooks", "Webhooks"]] },
   { title: "Services", items: [["mail", "Mail"], ["storage", "Storage"], ["realtime", "Realtime"]] },
-  { title: "Activity", items: [["activity", "Activity"]] },
-  { title: "Project", items: [["usage", "Usage & plan"], ["backups", "Backups"], ["status", "Status page"], ["settings", "Settings"]] },
+  { title: "Project", items: [["activity", "Activity"], ["usage", "Usage & plan"], ["backups", "Backups"], ["status", "Status page"], ["settings", "Settings"]] },
 ];
 
 // Pages that were folded into Activity still highlight it when reached from an old link.
