@@ -1,19 +1,13 @@
 import { Link, router } from "@inertiajs/react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import Layout, { useSection, envHref } from "../../components/Layout";
+import { useMemo, useRef, useState } from "react";
+import Layout, { envHref, useSection } from "../../components/Layout";
 import { Icon } from "../../components/icons";
-import { Badge, Button, Card, Field, IconButton, KeyValue, Loading, Modal, Section, Switch, TagInput, useAction } from "../../components/ui";
-import { PolicyPicker } from "../../components/definitions/PolicyPicker";
-import { del, envPath, patch, useApi } from "../../lib/api";
+import { Badge, Button, Card, Field, Loading, Modal, Section, useAction } from "../../components/ui";
+import { SaveButtons, RESERVED_KEYS, useEnvSettings } from "../../components/envSettings";
+import { del, envPath, patch } from "../../lib/api";
 
-// Settings the platform itself reads (services/api/app/env_settings.py validates
-// them; the gateway enforces ip_allowlist and maintenance; Angula reads realtime;
-// the data plane reads public_docs and cors_origins). Anything else under
-// `settings` is open-ended data flows and policies read as `$settings.<key>`.
-const KNOWN_KEYS = ["public_docs", "cors_origins", "ip_allowlist", "maintenance", "realtime", "timezone", "currency", "locale", "description"];
-const RESERVED_KEYS = ["deletion_pending"];
-const BLANK_RULE = { pattern: "", subscribe: null, publish: null, presence: true, history: 50 };
-const BLANK_MAINTENANCE = { enabled: false, message: "", retry_after: 300, allow_secret_keys: true };
+// What this environment is called and how it speaks to your users. How it is run (databases, storage, limits, the gateway)
+// is not set here: Pawabase operates that, and what you control about your API is under Networking.
 
 const CURRENCIES = [
   ["NGN", "Nigerian naira"], ["GHS", "Ghanaian cedi"], ["KES", "Kenyan shilling"], ["ZAR", "South African rand"],
@@ -34,169 +28,6 @@ function timezones() {
   return [...new Set([...AFRICAN_ZONES, ...all])];
 }
 
-const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
-
-// "Default" in a PolicyPicker is represented as `null` so the control has
-// something to show — but the backend only applies its own default when the
-// key is *absent*, not when it's present and null. Drop null/undefined keys
-// before they go over the wire so "Default" really means "not set".
-function omitNulls(value) {
-  if (Array.isArray(value)) return value.map(omitNulls);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value)
-        .filter(([, v]) => v !== null && v !== undefined)
-        .map(([k, v]) => [k, omitNulls(v)])
-    );
-  }
-  return value;
-}
-
-/** What to send: changed keys with their new value, removed keys as null (the API clears a null). */
-function diff(original, draft) {
-  const out = {};
-  for (const key of new Set([...Object.keys(original), ...Object.keys(draft)])) {
-    if (RESERVED_KEYS.includes(key)) continue;
-    const next = draft[key] === "" ? undefined : draft[key];
-    if (same(original[key], next)) continue;
-    out[key] = next === undefined ? null : omitNulls(next);
-  }
-  return out;
-}
-
-const SETTINGS_SECTIONS = [
-  ["general", "General", "settings"],
-  ["access", "API & access", "keys"],
-  ["maintenance", "Maintenance", "clock"],
-  ["realtime", "Realtime", "realtime"],
-  ["infrastructure", "Infrastructure", "database"],
-  ["limits", "Limits", "observability"],
-  ["custom", "Custom values", "braces"],
-  ["advanced", "Advanced", "terminal"],
-];
-
-export default function Settings({ env }) {
-  const [active, setActive] = useSection(SETTINGS_SECTIONS.map(([key]) => key), "general");
-  const path = envPath(env);
-  const state = useApi(path);
-  const policiesState = useApi(envPath(env, "/policies"));
-  const usage = useApi("/usage", { params: { env } });
-  const configuration = useApi(`${path}/configuration`);
-  const policyNames = (policiesState.data?.data || []).map((p) => p.name);
-  return (
-    <Layout title="Settings" subnav={{ title: "Settings", groups: [{ items: SETTINGS_SECTIONS.map(([key, label, icon]) => ({ key, label, icon })) }], active, onSelect: setActive }}>
-      <Loading state={state}>
-        {(data) => <SettingsBody active={active} key={data.version + ":" + JSON.stringify(data.settings)} env={env} path={path} data={data} usage={usage.data} configuration={configuration.data} policyNames={policyNames} reload={state.reload} />}
-      </Loading>
-    </Layout>
-  );
-}
-
-function SettingsBody({ active, env, path, data, usage, configuration, policyNames, reload }) {
-  const original = data.settings || {};
-  const [draft, setDraft] = useState(original);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [run, busy] = useAction();
-
-  const changes = useMemo(() => diff(original, draft), [original, draft]);
-  const changedKeys = Object.keys(changes);
-  const dirty = changedKeys.length > 0;
-  const set = (patchValues) => setDraft((d) => ({ ...d, ...patchValues }));
-
-  useEffect(() => {
-    if (!dirty) return undefined;
-    const warn = (e) => { e.preventDefault(); e.returnValue = ""; };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
-
-  const save = async () => {
-    if (await run(() => patch(path, { settings: changes }), "Settings saved")) reload();
-  };
-
-  const maintenance = { ...BLANK_MAINTENANCE, ...(draft.maintenance || {}) };
-  const setMaintenance = (values) => set({ maintenance: { ...maintenance, ...values } });
-  const realtime = draft.realtime || {};
-  const setRealtime = (values) => set({ realtime: { ...realtime, ...values } });
-  const rules = realtime.channels || [];
-  const setRules = (channels) => setRealtime({ channels });
-
-  const customKeys = Object.keys(draft).filter((k) => !KNOWN_KEYS.includes(k) && !RESERVED_KEYS.includes(k));
-  const custom = Object.fromEntries(customKeys.map((k) => [k, draft[k]]));
-  const setCustom = (next) => setDraft((d) => {
-    const kept = Object.fromEntries(Object.entries(d).filter(([k]) => KNOWN_KEYS.includes(k) || RESERVED_KEYS.includes(k)));
-    return { ...kept, ...next };
-  });
-
-  const badges = {
-    maintenance: maintenance.enabled ? <Badge tone="yellow">on</Badge> : null,
-  };
-
-  const section = SETTINGS_SECTIONS.find(([key]) => key === active);
-  const title = section?.[1] || "Settings";
-  const icon = section?.[2];
-  const description = `Behaviour, access and defaults for the ${env} environment. Infrastructure and limits come from environment variables, not from here.`;
-  const editable = !["infrastructure", "limits", "advanced"].includes(active);
-
-  return <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
-    {data.settings?.deletion_pending && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error"><b>Deletion queued.</b> This environment is being purged in the background.</div>}
-    {maintenance.enabled && !dirty && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] warn"><b>Maintenance mode is on.</b> Publishable keys get 503 responses{maintenance.allow_secret_keys ? "; secret keys still work" : " and so do secret keys"}.</div>}
-    <div style={{ display: "flex", gap: 18, alignItems: "flex-start" }}>
-      <Card title={title} description={description} icon={icon} className="grow flex-1 min-w-0" actions={editable && <>
-        {dirty && <Button size="sm" disabled={busy} onClick={() => setDraft(original)}>Discard</Button>}
-        <Button variant="primary" size="sm" disabled={busy || !dirty} onClick={save}>{dirty ? `Save ${changedKeys.length} change${changedKeys.length === 1 ? "" : "s"}` : "Save changes"}</Button>
-      </>}>
-        {active === "general" && <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 16 }}>
-          <Field label="Description" optional hint="What this environment is for. Shown to your team; flows can read it as $settings.description."><input maxLength={280} value={draft.description || ""} onChange={(e) => set({ description: e.target.value })} placeholder="Customer-facing production data" /></Field>
-          <Field label="Timezone" hint="Flows, schedules and mail templates read this as $settings.timezone."><TimezoneInput value={draft.timezone || ""} onChange={(v) => set({ timezone: v })} /></Field>
-          <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ gap: 16, alignItems: "flex-start" }}>
-            <Field label="Default currency" className="grow flex-1 min-w-0" hint="Read as $settings.currency. Amounts are stored in minor units."><select value={draft.currency || ""} onChange={(e) => set({ currency: e.target.value })}><option value="">Not set</option>{CURRENCIES.map(([code, name]) => <option key={code} value={code}>{code} — {name}</option>)}</select></Field>
-            <Field label="Default language" className="grow flex-1 min-w-0" hint="Read as $settings.locale."><select value={draft.locale || ""} onChange={(e) => set({ locale: e.target.value })}><option value="">Not set</option>{LOCALES.map(([code, name]) => <option key={code} value={code}>{code} — {name}</option>)}</select></Field>
-          </div>
-        </div>}
-
-        {active === "access" && <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 18 }}>
-          <Switch checked={!!draft.public_docs} onChange={(v) => set({ public_docs: v })} label="Publish generated API docs" hint="Makes the OpenAPI reference public at /docs/v1. Operators can always see it from Studio either way." />
-          <Field label="Allowed browser origins" hint="Sites allowed to call the gateway with a publishable key from JavaScript, like https://app.example.com. Leave empty to allow any origin."><TagInput value={draft.cors_origins || []} onChange={(v) => set({ cors_origins: v })} placeholder="https://app.example.com" /></Field>
-          <Field label="Secret-key IP allowlist" hint="When set, secret keys only work from these addresses or ranges (for example your servers). Publishable keys are not affected. Leave empty to allow any address."><TagInput value={draft.ip_allowlist || []} onChange={(v) => set({ ip_allowlist: v })} placeholder="203.0.113.7 or 10.0.0.0/8" /></Field>
-          {(draft.ip_allowlist || []).length > 0 && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] warn">Make sure your own server addresses are on the list before saving. Requests from anywhere else will get 403 until you change it here, and Studio is not affected. Changes reach the gateway within about 30 seconds.</div>}
-          <p className="muted text-muted" style={{ margin: 0 }}>Per-key restrictions (expiry, routes, addresses) are set on each key under <Link className="link-more inline-flex items-center gap-0.5 text-ui-sm font-semibold text-muted [&:hover]:text-text" href={envHref(env, "keys")}>API keys</Link>.</p>
-        </div>}
-
-        {active === "maintenance" && <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 16 }}>
-          <Switch checked={maintenance.enabled} onChange={(v) => setMaintenance({ enabled: v })} label="Maintenance mode" hint="The gateway answers with 503 and a Retry-After header instead of reaching your data. Applies within about 30 seconds." />
-          <Field label="Message" hint="Returned to clients in the response body."><input maxLength={300} value={maintenance.message} onChange={(e) => setMaintenance({ message: e.target.value })} placeholder="We are upgrading the database and will be back shortly." /></Field>
-          <Field label="Retry after (seconds)" hint="Sent as the Retry-After header so well-behaved clients back off."><input type="number" min={1} max={86400} value={maintenance.retry_after} onChange={(e) => setMaintenance({ retry_after: Math.min(86400, Math.max(1, Number(e.target.value) || 300)) })} /></Field>
-          <Switch checked={maintenance.allow_secret_keys} onChange={(v) => setMaintenance({ allow_secret_keys: v })} label="Let secret keys through" hint="Keeps your servers, migrations and scripts working while end users see the maintenance response." />
-        </div>}
-
-        {active === "realtime" && <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 16 }}>
-          <Switch checked={realtime.allow_client_publish !== false} onChange={(v) => setRealtime({ allow_client_publish: v })} label="Clients may publish" hint="Off restricts publishing to servers and flows; clients can still subscribe." />
-          <Field label="Default policy" hint="Used by any channel that matches no rule below."><PolicyPicker value={realtime.default_policy ?? null} onChange={(v) => setRealtime({ default_policy: v })} policies={policyNames} nullLabel="Default (authenticated)" /></Field>
-          <Section icon="realtime" title="Channel rules" description="Rules are matched top to bottom. Patterns support {{ auth.org }} templates and * wildcards.">
-            {rules.length === 0 && <p className="muted text-muted" style={{ margin: 0 }}>No rules yet — every channel uses the default policy.</p>}
-            <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 10 }}>{rules.map((rule, i) => <div key={i} className="card bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-md p-4 [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [&.flush_.card-head_+_*]:[border-top:1px_solid_var(--line)] [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:transform-[none]! [a&:hover]:shadow-none [border:1px_solid_var(--line)] shadow-none [&_>_.spread:first-child]:mb-3! [&_>_.spread_h2]:text-base [&_>_.spread_h2]:font-semibold [&_>_.spread_h2]:tracking-[-0.01em] [&.flush_>_.card-head_+_*]:border-t-0 [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&_>_.spread_.chips]:gap-0 [&_>_.spread_.chips]:flex-nowrap [&_>_.spread_.chips]:[border:1px_solid_var(--line-2)] [&_>_.spread_.chips]:rounded-sm [&_>_.spread_.chips]:overflow-hidden [&_>_.spread_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_>_.spread_.chip]:p-[0_10px] [&_>_.spread_.chip]:border-0 [&_>_.spread_.chip]:[border-left:1px_solid_var(--line-2)] [&_>_.spread_.chip]:rounded-none [&_>_.spread_.chip]:bg-transparent [&_>_.spread_.chip]:text-muted [&_>_.spread_.chip]:text-xs [&_>_.spread_.chip]:font-medium-plus [&_>_.spread_.chip:first-child]:border-l-0 [&_>_.spread_.chip.active]:bg-press [&_>_.spread_.chip.active]:text-text [&_>_.spread_.chip.on]:bg-press [&_>_.spread_.chip.on]:text-text [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100 sunken" style={{ padding: 14 }}>
-              <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ justifyContent: "space-between", alignItems: "flex-end" }}><Field label="Pattern" className="grow flex-1 min-w-0"><input value={rule.pattern || ""} onChange={(e) => setRules(rules.map((r, j) => j === i ? { ...r, pattern: e.target.value } : r))} placeholder="org:{{ auth.org }}" /></Field><IconButton icon="trash" label="Remove rule" onClick={() => setRules(rules.filter((_, j) => j !== i))} /></div>
-              <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 10 }}><Field label="Subscribe"><PolicyPicker value={rule.subscribe ?? null} onChange={(v) => setRules(rules.map((r, j) => j === i ? { ...r, subscribe: v } : r))} policies={policyNames} nullLabel="Default (authenticated)" /></Field><Field label="Publish"><PolicyPicker value={rule.publish ?? null} onChange={(v) => setRules(rules.map((r, j) => j === i ? { ...r, publish: v } : r))} policies={policyNames} nullLabel="Default (authenticated)" /></Field><Switch checked={rule.presence !== false} onChange={(v) => setRules(rules.map((r, j) => j === i ? { ...r, presence: v } : r))} label="Presence" /><Field label="History depth" hint="Messages kept for late subscribers."><input type="number" min={0} max={1000} value={rule.history ?? 50} onChange={(e) => setRules(rules.map((r, j) => j === i ? { ...r, history: Number(e.target.value) || 0 } : r))} /></Field></div>
-            </div>)}</div>
-            <Button size="sm" onClick={() => setRules([...rules, { ...BLANK_RULE }])}><Icon name="plus" />Add channel rule</Button>
-          </Section>
-        </div>}
-
-        {active === "infrastructure" && <Infrastructure env={env} configuration={configuration} deprecations={data.deprecations || []} />}
-        {active === "limits" && <Limits usage={usage} configuration={configuration} />}
-
-        {active === "custom" && <Field label="Custom values" hint="Extra keys flows and policies can read as $settings.<key>. They are not platform configuration. Names use letters, digits and underscores.">
-          <KeyValue value={custom} onChange={setCustom} keyLabel="Key" valueLabel="Value" addLabel="Add setting" />
-        </Field>}
-
-        {active === "advanced" && <Advanced env={env} path={path} data={data} settings={original} draftDirty={dirty} onImport={(incoming) => { setDraft((d) => ({ ...d, ...incoming })); setActive("general"); }} onDelete={() => setConfirmDelete(true)} reload={reload} />}
-      </Card>
-    </div>
-    {confirmDelete && <DeleteEnvironment env={env} path={path} onClose={() => setConfirmDelete(false)} onQueued={() => router.visit("/environments")} />}
-  </div>;
-}
-
 function TimezoneInput({ value, onChange }) {
   const zones = useMemo(timezones, []);
   const id = useRef(`tz-${Math.random().toString(36).slice(2)}`).current;
@@ -206,69 +37,65 @@ function TimezoneInput({ value, onChange }) {
   </>;
 }
 
-const SOURCE = { environment: ["this environment", "green"], deployment: ["every environment", "blue"], stored: ["stored (deprecated)", "yellow"], default: ["default", ""] };
+const SETTINGS_SECTIONS = [
+  ["general", "General", "settings"],
+  ["app", "App details", "mail"],
+  ["environment", "Environment", "networking"],
+];
 
-function Source({ value }) {
-  const [label, tone] = SOURCE[value] || SOURCE.default;
-  return <Badge tone={tone}>{label}</Badge>;
+export default function Settings({ env }) {
+  const [active, setActive] = useSection(SETTINGS_SECTIONS.map(([key]) => key), "general");
+  const editor = useEnvSettings(env);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const section = SETTINGS_SECTIONS.find(([key]) => key === active);
+  return (
+    <Layout title="Settings" subnav={{ title: "Settings", groups: [{ items: SETTINGS_SECTIONS.map(([key, label, icon]) => ({ key, label, icon })) }], active, onSelect: setActive }}>
+      <Loading state={editor.state}>
+        {(data) => !editor.ready ? null : (
+          <div className="mail-page" style={{ maxWidth: 760 }}>
+            {data.settings?.deletion_pending && <div className="alert error" style={{ marginBottom: 16 }}><b>This environment is being deleted.</b> It will disappear shortly.</div>}
+            {active === "general" && (
+              <Card icon="settings" title="General" description="Defaults your flows, schedules and mail templates read." actions={<SaveButtons editor={editor} />}>
+                <div className="stack">
+                  <Field label="Description" optional hint="What this environment is for. Flows can read it as $settings.description."><input maxLength={280} value={editor.draft.description || ""} onChange={(e) => editor.set({ description: e.target.value })} placeholder="Customer-facing production data" /></Field>
+                  <Field label="Timezone" hint="Schedules and emails use it. Read as $settings.timezone."><TimezoneInput value={editor.draft.timezone || ""} onChange={(v) => editor.set({ timezone: v })} /></Field>
+                  <div className="row top" style={{ gap: 16 }}>
+                    <Field label="Currency" className="grow" hint="Read as $settings.currency. Amounts are stored in minor units."><select value={editor.draft.currency || ""} onChange={(e) => editor.set({ currency: e.target.value })}><option value="">Not set</option>{CURRENCIES.map(([code, name]) => <option key={code} value={code}>{code} — {name}</option>)}</select></Field>
+                    <Field label="Language" className="grow" hint="Read as $settings.locale."><select value={editor.draft.locale || ""} onChange={(e) => editor.set({ locale: e.target.value })}><option value="">Not set</option>{LOCALES.map(([code, name]) => <option key={code} value={code}>{code} — {name}</option>)}</select></Field>
+                  </div>
+                </div>
+              </Card>
+            )}
+            {active === "app" && <AppDetails editor={editor} env={env} />}
+            {active === "environment" && (
+              <Environment env={env} path={editor.path} data={data} settings={editor.original} draftDirty={editor.count > 0} onImport={(incoming) => { editor.set(incoming); setActive("general"); }} onDelete={() => setConfirmDelete(true)} reload={editor.state.reload} />
+            )}
+          </div>
+        )}
+      </Loading>
+      {confirmDelete && <DeleteEnvironment env={env} path={editor.path} onClose={() => setConfirmDelete(false)} onQueued={() => router.visit("/environments")} />}
+    </Layout>
+  );
 }
 
-function Infrastructure({ env, configuration, deprecations }) {
-  if (!configuration) return <p className="muted text-muted" style={{ margin: 0 }}>Loading…</p>;
-  const { database, storage, mail, variables } = configuration;
-  const rows = [
-    ["Data database", <Source key="s" value={database.source} />, "database", `Where resource data lives. Set ${database.variable}; without it each environment gets its own schema in the platform's default database.`],
-    ["Storage", <><Badge>{storage.driver}</Badge> <Source value={storage.source} /></>, "storage", `Where uploaded objects go. Set ${storage.variable} (driver, endpoint, bucket, keys); anything unset keeps the platform default.`],
-    ["Mail", <Badge key="m" tone={mail.configured && !mail.suppressed ? "green" : "yellow"}>{mail.configured ? (mail.suppressed ? "paused" : "configured") : "not configured"}</Badge>, "mail", `SMTP for flows, sign-in emails and notifications. Set ${mail.variable}; without a host, mail is recorded and not sent.`],
-    ["Secrets", <Badge key="e" tone="green">encrypted, per environment</Badge>, "secrets", "Values are sealed for this environment and shown only as secret://NAME references."],
-  ];
-  return <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 12 }}>
-    {deprecations.length > 0 && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] warn"><b>This environment still stores settings the platform no longer prefers.</b>
-      <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{deprecations.map((note) => <li key={note}>{note}</li>)}</ul>
-      <div style={{ marginTop: 6 }}>Print them as variables with <code>python -m app.export_config --env {env}</code>.</div></div>}
-    <p className="muted text-muted" style={{ margin: 0 }}>Read-only. Set these as environment variables on the deployment: <code>{variables.environment_prefix}*</code> for this environment, <code>{variables.global_prefix}*</code> for every environment (this environment's wins), then restart.</p>
-    {rows.map(([label, value, section, hint]) => <div key={label} className="card bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-md p-4 [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [&.flush_.card-head_+_*]:[border-top:1px_solid_var(--line)] [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:transform-[none]! [a&:hover]:shadow-none [border:1px_solid_var(--line)] shadow-none [&_>_.spread:first-child]:mb-3! [&_>_.spread_h2]:text-base [&_>_.spread_h2]:font-semibold [&_>_.spread_h2]:tracking-[-0.01em] [&.flush_>_.card-head_+_*]:border-t-0 [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&_>_.spread_.chips]:gap-0 [&_>_.spread_.chips]:flex-nowrap [&_>_.spread_.chips]:[border:1px_solid_var(--line-2)] [&_>_.spread_.chips]:rounded-sm [&_>_.spread_.chips]:overflow-hidden [&_>_.spread_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_>_.spread_.chip]:p-[0_10px] [&_>_.spread_.chip]:border-0 [&_>_.spread_.chip]:[border-left:1px_solid_var(--line-2)] [&_>_.spread_.chip]:rounded-none [&_>_.spread_.chip]:bg-transparent [&_>_.spread_.chip]:text-muted [&_>_.spread_.chip]:text-xs [&_>_.spread_.chip]:font-medium-plus [&_>_.spread_.chip:first-child]:border-l-0 [&_>_.spread_.chip.active]:bg-press [&_>_.spread_.chip.active]:text-text [&_>_.spread_.chip.on]:bg-press [&_>_.spread_.chip.on]:text-text [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100 sunken" style={{ padding: 14 }}>
-      <div className="spread flex items-center justify-between gap-3">
-        <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ gap: 8 }}><b>{label}</b>{value}</div>
-        <Link className="link-more inline-flex items-center gap-0.5 text-ui-sm font-semibold text-muted [&:hover]:text-text" href={envHref(env, section)}>Open <Icon name="chevronRight" size={14} /></Link>
+/** How the app introduces itself. Mail templates read these as {{ app.name }} and the like, and replies go to the support address. */
+function AppDetails({ editor, env }) {
+  const app = editor.draft.app || {};
+  const set = (values) => editor.set({ app: { ...app, ...values } });
+  return (
+    <Card icon="mail" title="App details" description="How your app introduces itself to the people it emails." actions={<SaveButtons editor={editor} />}>
+      <div className="stack">
+        <Field label="App name" hint="Available to every email template as {{ app.name }}."><input maxLength={80} value={app.name || ""} onChange={(e) => set({ name: e.target.value })} placeholder="Northwind" /></Field>
+        <Field label="Support email" hint="Replies to your emails go here, and templates can show it as {{ app.support_email }}."><input type="email" maxLength={254} value={app.support_email || ""} onChange={(e) => set({ support_email: e.target.value })} placeholder="help@northwind.com" /></Field>
+        <Field label="Postal address" optional hint="Many countries require one in marketing email. Templates read it as {{ app.address }}."><input maxLength={300} value={app.address || ""} onChange={(e) => set({ address: e.target.value })} placeholder="12 Marina Road, Lagos" /></Field>
+        <Field label="Website" optional hint="Read as {{ app.website }}."><input type="url" maxLength={300} value={app.website || ""} onChange={(e) => set({ website: e.target.value })} placeholder="https://northwind.com" /></Field>
+        <p className="hint">These fill in the values of your <Link href={envHref(env, "mail")} className="linklike">email templates</Link> automatically. Anything you pass in when sending still wins.</p>
       </div>
-      <p className="muted text-muted" style={{ margin: "6px 0 0" }}>{hint}</p>
-    </div>)}
-  </div>;
+    </Card>
+  );
 }
 
-function bytes(n) {
-  if (!n) return "No limit";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let i = 0;
-  while (n >= 1024 && i < units.length - 1) { n /= 1024; i += 1; }
-  return `${Math.round(n * 10) / 10} ${units[i]}`;
-}
-
-const LIMIT_LABELS = {
-  MAX_USERS: ["Active users", (v) => (Number(v) ? `up to ${Number(v).toLocaleString()}` : "no limit")],
-  MAX_API_KEYS_PER_ENVIRONMENT: ["API keys", (v) => (Number(v) ? `up to ${v}` : "no limit")],
-  MAX_UPLOAD_BYTES: ["Largest upload", (v) => bytes(Number(v))],
-};
-
-function Limits({ usage, configuration }) {
-  if (!usage || !configuration) return <p className="muted text-muted" style={{ margin: 0 }}>Loading limits…</p>;
-  const used = { MAX_USERS: usage.users, MAX_API_KEYS_PER_ENVIRONMENT: usage.api_keys };
-  return <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 10 }}>
-    <p className="muted text-muted" style={{ margin: 0 }}>These installation safeguards come from deployment configuration. API request, rate, and realtime connection limits are configured per project.</p>
-    {configuration.limits.map((row) => {
-      const [label, format] = LIMIT_LABELS[row.key] || [row.key, String];
-      return <div key={row.key} className="spread flex items-center justify-between gap-3 card bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-md p-4 [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [&.flush_.card-head_+_*]:[border-top:1px_solid_var(--line)] [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:transform-[none]! [a&:hover]:shadow-none [border:1px_solid_var(--line)] shadow-none [&_>_.spread:first-child]:mb-3! [&_>_.spread_h2]:text-base [&_>_.spread_h2]:font-semibold [&_>_.spread_h2]:tracking-[-0.01em] [&.flush_>_.card-head_+_*]:border-t-0 [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&_>_.spread_.chips]:gap-0 [&_>_.spread_.chips]:flex-nowrap [&_>_.spread_.chips]:[border:1px_solid_var(--line-2)] [&_>_.spread_.chips]:rounded-sm [&_>_.spread_.chips]:overflow-hidden [&_>_.spread_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_>_.spread_.chip]:p-[0_10px] [&_>_.spread_.chip]:border-0 [&_>_.spread_.chip]:[border-left:1px_solid_var(--line-2)] [&_>_.spread_.chip]:rounded-none [&_>_.spread_.chip]:bg-transparent [&_>_.spread_.chip]:text-muted [&_>_.spread_.chip]:text-xs [&_>_.spread_.chip]:font-medium-plus [&_>_.spread_.chip:first-child]:border-l-0 [&_>_.spread_.chip.active]:bg-press [&_>_.spread_.chip.active]:text-text [&_>_.spread_.chip.on]:bg-press [&_>_.spread_.chip.on]:text-text [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100 sunken" style={{ padding: "12px 14px" }}>
-        <div><b>{label}</b><div className="hint text-xs font-book text-muted leading-[1.45]"><code>{row.variable}</code></div></div>
-        <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ gap: 8 }}><span>{format(row.value)}</span><Source value={row.source} /></div>
-      </div>;
-    })}
-    <div className="spread flex items-center justify-between gap-3 card bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-md p-4 [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [&.flush_.card-head_+_*]:[border-top:1px_solid_var(--line)] [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:transform-[none]! [a&:hover]:shadow-none [border:1px_solid_var(--line)] shadow-none [&_>_.spread:first-child]:mb-3! [&_>_.spread_h2]:text-base [&_>_.spread_h2]:font-semibold [&_>_.spread_h2]:tracking-[-0.01em] [&.flush_>_.card-head_+_*]:border-t-0 [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&_>_.spread_.chips]:gap-0 [&_>_.spread_.chips]:flex-nowrap [&_>_.spread_.chips]:[border:1px_solid_var(--line-2)] [&_>_.spread_.chips]:rounded-sm [&_>_.spread_.chips]:overflow-hidden [&_>_.spread_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_>_.spread_.chip]:p-[0_10px] [&_>_.spread_.chip]:border-0 [&_>_.spread_.chip]:[border-left:1px_solid_var(--line-2)] [&_>_.spread_.chip]:rounded-none [&_>_.spread_.chip]:bg-transparent [&_>_.spread_.chip]:text-muted [&_>_.spread_.chip]:text-xs [&_>_.spread_.chip]:font-medium-plus [&_>_.spread_.chip:first-child]:border-l-0 [&_>_.spread_.chip.active]:bg-press [&_>_.spread_.chip.active]:text-text [&_>_.spread_.chip.on]:bg-press [&_>_.spread_.chip.on]:text-text [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100 sunken" style={{ padding: "12px 14px" }}><b>Environments in this deployment</b><span>{usage.environments?.limit ? `${usage.environments.used} of ${usage.environments.limit}` : `${usage.environments?.used ?? 0} · no limit`}</span></div>
-    {used.MAX_API_KEYS_PER_ENVIRONMENT && <p className="muted text-muted" style={{ margin: 0 }}>{used.MAX_API_KEYS_PER_ENVIRONMENT.used ?? 0} API keys in use.</p>}
-  </div>;
-}
-
-function Advanced({ env, path, data, settings, draftDirty, onImport, onDelete, reload }) {
+function Environment({ env, path, data, settings, draftDirty, onImport, onDelete, reload }) {
   const [run, busy] = useAction();
   const [text, setText] = useState("");
   const [error, setError] = useState("");
@@ -319,7 +146,7 @@ function DeleteEnvironment({ env, path, onClose, onQueued }) {
   const ready = value === env;
   return <Modal title={`Delete ${env}?`} onClose={onClose} footer={<><Button onClick={onClose} disabled={busy}>Cancel</Button><Button variant="danger" disabled={!ready || busy} onClick={async () => { if (await run(() => del(path), "Deletion queued in the background")) onQueued(); }}>Permanently delete</Button></>}>
     <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] danger"><b>This cannot be undone.</b> The background purge permanently removes this environment’s resource records and tables, storage objects, API keys, secrets, users, sessions, MFA data, organizations, mail, request, flow, event and audit logs.</div>
-    <p className="muted text-muted" style={{ margin: 0 }}>The environment is marked for deletion and will disappear once the worker finishes. A final installation-level receipt is retained for accountability.</p>
+    <p className="muted text-muted" style={{ margin: 0 }}>The environment is marked for deletion and will disappear shortly. A final installation-level receipt is retained for accountability.</p>
     <Field label={`Type ${env} to confirm`}><input autoFocus value={value} onChange={(e) => setValue(e.target.value)} autoComplete="off" /></Field>
   </Modal>;
 }

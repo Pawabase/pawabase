@@ -72,6 +72,30 @@ def _maintenance(value: Any) -> dict[str, Any]:
     }
 
 
+EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _app(value: Any) -> dict[str, str]:
+    """The app's public details: how it names itself to its users (mail templates read them as ``{{ app.name }}``)."""
+    if not isinstance(value, dict):
+        raise _fail("app", "must be an object")
+    out: dict[str, str] = {}
+    for field, limit in (("name", 80), ("support_email", 254), ("address", 300), ("website", 300)):
+        text = _text(f"app.{field}", value.get(field, ""), limit)
+        if not text:
+            continue
+        if field == "support_email" and not EMAIL.match(text):
+            raise _fail("app.support_email", f"{text!r} is not an email address")
+        if field == "website":
+            parts = urlsplit(text)
+            if parts.scheme not in ("http", "https") or not parts.netloc:
+                raise _fail(
+                    "app.website", f"{text!r} is not a web address like https://example.com"
+                )
+        out[field] = text
+    return out
+
+
 def validate(patch: dict[str, Any]) -> dict[str, Any]:
     """Check and normalise a settings patch.
 
@@ -120,6 +144,8 @@ def validate(patch: dict[str, Any]) -> dict[str, Any]:
             clean[key] = _text(key, value, 280)
         elif key == "maintenance":
             clean[key] = _maintenance(value)
+        elif key == "app":
+            clean[key] = _app(value)
         elif key == "realtime":
             if not isinstance(value, dict):
                 raise _fail(key, "must be an object")

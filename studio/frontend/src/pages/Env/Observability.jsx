@@ -1,43 +1,45 @@
 import { useEffect, useMemo, useState } from "react";
-import Layout from "../../components/Layout";
+import { router } from "@inertiajs/react";
+import Layout, { envHref } from "../../components/Layout";
 import { Icon } from "../../components/icons";
-import { PageHead, Segmented } from "../../components/ui";
+import { Button, PageHead, Segmented } from "../../components/ui";
 import { envPath, get } from "../../lib/api";
 import AuditLog from "./observability/Audit";
-import { CacheAndMetrics, Database } from "./observability/Data";
 import Errors from "./observability/Errors";
 import { Alarms, Logs, Metrics } from "./observability/Explore";
 import Flows from "./observability/Flows";
 import { Events, Mail, Webhooks } from "./observability/Messaging";
 import Overview from "./observability/Overview";
-import Queues from "./observability/Queues";
+import JobsPanel from "./observability/JobsPanel";
+import { EmitEvent, EventLog, EventMap, FlowRuns } from "./observability/EventTools";
 import RealtimeHealth from "./observability/RealtimeHealth";
 import Requests from "./observability/Requests";
 import RequestTrace from "./observability/RequestTrace";
 import RouteDetail from "./observability/RouteDetail";
 import Routes from "./observability/Routes";
-import Workers from "./observability/Workers";
 import { AREA_SECTION, useSystem } from "./observability/system";
 
 const WINDOWS = [[15, "15m"], [60, "1h"], [360, "6h"], [1440, "24h"], [10080, "7d"], [20160, "14d"]];
 
-// Tabs answer "which part of the system"; pills pick the view inside it.
+// The sidebar answers "what do you want to look at"; each entry is one page of the same place.
 const TABS = [
-  ["overview", "Overview", [["overview", "Overview"]]],
-  ["traffic", "Traffic", [["routes", "Routes"], ["errors", "Errors"], ["requests", "Requests"]]],
-  ["background", "Background", [["queues", "Queues & jobs"], ["workers", "Workers & schedules"], ["flows", "Flows"]]],
-  ["messaging", "Messaging", [["events", "Events"], ["webhooks", "Webhooks"], ["mail", "Mail"], ["realtime", "Realtime"]]],
-  ["data", "Data", [["database", "Database & storage"], ["cache", "Cache & metrics"]]],
-  ["explore", "Explore", [["metrics", "Metrics"], ["logs", "Logs"], ["alarms", "Alarms"]]],
-  ["audit", "Audit", [["audit", "Audit log"]]],
+  ["overview", "Overview", [["overview", "Overview", "overview"]]],
+  ["requests", "Requests", [["routes", "Routes", "routes"], ["errors", "Errors", "status"], ["requests", "Requests", "networking"]]],
+  ["background", "Background work", [["jobs", "Jobs", "jobs"], ["flows", "Flow runs", "flows"]]],
+  ["messaging", "Events and messages", [["events", "Events", "events"], ["event-map", "Event map", "gitBranch"], ["webhooks", "Webhooks", "webhooks"], ["mail", "Mail", "mail"], ["realtime", "Realtime", "realtime"]]],
+  ["explore", "Logs and alerts", [["logs", "Logs", "book"], ["alarms", "Alarms", "bell"], ["metrics", "Metrics", "usage"]]],
+  ["audit", "Audit", [["audit", "Audit log", "audit"]]],
 ];
 const SECTIONS = TABS.flatMap(([, , items]) => items.map(([key]) => key));
-const NEEDS_WINDOW = new Set(["overview", "routes", "errors", "queues", "workers", "flows", "events", "webhooks", "mail", "cache"]);
+const NEEDS_WINDOW = new Set(["overview", "routes", "errors", "requests", "jobs", "flows", "events", "webhooks", "mail"]);
+// Links and bookmarks from before the sections were merged.
+const RENAMED = { queues: "jobs", workers: "jobs", database: "overview", cache: "overview", "event-log": "events" };
 
 const fromHash = () => {
   try {
     const key = window.location.hash.replace("#", "");
-    return SECTIONS.includes(key) ? key : "overview";
+    const mapped = RENAMED[key] || key;
+    return SECTIONS.includes(mapped) ? mapped : "overview";
   } catch { return "overview"; }
 };
 const savedMinutes = () => {
@@ -56,12 +58,14 @@ export default function Observability({ env }) {
   const [live, setLive] = useState(true);
   const [route, setRoute] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [emitting, setEmitting] = useState(false);
   const [updatedAt, setUpdatedAt] = useState(Date.now());
   const [now, setNow] = useState(Date.now());
   const system = useSystem(env, minutes, live);
 
   const open = (key) => {
     if (!key) return;
+    if (key === "schedules") { router.visit(envHref(env, "schedules")); return; }
     setSection(key);
     try { window.history.replaceState(null, "", `#${key}`); } catch { /* the hash is a convenience */ }
   };
@@ -94,23 +98,24 @@ export default function Observability({ env }) {
   }, [system.data]);
 
   const subnav = {
-    title: "Observability",
-    groups: TABS.map(([key, label, tabItems]) => ({ title: key === "overview" ? undefined : label, items: tabItems.map(([k, l]) => ({ key: k, label: l, flag: flagged[k] })) })),
+    title: "Activity",
+    groups: TABS.map(([key, label, tabItems]) => ({ title: key === "overview" ? undefined : label, items: tabItems.map(([k, l, icon]) => ({ key: k, label: l, icon, flag: flagged[k] })) })),
     active: section,
     onSelect: open,
   };
   const shared = { env, minutes, system, onOpen: open };
 
   return (
-    <Layout title="Observability" subnav={subnav}>
+    <Layout title="Activity" subnav={subnav}>
       <PageHead
-        title="Observability"
-        description={<>Traffic, background work, messaging and data across <b>{env}</b>.</>}
+        title="Activity"
+        description={<>What your app is doing and what went wrong, across <b>{env}</b>.</>}
         actions={<>
           <button type="button" className={`live inline-flex items-center gap-[7px] text-ui-sm text-muted bg-none border-0 font-inherit cursor-pointer p-[4px_6px] rounded-sm [&:hover]:bg-sunken [&_i]:w-2 [&_i]:h-2 [&_i]:rounded-full [&_i]:bg-ok [&_i]:shadow-none [&_i]:animate-[live-pulse_1.8s_infinite] [&.paused_i]:bg-[var(--faint)] [&.paused_i]:animate-[none] h-control-sm ${live ? "" : "paused"}`} onClick={() => setLive(!live)} title={live ? "Pause automatic refresh" : "Resume automatic refresh"}>
             <i />{live ? "Live" : "Paused"} · {ago(now - updatedAt)}
           </button>
           <button type="button" className="btn inline-flex items-center justify-center gap-1.5 [border:1px_solid_var(--line-2)] bg-transparent text-text rounded-sm p-[0_12px] font-inherit font-medium-plus text-ui cursor-pointer whitespace-nowrap transition-[background_0.12s,_border-color_0.12s] [&:hover]:border-line-hover [&:active]:transform-[none] [&:disabled]:opacity-45 [&:disabled]:cursor-not-allowed [&.primary]:bg-brand [&.primary]:border-transparent [&.primary]:text-text [&.primary:hover]:filter-none [&.soft]:bg-transparent [&.soft]:border-line-2 [&.soft]:text-text [&.danger]:text-danger [&.danger]:border-line-2 [&.danger]:bg-transparent [&.ghost]:bg-transparent [&.ghost]:border-transparent [&.ghost]:text-muted [&.ghost:hover]:text-text [&.ghost:hover]:bg-hover [&.sm]:p-[0_10px] [&.sm]:text-ui-sm [&.icon-only]:p-0 [&.icon-only]:w-control [&.icon-only]:h-[30px] [&_.icon]:w-4 [&_.icon]:h-4 h-control shadow-none [&:hover]:bg-hover [&:active]:bg-press [&:focus-visible]:outline-[2px_solid_var(--brand)] [&:focus-visible]:outline-offset-[1px] [&.primary:hover]:bg-brand [&.primary:hover]:border-line-hover [&.danger:hover]:bg-danger-soft [&.sm]:h-control-sm [&.sm.icon-only]:w-control-sm [label&]:inline-flex filter-none [&.soft]:shadow-none [&.soft]:filter-none [&.primary]:shadow-none [&.primary]:filter-none [label&]:bg-transparent [label&]:shadow-none [label&]:filter-none [label&.primary]:bg-transparent [label&.primary]:shadow-none [label&.primary]:filter-none [label&.primary]:border-line-2 [label&.primary]:text-text [label&.primary:hover]:bg-hover [label&.primary:hover]:border-line-hover [&.soft:hover]:bg-hover [&:disabled]:bg-transparent [&.primary:disabled]:bg-transparent [&.primary:disabled]:opacity-45 border-line-2 [label&]:border-line-2 [&.soft:hover]:border-line-hover [&.danger:hover]:border-line-hover [&.on]:border-brand [&.on]:text-text sm" onClick={() => system.reload()} aria-label="Refresh now"><Icon name="play" size={14} />Refresh</button>
+          {section === "events" && <Button onClick={() => setEmitting(true)}>Send test event</Button>}
           {NEEDS_WINDOW.has(section) && <Segmented options={WINDOWS} value={minutes} onChange={setMinutes} />}
         </>}
       />
@@ -119,16 +124,14 @@ export default function Observability({ env }) {
           {section === "overview" && <Overview {...shared} />}
           {section === "routes" && <Routes env={env} minutes={minutes} onRoute={setRoute} onTrace={openTrace} />}
           {section === "errors" && <Errors env={env} minutes={minutes} onRoute={setRoute} onTrace={openTrace} />}
-          {section === "requests" && <Requests base={base} onTrace={openTrace} />}
-          {section === "queues" && <Queues {...shared} />}
-          {section === "workers" && <Workers {...shared} />}
-          {section === "flows" && <Flows {...shared} />}
-          {section === "events" && <Events {...shared} />}
+          {section === "requests" && <Requests base={base} minutes={minutes} onTrace={openTrace} />}
+          {section === "jobs" && <JobsPanel env={env} system={system} />}
+          {section === "flows" && <><Flows {...shared} /><FlowRuns env={env} /></>}
+          {section === "events" && <><Events {...shared} /><EventLog env={env} /></>}
+          {section === "event-map" && <EventMap env={env} />}
           {section === "webhooks" && <Webhooks {...shared} />}
           {section === "mail" && <Mail {...shared} />}
           {section === "realtime" && <RealtimeHealth env={env} />}
-          {section === "database" && <Database env={env} />}
-          {section === "cache" && <CacheAndMetrics env={env} minutes={minutes} />}
           {section === "metrics" && <Metrics env={env} />}
           {section === "logs" && <Logs env={env} onTrace={openTrace} />}
           {section === "alarms" && <Alarms env={env} />}
@@ -136,6 +139,7 @@ export default function Observability({ env }) {
         </div>
       </div>
       {route && <RouteDetail env={env} route={route} minutes={minutes} onClose={() => setRoute(null)} onTrace={openTrace} />}
+      {emitting && <EmitEvent env={env} onClose={() => setEmitting(false)} />}
       {detail && <RequestTrace value={detail} onClose={() => setDetail(null)} />}
     </Layout>
   );

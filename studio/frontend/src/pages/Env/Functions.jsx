@@ -275,28 +275,23 @@ function HttpStats({ env, fn }) {
         )}
       </Loading>
       <Card
-        flush
-        title="Workers"
-        actions={<Button disabled={busy} onClick={async () => { if (await run(() => post(envPath(env, "/functions-runtime/restart"), { function: fn.name }), "Workers draining")) runtime.reload(); }}>Restart</Button>}
+        icon="functions"
+        title="Right now"
+        actions={<Button disabled={busy} onClick={async () => { if (await run(() => post(envPath(env, "/functions-runtime/restart"), { function: fn.name }), "Restarting")) runtime.reload(); }}>Restart</Button>}
       >
         <Loading state={runtime}>
-          {(rt) => (
-            <>
-              <p className="hint text-xs font-book text-muted leading-[1.45]" style={{ padding: "8px 16px" }}>Runtime: {rt.mode === "service" ? <>service at <code>{rt.url}</code>{rt.reachable === false ? <Badge tone="red">unreachable</Badge> : null}</> : "inside the server"} · confinement {rt.confinement} · network {rt.network}</p>
-              <Table
-                rows={mine?.workers || []}
-                empty={`No worker is running ${fn.name} right now; the next request starts one${fn.config?.warm ? " (warm workers are being started)" : ""}.`}
-                columns={[
-                  { label: "Worker", render: (w) => <code>{w.id}</code> },
-                  { label: "State", render: (w) => (w.draining ? <Badge tone="amber">draining</Badge> : w.alive ? <Badge tone="green">serving</Badge> : <Badge tone="red">stopped</Badge>) },
-                  { label: "In flight", render: (w) => `${w.active} / ${w.concurrency}` },
-                  { label: "Served", render: (w) => `${w.served}${w.failed ? ` (${w.failed} failed)` : ""}` },
-                  { label: "Heap", render: (w) => (w.heap_bytes ? `${Math.round(w.heap_bytes / 1048576)} / ${w.memory_mb} MB` : "—") },
-                  { label: "Idle", render: (w) => `${Math.round(w.idle_seconds)}s` },
-                ]}
-              />
-            </>
-          )}
+          {() => {
+            const live = (mine?.workers || []).filter((w) => w.alive && !w.draining);
+            const busyNow = live.reduce((n, w) => n + (w.active || 0), 0);
+            return (
+              <p className="hint">
+                {live.length
+                  ? <>Running and ready. {busyNow ? `${busyNow} request${busyNow === 1 ? " is" : "s are"} being answered now.` : "Nothing is being answered at the moment."}</>
+                  : <>Not running right now. It starts on the next request{fn.config?.warm ? ", and is kept ready in the background" : ""}.</>}
+                {" "}Restart it after changing its code or settings to pick the change up at once.
+              </p>
+            );
+          }}
         </Loading>
       </Card>
     </div>
@@ -305,11 +300,11 @@ function HttpStats({ env, fn }) {
 
 const LIMITS = [
   { key: "timeout", label: "Timeout", unit: "s", hint: "Wall-clock time a run may take." },
-  { key: "memory", label: "Memory", unit: "MB", hint: "What the run's worker may hold." },
+  { key: "memory", label: "Memory", unit: "MB", hint: "What one run may hold." },
   { key: "cpu", label: "CPU", unit: "s", hint: "CPU time per run. HTTP functions: the longest it may compute without yielding." },
   { key: "concurrency", label: "Runs at once", unit: "", hint: "Runs of this function at once in this environment." },
   { key: "max_body", label: "Request body", unit: "MB", hint: "HTTP functions only." },
-  { key: "workers", label: "Workers", unit: "", hint: "Workers this HTTP function may run at once." },
+  { key: "workers", label: "Copies", unit: "", hint: "How many copies of this function may run at once." },
 ];
 const SOURCE_LABEL = { project: "project", default: "installation default", code: "shorter timeout in code", installation: "installation maximum" };
 
@@ -379,7 +374,7 @@ function FunctionPanel({ env, fn, base, branch, stats, onRun }) {
                   {fn.public_url && <div><dt>Without a key</dt><dd><code>{fn.public_url}</code></dd></div>}
                   <div><dt>Who may</dt><dd><Badge tone={fn.config?.auth === "public" ? "amber" : undefined}>{typeof fn.config?.auth === "string" ? fn.config.auth : JSON.stringify(fn.config?.auth)}</Badge></dd></div>
                   <div><dt>Written with</dt><dd>{fn.style === "deno" ? <code>Deno.serve</code> : <code>serve()</code>}</dd></div>
-                  <div><dt>Workers</dt><dd>{fn.config?.warm ? `${fn.config.warm} kept warm` : "started on demand"}{fn.config?.concurrency ? ` · ${fn.config.concurrency} requests each` : ""}</dd></div>
+                  <div><dt>Copies</dt><dd>{fn.config?.warm ? `${fn.config.warm} kept warm` : "started on demand"}{fn.config?.concurrency ? ` · ${fn.config.concurrency} requests each` : ""}</dd></div>
                   {fn.config?.cors && <div><dt>Origins</dt><dd><code>{Array.isArray(fn.config.cors.origins) ? fn.config.cors.origins.join(", ") : fn.config.cors.origins}</code></dd></div>}
                 </>
               ) : (

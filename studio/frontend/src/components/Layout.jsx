@@ -72,19 +72,16 @@ export function webhooksSubnav(env, active) {
 }
 
 export const ENV_NAV = [
-  { title: "Build", items: [
-    ["overview", "Overview"], ["data", "Data", "tables", "database"], ["policies", "Policies"], ["routes", "Routes"], ["explorer", "API Explorer"], ["functions", "Functions"],
-  ] },
-  { title: "Automate", items: [
-    ["flows", "Flows"], ["subscriptions", "Event subscriptions"], ["schedules", "Schedules"],
-    ["webhooks", "Webhooks"],
-  ] },
-  { title: "Services", items: [["users", "Users & auth"], ["mail", "Mail"], ["storage", "Storage"], ["realtime", "Realtime"], ["networking", "Networking"], ["status", "Status page"]] },
-  { title: "Operate", items: [
-    ["jobs", "Jobs & queues"], ["events", "Events & runs"], ["observability", "Observability"], ["usage", "Usage & limits"],
-    ["keys", "API keys"], ["secrets", "Secrets"], ["backups", "Backups"], ["settings", "Settings"],
-  ] },
+  { items: [["overview", "Overview"]] },
+  { title: "Data", items: [["data", "Data", "tables", "database"], ["explorer", "API Explorer"]] },
+  { title: "Access", items: [["users", "Users & auth"], ["policies", "Policies"], ["keys", "API keys"], ["secrets", "Secrets"], ["networking", "Networking"]] },
+  { title: "Logic", items: [["functions", "Functions"], ["flows", "Flows"], ["routes", "Routes"], ["schedules", "Schedules"], ["subscriptions", "Event subscriptions"], ["webhooks", "Webhooks"]] },
+  { title: "Services", items: [["mail", "Mail"], ["storage", "Storage"], ["realtime", "Realtime"]] },
+  { title: "Project", items: [["activity", "Activity"], ["usage", "Usage & plan"], ["backups", "Backups"], ["status", "Status page"], ["settings", "Settings"]] },
 ];
+
+// Pages that were folded into Activity still highlight it when reached from an old link.
+const ACTIVITY_SECTIONS = ["activity", "observability", "jobs", "events"];
 
 // The pastel each section wears on its sheet headers and empty states.
 export const SECTION_TONES = {
@@ -388,11 +385,11 @@ export default function Layout({ title, crumbs = [], children, full, subnav, flo
           <nav className="nav overflow-auto flex-1 m-[0_-4px] p-[0_4px] [&_a]:flex [&_a]:items-center [&_a]:gap-2.5 [&_a]:p-[0_10px] [&_a]:rounded-sm [&_a]:text-muted [&_a]:font-medium [&_a]:text-body [&_a]:transition-[background_0.15s,_color_0.15s] [&_a_+_a]:mt-px [&_a:hover]:bg-hover [&_a:hover]:text-text [&_a.active]:bg-sunken [&_a.active]:text-text [&_a.active]:font-semibold [&_a_.icon]:opacity-100 [&_a_.grow]:overflow-hidden [&_a_.grow]:text-ellipsis [&_a_.grow]:whitespace-nowrap [&_a_>_span:not(.icon):not(.badge)]:overflow-hidden [&_a_>_span:not(.icon):not(.badge)]:text-ellipsis [&_a_>_span:not(.icon):not(.badge)]:whitespace-nowrap [&_a_.badge]:shrink-0 [&_a_.badge]:max-w-[45%] [&_a_.badge]:overflow-hidden [&_a_.badge]:text-ellipsis [&_.nav-title]:flex [&_.nav-title]:items-center [&_.nav-title]:justify-between [&_.nav-title]:w-full [&_.nav-title]:p-[9px_10px_3px] [&_.nav-title]:border-0 [&_.nav-title]:bg-none [&_.nav-title]:font-inherit [&_.nav-title]:text-[8px] [&_.nav-title]:font-medium [&_.nav-title]:normal-case [&_.nav-title]:tracking-[0.04em] [&_.nav-title]:text-faint [&_.nav-title]:cursor-default [&_.nav-title:hover]:text-faint [&_.nav-title_.icon]:transition-[transform_0.15s] [&_a]:relative [&_a]:h-8 [&_a_.icon]:w-[17px] [&_a_.icon]:h-[17px] [&_a.active]:shadow-none [&_a.active::before]:hidden [&_a_.icon]:text-inherit [&_a.active_.icon]:text-brand">
             {env ? (
               ENV_NAV.map((group) => (
-                <div key={group.title} role="group" aria-label={group.title} className="nav-group [&_+_.nav-group]:mt-1.5 [&.closed_.nav-title_.icon]:transform-[rotate(-90deg)] [&.closed_.nav-items]:hidden">
-                  <div className="nav-title">{group.title}</div>
+                <div key={group.title || "top"} role="group" aria-label={group.title || "Overview"} className="nav-group [&_+_.nav-group]:mt-1.5 [&.closed_.nav-title_.icon]:transform-[rotate(-90deg)] [&.closed_.nav-items]:hidden">
+                  {group.title && <div className="nav-title">{group.title}</div>}
                   <div className="nav-items">
                     {group.items.map(([key, label, to, icon]) => (
-                      <Link key={key} data-tour={`nav-${key}`} href={envHref(env, to || key)} className={section === key || (key === "data" && DATA_SECTIONS.includes(section)) || (key === "webhooks" && WEBHOOK_PAGES.some(([page]) => page === section)) ? "active" : ""} title={label}>
+                      <Link key={key} data-tour={`nav-${key}`} href={envHref(env, to || key)} className={section === key || (key === "activity" && ACTIVITY_SECTIONS.includes(section)) || (key === "data" && DATA_SECTIONS.includes(section)) || (key === "webhooks" && WEBHOOK_PAGES.some(([page]) => page === section)) ? "active" : ""} title={label}>
                         <Icon name={icon || key} size={16} /><span className="label whitespace-nowrap">{label}</span>
                       </Link>
                     ))}

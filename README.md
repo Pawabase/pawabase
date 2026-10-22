@@ -1,11 +1,9 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
-    <img src="docs/assets/banner.svg" alt="Pawabase: your backend, on your infrastructure" width="100%">
+    <img src="docs/assets/banner.svg" alt="Pawabase: the open backend for apps that need to stay yours" width="100%">
   </picture>
 </p>
-
-<h3 align="center">The open backend for apps that need to stay yours.</h3>
 
 <p align="center">
   Sign-in, a database with an API, files, realtime and functions, in one platform you run on your own infrastructure.

@@ -2,38 +2,10 @@
    Studio chrome is dark; the email itself is drawn on a light sheet so it looks
    the way it will in an inbox. */
 
-/* ── page helpers (scoped: Studio has no global utility classes) ───────── */
+/* ── page ── */
 
 .mail-page { padding: 20px var(--gutter) 40px; }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .stack { display: flex; flex-direction: column; gap: 12px; }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .stack.sm { gap: 6px; }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .stack.lg { gap: 20px; }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .row.wrap { flex-wrap: wrap; }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .row.top { align-items: flex-start; }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .grow { flex: 1; min-width: 0; }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .grid.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .muted { color: var(--muted); }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .faint { color: var(--faint); }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .mono { font-family: var(--mono); font-size: 12.5px; }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .hint { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .text-ok { color: var(--ok); }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .text-danger { color: var(--danger); }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .empty { padding: 36px 16px; text-align: center; color: var(--muted); font-size: 13px; }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .code-block { padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); max-height: 360px; overflow: auto; }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .alert { padding: 11px 14px; border-radius: var(--r); font-size: 13px; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .alert.ok { color: var(--ok); background: var(--ok-soft); }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .alert.warn { color: var(--warn); background: var(--warn-soft); }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .alert.error { color: var(--danger); background: var(--danger-soft); }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .alert.info { color: var(--info); background: var(--info-soft); }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .alert b { color: inherit; }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .linklike { border: 0; background: none; padding: 0; color: var(--brand); font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .linklike:hover { text-decoration: underline; }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); white-space: nowrap; cursor: pointer; }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) label.check input { width: 14px; height: 14px; accent-color: var(--brand); }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; margin-right: 5px; vertical-align: 1px; }
-:where(.mail-page, .mail-workspace, .sql-page, .sheet, .modal) input.invalid { border-color: var(--danger); }
-@media (max-width: 960px) { :where(.mail-page) .grid.two { grid-template-columns: minmax(0, 1fr); } }
+
 
 .mail-icon-btn { display: inline-grid; place-items: center; width: 28px; height: 28px; flex: none; border: 1px solid transparent; border-radius: var(--r); background: transparent; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; }
 .mail-icon-btn:hover { background: var(--hover); color: var(--text); border-color: var(--line-2); }
@@ -399,3 +371,4 @@ i.failed { background: var(--danger); }
 .mail-version-main .badge, .mail-version-main > span:not(:first-child) { align-self: flex-start; }
 .mail-version-main > * { max-width: 100%; }
 .toast.warn .toast-dot { color: var(--warn); }
+

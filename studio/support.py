@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-import time
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -89,14 +87,3 @@ async def json_body(ctx: HttpContext) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
     form = await ctx.form()
     return {k: form.get(k) for k in form}
-
-
-def recently_seen(worker: dict[str, Any], seconds: float = 600) -> bool:
-    """Seen within *seconds*, or an in-process worker (which has no heartbeat)."""
-    seen = worker.get("last_seen")
-    if not seen:
-        return bool(worker.get("alive"))
-    try:
-        return time.time() - datetime.fromisoformat(seen).timestamp() < seconds
-    except ValueError:
-        return False

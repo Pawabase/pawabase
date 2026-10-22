@@ -9,9 +9,12 @@ const PERIODS = [[1, "1 min"], [5, "5 min"], [15, "15 min"], [60, "1 hour"], [36
 const defaultPeriod = (minutes) => (minutes <= 60 ? 1 : minutes <= 360 ? 5 : minutes <= 1440 ? 15 : minutes <= 10080 ? 60 : 360);
 const LEVEL_TONES = { error: "red", warning: "yellow", warn: "yellow", info: "blue", debug: "", critical: "red" };
 
+// How Pawabase itself runs is not something an app's builder tunes: those measures are not offered.
+const INTERNAL_METRICS = new Set(["workers_alive", "jobs_waiting"]);
+
 function useCatalog(env) {
   const catalog = useApi(envPath(env, "/metric-catalog"));
-  return catalog.data?.data || [];
+  return (catalog.data?.data || []).filter((m) => !INTERNAL_METRICS.has(m.name));
 }
 
 /** Pick any metric, a range and a bucket size; compare with the period before; turn what you see into an alarm. */

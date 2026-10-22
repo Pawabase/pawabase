@@ -703,6 +703,14 @@ def register(r: Router, platform: Platform) -> None:
                 query = query.filter(status=int(status))
         if ctx.query_params.get("search"):
             query = query.filter(path__icontains=ctx.query_params["search"])
+        if ctx.query_params.get("minutes"):
+            try:
+                minutes = max(1, min(int(ctx.query_params["minutes"]), 43200))
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail="minutes must be an integer") from exc
+            query = query.filter(
+                started_at__gte=(datetime.now(UTC) - timedelta(minutes=minutes)).isoformat()
+            )
         rows = await query.order_by("-id").offset(offset).limit(limit)
         return {"data": [dump(row) for row in rows]}
 

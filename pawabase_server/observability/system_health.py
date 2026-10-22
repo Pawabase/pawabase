@@ -9,6 +9,7 @@ things worth looking at, each pointing at the Studio section that explains it.
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -542,6 +543,12 @@ async def _mail(env: str, start: datetime, end: datetime, step: timedelta) -> di
     }
 
 
+def _job_label(name: str) -> str:
+    """``RunFunctionJob`` as ``run function``: what a person reads, not the class that does the work."""
+    short = str(name or "").split(".")[-1].removesuffix("Job")
+    return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", short).lower() or "job"
+
+
 def diagnose(report: dict[str, Any]) -> list[dict[str, str]]:
     """Plain-language findings, most severe first. Empty means nothing stands out."""
     found: list[dict[str, str]] = []
@@ -561,19 +568,19 @@ def diagnose(report: dict[str, Any]) -> list[dict[str, str]]:
         add(
             "critical",
             "queues",
-            f"The oldest waiting job has been queued for {backlog['oldest_seconds'] // 60} minutes.",
+            f"Background jobs are waiting: the oldest has been waiting {backlog['oldest_seconds'] // 60} minutes.",
         )
     elif backlog["oldest_seconds"] > 300:
         add(
             "warning",
             "queues",
-            f"The oldest waiting job has been queued for {backlog['oldest_seconds'] // 60} minutes.",
+            f"Background jobs are waiting: the oldest has been waiting {backlog['oldest_seconds'] // 60} minutes.",
         )
     for item in backlog["stuck"][:3]:
         add(
             "warning",
             "queues",
-            f"Job {item['job']} has been running for {item['running_seconds'] // 60} minutes.",
+            f"A background job ({_job_label(item['job'])}) has been running for {item['running_seconds'] // 60} minutes.",
         )
     stale = [i["name"] for i in workers["items"] if not i["alive"] and i["status"] == "running"]
     if stale:

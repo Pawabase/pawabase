@@ -5,11 +5,11 @@ import { Badge, Button, CopyText, Field, Loading, Modal, PageHead, Section, Swit
 import { del, envPath, post, put, useApi } from "../../lib/api";
 
 const SOURCES = {
-  gateway: "API (probed through the gateway)",
-  auth: "Sign-in (probed)",
-  realtime: "Realtime (probed)",
-  workers: "Background jobs (worker heartbeats)",
-  manual: "Manual (only incidents change it)",
+  gateway: "Your API",
+  auth: "Sign-in",
+  realtime: "Realtime",
+  workers: "Background jobs",
+  manual: "Set by hand (only incidents change it)",
 };
 const TONES = { operational: "green", degraded: "yellow", outage: "red" };
 const STAGES = ["investigating", "identified", "monitoring", "resolved"];

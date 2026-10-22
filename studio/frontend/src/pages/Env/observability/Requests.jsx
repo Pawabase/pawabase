@@ -3,12 +3,12 @@ import { Badge, Card, Loading, Table, when } from "../../../components/ui";
 import { useApi } from "../../../lib/api";
 import { ms, statusTone } from "./shared";
 
-export default function Requests({ base, onTrace }) {
+export default function Requests({ base, minutes, onTrace }) {
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
   const [requestId, setRequestId] = useState("");
   const [slow, setSlow] = useState(false);
-  const requests = useApi(`${base}/requests`, { params: { status, search, request_id: requestId, limit: 100 }, interval: 10000 });
+  const requests = useApi(`${base}/requests`, { params: { status, search, request_id: requestId, limit: 100, ...(minutes && !requestId ? { minutes } : {}) }, interval: 10000 });
   return (
     <Card bleed icon="observability" flush title={<div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">
       <input placeholder="Search path" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 220 }} />
