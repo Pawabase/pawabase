@@ -1,153 +1,91 @@
-// Rules tester: ask whether a caller may do something, and see exactly why.
-//
-// A playground rather than a form: the request reads as a sentence ("Can an admin list plans?"), the answer
-// updates as you change it, and the tabs under it explain the answer (the checks behind it, the rows it lets
-// through, every caller and operation side by side, and what the rule saw). Nothing is changed by testing.
+// Rules tester: can this person pass this check? Pick who, pick what to check, read the answer.
+// Everything is chosen from a list; nothing has to be typed. The answer comes with its reasons in plain words.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Layout from "../../components/Layout";
 import { Icon } from "../../components/icons";
-import { Badge, Button, Field, Segmented, Spinner, TagInput } from "../../components/ui";
+import { Spinner } from "../../components/ui";
 import { envPath, get, post, useApi } from "../../lib/api";
 import "./rules/rules.css";
 
-const OPERATIONS = ["list", "get", "create", "update", "delete"];
-const WORDS = {
-  eq: "equals", ne: "does not equal", gt: "is greater than", gte: "is at least", lt: "is less than", lte: "is at most",
-  in: "is one of", not_in: "is not one of", contains: "contains", starts_with: "starts with", ends_with: "ends with", matches: "matches",
-};
-const UNARY_WORDS = { exists: "exists", truthy: "is set", empty: "is empty" };
-// Who can be asked about, in one click. `roles` of null means "whatever the user really has".
-const PRESETS = [
-  { key: "anonymous", label: "Anonymous", kind: "anonymous", roles: null },
-  { key: "user", label: "Signed in", kind: "user", roles: [] },
-  { key: "admin", label: "Admin", kind: "user", roles: ["admin"] },
-  { key: "service", label: "Service key", kind: "service", roles: null },
+const NOT_SIGNED_IN = "anonymous";
+const SERVICE = "service";
+const BUILT_IN = [
+  ["public", "Anyone, signed in or not"],
+  ["authenticated", "Any signed-in user"],
+  ["owner", "The owner of the record"],
+  ["mfa", "Signed in with a second factor"],
+  ["service", "Secret keys only"],
+  ["deny", "No one"],
 ];
+const ACTIONS = { list: "see the list", get: "open one", create: "create", update: "change", delete: "delete" };
 
-const show = (value) => (value === undefined || value === null ? "nothing" : JSON.stringify(value));
+// ── plain-language reasons ──────────────────────────────────────────
 
-function parseReference(text) {
-  const trimmed = text.trim();
-  if (!trimmed) return { value: null };
-  if (/^[{[]|^(true|false)$/.test(trimmed)) {
-    try { return { value: JSON.parse(trimmed) }; } catch (e) { return { error: `Not valid JSON: ${e.message}` }; }
+const NAMES = { "$auth.authenticated": "being signed in", "$credential.is_service": "using a secret key", "$auth.user_id": "their user id", "$auth.email": "their email", "$auth.roles": "their roles", "$auth.org": "their organization", "$auth.org_role": "their role in the organization", "$auth.aal": "their sign-in strength", "$auth.permissions": "their permissions" };
+const WORDS = { eq: "is", ne: "is not", gt: "is more than", gte: "is at least", lt: "is less than", lte: "is at most", in: "is one of", not_in: "is not one of", contains: "includes", starts_with: "starts with", ends_with: "ends with", matches: "matches" };
+const UNARY = { exists: ["is set", "isn't set"], truthy: ["is set", "isn't set"], empty: ["is empty", "isn't empty"] };
+// Checks on who the caller is, said the way a person would.
+const WHOLE = {
+  "$auth.org": ["They're in an organization", "They're not in an organization"],
+  "$auth.org_role": ["They have a role in an organization", "They have no role in an organization"],
+  "$auth.user_id": ["They are signed in", "They are not signed in"],
+  "$auth.email": ["They have an email address", "They have no email address"],
+};
+
+const value = (v) => (v === null || v === undefined ? "nothing" : Array.isArray(v) ? (v.length ? v.join(", ") : "none") : typeof v === "object" ? JSON.stringify(v) : String(v));
+const nameOf = (o) => (o.expr ? NAMES[o.expr] || (o.expr.startsWith("$record.") ? `the row's ${o.expr.slice(8)}` : o.expr.startsWith("$input.") ? `the submitted ${o.expr.slice(7)}` : o.expr.replace(/^\$/, "")) : null);
+const operand = (o) => (nameOf(o) ? `${nameOf(o)} (${value(o.value)})` : value(o.value));
+const list = (arg) => (Array.isArray(arg) ? arg.join(" or ") : String(arg));
+
+/** One check as a sentence, and whether it held. */
+function sentence(node) {
+  const ok = node.result === true;
+  switch (node.op) {
+    case "literal": return node.result ? "Everyone is allowed" : "No one is allowed";
+    case "service": return "Secret keys and Studio can always do this";
+    case "python": return "This check is written in code, so it can't be explained here";
+    case "authenticated": return ok ? "They are signed in" : "They are not signed in";
+    case "role": return `${ok ? "They have" : "They don't have"} the role ${list(node.arg)}`;
+    case "permission": return `${ok ? "They have" : "They don't have"} the permission ${list(node.arg)}`;
+    case "owner": return ok ? "They own this record" : "They don't own this record";
+    case "aal": return ok ? "They signed in with a second factor" : "They did not sign in with a second factor";
+    case "kind": case "service_only": return `${ok ? "They are" : "They are not"} ${node.arg}`;
+    default:
+      if (WORDS[node.op]) return `${operand(node.left)} ${ok ? WORDS[node.op] : `is not (${WORDS[node.op]})`} ${operand(node.right)}`.replace(" is not (is not)", " is");
+      if (UNARY[node.op]) {
+        const whole = node.op !== "empty" && WHOLE[node.operand.expr];
+        return whole ? whole[ok ? 0 : 1] : `${nameOf(node.operand) || value(node.operand.value)} ${UNARY[node.op][ok ? 0 : 1]}`;
+      }
+      return node.op;
   }
-  return { value: trimmed };
 }
 
-function parseJson(text, label) {
-  if (!text.trim()) return { value: null };
-  try {
-    const value = JSON.parse(text);
-    return typeof value === "object" && value !== null && !Array.isArray(value) ? { value } : { error: `${label} must be a JSON object` };
-  } catch (e) { return { error: `${label}: ${e.message}` }; }
+/** The few checks that decided it: the ones that failed for a "no", the ones that held for a "yes". */
+function reasons(node, want = node.result) {
+  if (!node) return [];
+  if (node.op === "all") {
+    const picked = want ? node.children : node.children.filter((c) => c.result === false);
+    return picked.flatMap((c) => reasons(c, want));
+  }
+  if (node.op === "any") {
+    const picked = want ? node.children.filter((c) => c.result === true).slice(0, 1) : node.children;
+    return picked.flatMap((c) => reasons(c, want));
+  }
+  if (node.op === "not") return node.children.flatMap((c) => reasons(c, !want));
+  return [{ text: sentence(node), ok: node.result === true }];
 }
 
-// ── the explanation ──────────────────────────────────────────────────
+// ── the technical view, for those who want it ───────────────────────
 
-function Operand({ operand }) {
-  return operand.expr
-    ? <span className="rt-operand"><code>{operand.expr}</code><em>{show(operand.value)}</em></span>
-    : <span className="rt-operand"><code>{show(operand.value)}</code></span>;
-}
-
-function label(node) {
-  if (node.op === "literal") return node.result ? "Always allowed" : "Never allowed";
-  if (node.op === "all") return "All of these";
-  if (node.op === "any") return "Any of these";
-  if (node.op === "not") return "None of these";
-  if (node.op === "service" || node.op === "python") return node.note;
-  if (WORDS[node.op]) return <span className="rt-sentence"><Operand operand={node.left} /> {WORDS[node.op]} <Operand operand={node.right} /></span>;
-  if (UNARY_WORDS[node.op]) return <span className="rt-sentence"><Operand operand={node.operand} /> {UNARY_WORDS[node.op]}</span>;
-  return <span className="rt-sentence"><b>{node.op}</b>{node.arg !== undefined && <> <code>{typeof node.arg === "string" ? node.arg : JSON.stringify(node.arg)}</code></>}</span>;
-}
-
-function TraceNode({ node }) {
+function Tree({ node }) {
   const tone = node.result === true ? "pass" : node.result === false ? "fail" : "info";
+  const title = ["all", "any", "not"].includes(node.op) ? { all: "All of these", any: "Any of these", not: "None of these" }[node.op] : sentence(node);
   return (
     <li className={`rt-node ${tone}`}>
-      <div className="rt-row">
-        <span className="rt-mark">{node.result === true ? <Icon name="check" size={13} /> : node.result === false ? <Icon name="x" size={13} /> : "·"}</span>
-        <span className="rt-label">{label(node)}</span>
-      </div>
-      {node.children?.length > 0 && <ul className="rt-children">{node.children.map((child, i) => <TraceNode key={i} node={child} />)}</ul>}
+      <div className="rt-row"><span className="rt-mark">{node.result === true ? <Icon name="check" size={12} /> : node.result === false ? <Icon name="x" size={12} /> : "·"}</span><span>{title}</span></div>
+      {node.children?.length > 0 && <ul className="rt-children">{node.children.map((c, i) => <Tree key={i} node={c} />)}</ul>}
     </li>
-  );
-}
-
-const Trace = ({ node }) => <ul className="rt-tree"><TraceNode node={node} /></ul>;
-
-function Verdict({ out, busy }) {
-  const tone = out.allowed ? "ok" : out.status === 404 ? "warn" : "bad";
-  const headline = out.enabled === false ? "No such route" : out.allowed ? "Allowed" : out.status === 404 ? "Hidden" : "Refused";
-  return (
-    <div className={`rt-verdict ${tone} ${busy ? "busy" : ""}`}>
-      <span className="rt-verdict-icon"><Icon name={out.allowed ? "check" : "x"} size={20} /></span>
-      <div className="rt-verdict-text">
-        <div className="rt-verdict-main"><b>{headline}</b><span className="rt-status">HTTP {out.status}</span>{out.policy && <Badge>{out.policy}</Badge>}</div>
-        <p>{out.reason}</p>
-      </div>
-    </div>
-  );
-}
-
-function Rows({ preview, plan }) {
-  const [open, setOpen] = useState(false);
-  const filters = Object.entries(plan?.filters || {});
-  return (
-    <div className="stack lg">
-      <div className="rt-counts">
-        <div className="ok"><b>{preview.visible}</b><span>visible</span></div>
-        <div className="bad"><b>{preview.hidden}</b><span>hidden by the rule</span></div>
-        <div><b>{preview.table_rows_matching_filters ?? preview.scanned}</b><span>in the table{preview.complete ? "" : " (first rows read)"}</span></div>
-      </div>
-      {(filters.length > 0 || plan?.residual || plan?.python) && (
-        <p className="hint">
-          {filters.length > 0 && <>Filtered in the database: <code>{filters.map(([k, v]) => `${k} = ${JSON.stringify(v)}`).join(" and ")}</code>. </>}
-          {plan.residual && <>Each remaining row is then checked against the rest of the rule.</>}
-          {plan.python && <>Each remaining row is then checked by the policy's Python code.</>}
-        </p>
-      )}
-      {preview.sample.length > 0 && <div><div className="rt-subhead">First visible rows</div><pre className="code-block rt-json">{JSON.stringify(preview.sample, null, 2)}</pre></div>}
-      {preview.hidden_example && (
-        <div className="rt-example">
-          <button type="button" className="linklike" onClick={() => setOpen(!open)}>{open ? "Hide" : "Why was a row hidden?"}</button>
-          {open && (<><pre className="code-block rt-json">{JSON.stringify(preview.hidden_example.row, null, 2)}</pre><Trace node={preview.hidden_example.trace} /></>)}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Every operation for several callers at once. A cell is a click away from testing that exact case. */
-function Matrix({ cells, busy, active, onPick }) {
-  return (
-    <div className="rt-matrix-wrap">
-      <table className="rt-matrix">
-        <thead><tr><th />{PRESETS.map((p) => <th key={p.key}>{p.label}</th>)}</tr></thead>
-        <tbody>
-          {OPERATIONS.map((op) => (
-            <tr key={op}>
-              <th>{op}</th>
-              {PRESETS.map((p) => {
-                const cell = cells?.[`${p.key}:${op}`];
-                const tone = !cell ? "wait" : cell.enabled === false ? "off" : cell.allowed ? "ok" : cell.status === 404 ? "warn" : "bad";
-                const on = active.preset === p.key && active.operation === op;
-                return (
-                  <td key={p.key}>
-                    <button type="button" className={`rt-cell ${tone} ${on ? "on" : ""}`} onClick={() => onPick(p, op)} title={cell ? `${p.label} · ${op}: ${cell.reason || ""}` : "Testing…"} disabled={!cell}>
-                      {!cell ? "·" : cell.enabled === false ? "off" : cell.allowed ? <Icon name="check" size={14} /> : cell.status === 404 ? "404" : <Icon name="x" size={14} />}
-                    </button>
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="hint">{busy ? "Testing every case…" : "Click a cell to test that caller and operation. Operations that read a record use the record from the Data tab."}</p>
-    </div>
   );
 }
 
@@ -155,238 +93,141 @@ function Matrix({ cells, busy, active, onPick }) {
 
 export default function Rules({ env }) {
   const base = envPath(env);
-  const resources = useApi(`${base}/resources`, { params: { limit: 500 } });
+  const users = useApi(`/envs/${env}/users`, { service: "auth", params: { limit: 100 } });
   const policies = useApi(`${base}/policies`);
-  const initial = useMemo(() => new URLSearchParams(window.location.search), []);
+  const resources = useApi(`${base}/resources`, { params: { limit: 500 } });
 
-  const [mode, setMode] = useState(initial.get("policy") ? "policy" : "resource");
-  const [resource, setResource] = useState(initial.get("resource") || "");
-  const [operation, setOperation] = useState(initial.get("operation") || "list");
-  const [policyText, setPolicyText] = useState(initial.get("policy") || "authenticated");
-  const [kind, setKind] = useState("user");
-  const [roles, setRoles] = useState([]);
-  const [permissions, setPermissions] = useState([]);
-  const [picked, setPicked] = useState(null);
-  const [userId, setUserId] = useState("");
-  const [search, setSearch] = useState("");
-  const [found, setFound] = useState([]);
-  const [org, setOrg] = useState("");
-  const [orgRole, setOrgRole] = useState("");
-  const [aal, setAal] = useState("aal1");
-  const [recordId, setRecordId] = useState("");
-  const [recordText, setRecordText] = useState("");
-  const [inputText, setInputText] = useState("");
-  const [side, setSide] = useState("caller");
-  const [tab, setTab] = useState("why");
-
+  const [who, setWho] = useState(NOT_SIGNED_IN);
+  const [what, setWhat] = useState("policy:authenticated");
+  const [row, setRow] = useState("");
+  const [rows, setRows] = useState([]);
   const [out, setOut] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [details, setDetails] = useState(false);
   const run = useRef(0);
 
-  const list = resources.data?.data || [];
-  useEffect(() => { if (!resource && list.length) setResource(list[0].name); }, [list.length]); // eslint-disable-line react-hooks/exhaustive-deps
-  const selected = list.find((r) => r.name === resource);
-  const configured = selected?.operations?.[operation];
+  const people = users.data?.data || [];
+  const named = (policies.data?.data || []).map((p) => p.name);
+  const tableRules = useMemo(() => (resources.data?.data || []).flatMap((r) => Object.entries(r.operations || {}).filter(([, s]) => s?.enabled).map(([op]) => ({ resource: r.name, op }))), [resources.data]);
 
+  // The question: "policy:<name>" for a named check, "table:<resource>:<action>" for what a table allows.
+  const [kind, a, b] = what.split(":");
+  const isTable = kind === "table";
+  const needsRow = isTable && ["get", "update", "delete"].includes(b);
+
+  // Rows to pick from, for checks that are about one record.
   useEffect(() => {
-    if (search.trim().length < 2 || picked) { setFound([]); return undefined; }
-    const t = setTimeout(async () => {
-      try { setFound((await get(`/envs/${env}/users`, { service: "auth", params: { search: search.trim(), limit: 6 } }))?.data || []); } catch { setFound([]); }
-    }, 200);
-    return () => clearTimeout(t);
-  }, [env, search, picked]);
+    setRow("");
+    setRows([]);
+    if (!needsRow) return;
+    get(`${base}/resources/${a}/records`, { params: { per_page: 25 } })
+      .then((r) => { const found = r?.data || []; setRows(found); if (found[0]) setRow(String(found[0].id ?? Object.values(found[0])[0])); })
+      .catch(() => {});
+  }, [what]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const needsRecord = mode === "resource" && ["get", "update", "delete"].includes(operation);
-  const needsInput = mode === "resource" && ["create", "update"].includes(operation);
-  const dataTab = needsRecord || needsInput;
-  useEffect(() => { if (side === "data" && !dataTab) setSide("caller"); }, [dataTab, side]);
-  useEffect(() => { if (tab === "rows" && !(out?.preview)) setTab("why"); }, [out, tab]);
-  useEffect(() => { if (tab === "matrix" && mode !== "resource") setTab("why"); }, [mode, tab]);
-
-  const presetKey = kind === "anonymous" ? "anonymous" : kind === "service" ? "service" : !picked && roles.length === 0 && !permissions.length ? "user" : !picked && roles.length === 1 && roles[0] === "admin" && !permissions.length ? "admin" : null;
-  const applyPreset = (preset) => {
-    setKind(preset.kind);
-    if (preset.kind === "user") { setRoles(preset.roles || []); setPicked(null); setUserId(""); setSearch(""); }
+  const label = (r) => {
+    const text = Object.entries(r).find(([k, v]) => k !== "id" && typeof v === "string" && v && v.length < 40 && !/_at$|_id$/.test(k));
+    return text ? `${text[1]}` : `#${String(r.id).slice(-6)}`;
   };
 
-  // The data the request carries, or why there is no request yet.
-  const data = useMemo(() => {
-    const record = parseJson(recordText, "Record");
-    const input = parseJson(inputText, "Submitted data");
-    const reference = parseReference(policyText);
-    const problem = record.error || input.error || (mode === "policy" && (reference.error || (reference.value === null ? "Name a policy or write a condition." : null)));
-    return { record: record.value, input: input.value, reference: reference.value, problem };
-  }, [mode, policyText, recordText, inputText]);
+  const person = people.find((p) => p.id === who);
+  const caller = who === NOT_SIGNED_IN ? { kind: "anonymous" } : who === SERVICE ? { kind: "service" } : { kind: "user", user_id: who };
+  const request = useMemo(() => ({
+    ...(isTable ? { resource: a, operation: b } : { policy: a }),
+    caller,
+    record_id: needsRow && row ? row : null,
+  }), [what, who, row]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const caller = useMemo(() => (kind === "user"
-    ? { kind, user_id: picked?.id || userId.trim() || null, roles: roles.length ? roles : picked ? null : [], permissions: permissions.length ? permissions : null, org: org.trim() || null, org_role: orgRole.trim() || null, aal }
-    : { kind }), [kind, picked, userId, roles, permissions, org, orgRole, aal]);
-
-  const bodyFor = (who, op) => ({
-    ...(mode === "resource" ? { resource, operation: op } : { policy: data.reference }),
-    caller: who,
-    record: data.record,
-    record_id: mode === "resource" && recordId.trim() ? recordId.trim() : null,
-    input: data.input,
-  });
-
-  const key = JSON.stringify([mode, resource, operation, data, caller, recordId]);
-  const execute = async () => {
-    if (data.problem || (mode === "resource" && !resource)) { setError(data.problem || null); return; }
+  useEffect(() => {
     const mine = ++run.current;
     setBusy(true);
-    try {
-      const answer = await post(`${base}/policies/test`, bodyFor(caller, operation));
-      if (mine === run.current) { setOut(answer); setError(null); }
-    } catch (e) {
-      if (mine === run.current) { setError(e.message); setOut(null); }
-    } finally {
-      if (mine === run.current) setBusy(false);
-    }
-  };
-  useEffect(() => { const t = setTimeout(execute, 400); return () => clearTimeout(t); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // The matrix: every preset caller × every operation, only while its tab is open.
-  const [cells, setCells] = useState(null);
-  const [matrixBusy, setMatrixBusy] = useState(false);
-  const matrixRun = useRef(0);
-  const matrixKey = JSON.stringify([resource, data.record, data.input, recordId, aal]);
-  useEffect(() => {
-    if (tab !== "matrix" || mode !== "resource" || !resource || data.problem) return undefined;
     const t = setTimeout(async () => {
-      const mine = ++matrixRun.current;
-      setMatrixBusy(true);
-      const next = {};
-      await Promise.all(PRESETS.flatMap((p) => OPERATIONS.map(async (op) => {
-        try {
-          next[`${p.key}:${op}`] = await post(`${base}/policies/test`, bodyFor(p.kind === "user" ? { kind: "user", user_id: null, roles: p.roles, aal } : { kind: p.kind }, op));
-        } catch (e) { next[`${p.key}:${op}`] = { allowed: false, status: 0, reason: e.message }; }
-      })));
-      if (mine === matrixRun.current) { setCells(next); setMatrixBusy(false); }
-    }, 300);
+      try {
+        const answer = await post(`${base}/policies/test`, request);
+        if (mine === run.current) { setOut(answer); setError(null); }
+      } catch (e) {
+        if (mine === run.current) { setError(e.message); setOut(null); }
+      } finally {
+        if (mine === run.current) setBusy(false);
+      }
+    }, 150);
     return () => clearTimeout(t);
-  }, [tab, mode, matrixKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(request)]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const pickCell = (preset, op) => { applyPreset(preset); setOperation(op); setTab("why"); };
-  const tabs = [["why", "Why"], ...(out?.preview ? [["rows", "Rows"]] : []), ...(mode === "resource" ? [["matrix", "Everyone"]] : []), ["context", "What the rule saw"], ["rule", "Rule"]];
+  const subject = who === NOT_SIGNED_IN ? "Someone who isn't signed in" : who === SERVICE ? "A secret key" : person?.email || "This user";
+  const yes = out?.allowed;
+  const why = out?.trace ? reasons(out.trace).slice(0, 4) : [];
+  const disabled = out && out.enabled === false;
 
   return (
     <Layout title="Rules tester">
-      <div className="rt-app">
-        <header className="rt-head">
-          <div className="rt-ask">
-            <span className="rt-word">Can</span>
-            <div className="rt-presets" role="radiogroup" aria-label="Who is asking">
-              {PRESETS.map((p) => <button key={p.key} type="button" role="radio" aria-checked={presetKey === p.key} className={presetKey === p.key ? "on" : ""} onClick={() => applyPreset(p)}>{p.label}</button>)}
-              {presetKey === null && <button type="button" role="radio" aria-checked className="on">{picked ? picked.email : "Custom"}</button>}
-            </div>
-            {mode === "resource" ? (
-              <>
-                <span className="rt-word">do</span>
-                <Segmented value={operation} onChange={setOperation} options={OPERATIONS.map((o) => [o, o])} />
-                <span className="rt-word">on</span>
-                <select className="rt-resource" value={resource} onChange={(e) => setResource(e.target.value)} aria-label="Resource">
-                  {list.length === 0 && <option value="">No resources yet</option>}
-                  {list.map((r) => <option key={r.name} value={r.name}>{r.name}</option>)}
-                </select>
-              </>
-            ) : (
-              <>
-                <span className="rt-word">pass</span>
-                <input className="rt-policy mono" list="rt-policies" value={policyText} onChange={(e) => setPolicyText(e.target.value)} placeholder="owner, role:admin, or a JSON condition" spellCheck={false} aria-label="Policy" />
-                <datalist id="rt-policies">{(policies.data?.data || []).map((p) => <option key={p.name} value={p.name} />)}</datalist>
-              </>
-            )}
-            <span className="rt-word">?</span>
-            <button type="button" className="linklike rt-switch" onClick={() => setMode(mode === "resource" ? "policy" : "resource")}>{mode === "resource" ? "Test a policy instead" : "Test a resource instead"}</button>
-          </div>
-          {mode === "resource" && selected && (
-            <p className="rt-guard">
-              {configured?.enabled ? <>{operation} is guarded by <code>{typeof configured.policy === "string" ? configured.policy : JSON.stringify(configured.policy || "authenticated")}</code></> : <>{operation} is not enabled on {selected.name}</>}
-            </p>
-          )}
-        </header>
+      <div className="rt-simple">
+        <h1>Can they do it?</h1>
+        <p className="rt-lead">Pick a person and something to check. You'll see the answer and why.</p>
 
-        <div className="rt-body">
-          <aside className="rt-side">
-            <div className="rt-tabs">
-              <button type="button" className={side === "caller" ? "on" : ""} onClick={() => setSide("caller")}>Caller</button>
-              {dataTab && <button type="button" className={side === "data" ? "on" : ""} onClick={() => setSide("data")}>Data</button>}
-            </div>
-            <div className="rt-side-body">
-              {side === "caller" && (kind === "user" ? (
-                <div className="stack">
-                  <Field label="User" hint="Search to load a real user's roles and permissions, or type any id.">
-                    {picked ? (
-                      <div className="rt-picked"><b>{picked.email}</b><button type="button" className="linklike" onClick={() => { setPicked(null); setUserId(""); setSearch(""); }}>Change</button></div>
-                    ) : (
-                      <div className="rt-search">
-                        <input value={search} onChange={(e) => { setSearch(e.target.value); setUserId(e.target.value); }} placeholder="Email, or an id" />
-                        {found.length > 0 && (
-                          <div className="rt-found">
-                            {found.map((u) => <button key={u.id} type="button" onMouseDown={(e) => { e.preventDefault(); setPicked(u); setUserId(u.id); setSearch(""); setRoles([]); }}><b>{u.email}</b><small>{u.id}</small></button>)}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </Field>
-                  <Field label="Roles" optional={!picked} hint={picked ? "Empty uses this user's own roles." : undefined}><TagInput value={roles} onChange={setRoles} placeholder="admin, editor" /></Field>
-                  <Field label="Permissions" optional><TagInput value={permissions} onChange={setPermissions} placeholder="posts.write" /></Field>
-                  <div className="row top" style={{ gap: 10 }}>
-                    <Field label="Organization" optional className="grow"><input value={org} onChange={(e) => setOrg(e.target.value)} placeholder="acme" /></Field>
-                    <Field label="Org role" optional className="grow"><input value={orgRole} onChange={(e) => setOrgRole(e.target.value)} placeholder="admin" /></Field>
-                  </div>
-                  <Field label="Sign-in strength"><Segmented value={aal} onChange={setAal} options={[["aal1", "Password"], ["aal2", "Second factor"]]} /></Field>
-                </div>
-              ) : (
-                <p className="hint rt-note">{kind === "anonymous" ? "Not signed in: no user, no roles. Most rules start by requiring a signed-in user." : "Secret keys and Studio bypass policies, so this always passes. Use it to confirm that is what you meant."}</p>
-              ))}
-              {side === "data" && (
-                <div className="stack">
-                  {needsRecord && (
-                    <>
-                      <Field label="Record id" optional hint="Loads the real record from the table."><input className="mono" value={recordId} onChange={(e) => setRecordId(e.target.value)} placeholder="01HX…" /></Field>
-                      <Field label="Or a record as JSON" optional hint="Used when no id is given."><textarea rows={5} className="mono" value={recordText} onChange={(e) => setRecordText(e.target.value)} placeholder='{"owner_id": "…"}' spellCheck={false} /></Field>
-                    </>
-                  )}
-                  {needsInput && <Field label="Submitted data" optional hint="What the request body would contain."><textarea rows={5} className="mono" value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder='{"title": "Hello"}' spellCheck={false} /></Field>}
-                </div>
+        <div className="rt-pickers">
+          <label>
+            <span>Who</span>
+            <select value={who} onChange={(e) => setWho(e.target.value)}>
+              <option value={NOT_SIGNED_IN}>Someone not signed in</option>
+              <option value={SERVICE}>A secret key (your server)</option>
+              {people.length > 0 && <optgroup label="Your users">{people.map((p) => <option key={p.id} value={p.id}>{p.email}</option>)}</optgroup>}
+            </select>
+          </label>
+          <label>
+            <span>Check</span>
+            <select value={what} onChange={(e) => setWhat(e.target.value)}>
+              <optgroup label="Rules">
+                {BUILT_IN.map(([n, text]) => <option key={n} value={`policy:${n}`}>{text}</option>)}
+                {named.filter((n) => !BUILT_IN.some(([b]) => b === n)).map((n) => <option key={n} value={`policy:${n}`}>{n}</option>)}
+              </optgroup>
+              {tableRules.length > 0 && (
+                <optgroup label="Who can use your tables">
+                  {tableRules.map((t) => <option key={`${t.resource}:${t.op}`} value={`table:${t.resource}:${t.op}`}>{t.resource}: {ACTIONS[t.op]}</option>)}
+                </optgroup>
               )}
-            </div>
-          </aside>
-
-          <section className="rt-result">
-            {error && <div className="alert error">{error}</div>}
-            {!out && !error && <div className="empty">{busy ? <Spinner /> : "Choose who is asking and what for."}</div>}
-            {out && (
-              <>
-                <Verdict out={out} busy={busy} />
-                {out.warnings?.map((w) => <div key={w} className="alert warn">{w}</div>)}
-                <div className="rt-tabs wide">
-                  {tabs.map(([k, l]) => <button key={k} type="button" className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>)}
-                </div>
-                <div className={`rt-panel ${busy ? "rt-stale" : ""}`}>
-                  {tab === "why" && (out.trace ? <Trace node={out.trace} /> : <p className="hint">Nothing to explain: this operation is not enabled.</p>)}
-                  {tab === "rows" && out.preview && <Rows preview={out.preview} plan={out.plan} />}
-                  {tab === "matrix" && <Matrix cells={cells} busy={matrixBusy} active={{ preset: presetKey, operation }} onPick={pickCell} />}
-                  {tab === "context" && (
-                    <>
-                      <p className="hint">{out.caller?.source === "user" ? "Loaded from this user." : out.caller?.source === "manual" ? "Values you entered." : "The caller as the rule sees it."}</p>
-                      <pre className="code-block rt-json">{JSON.stringify(out.caller?.auth || {}, null, 2)}</pre>
-                    </>
-                  )}
-                  {tab === "rule" && (
-                    <>
-                      <p className="hint">The condition behind <code>{out.policy}</code>.</p>
-                      <pre className="code-block rt-json">{out.condition === null || out.condition === undefined ? "Decided by Python code." : JSON.stringify(out.condition, null, 2)}</pre>
-                    </>
-                  )}
-                </div>
-              </>
-            )}
-          </section>
+            </select>
+          </label>
+          {needsRow && rows.length > 0 && (
+            <label className="wide">
+              <span>Which one</span>
+              <select value={row} onChange={(e) => setRow(e.target.value)}>
+                {rows.map((r) => <option key={r.id} value={String(r.id)}>{label(r)}</option>)}
+              </select>
+            </label>
+          )}
         </div>
+
+        <div className={`rt-answer ${error ? "bad" : disabled ? "warn" : yes ? "ok" : out ? "bad" : ""} ${busy ? "busy" : ""}`} aria-live="polite">
+          {error && <p>{error}</p>}
+          {!out && !error && <div className="rt-wait"><Spinner /></div>}
+          {out && !error && (
+            <>
+              <div className="rt-answer-head">
+                <span className="rt-answer-icon"><Icon name={yes ? "check" : "x"} size={22} /></span>
+                <div>
+                  <b>{disabled ? "Not available" : yes ? "Yes" : "No"}</b>
+                  <p>{disabled ? out.reason : `${subject} ${yes ? "can" : "can't"} ${isTable ? `${ACTIONS[b]} ${a}` : "pass this check"}.`}</p>
+                </div>
+              </div>
+              {why.length > 0 && !disabled && (
+                <ul className="rt-why">
+                  {why.map((r, i) => <li key={i} className={r.ok ? "ok" : "bad"}><span><Icon name={r.ok ? "check" : "x"} size={12} /></span>{r.text}</li>)}
+                </ul>
+              )}
+              {out.status === 404 && !yes && <p className="rt-fine">The row exists, but they can't see it, so it looks like it isn't there.</p>}
+              {out.warnings?.length > 0 && <p className="rt-fine">{out.warnings[0]}</p>}
+            </>
+          )}
+        </div>
+
+        {out?.trace && !disabled && (
+          <div className="rt-more">
+            <button type="button" className="linklike" onClick={() => setDetails(!details)}>{details ? "Hide details" : "Show details"}</button>
+            {details && <ul className="rt-tree"><Tree node={out.trace} /></ul>}
+          </div>
+        )}
       </div>
     </Layout>
   );
