@@ -3,7 +3,7 @@ import { envHref } from "./Layout";
 import { envPath, useApi } from "../lib/api";
 
 // Bottom-of-sidebar tools, in order. Pinned in place (see Layout.jsx's SubNav) so a long table list never pushes them out of view.
-export const DATA_TOOLS = [["database", "SQL", "database"], ["schemas", "Schemas", "schemas"], ["transformers", "Transformers", "transformers"], ["topology", "Topology", "resources"]];
+export const DATA_TOOLS = [["database", "SQL", "database"], ["types", "Types", "code"], ["schemas", "Schemas", "schemas"], ["transformers", "Transformers", "transformers"], ["topology", "Topology", "resources"]];
 
 // A link to the Tables page focused on one table.
 export function tablesHref(env, table) {

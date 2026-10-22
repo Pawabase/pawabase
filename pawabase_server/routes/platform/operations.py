@@ -72,14 +72,6 @@ class FolderBody(BaseModel):
     prefix: str = Field(min_length=1, max_length=1024)
 
 
-class MailTestBody(BaseModel):
-    to: list[str]
-    subject: str = "Pawabase test message"
-    text: str = "This is a test message sent from Pawabase Studio."
-    template: str | None = None
-    data: dict[str, Any] = Field(default_factory=dict)
-
-
 def _custom_window(start: str | None, end: str | None) -> tuple[datetime, datetime] | None:
     """A custom analytics window from ``from`` and ``to`` ISO timestamps; nothing when either is missing or unreadable."""
     if not start or not end:
@@ -675,8 +667,6 @@ def register(r: Router, platform: Platform) -> None:
             raise HTTPException(400, str(exc)) from exc
         return {"url": url}
 
-    # ── mail ─────────────────────────────────────────────────────────────
-
     @r.get(
         f"{base}/configuration",
         auth=MANAGE,
@@ -686,44 +676,6 @@ def register(r: Router, platform: Platform) -> None:
     async def configuration(ctx: HttpContext, env: str):
         await get_environment(env)
         return configuration_report(platform, await platform.state(env))
-
-    @r.get(
-        f"{base}/mail/config",
-        auth=MANAGE,
-        tags=["mail"],
-        summary="The mail setup this environment has, and which variable each part comes from",
-    )
-    async def mail_config(ctx: HttpContext, env: str):
-        await get_environment(env)
-        return platform.mail.describe(await platform.state(env))
-
-    @r.get(f"{base}/mail/log", auth=MANAGE, tags=["mail"], summary="Messages sent or suppressed")
-    async def mail_log(ctx: HttpContext, env: str):
-        limit, offset = page_params(ctx)
-        rows = await MailLog.filter(env=env).order_by("-id").offset(offset).limit(limit)
-        return {"data": [dump(row) for row in rows]}
-
-    @r.post(
-        f"{base}/mail/test",
-        auth=MANAGE,
-        tags=["mail"],
-        request_model=MailTestBody,
-        summary="Send a message now",
-    )
-    async def mail_test(ctx: HttpContext, env: str, body: MailTestBody):
-        state = await platform.state(env)
-        try:
-            return await platform.mail.send(
-                state,
-                body.to,
-                body.subject,
-                text=body.text,
-                template=body.template,
-                data=body.data,
-                source="studio",
-            )
-        except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
 
     # ── observability ────────────────────────────────────────────────────
 

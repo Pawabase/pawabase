@@ -28,7 +28,7 @@ export const KINDS = {
     title: "Resources",
     description: "Tables exposed as REST at /rest/v1/<name>, guarded per operation by policies.",
     columns: ["name", "table", "description"],
-    blank: { name: "", description: "", id_type: "ulid", fields: [{ name: "", type: "string", required: true }], operations: { list: { enabled: true, policy: "authenticated" }, get: { enabled: true, policy: "authenticated" }, create: { enabled: true, policy: "authenticated" }, update: { enabled: true, policy: "owner" }, delete: { enabled: true, policy: "owner" } }, relations: [], cache_ttl: 0, events: true, realtime: false, timestamps: true },
+    blank: { name: "", description: "", id_type: "ulid", fields: [{ name: "", type: "string", required: true }], operations: { list: { enabled: true, policy: "authenticated" }, get: { enabled: true, policy: "authenticated" }, create: { enabled: true, policy: "authenticated" }, update: { enabled: true, policy: "owner" }, delete: { enabled: true, policy: "owner" } }, relations: [], cache_ttl: 0, events: true, realtime: false, capture: false, timestamps: true },
     template: {
       name: "todos",
       description: "",

@@ -219,7 +219,7 @@ def encode_value(dialect: str, spec: Mapping[str, Any] | None, value: Any) -> An
         return value
     kind = spec.get("type", "string")
     if kind in JSON_TYPES:
-        return json.dumps(value, default=str)
+        return json.dumps(_unwrap_json_text(value), default=str)
     if kind == "boolean":
         if isinstance(value, str):
             normalized = value.lower()
@@ -256,6 +256,26 @@ def encode_value(dialect: str, spec: Mapping[str, Any] | None, value: Any) -> An
     return value
 
 
+def _unwrap_json_text(value: Any) -> Any:
+    """A JSON document that arrived as text, as the document.
+
+    Forms and hand-written clients often send an object or array as its JSON text. Stored as given, that text would be
+    encoded a second time and read back as a string, and an edit-save cycle would wrap it again. A string that holds an
+    object or array is always such a slip; any other string (a name, a number in quotes) is a value and is kept.
+    """
+    for _ in range(4):
+        if not isinstance(value, str) or not value.lstrip().startswith(("{", "[", '"')):
+            break
+        try:
+            parsed = json.loads(value)
+        except ValueError:
+            break
+        if not isinstance(parsed, (dict, list, str)):
+            break
+        value = parsed
+    return value
+
+
 def decode_value(spec: Mapping[str, Any] | None, value: Any) -> Any:
     """A driver value as JSON-friendly Python."""
     if value is None:
@@ -263,7 +283,8 @@ def decode_value(spec: Mapping[str, Any] | None, value: Any) -> Any:
     kind = (spec or {}).get("type")
     if kind in JSON_TYPES and isinstance(value, (str, bytes)):
         try:
-            return json.loads(value)
+            # Rows written before JSON text was unwrapped on the way in come back wrapped; read them as documents.
+            return _unwrap_json_text(json.loads(value))
         except ValueError:
             return value
     if kind == "boolean":

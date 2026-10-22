@@ -18,7 +18,7 @@ from sillo.exceptions import HTTPException
 from pawabase_server.compiler.openapi_scope import add_apikey_security
 from pawabase_server.core.context import PlatformContext
 from pawabase_server.core.schemas import compile_model
-from pawabase_server.data import ddl, schema
+from pawabase_server.data import cdc, ddl, schema
 from pawabase_server.data import inspect as db_inspect
 from pawabase_server.data.console import (
     fetch_read_only,
@@ -29,15 +29,22 @@ from pawabase_server.data.isolation import developer_source
 from pawabase_server.data.resources import after_write, resource_tag
 from pawabase_server.data.sql import SqlError, decode_value, drop_table_sql
 from pawabase_server.data.store import Filter, parse_filters, parse_sort
+from pawabase_server.db.models import SavedQuery
 from pawabase_server.platform import Platform
 from pawabase_server.projects import quotas
-from pawabase_server.routes.common import MANAGE, actor, audit
+from pawabase_server.routes.common import MANAGE, actor, audit, dump, get_environment
 
 
 class QueryBody(BaseModel):
     sql: str = Field(min_length=1, max_length=100_000)
     params: list[Any] = Field(default_factory=list)
     allow_write: bool = False
+
+
+class SavedQueryBody(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=500)
+    sql: str = Field(min_length=1, max_length=100_000)
 
 
 class ImportBody(BaseModel):
@@ -86,6 +93,8 @@ def register(r: Router, platform: Platform) -> None:
             target=name,
             details={"statements": statements},
         )
+        # The table may have just appeared or gained columns; capture triggers read them, so they are laid down again.
+        await cdc.apply(platform, env)
         return {"resource": name, "table": store.spec.table, "statements": statements}
 
     @r.get(
@@ -495,6 +504,8 @@ def register(r: Router, platform: Platform) -> None:
             await platform.cache_invalidate(state, [f"resource:{name}" for name in state.specs])
             warnings = await ddl.advise(env, source, state.specs, body.sql)
             if warnings:
+                # The shape of a table changed: a capture trigger that lists its columns must be laid down again.
+                await cdc.apply(platform, env)
                 result["warnings"] = warnings
                 await audit(
                     ctx,
@@ -503,6 +514,74 @@ def register(r: Router, platform: Platform) -> None:
                     details={"sql": body.sql[:500], "warnings": [w["title"] for w in warnings]},
                 )
         return result
+
+    # ── saved queries ────────────────────────────────────────────────────
+
+    @r.get(
+        f"{base}/database/queries",
+        auth=MANAGE,
+        tags=["database"],
+        summary="Queries saved in the SQL editor",
+    )
+    async def saved_queries(ctx: HttpContext, env: str):
+        await get_environment(env)
+        rows = await SavedQuery.filter(env=env).order_by("name")
+        return {"data": [dump(row) for row in rows]}
+
+    @r.post(
+        f"{base}/database/queries",
+        auth=MANAGE,
+        tags=["database"],
+        request_model=SavedQueryBody,
+        summary="Save a query in the SQL editor",
+    )
+    async def save_query(ctx: HttpContext, env: str, body: SavedQueryBody):
+        await get_environment(env)
+        if await SavedQuery.filter(env=env, name=body.name).exists():
+            raise HTTPException(
+                status_code=409, detail=f"a saved query is already named {body.name!r}"
+            )
+        row = await SavedQuery.create(env=env, updated_by=actor(ctx), **body.model_dump())
+        await audit(ctx, "database.query_saved", env=env, target=body.name)
+        return created(dump(row))
+
+    @r.put(
+        f"{base}/database/queries/{{query_id}}",
+        auth=MANAGE,
+        tags=["database"],
+        request_model=SavedQueryBody,
+        summary="Change a saved query",
+    )
+    async def update_query(ctx: HttpContext, env: str, query_id: str, body: SavedQueryBody):
+        row = await SavedQuery.get_or_none(env=env, id=query_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="no such saved query")
+        if await SavedQuery.filter(env=env, name=body.name).exclude(id=query_id).exists():
+            raise HTTPException(
+                status_code=409, detail=f"a saved query is already named {body.name!r}"
+            )
+        row.name, row.description, row.sql, row.updated_by = (
+            body.name,
+            body.description,
+            body.sql,
+            actor(ctx),
+        )
+        await row.save()
+        return dump(row)
+
+    @r.delete(
+        f"{base}/database/queries/{{query_id}}",
+        auth=MANAGE,
+        tags=["database"],
+        summary="Delete a saved query",
+    )
+    async def delete_query(ctx: HttpContext, env: str, query_id: str):
+        row = await SavedQuery.get_or_none(env=env, id=query_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="no such saved query")
+        await row.delete()
+        await audit(ctx, "database.query_deleted", env=env, target=row.name)
+        return no_content()
 
 
 def _quoted(dialect: str, table: str) -> str:

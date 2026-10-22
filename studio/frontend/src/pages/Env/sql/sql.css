@@ -1,0 +1,49 @@
+/* SQL editor */
+
+.sql-page { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start; padding: 16px var(--gutter) 48px; }
+@media (max-width: 1000px) { .sql-page { grid-template-columns: minmax(0, 1fr); } }
+.sql-side { display: flex; flex-direction: column; gap: 10px; position: sticky; top: 12px; max-height: calc(100vh - 140px); min-width: 0; }
+.sql-side .segmented { align-self: stretch; width: 100%; }
+.sql-side .segmented button { flex: 1; padding: 0 6px; }
+.sql-filter { height: 30px; font-size: 12.5px; }
+.sql-tree { display: flex; flex-direction: column; gap: 1px; overflow-y: auto; min-height: 0; padding-bottom: 8px; }
+.sql-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+.sql-table { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.sql-twisty, .sql-name { border: 0; background: none; color: var(--text); font: inherit; cursor: pointer; }
+.sql-twisty { display: grid; place-items: center; width: 22px; height: 26px; color: var(--muted); flex: none; }
+.sql-name { flex: 1; min-width: 0; height: 26px; padding: 0 6px; border-radius: 6px; text-align: left; font-family: var(--mono); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sql-name:hover { background: var(--hover); }
+.sql-columns { list-style: none; margin: 0 0 4px 22px; padding: 0 0 0 8px; border-left: 1px solid var(--line-2); }
+.sql-columns button { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; width: 100%; padding: 2px 6px; border: 0; border-radius: 5px; background: none; color: var(--text); font-family: var(--mono); font-size: 12px; text-align: left; cursor: pointer; }
+.sql-columns button:hover { background: var(--hover); }
+.sql-columns small { color: var(--faint); font-size: 10.5px; }
+.sql-columns li.faint { padding: 2px 6px; font-size: 12px; }
+
+.sql-item { display: flex; align-items: center; gap: 2px; border-radius: 7px; }
+.sql-item.on { background: var(--brand-soft); }
+.sql-item:hover { background: var(--hover); }
+.sql-item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 6px 8px; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.sql-item-main b { font-size: 12.5px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sql-item-main small { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sql-icon { display: grid; place-items: center; width: 24px; height: 24px; border: 0; border-radius: 5px; background: none; color: var(--faint); cursor: pointer; opacity: 0; }
+.sql-item:hover .sql-icon { opacity: 1; }
+.sql-icon:hover { color: var(--danger); }
+
+.sql-editor { position: relative; }
+.sql-editor textarea { width: 100%; min-height: 200px; padding: 12px 14px; font-size: 13px; line-height: 1.6; tab-size: 2; resize: vertical; }
+.sql-suggest { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 8px; padding: 6px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--surface); }
+.sql-suggest button { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px 0 5px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--text); font-family: var(--mono); font-size: 12px; cursor: pointer; }
+.sql-suggest button:hover, .sql-suggest button.on { background: var(--press); border-color: var(--brand-line); }
+.sql-suggest small { color: var(--faint); font-size: 10.5px; }
+.sql-suggest-hint { margin-left: auto; color: var(--faint); font-size: 11px; }
+.sql-kind { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 4px; font-family: var(--sans); font-size: 10px; font-weight: 700; }
+.sql-kind.table { background: var(--info-soft); color: var(--info); }
+.sql-kind.column { background: var(--ok-soft); color: var(--ok); }
+.sql-kind.keyword { background: var(--surface); color: var(--muted); border: 1px solid var(--line-2); }
+
+.sql-plan { max-height: 420px; font-size: 12.5px; white-space: pre; overflow: auto; margin: 0; }
+.sql-more { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--line); }
+.sql-warning ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.sql-warning p { margin: 0; }
+.sql-page .small { font-size: 12px; }

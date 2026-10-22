@@ -106,6 +106,12 @@ class PlatformScheduler:
 
     async def reconcile(self) -> None:
         await self._expire_previews()
+        if self.leader:
+            # Mail scheduled in Studio goes out from the lease holder, so it is sent once.
+            try:
+                await self.platform.mail.send_due()
+            except Exception:
+                logger.exception("sending scheduled mail failed")
         wanted = await self.desired()
         for key in [k for k in self._registered if k not in wanted]:
             self.manager.remove(self._registered.pop(key))

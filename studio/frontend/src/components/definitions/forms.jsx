@@ -230,6 +230,7 @@ export function ResourceForm({ body, patch, refs, isNew, mode = "all" }) {
         <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
           <Switch checked={body.events !== false} onChange={(events) => patch({ events })} label="Emit events" hint={`${body.name || "name"}.created / updated / deleted`} />
           <Switch checked={!!body.realtime} onChange={(realtime) => patch({ realtime })} label="Broadcast changes" hint="Push row changes to realtime subscribers." />
+          <Switch checked={!!body.capture} onChange={(capture) => patch({ capture })} label="Capture changes made outside the API" hint="Also announce writes from SQL, other services and migrations, using database triggers (PostgreSQL and SQLite). Events and realtime then come from the database." />
           <Switch checked={body.timestamps !== false} onChange={(timestamps) => patch({ timestamps })} label="Timestamps" hint="Maintain created_at and updated_at." />
           <Field label="Owner field" optional hint="Filled with the caller's user id on create.">
             <RefSelect options={fieldNames} value={body.owner_field} empty="None" onChange={(owner_field) => patch({ owner_field })} />

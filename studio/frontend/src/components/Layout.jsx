@@ -73,7 +73,7 @@ export function webhooksSubnav(env, active) {
 
 export const ENV_NAV = [
   { title: "Build", items: [
-    ["overview", "Overview"], ["data", "Data", "tables", "database"], ["policies", "Policies"], ["routes", "Routes"], ["explorer", "API Explorer"], ["functions", "Functions"],
+    ["overview", "Overview"], ["data", "Data", "tables", "database"], ["policies", "Policies"], ["rules", "Rules tester"], ["routes", "Routes"], ["explorer", "API Explorer"], ["functions", "Functions"],
   ] },
   { title: "Automate", items: [
     ["flows", "Flows"], ["subscriptions", "Event subscriptions"], ["schedules", "Schedules"],
@@ -88,7 +88,7 @@ export const ENV_NAV = [
 
 // The pastel each section wears on its sheet headers and empty states.
 export const SECTION_TONES = {
-  resources: "lavender", schemas: "sky", transformers: "butter", policies: "mint", routes: "peach",
+  resources: "lavender", schemas: "sky", transformers: "butter", policies: "mint", rules: "mint", routes: "peach",
   functions: "sky", flows: "lavender", subscriptions: "rose", schedules: "butter", webhooks: "peach",
   "inbound-hooks": "mint", mail: "rose", buckets: "sky", storage: "sky",
 };

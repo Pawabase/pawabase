@@ -40,13 +40,16 @@ def register_routes(
         firewall,
         functions,
         insights,
+        mail,
         networking,
         operations,
         releases,
         realtime_channels,
+        rules,
         runtime,
         schema,
         status,
+        types,
     )
 
     management = Router(prefix="/platform/v1")
@@ -61,13 +64,16 @@ def register_routes(
         backups,
         automation,
         operations,
+        mail,
         functions,
         insights,
         networking,
         firewall,
+        rules,
         runtime,
         schema,
         status,
+        types,
     ):
         module.register(management, platform)
     # Your users, administered with the environment's secret key: the same routes as ``/admin/v1`` (which only other services reach), under

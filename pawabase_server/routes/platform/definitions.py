@@ -24,6 +24,7 @@ from sillo.exceptions import HTTPException
 from pawabase_server.core.ids import is_ulid, new_ulid
 from pawabase_server.core.schemas import SchemaError, validate_fields
 from pawabase_server.core.transformers import TransformerError, validate_transformer
+from pawabase_server.data import cdc
 from pawabase_server.data import indexes as declared_indexes
 from pawabase_server.data.sql import SqlError
 from pawabase_server.db.models import (
@@ -106,6 +107,8 @@ class ResourceBody(BaseModel):
     rate_limit: dict[str, int] = Field(default_factory=dict)
     events: bool = True
     realtime: bool = False
+    #: Announce changes made outside the API too (needs PostgreSQL or SQLite).
+    capture: bool = False
     timestamps: bool = True
     owner_field: str | None = Field(default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
     #: Declared indexes: ``[{"name", "columns", "unique", "where", "method"}]``.
@@ -165,8 +168,20 @@ class MailTemplateBody(BaseModel):
     name: str = Field(pattern=NAME_PATTERN)
     description: str = ""
     subject: str = ""
+    preheader: str = Field(default="", max_length=255)
     html: str = ""
     text: str = ""
+    #: The visual editor's document for the published version; ``None`` for templates written as HTML.
+    design: Any = None
+    #: Unpublished edits: ``{subject, preheader, html, text, design, saved_at}``.
+    draft: dict[str, Any] | None = None
+    status: Literal["draft", "published", "archived"] = "published"
+    category: str = Field(default="", max_length=32)
+    tags: list[str] = Field(default_factory=list)
+    folder: str = Field(default="", max_length=64)
+    favorite: bool = False
+    #: ``[{name, description, sample}]``: the values the template reads.
+    variables: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class SubscriptionBody(BaseModel):
@@ -291,6 +306,10 @@ async def validate_resource(platform, env, body: ResourceBody) -> dict[str, Any]
         dialect = (await (await platform.state(env)).source()).dialect
     except Exception:  # an environment whose database cannot be reached still accepts a definition
         dialect = None
+    if body.capture and dialect is not None and not cdc.supported(dialect):
+        raise _invalid(
+            f"capture: changes cannot be captured on {dialect} (PostgreSQL and SQLite only)"
+        )
     try:
         declared = declared_indexes.clean(body.indexes or [], names, dialect=dialect)
     except SqlError as exc:
@@ -384,11 +403,13 @@ async def validate_mail_template(platform, env, body: MailTemplateBody) -> dict[
 
     from pawabase_server.infra.mail import _jinja
 
-    for label in ("subject", "html", "text"):
-        try:
-            _jinja.parse(getattr(body, label))
-        except TemplateSyntaxError as exc:
-            raise _invalid(f"{label}: {exc}") from exc
+    draft = body.draft or {}
+    for label in ("subject", "preheader", "html", "text"):
+        for where, source in (("", getattr(body, label)), ("draft ", draft.get(label) or "")):
+            try:
+                _jinja.parse(source)
+            except TemplateSyntaxError as exc:
+                raise _invalid(f"{where}{label}: {exc}") from exc
     return body.model_dump()
 
 
@@ -645,6 +666,8 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
             await quotas.check_count(await platform.state(env), kind["limit"])
         item = await model.create(environment=environment, **data)
         await changed(ctx, environment, f"{path}.created", str(getattr(item, key_field)))
+        if model is Resource:
+            await cdc.apply(platform, env)
         return created({**view(item), **reveal})
 
     async def get_item(ctx: HttpContext, env: str, key: str):
@@ -694,6 +717,8 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
             setattr(item, field, value)
         await item.save()
         await changed(ctx, environment, f"{path}.updated", key)
+        if model is Resource:
+            await cdc.apply(platform, env)
         return {**view(item), **reveal}
 
     async def delete_item(ctx: HttpContext, env: str, key: str):
@@ -715,6 +740,8 @@ def _register(r: Router, platform: Platform, kind: dict[str, Any]) -> None:
         item = await lookup(environment, key)
         await item.delete()
         await changed(ctx, environment, f"{path}.deleted", key)
+        if model is Resource:
+            await cdc.apply(platform, env, removed=[item.table or item.name])
         return no_content()
 
     r.get(

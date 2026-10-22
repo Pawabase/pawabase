@@ -2,7 +2,7 @@ import { router } from "@inertiajs/react";
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import { useDataSubnav } from "../../components/DataNav";
-import SqlBuilder from "../../components/SqlBuilder";
+import SqlEditor from "./sql/SqlEditor";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Card, Loading, PageHead, Table, formatCell, truncate, useAction } from "../../components/ui";
 import { envPath, get, post, useApi } from "../../lib/api";
@@ -50,7 +50,7 @@ export default function Database({ env }) {
         </div>
       )}
       <Loading state={overview}>
-        {(data) => <SqlConsole env={env} base={base} tables={data.tables || []} dialect={data.dialect} />}
+        {(data) => <SqlEditor env={env} base={base} tables={data.tables || []} dialect={data.dialect} />}
       </Loading>
     </Layout>
   );
@@ -104,72 +104,5 @@ export function TableView({ base, table }) {
         }}
       </Loading>
     </section>
-  );
-}
-
-function SqlConsole({ env, base, tables, dialect }) {
-  const [sql, setSql] = useState("SELECT 1 AS ok");
-  const [builder, setBuilder] = useState(true);
-  const [allowWrite, setAllowWrite] = useState(false);
-  const [result, setResult] = useState(null);
-  const [run, busy] = useAction();
-  const execute = async () => {
-    const r = await run(() => post(`${base}/query`, { sql, allow_write: allowWrite }));
-    if (r) setResult(r);
-  };
-  return (
-    <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
-      <Card
-        title="Query"
-        actions={<>
-          <label className="check [label&]:flex [label&]:items-center [label&]:gap-2 [label&]:text-text [label&]:text-ui" style={{ fontSize: 12.5 }}><input type="checkbox" checked={allowWrite} onChange={(e) => setAllowWrite(e.target.checked)} /> allow writes</label>
-          <Button size="sm" onClick={() => setBuilder(!builder)}>{builder ? "Hide builder" : "Query builder"}</Button>
-          <Button size="sm" variant="primary" disabled={busy} onClick={execute}><Icon name="play" size={14} /> Run</Button>
-        </>}
-      >
-        {builder && (
-          <>
-            <SqlBuilder base={base} tables={tables} dialect={dialect} initialTable={null} onSql={setSql} onWrites={(writes) => setAllowWrite(writes)} />
-            <p className="hint text-xs font-book text-muted leading-[1.45]" style={{ margin: "10px 0 14px" }}>Each click rewrites the SQL below. Edit it by hand any time; the next click in the builder replaces your edits.</p>
-          </>
-        )}
-        <textarea
-          rows={8}
-          className="mono font-mono text-ui-sm"
-          value={sql}
-          onChange={(e) => setSql(e.target.value)}
-          onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") execute(); }}
-          aria-label="SQL"
-          spellCheck={false}
-        />
-        <p className="hint text-xs font-book text-muted leading-[1.45]" style={{ margin: "8px 0 0" }}>⌘ or Ctrl + Enter runs the query. {dialect ? `Dialect: ${dialect}.` : ""}</p>
-      </Card>
-      {result?.warnings?.map((warning, index) => (
-        <div key={index} className={`alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] ${warning.level === "error" ? "error" : warning.level === "info" ? "info" : "warn"} sql-warning flex flex-col gap-2 [&_p]:m-0 [&_ol]:m-0 [&_ol]:pl-5 [&_ol]:flex [&_ol]:flex-col [&_ol]:gap-1 [&_.btn]:self-start`}>
-          <div className="spread flex items-center justify-between gap-3">
-            <b>{warning.title}</b>
-            <Badge tone={warning.level === "error" ? "red" : warning.level === "info" ? "" : "yellow"}>{warning.level === "error" ? "Needs fixing" : warning.level === "info" ? "Good to know" : "Action needed"}</Badge>
-          </div>
-          <p>{warning.message}</p>
-          <ol>{warning.steps.map((step) => <li key={step}>{step}</li>)}</ol>
-          {warning.action && (
-            <Button size="sm" onClick={() => {
-              const table = warning.action.table || (warning.action.type === "import" ? null : warning.action.resource);
-              router.visit(table ? `/envs/${env}/tables?table=${encodeURIComponent(table)}&tab=columns` : `/envs/${env}/tables`);
-            }}>{warning.action.label}</Button>
-          )}
-        </div>
-      ))}
-      {result && (
-        <Card icon="eye" flush title="Result" actions={result.rows ? <span className="muted text-muted small text-ui-sm">{result.rows.length} row{result.rows.length === 1 ? "" : "s"}</span> : undefined}>
-          {result.affected !== undefined ? (
-            <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] ok" style={{ margin: 16 }}>{result.affected} row(s) affected.</div>
-          ) : (
-            <Table rows={result.rows} columns={Object.keys(result.rows[0] || {}).map((c) => ({ label: c, key: c, render: (r) => formatCell(r[c]) }))} empty="No rows." />
-          )}
-          {result.truncated && <div className="hint text-xs font-book text-muted leading-[1.45]" style={{ padding: "0 20px 14px" }}>Showing the first 5000 rows.</div>}
-        </Card>
-      )}
-    </div>
   );
 }
