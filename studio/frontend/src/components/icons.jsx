@@ -4,7 +4,7 @@ import {
   Diagram, DirectboxSend, DocumentCode2, DocumentText, Copy, Eye, Export, Flash, Folder, Global, Hierarchy3,
   Home2, Import, Key, Layer, LayoutMaximize, Link21, Lock, Login, Logout, MagicStar, Map, Maximize3,
   Maximize4, Menu, Message, MessageQuestion, Monitor, Moon, Notification, People, Play, Profile2User,
-  Refresh2, RouteSquare, SearchNormal1, Send2, Setting2, ShieldTick, Status, Sun1, TableDocument,
+  Refresh2, RouteSquare, SearchNormal1, Send2, Setting2, ShieldSearch, ShieldTick, Status, Sun1, TableDocument,
   TickCircle, Timer1, Trash, User, Wifi,
 } from "iconsax-react";
 
@@ -12,7 +12,7 @@ import {
 // Flow blocks remain custom because their marks communicate block semantics.
 const BULK_ICONS = {
   overview: Home2, database: Data, resources: TableDocument, schemas: DocumentCode2,
-  transformers: ArrowSwapHorizontal, policies: ShieldTick, routes: RouteSquare, gitBranch: Hierarchy3,
+  transformers: ArrowSwapHorizontal, policies: ShieldTick, rules: ShieldSearch, routes: RouteSquare, gitBranch: Hierarchy3,
   explorer: Map, functions: Code, flows: Diagram, flowBlock: Diagram, subscriptions: Notification,
   schedules: Calendar, webhooks: Send2, "inbound-hooks": DirectboxSend, "mail-templates": Message,
   users: Profile2User, storage: Folder, realtime: Wifi, jobs: Layer, events: Activity,
