@@ -38,7 +38,7 @@ export default function Database({ env }) {
     <Layout title="SQL" subnav={subnav}>
       <PageHead
         title="SQL"
-        description="Run queries against the environment's database. Browse a table's rows in the Table editor. Bring your own database with a database URL in Settings."
+        description="Run queries against the environment's database. Browse a table's rows in the Table editor."
         actions={<Button disabled={busy} onClick={syncTables}><Icon name="database" />{busy ? "Working…" : "Create tables"}</Button>}
       />
       {result && (

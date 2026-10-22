@@ -371,3 +371,4 @@ i.failed { background: var(--danger); }
 .mail-version-main .badge, .mail-version-main > span:not(:first-child) { align-self: flex-start; }
 .mail-version-main > * { max-width: 100%; }
 .toast.warn .toast-dot { color: var(--warn); }
+

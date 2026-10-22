@@ -30,3 +30,6 @@
 :where(.dot) { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; margin-right: 5px; vertical-align: 1px; }
 :where(input.invalid) { border-color: var(--danger); }
 @media (max-width: 960px) { :where(.grid.two) { grid-template-columns: minmax(0, 1fr); } }
+
+/* One editable item in a list of them (a rule, a mapping) */
+:where(.list-card) { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: calc(var(--r) + 2px); background: color-mix(in srgb, var(--surface) 58%, var(--canvas)); }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Layout from "../../components/Layout";
-import { Badge, Button, Card, CopyText, Field, Loading, Modal, PageHead, Table, useAction, when } from "../../components/ui";
+import CustomValues from "../../components/settings/CustomValues";
+import { Badge, Button, Card, CopyText, Field, Loading, Modal, PageHead, Segmented, Table, useAction, when } from "../../components/ui";
 import { del, envPath, patch, post, put, useApi } from "../../lib/api";
 
 export default function Secrets({ env }) {
@@ -8,14 +9,19 @@ export default function Secrets({ env }) {
   const secrets = useApi(base);
   const [editing, setEditing] = useState(null);
   const [rotating, setRotating] = useState(null);
+  const [view, setView] = useState(new URLSearchParams(window.location.search).get("view") === "values" ? "values" : "secrets");
   const [run, busy] = useAction();
   return (
     <Layout title="Secrets">
       <PageHead
         title="Secrets"
-        description={<>Encrypted at rest. Reference them as <code>secret://NAME</code> in settings, webhook headers and block configs, or read <code>ctx.secrets</code> in functions. Values are never shown again.</>}
-        actions={<Button variant="primary" onClick={() => setEditing({ name: "", value: "", description: "", isNew: true })}>New secret</Button>}
+        description={view === "values" ? "Values your app reads that are not secret, like a store name or a feature switch. Keep anything private in Secrets." : <>Encrypted at rest. Reference them as <code>secret://NAME</code> in settings, webhook headers and block configs, or read <code>ctx.secrets</code> in functions. Values are never shown again.</>}
+        actions={<>
+          <Segmented value={view} onChange={setView} options={[["secrets", "Secrets"], ["values", "Plain values"]]} />
+          {view === "secrets" && <Button variant="primary" onClick={() => setEditing({ name: "", value: "", description: "", isNew: true })}>New secret</Button>}
+        </>}
       />
+      {view === "values" ? <div className="mail-page"><CustomValues env={env} /></div> : (
       <Card bleed flush>
         <Loading state={secrets} empty="No secrets yet.">
           {(data) => (
@@ -44,6 +50,7 @@ export default function Secrets({ env }) {
           )}
         </Loading>
       </Card>
+      )}
       {rotating && <RotateSheet base={base} secret={rotating} onClose={() => setRotating(null)} onDone={() => secrets.reload()} />}
       {editing && <SecretForm base={base} secret={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); secrets.reload(); }} />}
     </Layout>

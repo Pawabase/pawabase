@@ -77,11 +77,11 @@ export function Channels({ env, onWatch }) {
   const reload = () => rules.reload();
   return (
     <>
-      <PageHead title="Channels" description="Durable rules Studio and the API both read — the DB-backed sibling of the hand-edited channel list in Settings. Patterns support * and {{ auth.* }} templates." actions={<Button variant="primary" onClick={() => setEditing(blankRule())}><Icon name="plus" />New channel rule</Button>} />
+      <PageHead title="Channels" description="Durable rules Studio and the API both read — the same rules the Settings tab of this section can hold. Patterns support * and {{ auth.* }} templates." actions={<Button variant="primary" onClick={() => setEditing(blankRule())}><Icon name="plus" />New channel rule</Button>} />
       <Card icon="realtime" flush title="Channel rules">
         <Loading state={rules} empty={
           <EmptyState icon="layers" title="No channel rules yet" action={<Button variant="primary" onClick={() => setEditing(blankRule())}><Icon name="plus" />New channel rule</Button>}>
-            Every channel falls back to the environment's default policy (Settings → Realtime) until you add a rule here.
+            Every channel falls back to the environment's default policy (see Settings in this section) until you add a rule here.
           </EmptyState>
         }>
           {(data) => (

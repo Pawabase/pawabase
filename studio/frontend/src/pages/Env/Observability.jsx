@@ -23,15 +23,15 @@ const WINDOWS = [[15, "15m"], [60, "1h"], [360, "6h"], [1440, "24h"], [10080, "7
 
 // The sidebar answers "what do you want to look at"; each entry is one page of the same place.
 const TABS = [
-  ["overview", "Overview", [["overview", "Overview"]]],
-  ["requests", "Requests", [["routes", "Routes"], ["errors", "Errors"], ["requests", "Requests"]]],
-  ["background", "Background work", [["jobs", "Jobs"], ["flows", "Flow runs"]]],
-  ["messaging", "Events and messages", [["events", "Events"], ["event-map", "Event map"], ["webhooks", "Webhooks"], ["mail", "Mail"], ["realtime", "Realtime"]]],
-  ["explore", "Logs and alerts", [["logs", "Logs"], ["alarms", "Alarms"], ["metrics", "Metrics"]]],
-  ["audit", "Audit", [["audit", "Audit log"]]],
+  ["overview", "Overview", [["overview", "Overview", "overview"]]],
+  ["requests", "Requests", [["routes", "Routes", "routes"], ["errors", "Errors", "status"], ["requests", "Requests", "networking"]]],
+  ["background", "Background work", [["jobs", "Jobs", "jobs"], ["flows", "Flow runs", "flows"]]],
+  ["messaging", "Events and messages", [["events", "Events", "events"], ["event-map", "Event map", "gitBranch"], ["webhooks", "Webhooks", "webhooks"], ["mail", "Mail", "mail"], ["realtime", "Realtime", "realtime"]]],
+  ["explore", "Logs and alerts", [["logs", "Logs", "book"], ["alarms", "Alarms", "bell"], ["metrics", "Metrics", "usage"]]],
+  ["audit", "Audit", [["audit", "Audit log", "audit"]]],
 ];
 const SECTIONS = TABS.flatMap(([, , items]) => items.map(([key]) => key));
-const NEEDS_WINDOW = new Set(["overview", "routes", "errors", "jobs", "flows", "events", "webhooks", "mail"]);
+const NEEDS_WINDOW = new Set(["overview", "routes", "errors", "requests", "jobs", "flows", "events", "webhooks", "mail"]);
 // Links and bookmarks from before the sections were merged.
 const RENAMED = { queues: "jobs", workers: "jobs", database: "overview", cache: "overview", "event-log": "events" };
 
@@ -99,7 +99,7 @@ export default function Observability({ env }) {
 
   const subnav = {
     title: "Activity",
-    groups: TABS.map(([key, label, tabItems]) => ({ title: key === "overview" ? undefined : label, items: tabItems.map(([k, l]) => ({ key: k, label: l, flag: flagged[k] })) })),
+    groups: TABS.map(([key, label, tabItems]) => ({ title: key === "overview" ? undefined : label, items: tabItems.map(([k, l, icon]) => ({ key: k, label: l, icon, flag: flagged[k] })) })),
     active: section,
     onSelect: open,
   };
@@ -124,7 +124,7 @@ export default function Observability({ env }) {
           {section === "overview" && <Overview {...shared} />}
           {section === "routes" && <Routes env={env} minutes={minutes} onRoute={setRoute} onTrace={openTrace} />}
           {section === "errors" && <Errors env={env} minutes={minutes} onRoute={setRoute} onTrace={openTrace} />}
-          {section === "requests" && <Requests base={base} onTrace={openTrace} />}
+          {section === "requests" && <Requests base={base} minutes={minutes} onTrace={openTrace} />}
           {section === "jobs" && <JobsPanel env={env} system={system} />}
           {section === "flows" && <><Flows {...shared} /><FlowRuns env={env} /></>}
           {section === "events" && <><Events {...shared} /><EventLog env={env} /></>}

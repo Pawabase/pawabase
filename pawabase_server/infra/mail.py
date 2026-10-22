@@ -186,7 +186,20 @@ class MailManager:
             raise KeyError(f"no mail template {template!r}")
         if getattr(stored, "status", "published") == "draft" and not (stored.html or stored.text):
             raise KeyError(f"mail template {template!r} has not been published yet")
-        return self.render_source(stored.subject, stored.html, stored.text, data)
+        return self.render_source(
+            stored.subject, stored.html, stored.text, self.context(state, data)
+        )
+
+    @staticmethod
+    def app_details(state: EnvironmentState) -> dict[str, str]:
+        """The app's public details from Settings (name, support email, address, website), or nothing."""
+        details = (getattr(state, "settings", None) or {}).get("app")
+        return dict(details) if isinstance(details, dict) else {}
+
+    def context(self, state: EnvironmentState, data: Mapping[str, Any]) -> dict[str, Any]:
+        """What a template can read: the caller's data, and ``app`` from Settings for whatever the caller did not give."""
+        given = data.get("app") if isinstance(data.get("app"), Mapping) else {}
+        return {**data, "app": {**self.app_details(state), **given}}
 
     async def _deliver(
         self,
@@ -256,6 +269,8 @@ class MailManager:
         """
         if not to:
             raise ValueError("a message needs at least one recipient")
+        # Replies go to the app's support address unless the message says otherwise.
+        reply_to = reply_to or self.app_details(state).get("support_email") or None
         if template:
             rendered_subject, rendered_html, rendered_text = self.render(
                 state, template, data or {}

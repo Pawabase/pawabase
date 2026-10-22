@@ -1,6 +1,7 @@
 import { Link } from "@inertiajs/react";
 import { useState } from "react";
 import Layout, { envHref, sectionNav, useSection } from "../../components/Layout";
+import AccessSettings from "../../components/settings/AccessSettings";
 import { Bans, FirewallEvents, FirewallOverview, FirewallRules, FirewallTester } from "./firewall/Firewall";
 import { Badge, Button, CopyText, EmptyState, Field, Loading, Modal, PageHead, Section, Switch, Table, TagInput, when, useAction } from "../../components/ui";
 import { del, envPath, patch, post, put, useApi } from "../../lib/api";
@@ -9,7 +10,7 @@ const STATUS_TONES = { verified: "green", pending: "yellow", failed: "red" };
 
 export default function Networking({ env }) {
   const base = envPath(env);
-  const [tab, setTab] = useSection(["domains", "overview", "rules", "bans", "events", "test"], "overview");
+  const [tab, setTab] = useSection(["domains", "access", "overview", "rules", "bans", "events", "test"], "overview");
   const [banning, setBanning] = useState(null);
   const [newRule, setNewRule] = useState(null);
   const ban = (ip) => { setBanning(ip); setTab("bans"); };
@@ -23,20 +24,26 @@ export default function Networking({ env }) {
         ["events", "Events", null, { icon: "events" }],
         ["test", "Test a request", null, { icon: "play" }],
       ] },
-      { title: "Addresses", items: [["domains", "Custom domains", null, { icon: "link" }]] },
+      { title: "Access", items: [["access", "API access", null, { icon: "keys" }], ["domains", "Custom domains", null, { icon: "link" }]] },
     ], tab, setTab)}>
       {tab === "overview" && <FirewallOverview base={base} onBan={ban} onNewRule={createRule} />}
       {tab === "rules" && <FirewallRules base={base} prefill={newRule} onPrefilled={() => setNewRule(null)} />}
       {tab === "bans" && <Bans base={base} prefill={banning} onPrefilled={() => setBanning(null)} />}
       {tab === "events" && <FirewallEvents base={base} onBan={ban} />}
       {tab === "test" && <FirewallTester base={base} />}
+      {tab === "access" && (
+        <div className="stack lg">
+          <PageHead title="API access" description="Who can call your API and from where, and maintenance mode." />
+          <div className="flex flex-col gap-3 max-w-[920px] mx-auto"><AccessSettings env={env} /></div>
+        </div>
+      )}
       {tab === "domains" && (
         <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
           <PageHead title="Custom domains" description="Addresses this environment answers on, proved with a DNS record." />
           <div className="flex flex-col gap-3 max-w-[920px] mx-auto">
             <Domains base={base} />
             <Section icon="networking" title="Other network controls">
-              <p className="m-0 text-ui-sm text-muted">Allowed origins (CORS), the secret-key IP allowlist and maintenance mode live in <Link href={envHref(env, "settings")}>Settings</Link>. Each API key can also be limited to IP ranges and routes under <Link href={envHref(env, "keys")}>API keys</Link>.</p>
+              <p className="m-0 text-ui-sm text-muted">Allowed websites, the server allowlist for secret keys and maintenance mode are under <button type="button" className="linklike" onClick={() => setTab("access")}>API access</button>. Each API key can also be limited to IP ranges and routes under <Link href={envHref(env, "keys")}>API keys</Link>.</p>
             </Section>
           </div>
         </div>
