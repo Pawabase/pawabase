@@ -1,125 +1,108 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
-    <img src="docs/assets/banner.svg" alt="Pawabase: the open backend for apps that need to stay yours" width="100%">
+    <img src="docs/assets/banner.svg" alt="Pawabase: the complete backend for modern apps" width="100%">
   </picture>
 </p>
 
 <p align="center">
-  Sign-in, a database with an API, files, realtime and functions, in one platform you run on your own infrastructure.
+  Pawabase is a product-first platform for going from idea to launch at the speed of a conversation.
   <br>
-  Everything Supabase and Firebase give you out of the box, without handing over your data or your bill.
+  Give your app sign-in, data, files, automation, email and realtime, already connected, with one workspace to run it all.
 </p>
 
 <p align="center">
-  <a href="https://github.com/Pawabase/pawabase-docs"><b>Docs</b></a> ·
-  <a href="#get-started-in-two-minutes"><b>Get started</b></a> ·
+  <a href="https://github.com/Pawabase/pawabase-docs"><b>Documentation</b></a> ·
+  <a href="#pawabase-cloud"><b>Pawabase Cloud</b></a> ·
+  <a href="#everything-your-app-needs"><b>Features</b></a> ·
   <a href="https://github.com/Pawabase/pawabase-python"><b>Python</b></a> ·
-  <a href="https://github.com/Pawabase/pawabase-js"><b>TypeScript</b></a> ·
-  <a href="#pawabase-cloud"><b>Cloud</b></a>
+  <a href="https://github.com/Pawabase/pawabase-js"><b>TypeScript</b></a>
 </p>
 
 ---
 
-## Ship the product, not the plumbing
+## Build the product, not the backend
 
-Every app ends up needing the same things: people signing in, data with rules, files, live updates, and work that
-happens in the background. Pawabase is all of it, already connected, with one place to run it.
+Every app needs the same things before anyone can use it: people signing in, data that is kept safe, files, live
+updates, email, and work that happens in the background. Pawabase is all of it, set up and connected on day one, so
+a small team can move like a big one.
 
-|  |  |
-| --- | --- |
-| **A database with an API** <br> Describe a table and get a secure REST API, with filtering, sorting, relations and generated docs. Your data stays in plain Postgres, MySQL or SQLite. | **Sign-in that scales to teams** <br> Email, social sign-in, two-step verification, organizations, roles and invitations, built in and usable in your rules. |
-| **Rules you can read** <br> Say who can list, read, create, update and delete in plain conditions. They hold on every request and every file. | **Files with the same rules** <br> Buckets, uploads and expiring links on local disk or any S3-compatible storage. |
-| **Realtime** <br> Channels with broadcast, presence and history, over WebSockets, guarded by the same rules. | **Functions and workflows** <br> Write Python, or build the flow visually. Run it on a schedule, on an event, or from a webhook, with retries. |
-| **Studio** <br> One dashboard for all of it: data, users, logs, queues, keys, topology of how your data connects. | **Real environments** <br> Development, staging and production side by side, each with its own keys, with releases and branches for safe changes. |
+- **Launch in days, not quarters.** Start with a working backend instead of a blank page.
+- **One place for everything.** Your data, your users, your email and what went wrong, in a single workspace.
+- **Change things safely.** Try an idea on a branch, release it when you are ready, roll it back if you are not.
+- **Predictable costs.** Simple pricing, with no surprise bills as your users grow.
+- **Room to grow.** The same setup carries you from your first user to your millionth.
+
+## Everything your app needs
+
+### Your users
+
+- **Sign-in people trust.** Email and password, social sign-in, magic links and two-step verification.
+- **Teams built in.** Organizations, roles, permissions and invitations, ready to use in your app.
+- **Control over who gets in.** Sign-up rules, password policy, session and device management, domain restrictions.
+
+### Your data
+
+- **Create a table and use it straight away.** Searching, sorting, filtering and relations work from the start.
+- **Works with the database you already have.** Bring your own, or start fresh in minutes.
+- **A real SQL editor.** Write queries with suggestions, save the useful ones, share them with your team.
+- **Rules you can read.** Say who can see and change what in plain conditions. The same rules protect your data,
+  your files and your live updates.
+- **Know the moment data changes.** Get told when a record is added, changed or removed, including changes made
+  outside your app (on PostgreSQL and SQLite).
+- **Typed clients, generated for you.** TypeScript and Python types that match your data, always up to date.
+
+### Files and live moments
+
+- **Files without the fuss.** Upload, store and share files with expiring links, and resize images on the fly.
+- **Realtime that feels alive.** Live updates, chat-style channels, and who is online right now.
+
+### Email that looks like a product
+
+- **A visual email editor.** Design beautiful emails by dragging blocks, with a live preview for desktop and phone.
+- **Ready-made templates.** Welcome, receipts, password resets, invitations and more, all yours to edit.
+- **See every message.** What was sent, to whom, whether it arrived, and one click to try again.
+- **Your brand, applied everywhere.** Set your name, colors and support address once.
+
+### Work that runs by itself
+
+- **Build workflows by drawing them.** Connect blocks, or write Python when you want full control.
+- **Start them your way.** On a schedule, when something happens in your app, or when another service calls.
+- **Failures are handled.** Failed work retries on its own, and anything that gives up waits for you to look.
+- **Tell other systems what happened.** Send webhooks when things happen, and receive them securely.
+
+### One workspace to run it all
+
+- **Studio.** Your data, users, files, email, workflows and settings in a single, clean dashboard.
+- **Activity at a glance.** What your app is doing and what went wrong, with logs, alarms that email you, and a
+  public status page for your users.
+- **Real environments.** Development, staging and production side by side, each with its own keys and settings.
+- **Releases and branches.** Ship a change when it is ready, and go back if it is not.
+- **Backups and security.** Snapshots you can restore, key and secret rotation, custom domains and a firewall.
 
 ## Why teams choose Pawabase
 
-- **It is yours.** Run it anywhere you run containers. Your database, your storage, your network, your region. No
-  vendor in the middle and nothing to export when you grow.
-- **No meter on your users.** You pay for your own infrastructure, not per read, per write or per sign-in.
-- **Familiar underneath.** Real SQL databases, S3-compatible storage, plain HTTP and WebSockets. Move off whenever
-  you like.
-- **One platform, not twelve services.** Sign-in, data, files, realtime and automation share one set of rules and one
-  place to look when something is wrong.
-- **Operations included.** Metrics and alarms that email you, a public status page, backups and snapshots, key and
-  secret rotation, custom domains and a firewall.
-
-## How it compares
-
-| | Pawabase | Supabase | Firebase |
-| --- | :---: | :---: | :---: |
-| Self-host the whole platform | ✅ | ✅ | ❌ |
-| Bring your own database | ✅ Postgres, MySQL, SQLite | Postgres | ❌ |
-| Open source | ✅ BSD-3 | ✅ | ❌ |
-| Access rules you can read | ✅ | ✅ | ✅ |
-| Server logic in | Python | TypeScript | JavaScript, Python |
-| Visual workflow builder | ✅ | ❌ | ❌ |
-| Realtime and presence | ✅ | ✅ | ✅ |
-| Teams, roles and invitations built in | ✅ | ➖ build it | ➖ build it |
-
-<sub>Based on each product's public documentation. Check theirs for the details that matter to you.</sub>
-
-## Get started in two minutes
-
-You need Docker.
-
-```sh
-git clone https://github.com/Pawabase/pawabase && cd pawabase
-cp .env.test .env
-docker compose up -d
-```
-
-Open **Studio** at <http://localhost:8090> and your API is at <http://localhost:8080>. Then:
-
-```sh
-# Read a table
-curl http://localhost:8080/rest/v1/todos -H "apikey: <publishable key>"
-
-# Sign someone up
-curl -X POST http://localhost:8080/auth/v1/signup \
-  -H "apikey: <publishable key>" -H "content-type: application/json" \
-  -d '{"email":"ada@example.com","password":"Str0ng!pass"}'
-```
-
-Or from your app:
-
-```ts
-import { createClient } from "@pawabase/client";
-
-const pawabase = createClient({ url: "http://localhost:8080", apiKey: "<publishable key>" });
-const todos = await pawabase.from("todos").eq("done", false).perPage(20);
-```
-
-Using Python? `pip install pawabase`.
-
-## Run it for real
-
-```sh
-cp .env.example .env     # set the secrets: `openssl rand -hex 32` for each one
-docker compose up -d
-```
-
-Point Pawabase at your own Postgres, Redis and S3-compatible storage with the variables in `.env.example`. In
-production mode it refuses to start while a development secret is still in place. Put TLS in front of it, turn on
-Studio's sign-in, and you are live. When you outgrow one server, add more and share a Redis.
+| | |
+| --- | --- |
+| **Fewer tools to stitch together** | Sign-in, data, files, email and automation share one set of rules and one place to look when something is wrong. |
+| **Everyone can follow along** | Rules, workflows and emails are readable, so designers, product managers and developers all see what the app does. |
+| **Built for real products** | Teams, environments, releases, alarms and backups are part of it from the start, not something you add later. |
+| **Familiar underneath** | Standard databases, standard storage and standard web technology, so nothing you build is a dead end. |
 
 ## Pawabase Cloud
 
-Would you rather we run it? Pawabase Cloud gives you a project with its own database in a minute, and bills by
-subscription. It is in pre-launch.
+Prefer not to run anything yourself? Pawabase Cloud gives you a project with its own database in about a minute, and
+bills by simple subscription. It is in pre-launch.
 
 ## Learn more
 
 | | |
 | --- | --- |
-| [Documentation](https://github.com/Pawabase/pawabase-docs) | Guides and reference |
-| [Python library and CLI](https://github.com/Pawabase/pawabase-python) | `pip install pawabase` |
-| [TypeScript client](https://github.com/Pawabase/pawabase-js) | `@pawabase/client` |
+| [Documentation](https://github.com/Pawabase/pawabase-docs) | Guides, tutorials and reference |
+| [Python library and command line](https://github.com/Pawabase/pawabase-python) | For functions and automation |
+| [TypeScript client](https://github.com/Pawabase/pawabase-js) | For web and mobile apps |
 | [Upgrading](docs/upgrading.md) | Moving an older installation forward |
 | [Architecture](ARCHITECTURE.md) | How it is built, for contributors |
-
-Contributing? `docker compose -f docker-compose.dev.yml up` starts everything with live reload.
 
 ## License
 
