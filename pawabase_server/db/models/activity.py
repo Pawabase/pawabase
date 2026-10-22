@@ -173,10 +173,26 @@ class MailLog(Model):
     to = AnyJSONField(default=list)
     subject = fields.CharField(max_length=255, default="")
     template = fields.CharField(max_length=128, null=True)
+    #: ``sent``, ``failed``, ``suppressed``, ``scheduled`` or ``canceled``.
     status = fields.CharField(max_length=16)
     message_id = fields.CharField(max_length=255, null=True)
     error = fields.TextField(null=True)
     source = fields.CharField(max_length=32, default="api")
+    # What was sent, kept so Studio can show it, retry it, or send it later.
+    from_email = fields.CharField(max_length=255, null=True)
+    reply_to = fields.CharField(max_length=255, null=True)
+    cc = AnyJSONField(null=True)
+    bcc = AnyJSONField(null=True)
+    html = fields.TextField(null=True)
+    text = fields.TextField(null=True)
+    data = AnyJSONField(null=True)
+    #: ``[{filename, content_type, size, content}]``: content is base64.
+    attachments = AnyJSONField(null=True)
+    provider_response = AnyJSONField(null=True)
+    attempts = fields.IntField(default=1)
+    retry_of = fields.CharField(max_length=26, null=True)
+    scheduled_at = fields.DatetimeField(null=True)
+    sent_at = fields.DatetimeField(null=True)
 
     class Meta:
         table = "pb_mail_log"

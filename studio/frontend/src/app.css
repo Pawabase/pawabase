@@ -1,0 +1,853 @@
+@import "tailwindcss";
+
+@theme {
+  /* surfaces */
+  --color-hero: #08090a;
+  --color-frame: #08090a;
+  --color-canvas: #08090a;
+  --color-surface: #16171a;
+  --color-sunken: #16171a;
+  --color-line: #292a2d;
+  --color-line-2: #292a2d;
+
+  /* text */
+  --color-ink: #ededed;
+  --color-on-ink: #08090a;
+  --color-text: #ededed;
+  --color-muted: #aaa8b8;
+  --color-faint: #747180;
+
+  /* brand */
+  --color-brand: #ff7049;
+  --color-brand-strong: #ffffff;
+  --color-brand-soft: #3a211c;
+  --color-brand-ring: rgba(255, 112, 73, 0.34);
+  --color-accent: #9a8cff;
+  --color-accent-soft: #29243d;
+  --color-accent-line: #403762;
+
+  /* pastels (decoration only) */
+  --color-lavender: #cfc4fa;
+  --color-peach: #ffd4b8;
+  --color-mint: #c4ebd9;
+  --color-butter: #f8e6a8;
+  --color-sky: #c3dcf6;
+  --color-rose: #f7cadb;
+  --color-pastel-ink: #211f2c;
+
+  /* status */
+  --color-ok: #6fd3a2;
+  --color-ok-soft: #1c3329;
+  --color-warn: #efc463;
+  --color-warn-soft: #3a3019;
+  --color-danger: #f39a93;
+  --color-danger-soft: #3d2224;
+  --color-info: #8fb8f2;
+  --color-info-soft: #1d2a40;
+
+  /* interactive fills */
+  --color-hover: color-mix(in srgb, #ededed 6%, transparent);
+  --color-press: color-mix(in srgb, #ff7049 19%, transparent);
+  --color-head-bg: color-mix(in srgb, #16171a 82%, #08090a);
+  --color-line-hover: color-mix(in srgb, #292a2d 55%, #aaa8b8);
+  --color-brand-line: color-mix(in srgb, #ff7049 22%, #16171a);
+
+  /* controls */
+  --color-control: #f5f5f6;
+  --color-control-hover: #ffffff;
+  --color-control-ink: #111315;
+  --color-control-line: rgba(255, 255, 255, 0.78);
+  --color-control-accent: rgba(255, 112, 73, 0.45);
+
+  /* radii */
+  --radius-xs: 7px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 22px;
+  --radius-control: 8px;
+
+  /* type */
+  --font-sans: "Geist Variable", "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-weight-book: 450;
+  --font-weight-medium-plus: 550;
+  --font-weight-semibold-plus: 650;
+  --font-weight-bold-plus: 750;
+
+  /* Studio's compact type scale */
+  --text-3xs: 10px;
+  --text-2xs: 11px;
+  --text-caption: 11.5px;
+  --text-xs: 12px;
+  --text-ui-sm: 12.5px;
+  --text-ui: 13px;
+  --text-body: 13.5px;
+  --text-base: 14px;
+  --text-heading: 15px;
+  --text-title: 16px;
+  --text-display-sm: 22px;
+  --text-display: 28px;
+
+  /* layout constants */
+  --spacing-bar: 66px;
+  --spacing-dock: 39px;
+  --spacing-edge: clamp(10px, 2vw, 28px);
+  --spacing-gutter: 24px;
+  --spacing-control: 34px;
+  --spacing-control-sm: 30px;
+
+  /* Existing responsive thresholds, named for their layout role. */
+  --breakpoint-compact: 560px;
+  --breakpoint-mobile: 620px;
+  --breakpoint-phone: 640px;
+  --breakpoint-tablet: 720px;
+  --breakpoint-wide-tablet: 780px;
+  --breakpoint-narrow: 900px;
+  --breakpoint-workbench: 960px;
+  --breakpoint-navigation: 980px;
+  --breakpoint-search: 1000px;
+  --breakpoint-layout: 1100px;
+  --breakpoint-wide: 1180px;
+}
+
+@utility font-inherit {
+  font: inherit;
+}
+
+@utility pastel-contrast {
+  --muted: #aaa5bd;
+  --faint: #706b84;
+}
+
+/* Element defaults, theme variables, conditional-state fallbacks, animations,
+   and third-party integration that cannot be expressed safely as local utilities. */
+@layer components {
+/*
+ * Studio's visual system.
+ *
+ * The landing hero's near-black canvas, one hairline frame, compact controls,
+ * and a white primary action with an orange baseline. Hover is one neutral
+ * wash everywhere; only semantic state colours change the fill.
+ *
+ * Status colours (ok / warn / danger / info) mean a state and are never used
+ * for decoration. Studio uses one focused dark theme.
+ */
+
+:root {
+  --hero: var(--color-hero);
+  --frame: var(--color-frame);
+  --canvas: var(--color-canvas);
+  --surface: var(--color-surface);
+  --sunken: var(--color-sunken);
+  --line: var(--color-line);
+  --line-2: var(--color-line-2);
+  --ink: var(--color-ink);
+  --on-ink: var(--color-on-ink);
+  --text: var(--ink);
+  --muted: var(--color-muted);
+  --faint: var(--color-faint);
+
+  --brand: var(--color-brand);
+  --brand-strong: var(--color-brand-strong);
+  --brand-soft: var(--color-brand-soft);
+  --brand-ring: var(--color-brand-ring);
+  --accent: var(--color-accent);
+  --accent-soft: var(--color-accent-soft);
+  --accent-line: var(--color-accent-line);
+
+  --control-bg: var(--color-control);
+  --control-bg-hover: var(--color-control-hover);
+  --control-ink: var(--color-control-ink);
+  --control-line: var(--color-control-line);
+  --control-accent: var(--color-control-accent);
+  --r-control: var(--radius-control);
+
+  --lavender: var(--color-lavender);
+  --peach: var(--color-peach);
+  --mint: var(--color-mint);
+  --butter: var(--color-butter);
+  --sky: var(--color-sky);
+  --rose: var(--color-rose);
+  /* Pastel surfaces are used as accents, so their copy needs the same deep
+     ink as the rest of the workspace rather than low-contrast light text. */
+  --pastel-ink: var(--color-pastel-ink);
+
+  --ok: var(--color-ok); --ok-soft: var(--color-ok-soft);
+  --warn: var(--color-warn); --warn-soft: var(--color-warn-soft);
+  --danger: var(--color-danger); --danger-soft: var(--color-danger-soft);
+  --info: var(--color-info); --info-soft: var(--color-info-soft);
+
+  --shadow-pop: none;
+  --r-xl: 30px;
+  --r-lg: 22px;
+  --r-md: 16px;
+  --r-sm: 12px;
+  --mono: "Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: "Geist Variable", "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--frame); color: var(--text); font: 14px/1.5 var(--sans); letter-spacing: -0.006em; font-feature-settings: "ss01", "cv11", "tnum" 0; font-optical-sizing: auto; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+#app { height: 100%; }
+a { color: inherit; text-decoration: none; }
+code, pre { font-family: var(--mono); font-size: 12.5px; }
+pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: -0.02em; }
+h1 { font-size: 26px; }
+h2 { font-size: 16px; }
+h3 { font-size: 14px; }
+::selection { background: var(--brand-soft); }
+* { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+
+/* ── shell ─────────────────────────────────────────────────────────────── */
+.crumbs { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 13.5px; flex-wrap: wrap; }
+.crumbs a { padding: 5px 10px; border-radius: var(--r); }
+.crumbs a:hover { color: var(--text); background: var(--surface); }
+.crumbs .sep { color: var(--faint); }
+.crumbs .here { color: var(--text); font-weight: 600; padding: 5px 10px; }
+
+/* ── elements ──────────────────────────────────────────────────────────── */
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 16px 20px; }
+
+input, select, textarea { width: 100%; background: var(--surface); color: var(--text); border: 1px solid var(--line-2); border-radius: var(--r); padding: 9px 12px; font: inherit; font-size: 13.5px; transition: border-color 0.15s; }
+input::placeholder, textarea::placeholder { color: var(--faint); }
+/* A field has one border. Focus changes that border instead of drawing a second ring around it. */
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--brand); box-shadow: none; }
+select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239d98b0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; background-size: 16px; padding-right: 32px; }
+textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; min-height: 100px; line-height: 1.55; }
+input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--brand); }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 12px 20px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { font-size: 11px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: 0.07em; padding-top: 10px; padding-bottom: 10px; }
+tr:last-child td { border-bottom: 0; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--sunken); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* switch */
+.switch .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.18s cubic-bezier(0.3, 1.4, 0.6, 1); box-shadow: none; }
+
+/* tags */
+
+/* ── forms in sheets ──────────────────────────────────────────────────── */
+
+/* Columns tab: rows carry a drag handle, a type menu and pills for the flags in play. */
+
+/* Relations: one summary line per relation, expanding into the editors. */
+
+/* condition builder */
+
+/* ── modal & sheet ─────────────────────────────────────────────────────── */
+@keyframes fade { from { opacity: 0; } }
+@keyframes pop { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
+@keyframes slide-in { from { transform: translateX(40px); opacity: 0; } }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+
+/* ── login ─────────────────────────────────────────────────────────────── */
+.login { min-height: 100%; display: grid; grid-template-columns: 1.05fr 1fr; gap: 14px; padding: 14px; }
+
+/* ── flow editor ──────────────────────────────────────────────────────── */
+.react-flow__handle { width: 10px; height: 10px; background: var(--brand); border: 2px solid var(--surface); }
+.react-flow__handle.error-handle { background: var(--danger); }
+.react-flow__background { color: var(--line-2); }
+.react-flow__controls { box-shadow: none; border-radius: var(--r); overflow: hidden; }
+.react-flow__controls button { background: var(--surface); border-color: var(--line); fill: var(--text); }
+.react-flow__minimap { background: var(--surface); border-radius: var(--r); overflow: hidden; }
+.react-flow__edge-path { stroke: var(--line-2); stroke-width: 1.8; }
+.react-flow__edge.selected .react-flow__edge-path { stroke: var(--brand); }
+.react-flow__edge-textbg { fill: var(--canvas); }
+.react-flow__edge-text { fill: var(--muted); font-size: 10px; }
+
+
+/* ── top bar: status lights and page search ─────────────────────────────── */
+:root { --chart-mint: #2fa57a; }
+:root { --chart-mint: #6fd3a2; }
+@keyframes blink { 50% { opacity: 0.35; } }
+
+/* ── overview analytics ─────────────────────────────────────────────────── */
+.failures { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.failures li { display: flex; flex-direction: column; gap: 3px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.failures li:last-child { border-bottom: 0; padding-bottom: 0; }
+
+
+/* ── realtime console ────────────────────────────────────────────────────── */
+
+
+/* Realtime Playground: full-bleed, edge to edge between the topbar and the bottom of the viewport — no card, no rounded corners. */
+
+@media (max-width: 980px) {
+  .login { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .crumbs { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* ── API Explorer ─────────────────────────────────────────────────────── */
+
+/* SQL query builder */
+
+/* ── Database browser ─────────────────────────────────────────────────── */
+
+/* ── Backups: choosing a file and restoring it ────────────────────────── */
+
+/* Observability: route table, timeline, waterfall, request trace */
+@keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+
+
+/* ═════════ The frame: Studio inside the website's ruled border ═════════
+   One bordered page that starts at the top of the screen and never touches the left or right edge: square corners, 1px rails, a dashed
+   rail inside them, and a cross where the top bar's rule meets each rail. Lines carry the structure, not shadows. */
+:root { --edge: clamp(10px, 2vw, 28px); --cross: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 11 11'%3E%3Cpath d='M5.5 0v11M0 5.5h11' stroke='black' stroke-width='1'/%3E%3C/svg%3E"); }
+html, body { background: var(--canvas); }
+
+/* sidebar modes: expanded, collapsed, and collapsed until the pointer arrives */
+.label { white-space: nowrap; }
+
+/* These state classes are applied by Layout. Keep their width rules explicit so
+   the sidebar can override its normal Tailwind utility width. */
+.side-collapsed .side-slot,
+.side-hover .side-slot { width: 64px !important; }
+.side-collapsed .sidebar,
+.side-hover .sidebar { width: 64px !important; padding-inline: 0 !important; }
+.side-hover .sidebar:hover,
+.side-hover .sidebar:focus-within { width: 236px !important; }
+
+.side-collapsed .sidebar .label,
+.side-collapsed .brand-name,
+.side-collapsed .nav-title,
+.side-hover .sidebar:not(:hover):not(:focus-within) .label,
+.side-hover .sidebar:not(:hover):not(:focus-within) .brand-name,
+.side-hover .sidebar:not(:hover):not(:focus-within) .nav-title { display: none !important; }
+
+.side-collapsed .nav a,
+.side-hover .sidebar:not(:hover):not(:focus-within) .nav a { justify-content: center !important; padding-inline: 0 !important; }
+.side-collapsed .switcher,
+.side-hover .sidebar:not(:hover):not(:focus-within) .switcher { justify-content: center !important; padding-inline: 0 !important; }
+.side-collapsed .nav-title + a,
+.side-hover .sidebar:not(:hover):not(:focus-within) .nav-title + a { margin-top: 0 !important; }
+
+@media (max-width: 980px) {
+  .side-collapsed .side-slot,
+  .side-hover .side-slot { width: 0 !important; }
+  .side-collapsed .sidebar,
+  .side-hover .sidebar,
+  .side-hover .sidebar:hover,
+  .side-hover .sidebar:focus-within { width: 292px !important; padding-inline: 14px !important; }
+  .side-collapse { display: none !important; }
+}
+
+/* the control at the sidebar's foot */
+
+/* breadcrumb: project and environment, one control, one wide menu */
+.crumbs { position: static; }
+
+/* the terminal: a docked bar at the foot of the page; opening it expands a panel above the bar */
+/* Keep the console deliberately distinct: VS Code's familiar dark workbench
+   colors make commands, paths, errors, and selection states readable. */
+.term { --term-bg: #1e1e1e; --term-panel: #252526; --term-line: #3c3c3c; --term-text: #d4d4d4; --term-muted: #9d9d9d; --term-blue: #569cd6; --term-green: #4ec9b0; --term-red: #f14c4c; height: min(340px, 42vh); display: flex; flex-direction: column; background: var(--term-bg); color: var(--term-text); font-family: Menlo, "SF Mono", Consolas, "Courier New", monospace; font-size: 12.5px; }
+
+
+/* the sidebar never clips what opens from it; only the nav list scrolls */
+
+
+/* ═════════ Aligned rails, a calmer nav, quieter initials ═════════ */
+:root { --bar: 66px; --dock: 39px; }
+.nav a.active::before { content: ""; position: absolute; left: -14px; top: 7px; bottom: 7px; width: 3px; border-radius: 0 var(--r-xs) var(--r-xs) 0; background: var(--brand); }
+
+/* ═════════ Sheets and modals: flush to the right edge, square, ruled like the sidebar ═════════
+   One component draws every modal and drawer. It runs the full height of the screen against the right edge, its header is as tall as the
+   top bar and its footer as tall as the terminal bar, so their rules line up across the page. No rounding, no shadow, no blur. */
+
+/* popovers and toasts follow the same rule: square, ruled, no shadow */
+
+/* behind a sheet or modal, the page softens */
+
+/* ═════════ Overview: one chart with tabs, then keys and functions ═════════ */
+
+/* date range picker */
+
+/* ═════════ Secondary navigation: a section with parts of its own ═════════
+   Its column sits beside the sidebar, which folds to icons while it is open. Head and foot match the top bar and the terminal bar. */
+.subnav-list button.active::before { content: ""; position: absolute; left: -12px; top: 7px; bottom: 7px; width: 3px; border-radius: 0 var(--r-xs) var(--r-xs) 0; background: var(--brand); }
+/* A group that stays put at the bottom of the sidebar (e.g. Data's tools) while the rest of the list scrolls above it. */
+
+/* in the icon rail the group headings give way to a thin rule */
+
+/* ═════════ Figures without boxes: one ruled strip, cells divided by lines ═════════ */
+
+/* secondary navigation, fuller: rows with a badge or a second line, a search box, an add button */
+.subnav-item.active::before { content: ""; position: absolute; left: -12px; top: 7px; bottom: 7px; width: 3px; border-radius: 0 var(--r-xs) var(--r-xs) 0; background: var(--brand); }
+
+/* ═════════ Figures as one quiet line, not boxes ═════════ */
+
+/* social providers: a grid of marks */
+
+/* users & auth */
+
+/* import wizard */
+
+/* metrics, logs and alarms */
+
+/* Sections stacked straight inside a page keep a gap between them, whichever component draws them. */
+
+/* ═════════ Topology: the shape of the data ═════════ */
+.topo-field text { font: 500 12.5px var(--sans); fill: var(--muted); }
+.topo-field .topo-type { font-size: 11px; fill: var(--faint); }
+.topo-field.link text:not(.topo-type) { fill: var(--text); }
+.topo-field circle { fill: var(--brand); }
+#topo-arrow path { fill: var(--faint); }
+
+/* The guided tour: a veil with a lit window around one part of Studio, and a card that follows it. */
+@keyframes tour-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes tour-ping { 0%, 100% { opacity: 1; } 50% { opacity: .6; } }
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+   Design system v2: a framed app with a search-first top bar and compact data views.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+:root {
+  --r-xl: 36px; --r-lg: 28px; --r-md: 20px; --r-sm: 12px;
+  --ink: #ededed; --text: #ededed; --muted: #aaa8b8; --faint: #747180;
+  --canvas: var(--color-canvas); --sunken: var(--color-sunken); --line: var(--color-line); --line-2: var(--color-line-2);
+}
+
+/* Project-scoped usage and plan limits. */
+
+/* Console controls are intentionally unframed inside the dock. This comes after
+   the shared shell field rule so it cannot inherit a second field border. */
+/* Flow creation is a workbench, not a dashboard page. Keep this route-specific
+   contract after the shared v2 component rules so dashboard page padding can
+   never turn the editor back into an inset card. The main column already
+   yields space to the docked terminal, so no viewport-height arithmetic is
+   needed here. */
+
+
+/* ── function code, runs, logs ─────────────────────────────────────────────────────────────────────────────────────── */
+
+
+/* ═════════════════════════════════════════════════════════════════════════
+ * STUDIO SYSTEM — the single source of truth for every shared surface.
+ *
+ * One workspace framed by 1px hairlines. Corners are 6px on controls and
+ * 4px on chips, and nothing is a floating rounded card. Elevation exists
+ * only for things that float (menus, popovers, sheets, toasts).
+ *
+ *   app bar (full width)
+ *   ├ sidebar │ secondary panel │ page header
+ *   │         │                 │ tabs
+ *   │         │                 │ toolbar
+ *   │         │                 │ content (tables, sections, metrics)
+ *   │         │                 │ footer (pagination)
+ *   └ console dock
+ * ═════════════════════════════════════════════════════════════════════════ */
+:root {
+  --r: 6px;
+  --r-xs: 4px;
+  --r-sm: var(--r); --r-md: var(--r); --r-lg: var(--r); --r-xl: var(--r);
+  --bar: 52px;
+  --gutter: 24px;
+  --control: 32px;
+  --control-sm: 28px;
+  --hover: color-mix(in srgb, var(--text) 5%, transparent);
+  --press: color-mix(in srgb, var(--text) 8%, transparent);
+  --head-bg: color-mix(in srgb, var(--surface) 70%, var(--canvas));
+  --shadow-pop: none;
+}
+html, body { background: var(--canvas); }
+
+/* ── shell ──────────────────────────────────────────────────────────────── */
+
+/* sidebar */
+
+/* secondary panel (Data, Storage, …) */
+
+/* main column */
+
+/* ── page anatomy ───────────────────────────────────────────────────────── */
+
+/* every direct region of a page is full-bleed and divided, never a floating card */
+
+/* nested sections and cards: flat regions with a hairline, 6px corners */
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 52px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.card-head h2 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+
+/* ── metrics: one ruled row, values aligned, no tiles ───────────────────── */
+a.metric:hover::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--brand); }
+.kpi.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--brand); }
+
+/* ── tabs: text with an underline on a hairline ─────────────────────────── */
+.tabs button.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 0; background: var(--accent); }
+
+/* ── segmented control: joined segments, one outline ────────────────────── */
+
+/* ── buttons ────────────────────────────────────────────────────────────── */
+
+/* ── resource definition and index tabs ──────────────────────────────────
+ * Resource management deserves a calm reading column, not a dashboard stretched
+ * across the table editor. Straight rules separate each concern. */
+/* Settings are independent controls, not a responsive form grid. Keeping
+   them in a single ruled list prevents a switch from recalculating a grid row
+   and shifting the whole table workspace. */
+.resource-settings-operations { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+
+/* ── fields ─────────────────────────────────────────────────────────────── */
+input, select, textarea { height: var(--control); padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--canvas); color: var(--text); font: inherit; font-size: 13px; box-shadow: none; }
+textarea { height: auto; padding: 8px 10px; font-family: var(--mono); font-size: 12.5px; }
+input:hover, select:hover, textarea:hover { border-color: color-mix(in srgb, var(--line-2) 50%, var(--faint)); }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--brand); box-shadow: none; }
+input[type="checkbox"], input[type="radio"] { width: 15px; height: 15px; padding: 0; }
+input[type="file"] { height: auto; padding: 6px; }
+select { padding-right: 30px; background-position: right 8px center; }
+
+/* ── tables: full width, ruled header, hairline rows ────────────────────── */
+table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+th, td { padding: 0 16px; height: 44px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--line); }
+th { position: sticky; top: 0; z-index: 1; height: 38px; background: var(--head-bg); color: var(--muted); font-size: 12px; font-weight: 550; letter-spacing: 0; text-transform: none; white-space: nowrap; border-bottom: 1px solid var(--line); }
+th + th { box-shadow: none; border-left: 1px solid var(--line); }
+tr:last-child td { border-bottom: 1px solid var(--line); }
+tbody tr:hover td { background: var(--hover); }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--hover); }
+
+/* ── code ───────────────────────────────────────────────────────────────── */
+
+/* ── key/value details ──────────────────────────────────────────────────── */
+
+/* ── floating layers: sheets, menus, popovers, toasts ───────────────────── */
+[role="menu"], [role="listbox"] { border: 1px solid var(--line-2); border-radius: var(--r); background: var(--surface); box-shadow: none; }
+[role="menuitem"], [role="option"] { border-radius: var(--r-xs); }
+
+/* ── workspaces: flow editor, console dock ──────────────────────────────── */
+.react-flow__controls, .react-flow__minimap { border: 1px solid var(--line-2); border-radius: var(--r); box-shadow: none; overflow: hidden; }
+.react-flow__minimap { background: var(--canvas); }
+.react-flow__controls button { border-bottom: 1px solid var(--line); background: var(--surface); }
+
+/* ── responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 980px) {
+  :root { --gutter: 16px; }
+}
+th::first-letter { text-transform: uppercase; }
+
+/* filter chip groups in a card head or toolbar read as one segmented control */
+.card-head .chips { gap: 0; flex-wrap: nowrap; border: 1px solid var(--line-2); border-radius: var(--r); overflow: hidden; }
+.card-head .chip { height: calc(var(--control-sm) - 2px); padding: 0 10px; border: 0; border-left: 1px solid var(--line-2); border-radius: 0; background: transparent; color: var(--muted); font-size: 12px; font-weight: 550; }
+.card-head .chip:first-child { border-left: 0; }
+.card-head .chip.active, .card-head .chip.on { background: var(--press); color: var(--text); }
+
+/* ── buttons ───────────────────────────────────────────────────────────────
+ * One action language: a white primary with the landing hero's orange
+ * baseline, neutral secondary fills, and one hover treatment. */
+.btn {
+  background: var(--surface) !important;
+  border-color: var(--line-2) !important;
+  border-radius: var(--r-control) !important;
+  color: var(--text) !important;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s !important;
+}
+.btn:not(.primary):not(.soft):not(.danger):not(.ghost):hover {
+  background: var(--hover) !important;
+  border-color: var(--line-hover) !important;
+  color: var(--text) !important;
+}
+.btn.primary {
+  background: var(--control-bg) !important;
+  border-color: var(--control-line) !important;
+  color: var(--control-ink) !important;
+  box-shadow: inset 0 -2px 0 var(--control-accent) !important;
+}
+.btn.primary:hover {
+  background: var(--control-bg-hover) !important;
+  border-color: var(--control-bg-hover) !important;
+  color: var(--control-ink) !important;
+}
+.btn.soft {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fff !important;
+}
+.btn.soft:hover {
+  background: color-mix(in srgb, var(--accent) 82%, #fff) !important;
+  border-color: color-mix(in srgb, var(--accent) 82%, #fff) !important;
+  color: #fff !important;
+}
+.btn.danger {
+  background: var(--danger-soft) !important;
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--danger-soft)) !important;
+  color: var(--danger) !important;
+}
+.btn.danger:hover {
+  background: color-mix(in srgb, var(--danger) 18%, var(--danger-soft)) !important;
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--danger-soft)) !important;
+  color: var(--danger) !important;
+}
+.btn.ghost {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--muted) !important;
+}
+.btn.ghost:hover {
+  background: var(--hover) !important;
+  border-color: transparent !important;
+  color: var(--text) !important;
+}
+
+/* ── popovers: one anchored surface for every menu ─────────────────────── */
+@keyframes pop-in { from { opacity: 0; transform: translateY(-3px); } }
+/* Project and environment options belong to the popover surface itself. The
+   listbox role is semantic here, not a second floating menu. */
+kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border: 1px solid var(--line-2); border-radius: var(--r-xs); color: var(--muted); font: 600 11px var(--sans); }
+
+/* ── app bar: context switchers and actions ─────────────────────────────── */
+@media (max-width: 980px) { .appbar-icons [title="Branches and history"] { display: none; } }
+
+/* ── overview ───────────────────────────────────────────────────────────── */
+
+/* The top bar is its own full-width strip: the logo belongs to it, not to the sidebar column below. */
+
+/* the page grid never grows wider than the window: the shell's one column is the viewport, not the top bar's content */
+
+/* id chips: an ID or URL you can copy, truncated */
+/* page-header actions wrap under the title instead of running off the edge */
+/* in a narrow window the location names give way first; search and actions keep their size and never overlap */
+
+/* overview: a short chart with recent requests beside it */
+/* the overview chart fills its half of the split, so it is as tall as the requests list beside it */
+
+/* ── table editor ───────────────────────────────────────────────────────── */
+.tbl-tab.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: var(--canvas); }
+.tbl-tab.active::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--brand); }
+/* Columns, settings and indexes can grow after an inline control opens.
+   Keep the table workspace itself scrollable so a growing section does not
+   overflow into an empty canvas below the viewport. */
+
+/* A sheet with sections: a side menu down its left edge, in place of tabs across the top. */
+
+/* A pane with its own section list on the left (email templates and the like). */
+
+/* Tabs across one record's view: an underline, not a pill strip. */
+.page-tabs-list button.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); }
+
+/* ── API Explorer workbench ───────────────────────────────────────────── */
+
+
+/* API Explorer: where requests go, groups to pick from, a group's endpoints. */
+/* API context is the first row in the workbench. Give it the same inset as
+   the endpoint header so it never sits flush against the secondary bar. */
+
+/* Folders in the secondary sidebar (the API Explorer's groups). */
+
+/* Firewall */
+
+/* Secondary sidebar groups: divided sections. A rule across the sidebar's full width (past the list's own padding) separates each
+   group from the one above; no boxes, no fill. */
+
+/* Firewall: one interconnected surface. Nested cards lose their boxes; columns and rows are divided by rules that meet the edges. */
+
+/* An empty list: what to do first, with the starting points right under the button. */
+
+/* Protocols: plain Cards in a grid so they match every other grid of cards in Studio; "not yet available" ones are just dimmed. */
+
+/* Overview: the stats, the graph and recent requests are one board — inset from the page edges, rounded, divided inside. */
+/* Iconsax Bulk companion layer: rounded, layered controls give the filled icon
+   set enough visual weight without making the workspace feel decorative. */
+:root {
+  --r: var(--radius-sm);
+  --r-xs: var(--radius-xs);
+  --r-sm: var(--radius-sm); --r-md: var(--radius-md); --r-lg: var(--radius-lg); --r-xl: var(--radius-xl);
+  --control: var(--spacing-control);
+  --control-sm: var(--spacing-control-sm);
+  --hover: var(--color-hover);
+  --press: var(--color-press);
+  --head-bg: var(--color-head-bg);
+}
+input, select, textarea { border-radius: var(--r); }
+
+/* Flat product surface: Pawabase uses borders, fills and color changes for
+   hierarchy. Shadows, glows, blur filters and hover lifts are intentionally
+   disabled globally so new components cannot accidentally reintroduce them. */
+:root { --shadow-pop: none; }
+*, *::before, *::after {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  filter: none !important;
+}
+@keyframes blink { 50% { opacity: 0.35; } }
+}
+
+.appbar,
+.secondary-bar {
+  background: var(--hero) !important;
+}
+.btn,
+.appbar-btn,
+.appbar-icon,
+.side-toggle,
+.subnav-action,
+.subnav-create,
+.subnav-foot,
+.ctx-btn,
+.icon-btn {
+  border-radius: var(--r-control) !important;
+}
+.appbar-btn:not(.primary):hover,
+.appbar-icon:hover,
+.side-toggle:hover,
+.subnav-action:hover,
+.subnav-create:hover,
+.subnav-foot:hover,
+.ctx-btn:hover,
+.ctx-btn[aria-expanded="true"],
+.icon-btn:hover {
+  background: var(--hover) !important;
+  border-color: var(--line-hover) !important;
+  color: var(--text) !important;
+}
+
+/* API Explorer: the builder and the inspector are one framed region, divided
+   inside — not a stack of individually boxed cards. One border around each
+   column, a single rule between sections, a single rule between the columns;
+   nothing repeats an edge it shares with a neighbour. Scoped to the Explorer
+   (ex-columns / ex-stack appear nowhere else).
+
+   Lives OUTSIDE @layer components: the card's radius and the header strip's
+   radius are Tailwind utilities, which beat anything inside that layer no
+   matter how specific the selector is. */
+.ex-workbench { border: 1px solid var(--line-2); border-radius: 0; }
+.ex-columns { border: 0; }
+.ex-stack > .card { margin: 0; padding: 18px var(--gutter); border: 0; border-radius: 0; background: transparent; }
+.ex-stack > .card + .card,
+.ex-stack > .card + .alert,
+.ex-stack > .alert + .card,
+.ex-stack > .alert + .alert { border-top: 1px solid var(--line); }
+.ex-stack > .card > .card-head { margin: 0 calc(var(--gutter) * -1) 14px; padding: 0 var(--gutter); background: transparent; border-radius: 0; }
+.ex-stack > .alert { margin: 0; padding: 18px var(--gutter); border: 0; border-radius: 0; background: transparent; }
+
+/* ── functions: the all-functions list ─────────────────────────────────── */
+.fn-table table { table-layout: fixed; }
+.fn-table th, .fn-table td { height: auto; padding: 11px 18px; }
+.fn-table th:nth-child(2) { width: 120px; }
+.fn-table th:nth-child(3) { width: 234px; }
+.fn-table th:nth-child(4) { width: 86px; text-align: right; }
+.fn-table th:nth-child(5) { width: 150px; text-align: right; }
+.fn-table td:nth-child(4), .fn-table td:nth-child(5) { text-align: right; }
+.fn-table tbody tr:hover td:first-child { box-shadow: inset 2px 0 var(--brand); }
+.fn-table tbody tr:hover .fn-title { color: var(--brand-strong); }
+
+.fn-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.fn-tile { flex: none; display: grid; place-items: center; width: 18px; height: 24px; background: none; border: 0; border-radius: 0; color: var(--muted); }
+.fn-tile.call { color: var(--brand-strong); }
+.fn-tile.http { color: var(--info); }
+.fn-name-text { min-width: 0; }
+.fn-name-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.fn-title { font-family: var(--mono); font-size: 12.5px; font-weight: 650; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color 0.12s; }
+.fn-desc { margin-top: 2px; font-size: 12px; line-height: 1.4; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fn-file { display: block; font-family: var(--mono); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fn-dir { color: var(--faint); }
+.fn-code { font-size: 12px; color: var(--muted); }
+.fn-dash { color: var(--faint); }
+.fn-time { font-variant-numeric: tabular-nums; }
+.fn-unit { margin-left: 2px; color: var(--faint); }
+.fn-runs { display: inline-flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.fn-spark { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+.fn-spark i { width: 3px; border-radius: 1px; background: color-mix(in srgb, var(--brand) 28%, transparent); }
+.fn-spark i.on { background: color-mix(in srgb, var(--brand) 85%, transparent); }
+.fn-spark i.bad { background: var(--danger); }
+.fn-count { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 12.5px; min-width: 18px; text-align: right; }
+.fn-count.zero { color: var(--faint); font-weight: 500; }
+.fn-chip-n { margin-left: 6px; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+/* Frames. A section of a page is a rounded, bordered card all the way round,
+   its head sharing the top corners. A table never floats: inside a card it
+   runs edge to edge and follows the card's corners; anywhere else it gets a
+   rounded frame of its own. (Cards are not clipped, so menus opened from a
+   card head are never cut off; the table rounds its own corners instead.) */
+.card > .table-wrap:first-child,
+.form-section:not(:has(> .form-section-head)) > div > .table-wrap:first-child {
+  border-top-left-radius: calc(var(--r) + 3px);
+  border-top-right-radius: calc(var(--r) + 3px);
+}
+/* A card the shell flattens into a full-width region (a direct child of the
+   content column) has no corners, so neither does its table. */
+.content > .card > .table-wrap { border-radius: 0; }
+/* A main list right under a filter or toolbar row opens on a rule, so the head never floats. */
+.content > :where(.row, .spread, .segmented, .usage-filters, div:not([class])) + .card.bleed,
+.content > :where(.row, .spread, .segmented, .usage-filters, div:not([class])) + .table-wrap.bleed { border-top: 1px solid var(--line); }
+/* Under a head, a table starts right at the head's rule: no gap above it, square on top. */
+.form-section:has(> .form-section-head) > div > .table-wrap:first-child { margin-top: -16px; }
+.card:not(.flush) > .card-head + .table-wrap { margin-top: -14px; }
+.card > .table-wrap:last-child,
+.form-section > div > .table-wrap:last-child {
+  border-bottom-left-radius: calc(var(--r) + 3px);
+  border-bottom-right-radius: calc(var(--r) + 3px);
+}
+.table-wrap:not(.bleed):not(.content > .table-wrap):not(.card .table-wrap):not(.form-section.overflow-hidden .table-wrap) {
+  border: 1px solid var(--line-2);
+  border-radius: calc(var(--r) + 4px);
+  overflow: auto;
+}
+.table-wrap:not(.bleed):not(.content > .table-wrap):not(.card .table-wrap):not(.form-section.overflow-hidden .table-wrap) tr:last-child td,
+.card > .table-wrap:last-child tr:last-child td,
+.form-section > div > .table-wrap:last-child tr:last-child td { border-bottom: 0; }
+
+/* observability carries one frame: every panel, chart or table, is the same bordered card */
+.obs .card { border: 1px solid var(--line-2); border-radius: calc(var(--r) + 2px); overflow: hidden; background: color-mix(in srgb, var(--surface) 58%, var(--canvas)); }
+.obs .card > .card-head { border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 72%, var(--canvas)); }
+.obs .card.flush { border-radius: calc(var(--r) + 2px); }
+.obs .card.flush > .card-head { border-radius: 0; }
+.obs .banner { border: 1px solid color-mix(in srgb, currentColor 22%, transparent); border-radius: calc(var(--r) + 2px); }
+
+/* tables cover their frame edge to edge, like the policy table */
+.card:not(.flush) > .table-wrap { margin: 0 -18px; }
+.card:not(.flush) > .table-wrap:last-child { margin: 0 -18px -18px; }
+.form-section > div > .table-wrap { margin: 0 -16px; }
+.form-section > div > .table-wrap:last-child { margin: 0 -16px -16px; }
+/* a toolbar above the table (a stack inside the card) still lets the table reach the card's edges */
+.card:not(.flush) > .stack > .table-wrap:last-child { margin: 0 -18px -18px; border-radius: 0 0 calc(var(--r) + 3px) calc(var(--r) + 3px); }
+.card:not(.flush) > .stack > .table-wrap:last-child tr:last-child td { border-bottom: 0; }
+
+/* A page's main list (users, objects, definitions, jobs, logs) is not a card:
+   it runs square across the content column, ruled top and bottom, so its rows
+   meet the frame of the app. The shell already draws a direct child of
+   .content this way (no padding, gutter-padded cells); a main list nested one
+   level down, inside a gutter-padded stack, cancels exactly that gutter.
+   Supporting tables in configuration sections stay in their rounded cards. */
+.content > * > .card.bleed,
+.content > * > .table-wrap.bleed {
+  margin-left: calc(var(--gutter) * -1);
+  margin-right: calc(var(--gutter) * -1);
+  border-left: 0;
+  border-right: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.content > * > .card.bleed:first-child,
+.content > * > .table-wrap.bleed:first-child { margin-top: -16px; border-top: 0; }
+.content > * > .card.bleed:last-child,
+.content > * > .table-wrap.bleed:last-child { margin-bottom: -16px; border-bottom: 0; }
+.content > * > .table-wrap.bleed { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.content .card.bleed > .card-head,
+.content .card.bleed > .table-wrap { border-radius: 0; }
+.content > * > .card.bleed > .card-head { padding-left: var(--gutter); padding-right: var(--gutter); }
+.content > * > .card.bleed th:first-child,
+.content > * > .card.bleed td:first-child,
+.content > * > .table-wrap.bleed th:first-child,
+.content > * > .table-wrap.bleed td:first-child { padding-left: var(--gutter); }
+.content > * > .card.bleed th:last-child,
+.content > * > .card.bleed td:last-child,
+.content > * > .table-wrap.bleed th:last-child,
+.content > * > .table-wrap.bleed td:last-child { padding-right: var(--gutter); }
+
+/* The flow editor owns the viewport: the page must be a flex column so the
+   canvas gets a bounded height, the block palette and the inspector scroll
+   inside it, and fitView centres nodes in the visible area rather than in a
+   page-tall canvas. Unlayered on purpose — these beat the layout utilities. */
+.flow-page .main.flow-main { display: flex; flex-direction: column; }
+.flow-page .content.flow-content { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.flow-page .flow-shell { height: 100%; min-height: 0; }
+.flow-page .palette,
+.flow-page .inspector { min-height: 0; }

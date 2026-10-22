@@ -32,23 +32,22 @@ export default function Transfer({ env, base }) {
     if (report && report !== true) { setDone(report); setPreview(null); }
   };
   return (
-    <div className="stack lg">
-      <Card title="Export" actions={<Button variant="primary" size="sm" disabled={busy} onClick={download}>Download file</Button>}>
-        <p className="muted" style={{ margin: 0, maxWidth: 640 }}>Roles with their permissions, users with their password hashes, linked social sign-ins, authenticator apps, and organizations with members and teams. User ids are kept, so records that point at a user still do.</p>
-        <p className="hint" style={{ margin: "10px 0 0" }}>Left out: sessions, tokens, sign-in history and pending invitations. Everyone signs in again after an import. The file holds password hashes, so keep it private.</p>
+    <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
+      <Card icon="upload" title="Export" description={<>Roles with their permissions, users with their password hashes, linked social sign-ins, authenticator apps, and organizations with members and teams. User ids are kept, so records that point at a user still do.</>} actions={<Button variant="primary" size="sm" disabled={busy} onClick={download}>Download file</Button>}>
+        <p className="hint text-xs font-book text-muted leading-[1.45]" style={{ margin: "10px 0 0" }}>Left out: sessions, tokens, sign-in history and pending invitations. Everyone signs in again after an import. The file holds password hashes, so keep it private.</p>
       </Card>
-      <Card title="Import">
-        <div className="stack">
+      <Card icon="upload" title="Import">
+        <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
           <Field label="Identities file"><input type="file" accept="application/json,.json" onChange={(e) => read(e.target.files[0])} /></Field>
-          {file?.invalid && <div className="alert error">That file is not valid JSON.</div>}
+          {file?.invalid && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error">That file is not valid JSON.</div>}
           {file?.document && (
             <>
               <Switch checked={replace} onChange={setReplace} label="Replace what is here" hint="Off adds and updates. On first removes this environment's users, roles and organizations." />
-              <div className="row"><Button disabled={busy} onClick={check}>Check the file</Button><Button variant="primary" disabled={busy} onClick={apply}>Import</Button></div>
+              <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5"><Button disabled={busy} onClick={check}>Check the file</Button><Button variant="primary" disabled={busy} onClick={apply}>Import</Button></div>
             </>
           )}
-          {preview && <div className="alert info"><b>Dry run.</b> This file holds {Object.entries(preview).filter(([k, v]) => typeof v === "number").map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`).join(", ") || "identities"}. Nothing has changed.</div>}
-          {done && <div className="alert ok"><b>Imported.</b> {Object.entries(done).filter(([, v]) => typeof v === "number").map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`).join(", ")}.</div>}
+          {preview && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] info"><b>Dry run.</b> This file holds {Object.entries(preview).filter(([k, v]) => typeof v === "number").map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`).join(", ") || "identities"}. Nothing has changed.</div>}
+          {done && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] ok"><b>Imported.</b> {Object.entries(done).filter(([, v]) => typeof v === "number").map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`).join(", ")}.</div>}
         </div>
       </Card>
     </div>

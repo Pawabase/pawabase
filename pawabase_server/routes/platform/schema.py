@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sillo import HttpContext, Router
 from sillo.exceptions import HTTPException
 
-from pawabase_server.data import schema
+from pawabase_server.data import cdc, schema
 from pawabase_server.db.models import SchemaMigration
 from pawabase_server.platform import Platform
 from pawabase_server.routes.common import MANAGE, actor, audit
@@ -177,6 +177,8 @@ def register(r: Router, platform: Platform) -> None:
                     details={"error": str(exc)},
                 )
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        # The table may have just changed shape or appeared: capture triggers read its columns, so they are laid down again.
+        await cdc.apply(platform, env)
         if migration is None:
             return {
                 "applied": False,

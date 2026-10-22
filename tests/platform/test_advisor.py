@@ -66,3 +66,16 @@ async def test_limits_close_to_full_are_reported(api, monkeypatch):
     if active >= 2:
         finding = next(f for f in report["findings"] if f["area"] == "limits")
         assert finding["severity"] == "critical" and "API keys" in finding["title"]
+
+
+async def test_one_unreadable_source_does_not_fail_the_advisor(api, monkeypatch):
+    from pawabase_server.observability import advisor
+
+    async def broken(*args, **kwargs):
+        raise RuntimeError("worker table is unreachable")
+
+    monkeypatch.setattr(advisor, "system_report", broken)
+    report = await api.studio.get(f"{ENV}/advisor")
+    assert report["unavailable"] == ["system"]
+    assert report["findings"] == []
+    assert "limits" in report

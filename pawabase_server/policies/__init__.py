@@ -9,9 +9,11 @@ from pawabase_server.policies.engine import (
     PolicyError,
     evaluate,
     lookup,
+    mentions,
     partial,
     policy_from_definition,
     pushdown,
+    trace,
     validate_condition,
 )
 from pawabase_server.policies.gate import (
@@ -38,10 +40,12 @@ __all__ = [
     "evaluate",
     "last_decision",
     "lookup",
+    "mentions",
     "partial",
     "policy",
     "policy_from_definition",
     "pushdown",
     "python_policies",
+    "trace",
     "validate_condition",
 ]

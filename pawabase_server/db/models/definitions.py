@@ -81,6 +81,7 @@ class Resource(_Definition):
         rate_limit: ``{"limit": 100, "window": 60}`` per client, or empty.
         events: Publish ``<resource>.created|updated|deleted`` events.
         realtime: Publish changes to the ``resource:<name>`` channel.
+        capture: Also announce changes made outside the API (SQL, other services), by database triggers and an outbox.
         timestamps: Maintain ``created_at``/``updated_at`` columns.
         owner_field: Set this column to the caller's user id on create.
     """
@@ -99,6 +100,7 @@ class Resource(_Definition):
     rate_limit = AnyJSONField(default=dict)
     events = fields.BooleanField(default=True)
     realtime = fields.BooleanField(default=False)
+    capture = fields.BooleanField(default=False)
     timestamps = fields.BooleanField(default=True)
     owner_field = fields.CharField(max_length=64, null=True)
     #: Indexes beyond the single-column ones fields ask for: ``[{"name", "columns", "unique", "where", "method"}]`` (see ``data/indexes.py``).
@@ -192,18 +194,94 @@ class Bucket(_Definition):
 
 
 class MailTemplate(_Definition):
-    """A stored email template, rendered in Jinja2's sandbox."""
+    """A stored email template, rendered in Jinja2's sandbox.
+
+    ``subject``, ``preheader``, ``html`` and ``text`` are the published version: what sending uses.
+    Edits made in Studio's editor live in ``draft`` until they are published. ``design`` is the
+    editor's document for the published version, so the visual editor can reopen it; a template
+    without one was written as HTML.
+    """
 
     environment = fields.ForeignKeyField(
         "models.Environment", related_name="mail_templates", on_delete=fields.CASCADE
     )
     subject = fields.CharField(max_length=255, default="")
+    preheader = fields.CharField(max_length=255, default="")
     html = fields.TextField(default="")
     text = fields.TextField(default="")
+    design = AnyJSONField(null=True)
+    #: Unpublished edits: ``{subject, preheader, html, text, design, saved_at}``.
+    draft = AnyJSONField(null=True)
+    #: ``draft`` (never published), ``published`` or ``archived``.
+    status = fields.CharField(max_length=12, default="published")
+    category = fields.CharField(max_length=32, default="")
+    tags = AnyJSONField(default=list)
+    folder = fields.CharField(max_length=64, default="")
+    favorite = fields.BooleanField(default=False)
+    #: The values a template reads: ``[{name, description, sample}]``.
+    variables = AnyJSONField(default=list)
+    published_at = fields.DatetimeField(null=True)
 
     class Meta:
         table = "pb_mail_templates"
         unique_together = (("environment", "name"),)
+        ordering = ["name"]
+
+
+class MailTemplateVersion(Model):
+    """One published version of a mail template, kept so an older one can be restored."""
+
+    id = ulid_pk()
+    env = fields.CharField(max_length=63)
+    template = fields.CharField(max_length=128)
+    number = fields.IntField()
+    subject = fields.CharField(max_length=255, default="")
+    preheader = fields.CharField(max_length=255, default="")
+    html = fields.TextField(default="")
+    text = fields.TextField(default="")
+    design = AnyJSONField(null=True)
+    note = fields.CharField(max_length=255, default="")
+
+    class Meta:
+        table = "pb_mail_template_versions"
+        unique_together = (("env", "template", "number"),)
+        ordering = ["-number"]
+
+
+class MailKit(Model):
+    """An environment's shared email styling: brand, colour palettes, reusable blocks and template folders."""
+
+    id = ulid_pk()
+    env = fields.CharField(max_length=63, unique=True)
+    #: ``{font, text_color, link_color, background, content_background, accent, width, radius, logo}``.
+    brand = AnyJSONField(default=dict)
+    #: ``[{name, colors: [hex, …]}]``.
+    palettes = AnyJSONField(default=list)
+    #: ``[{id, name, kind: block|header|footer|signature, content}]``: editor content to insert.
+    blocks = AnyJSONField(default=list)
+    folders = AnyJSONField(default=list)
+
+    class Meta:
+        table = "pb_mail_kits"
+
+
+class SavedQuery(Model):
+    """A SQL query the team keeps in Studio's SQL editor. Shared by everyone who can manage the environment.
+
+    Not part of releases or blueprints: it is tooling for people working on the database, not application behaviour.
+    """
+
+    id = ulid_pk()
+    env = fields.CharField(max_length=63, db_index=True)
+    name = fields.CharField(max_length=120)
+    description = fields.CharField(max_length=500, default="")
+    sql = fields.TextField()
+    #: Who saved it last (an email, or an API key id).
+    updated_by = fields.CharField(max_length=255, null=True)
+
+    class Meta:
+        table = "pb_saved_queries"
+        unique_together = (("env", "name"),)
         ordering = ["name"]
 
 

@@ -85,50 +85,50 @@ export default function Backups({ env }) {
   return (
     <Layout title="Backups">
       <PageHead title="Backups" description="Save everything that makes up this environment, on a schedule or on demand, and restore from it later. Or download it as one file to restore into another environment." />
-      <div className="stack lg">
+      <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
         <Snapshots env={env} base={base} list={snapshots} />
-        <Card title="Download a backup">
-          <div className="stack">
+        <Card icon="backups" title="Download a backup">
+          <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
             {PARTS.map(([key, label, hint]) => (
-              <label className="check" key={key} style={{ alignItems: "flex-start" }}>
+              <label className="check [label&]:flex [label&]:items-center [label&]:gap-2 [label&]:text-text [label&]:text-ui" key={key} style={{ alignItems: "flex-start" }}>
                 <input type="checkbox" checked={chosen.includes(key)} onChange={() => toggle(chosen, setChosen, key)} />
-                <span><b>{label}</b><br /><span className="hint">{hint}</span></span>
+                <span><b>{label}</b><br /><span className="hint text-xs font-book text-muted leading-[1.45]">{hint}</span></span>
               </label>
             ))}
-            <p className="hint">
+            <p className="hint text-xs font-book text-muted leading-[1.45]">
               Not included: API keys, secret values, stored files, sessions, logs and jobs. A backup holds password hashes, so keep the file private.
             </p>
             <div><Button variant="primary" disabled={busy || !chosen.length} onClick={download}>Download backup</Button></div>
           </div>
         </Card>
 
-        <Card title="Restore from a backup">
-          <div className="restore-step">
-            <label className={`dropzone ${over ? "over" : ""}`} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); setOver(false); const dropped = e.dataTransfer.files?.[0]; if (dropped) readFile(dropped); }}>
+        <Card icon="backups" title="Restore from a backup">
+          <div className="restore-step grid gap-3.5">
+            <label className={`dropzone grid gap-1 justify-items-center text-center p-[26px_18px] [border:2px_dashed_var(--line-strong,_var(--line))] rounded-sm bg-sunken cursor-pointer transition-[border-color_0.15s,_background_0.15s] [&:hover]:[border-color:var(--brand,_#FF7049)] [&:hover]:bg-brand-soft [&.over]:[border-color:var(--brand,_#FF7049)] [&.over]:bg-brand-soft [&_b]:text-base [&_input]:hidden ${over ? "over" : ""}`} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); setOver(false); const dropped = e.dataTransfer.files?.[0]; if (dropped) readFile(dropped); }}>
               <input ref={input} type="file" accept="application/json,.json" onChange={(e) => e.target.files?.[0] && readFile(e.target.files[0])} />
               <Icon name="upload" />
               <b>{file ? file.name : "Choose a backup file, or drop it here"}</b>
-              <span className="hint">{file ? `${(file.size / 1024).toFixed(0)} KB · choose another to replace it` : "A .pawabase-backup.json file downloaded from Studio or the API."}</span>
+              <span className="hint text-xs font-book text-muted leading-[1.45]">{file ? `${(file.size / 1024).toFixed(0)} KB · choose another to replace it` : "A .pawabase-backup.json file downloaded from Studio or the API."}</span>
             </label>
 
-            {checking && <div className="alert info">Checking the file…</div>}
-            {problem && <div className="alert error">{problem}</div>}
+            {checking && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] info">Checking the file…</div>}
+            {problem && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error">{problem}</div>}
 
             {preview && (
               <>
-                <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ gap: 8, flexWrap: "wrap" }}>
                   <Badge tone="lavender">from {preview.source?.env}</Badge>
-                  <span className="muted">Nothing has changed yet: this is what the file holds.</span>
+                  <span className="muted text-muted">Nothing has changed yet: this is what the file holds.</span>
                 </div>
-                <div className="restore-summary">
+                <div className="restore-summary grid grid-cols-[repeat(auto-fill,_minmax(150px,_1fr))] gap-2 [&_div]:bg-sunken [&_div]:rounded-sm [&_div]:p-[10px_12px] [&_b]:block [&_b]:text-[18px] [&_b]:tabular-nums [&_span]:text-xs [&_span]:text-muted">
                   {Object.entries(preview.contents || {}).flatMap(([part, counts]) =>
                     typeof counts === "object" && counts ? Object.entries(counts).filter(([, n]) => typeof n === "number" && n > 0).map(([name, n]) => ({ key: `${part}.${name}`, name: name.replace(/_/g, " "), n })) : [{ key: part, name: part, n: counts }],
                   ).slice(0, 24).map((item) => <div key={item.key}><b>{typeof item.n === "number" ? item.n.toLocaleString() : String(item.n)}</b><span>{item.name}</span></div>)}
                 </div>
                 <Field label="What to restore">
-                  <div className="stack" style={{ gap: 6 }}>
+                  <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 6 }}>
                     {PARTS.filter(([key]) => available.includes(key)).map(([key, label]) => (
-                      <label className="check" key={key}>
+                      <label className="check [label&]:flex [label&]:items-center [label&]:gap-2 [label&]:text-text [label&]:text-ui" key={key}>
                         <input type="checkbox" checked={restoreParts.includes(key)} onChange={() => toggle(restoreParts, setRestoreParts, key)} /> {label}
                       </label>
                     ))}
@@ -145,7 +145,7 @@ export default function Backups({ env }) {
               </>
             )}
 
-            <div className="restore-bar">
+            <div className="restore-bar sticky bottom-0 flex items-center justify-between gap-3 flex-wrap p-[14px_16px] m-[4px_-4px_-4px] rounded-sm bg-surface [border:1px_solid_var(--line)] shadow-none [&_.what]:text-ui [&_.what]:text-muted [&_.what_b]:text-text">
               <span className="what">
                 {!file ? "Choose a file to begin." : checking ? "Checking…" : !preview ? "This file cannot be restored." : !restoreParts.length ? "Pick at least one part to restore." : strategy === "replace" && confirm !== env ? `Type ${env} above to enable Replace.` : <><b>{restoreParts.length}</b> part{restoreParts.length === 1 ? "" : "s"} · {strategy === "replace" ? "replacing" : "merging into"} <b>{env}</b></>}
               </span>
@@ -157,9 +157,9 @@ export default function Backups({ env }) {
                 <h4>Restored</h4>
                 <Json value={{ ...report, warnings: undefined }} />
                 {report.warnings?.length > 0 && (
-                  <div className="stack" style={{ gap: 4 }}>
+                  <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 4 }}>
                     <b>Warnings</b>
-                    {report.warnings.map((w, i) => <span className="muted" key={i}>{w}</span>)}
+                    {report.warnings.map((w, i) => <span className="muted text-muted" key={i}>{w}</span>)}
                   </div>
                 )}
               </>

@@ -14,8 +14,101 @@ const rank = (c) => (CATEGORY_ORDER.includes(c) ? CATEGORY_ORDER.indexOf(c) : 99
 const plain = (text) => (text || "").replace(/``/g, "");
 const BlocksContext = createContext({ byKey: {}, trace: {} });
 
+const BLOCK_ICONS = {
+  "auth.lookup": "users",
+  "auth.require": "secrets",
+  "auth.user": "users",
+  "policy.check": "policies",
+  "cache.delete": "trash",
+  "cache.get": "import",
+  "cache.invalidate": "refresh",
+  "cache.set": "upload",
+  "function.call": "functions",
+  "control.delay": "clock",
+  "control.foreach": "layers",
+  "control.if": "gitBranch",
+  "control.merge": "transformers",
+  "control.noop": "flowBlock",
+  "control.retry": "refresh",
+  "control.set": "braces",
+  "control.stop": "x",
+  "control.switch": "routes",
+  "control.timeout": "status",
+  "control.while": "chevronsUpDown",
+  "crypto.hash": "secrets",
+  "json.parse": "braces",
+  "json.stringify": "code",
+  "math.calculate": "usage",
+  "time.now": "clock",
+  "transform.batch": "layers",
+  "transform.filter": "transformers",
+  "transform.flatten": "transformers",
+  "transform.group": "transformers",
+  "transform.map": "transformers",
+  "transform.pick": "transformers",
+  "transform.rename": "transformers",
+  "transform.slice": "transformers",
+  "transform.sort": "transformers",
+  "transform.summarize": "transformers",
+  "transform.template": "transformers",
+  "transform.unique": "transformers",
+  "util.id": "keys",
+  "validate.schema": "schemas",
+  "event.emit": "events",
+  "http.request": "networking",
+  "secret.get": "secrets",
+  "webhook.send": "send",
+  "flow.call": "flows",
+  "queue.flow": "send",
+  "queue.function": "code",
+  "mail.send": "mail",
+  "log.write": "audit",
+  "metric.increment": "chart",
+  "realtime.publish": "realtime",
+  "db.query": "database",
+  "db.transaction": "schemas",
+  "resource.create": "plus",
+  "resource.delete": "trash",
+  "resource.get": "eye",
+  "resource.list": "resources",
+  "resource.update": "chevronsUpDown",
+  "error.raise": "x",
+  "response.return": "send",
+  "storage.delete": "trash",
+  "storage.put": "upload",
+  "storage.read": "eye",
+  "storage.signed_url": "link",
+  "trigger.event": "events",
+  "trigger.http": "networking",
+  "trigger.job": "jobs",
+  "trigger.manual": "play",
+  "trigger.realtime": "realtime",
+  "trigger.resource": "resources",
+  "trigger.schedule": "schedules",
+  "trigger.webhook": "webhooks",
+};
+
+const CATEGORY_ICONS = {
+  triggers: "bolt",
+  control: "routes",
+  resources: "resources",
+  responses: "send",
+  auth: "secrets",
+  data: "database",
+  code: "code",
+  events: "events",
+  jobs: "jobs",
+  mail: "mail",
+  storage: "storage",
+  realtime: "realtime",
+  cache: "refresh",
+  integrations: "networking",
+  observability: "observability",
+};
+
 function blockIcon(block) {
-  return block?.key ? `block:${block.key}` : "flowBlock";
+  if (!block) return "flowBlock";
+  return BLOCK_ICONS[block.key] || CATEGORY_ICONS[block.category] || "flowBlock";
 }
 
 export default function FlowEditor(props) {
@@ -108,17 +201,17 @@ function Editor({ env, flow, blocks }) {
   return (
     <Layout title={meta.name || "New flow"} crumbs={[<a key="f" href={envHref(env, "flows")}>flows</a>, meta.name || "new"]} full flowPage>
       <BlocksContext.Provider value={{ byKey, trace }}>
-        <div className="flow-shell">
+        <div className="flow-shell grid grid-cols-[248px_minmax(0,_1fr)_304px] h-full min-h-0 w-full p-0! max-navigation:grid-cols-1">
           <Palette blocks={blocks} onAdd={addBlock} />
           <div className="flow-canvas" ref={wrapper} onDrop={onDrop} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}>
-            <div className="flow-toolbar">
-              <div className="row flow-toolbar-title">
+            <div className="flow-toolbar absolute z-[4] top-0 left-0 right-0 flex items-center justify-between gap-3 pointer-events-auto h-[44px] p-[0_10px_0_14px] bg-canvas [border-bottom:1px_solid_var(--line)]">
+              <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 flow-toolbar-title pointer-events-auto min-w-0 p-0 bg-none border-0 rounded-none [&_b]:max-w-[220px] [&_b]:overflow-hidden [&_b]:text-ellipsis [&_b]:whitespace-nowrap gap-2">
                 <Icon name="flowBlock" size={18} />
                 <b>{meta.name || "Untitled flow"}</b>
                 <Badge tone={meta.enabled ? "green" : ""}>{meta.enabled ? "enabled" : "disabled"}</Badge>
                 {problems && (problems.length ? <Badge tone="red">{problems.length} problem(s)</Badge> : <Badge tone="green">valid</Badge>)}
               </div>
-              <div className="row flow-toolbar-actions">
+              <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 flow-toolbar-actions pointer-events-auto gap-1.5 [&_.btn]:p-[0_10px] [&_.btn]:text-ui-sm [&_.btn]:h-control-sm">
                 <Button onClick={validate} disabled={busy}>Validate</Button>
                 {!isNew && <Button onClick={() => setPanel("run")}>Test run</Button>}
                 <Button variant="primary" onClick={save} disabled={busy || !meta.name}>Save</Button>
@@ -140,18 +233,18 @@ function Editor({ env, flow, blocks }) {
             >
               <Background gap={22} size={1.5} color="var(--line-2)" />
               <Controls />
-              <MiniMap pannable zoomable nodeColor="#3a3649" nodeStrokeColor="#b9abff" maskColor="rgba(8,7,12,0.55)" />
+              <MiniMap pannable zoomable nodeColor="#3a211c" nodeStrokeColor="#9a8cff" maskColor="rgba(8,9,10,0.55)" />
             </ReactFlow>
           </div>
-          <aside className="inspector">
-            <div className="inspector-tabs">
+          <aside className="inspector bg-canvas overflow-auto [border-left:1px_solid_var(--line)] max-navigation:hidden">
+            <div className="inspector-tabs p-[0_14px]">
               <Segmented
                 value={panel}
                 onChange={setPanel}
                 options={[["flow", "Flow"], ...(selectedNode ? [["node", "Block"]] : []), ...(!isNew ? [["run", "Run"]] : [])]}
               />
             </div>
-            <div className="stack inspector-body">
+            <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 inspector-body">
               {panel === "flow" && <FlowSettings meta={meta} setMeta={setMeta} isNew={isNew} problems={problems} />}
               {panel === "node" && selectedNode && (
                 <NodeInspector
@@ -186,28 +279,41 @@ function Palette({ blocks, onAdd }) {
     return Object.entries(out).sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b));
   }, [blocks, filter]);
   return (
-    <aside className="palette">
-      <div style={{ padding: "12px 10px 4px" }}>
-        <input placeholder={`Search ${blocks.length} blocks…`} value={filter} onChange={(e) => setFilter(e.target.value)} />
+    <aside className="subnav palette w-[248px] shrink-0 flex flex-col bg-canvas [border-right:1px_solid_var(--line)] z-[20] h-full min-h-0 max-navigation:hidden" aria-label="Blocks">
+      <div className="subnav-head h-[var(--bar)] box-border flex items-center justify-between p-[0_12px_0_16px] [border-bottom:1px_solid_var(--line)] text-base [&_b]:font-semibold">
+        <b>Blocks</b>
+        <span className="subnav-count text-2xs font-semibold text-faint">{blocks.length}</span>
       </div>
-      {groups.map(([category, items]) => (
-        <div key={category} className="palette-group">
-          <h4>{category}</h4>
-          {items.map((b) => (
-            <div
-              key={b.key}
-              className="palette-item"
-              draggable
-              onDragStart={(e) => { e.dataTransfer.setData("application/pawabase-block", b.key); e.dataTransfer.effectAllowed = "move"; }}
-              onDoubleClick={() => onAdd(b.key)}
-              title="Drag onto the canvas, or double-click to add"
-            >
-              <span className="palette-item-title"><Icon name={blockIcon(b)} size={15} /><span>{b.title}</span></span>
-              <small>{plain(b.description)}</small>
+      <div className="subnav-search flex items-center gap-2 m-[12px_12px_4px] p-[0_10px] [border:1px_solid_var(--line-2)] rounded-sm bg-transparent text-faint [&_input]:flex-1 [&_input]:min-w-0 [&_input]:border-0 [&_input]:outline-none [&_input]:shadow-none [&_input]:bg-transparent [&_input]:p-[8px_0] [&_input]:text-ui [&:focus-within]:border-brand h-control">
+        <Icon name="search" size={14} />
+        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search blocks…" aria-label="Search blocks" />
+      </div>
+      <nav className="subnav-list flex-1 min-h-0 overflow-y-auto p-[8px_10px]">
+        {groups.length === 0 && <p className="subnav-empty m-[16px_10px] text-muted text-ui">No blocks match.</p>}
+        {groups.map(([category, items]) => (
+          <div key={category} className="subnav-group m-[0_-10px] p-[4px_10px_8px] [&_+_.subnav-group]:mt-1.5 [&_+_.subnav-group]:[border-top:1px_solid_var(--line-2)] [&_+_.subnav-group]:pt-1.5">
+            <div className="palette-title flex items-center justify-between p-[10px_10px_6px] text-2xs font-semibold-plus uppercase tracking-[0.06em] text-muted [&::after]:hidden">
+              <span>{category}</span>
+              <span>{items.length}</span>
             </div>
-          ))}
-        </div>
-      ))}
+            {items.map((b) => (
+              <button
+                key={b.key}
+                type="button"
+                draggable
+                onDragStart={(e) => { e.dataTransfer.setData("application/pawabase-block", b.key); e.dataTransfer.effectAllowed = "move"; }}
+                onDoubleClick={() => onAdd(b.key)}
+                title={`${plain(b.description)} — drag onto the canvas, or double-click to add`}
+                className="subnav-item relative flex h-auto min-h-8 w-full cursor-grab items-center gap-2 rounded-sm border-0 bg-none p-[7px_10px] text-left font-inherit text-body font-medium text-muted shadow-none [&:hover]:bg-hover [&:hover]:text-text [&:hover_.palette-icon]:text-brand"
+              >
+                <Icon name={blockIcon(b)} size={15} className="palette-icon shrink-0 text-faint" />
+                <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{b.title}</span>
+                <span className="subnav-tag shrink-0 text-[10.5px] text-faint rounded-xs">{b.key.split(".").pop()}</span>
+              </button>
+            ))}
+          </div>
+        ))}
+      </nav>
     </aside>
   );
 }
@@ -220,14 +326,14 @@ function BlockNode({ id, data, selected }) {
   const summary = Object.entries(data.config || {}).slice(0, 2).map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`).join(" · ");
   const state = trace[id];
   return (
-    <div className={`flow-node ${selected ? "selected" : ""} ${block.trigger ? "trigger" : ""} ${state || ""}`}>
+    <div className={`flow-node bg-surface [border:1px_solid_var(--line-2)] rounded-sm min-w-[170px] max-w-[240px] text-xs [&.selected]:border-brand [&.selected]:shadow-none [&.trigger_.flow-node-head]:bg-head-bg [&.trigger_.flow-node-head]:text-text [&.trigger_.flow-node-head]:rounded-[var(--r)_var(--r)_0_0] [&.failed]:border-danger [&.ran]:outline-[1px_solid_var(--ok)] shadow-none [&.trigger_.flow-node-head]:shadow-none [&.trigger_.flow-node-head]:[border-top:2px_solid_var(--brand)] [&.ran]:outline-offset-[2px] ${selected ? "selected" : ""} ${block.trigger ? "trigger" : ""} ${state || ""}`}>
       {!block.trigger && <Handle type="target" position={Position.Top} />}
-      <div className="flow-node-head">
-        <span className="flow-node-title"><Icon name={blockIcon(block)} size={15} /><b>{data.label || block.title}</b></span>
-        <span className="faint mono" style={{ fontSize: 10 }}>{id}</span>
+      <div className="flow-node-head p-[7px_9px] [border-bottom:1px_solid_var(--line)] flex items-center justify-between gap-1.5 font-semibold-plus rounded-[var(--r)_var(--r)_0_0] bg-head-bg text-text">
+        <span className="flow-node-title flex items-center gap-[7px] min-w-0 [&_.icon]:text-brand [&_.icon]:flex-none"><Icon name={blockIcon(block)} size={15} /><b>{data.label || block.title}</b></span>
+        <span className="faint text-faint mono font-mono text-ui-sm" style={{ fontSize: 10 }}>{id}</span>
       </div>
-      <div className="flow-node-body" title={summary}>{summary || data.block}</div>
-      <div className="flow-handles">
+      <div className="flow-node-body p-[7px_11px] text-muted font-mono text-2xs overflow-hidden text-ellipsis whitespace-nowrap" title={summary}>{summary || data.block}</div>
+      <div className="flow-handles flex justify-around p-[4px_6px_8px] text-3xs text-faint">
         {handles.map((h) => <span key={h}>{h}</span>)}
       </div>
       {handles.map((h, i) => (
@@ -253,10 +359,10 @@ function FlowSettings({ meta, setMeta, isNew, problems }) {
       </Field>
       <Field label="Description"><input value={meta.description} onChange={set("description")} /></Field>
       <Field label="Timeout (seconds)"><input type="number" min="1" max="900" value={meta.timeout} onChange={set("timeout")} /></Field>
-      <label className="check"><input type="checkbox" checked={meta.enabled} onChange={set("enabled")} /> Enabled</label>
-      <label className="check"><input type="checkbox" checked={meta.record_runs} onChange={set("record_runs")} /> Record runs (with traces)</label>
-      {problems?.length > 0 && <div className="alert error"><ul style={{ margin: 0, paddingLeft: 18 }}>{problems.map((p, i) => <li key={i}>{p}</li>)}</ul></div>}
-      <div className="hint">
+      <label className="check [label&]:flex [label&]:items-center [label&]:gap-2 [label&]:text-text [label&]:text-ui"><input type="checkbox" checked={meta.enabled} onChange={set("enabled")} /> Enabled</label>
+      <label className="check [label&]:flex [label&]:items-center [label&]:gap-2 [label&]:text-text [label&]:text-ui"><input type="checkbox" checked={meta.record_runs} onChange={set("record_runs")} /> Record runs (with traces)</label>
+      {problems?.length > 0 && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error"><ul style={{ margin: 0, paddingLeft: 18 }}>{problems.map((p, i) => <li key={i}>{p}</li>)}</ul></div>}
+      <div className="hint text-xs font-book text-muted leading-[1.45]">
         Drag blocks from the left and connect handles. Every block except triggers has an <code>error</code> handle; connect it to handle failures.
         Config values accept templates like <code>{"{{ input.email }}"}</code>, <code>{"{{ steps.lookup.output.id }}"}</code> or <code>{"{{ auth.user_id }}"}</code>.
       </div>
@@ -270,7 +376,7 @@ function NodeInspector({ node, block, onChange, onRename, onDelete, step, nodes,
   const [focusedField, setFocusedField] = useState(null);
   const fieldRefs = useRef({});
 
-  if (!block) return <div className="alert error">Unknown block {node.data.block}</div>;
+  if (!block) return <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error">Unknown block {node.data.block}</div>;
   const config = node.data.config || {};
   const setConfig = (name, value) => {
     const next = { ...config };
@@ -298,8 +404,8 @@ function NodeInspector({ node, block, onChange, onRename, onDelete, step, nodes,
     <>
       <div>
         <h3>{block.title}</h3>
-        <code className="faint">{block.key}</code>
-        <p className="muted" style={{ margin: "6px 0 0", fontSize: 12.5 }}>{plain(block.description)}</p>
+        <code className="faint text-faint">{block.key}</code>
+        <p className="muted text-muted" style={{ margin: "6px 0 0", fontSize: 12.5 }}>{plain(block.description)}</p>
       </div>
       <Field label="Node id" hint="Other blocks read this node's output as steps.<id>.output.">
         <input value={id} onChange={(e) => setId(e.target.value)} onBlur={() => onRename(id)} />
@@ -325,7 +431,7 @@ function NodeInspector({ node, block, onChange, onRename, onDelete, step, nodes,
         onInsert={insertVariable}
       />
       {step?.length > 0 && (
-        <div className="stack" style={{ gap: 6 }}>
+        <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 6 }}>
           <h3>Last run</h3>
           {step.map((s, i) => <Json key={i} value={{ handle: s.handle, duration_ms: s.duration_ms, output: s.output, error: s.error }} />)}
         </div>
@@ -399,7 +505,7 @@ function AvailableVariables({ nodeId, nodes, edges, byKey, focusedField, onInser
           </button>
         ))}
       </div>
-      {!focusedField && <div className="hint" style={{ fontSize: 10, marginTop: 8, color: "var(--text-secondary)" }}>Focus a field to insert variables</div>}
+      {!focusedField && <div className="hint text-xs font-book text-muted leading-[1.45]" style={{ fontSize: 10, marginTop: 8, color: "var(--text-secondary)" }}>Focus a field to insert variables</div>}
     </div>
   );
 }
@@ -417,7 +523,7 @@ function ConfigField({ spec, value, onChange, fieldRef, onFocus, onBlur }) {
     );
   }
   if (spec.type === "boolean") {
-    return <label className="check"><input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} /> {spec.name}{spec.description && <span className="hint"> — {spec.description}</span>}</label>;
+    return <label className="check [label&]:flex [label&]:items-center [label&]:gap-2 [label&]:text-text [label&]:text-ui"><input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} /> {spec.name}{spec.description && <span className="hint text-xs font-book text-muted leading-[1.45]"> — {spec.description}</span>}</label>;
   }
   if (spec.type === "integer" || spec.type === "number") {
     return <Field label={label} hint={spec.description}><input type="number" value={value ?? ""} onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))} /></Field>;
@@ -455,18 +561,18 @@ function RunPanel({ base, name, nodes, result, onResult }) {
         const r = await run(() => post(`${base}/${name}/run`, { input, entry: entry || null, as_user: asUser || null }));
         if (r) onResult(r);
       }}>Run saved flow</Button>
-      <div className="hint">Runs the saved version. Save first to test changes.</div>
+      <div className="hint text-xs font-book text-muted leading-[1.45]">Runs the saved version. Save first to test changes.</div>
       {result && (
-        <div className="stack" style={{ gap: 8 }}>
-          <div className="row"><b>Result</b><Badge tone={result.status === "succeeded" ? "green" : "red"}>{result.status}</Badge></div>
-          {result.error && <div className="alert error">{result.error} {result.node && <>at <code>{result.node}</code></>}</div>}
+        <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 8 }}>
+          <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5"><b>Result</b><Badge tone={result.status === "succeeded" ? "green" : "red"}>{result.status}</Badge></div>
+          {result.error && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error">{result.error} {result.node && <>at <code>{result.node}</code></>}</div>}
           {result.response && <Json value={result.response} />}
           {result.result !== undefined && !result.response && <Json value={result.result} />}
           <h3>Trace</h3>
           {(result.trace || []).map((s, i) => (
-            <div key={i} className={`trace-step ${s.error ? "failed" : ""}`}>
-              <div className="spread"><code>{s.node}</code><span className="faint">{s.duration_ms} ms → {s.handle || "end"}</span></div>
-              {s.error ? <div className="error-text">{s.error}</div> : <pre className="faint" style={{ fontSize: 11 }}>{typeof s.output === "string" ? s.output : JSON.stringify(s.output)}</pre>}
+            <div key={i} className={`trace-step [border-left:2px_solid_var(--line-2)] p-[2px_0_8px_10px] text-xs [&.failed]:border-l-danger ${s.error ? "failed" : ""}`}>
+              <div className="spread flex items-center justify-between gap-3"><code>{s.node}</code><span className="faint text-faint">{s.duration_ms} ms → {s.handle || "end"}</span></div>
+              {s.error ? <div className="error-text text-danger text-ui-sm font-medium">{s.error}</div> : <pre className="faint text-faint" style={{ fontSize: 11 }}>{typeof s.output === "string" ? s.output : JSON.stringify(s.output)}</pre>}
             </div>
           ))}
           {result.logs?.length > 0 && <><h3>Logs</h3><Json value={result.logs} /></>}

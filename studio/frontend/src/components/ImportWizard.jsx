@@ -74,7 +74,7 @@ export default function ImportWizard({ env, resource, onClose, onDone }) {
   const footer = (
     <>
       {step > 0 && <Button disabled={busy} onClick={() => { setStep(step - 1); setReport(null); }}>Back</Button>}
-      <span className="grow" />
+      <span className="grow flex-1 min-w-0" />
       {step === 0 && <Button variant="primary" disabled={!table} onClick={() => setStep(1)}>Next</Button>}
       {step === 1 && <Button variant="primary" disabled={missing.length > 0 || Object.keys(mapping).length === 0} onClick={() => setStep(2)}>Next</Button>}
       {step === 2 && <>
@@ -91,22 +91,22 @@ export default function ImportWizard({ env, resource, onClose, onDone }) {
           <Field label="CSV or JSON file" hint="A CSV needs a header row. A JSON file is an array of objects. Up to a few hundred thousand rows works in the browser.">
             <input type="file" accept=".csv,.tsv,.json,text/csv,application/json" onChange={(e) => choose(e.target.files[0])} />
           </Field>
-          {problem && <div className="alert error">{problem}</div>}
+          {problem && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error">{problem}</div>}
           {table && (
             <>
-              <p className="muted" style={{ margin: 0 }}><b>{fileName}</b>: {table.rows.length.toLocaleString()} row{table.rows.length === 1 ? "" : "s"}, {table.columns.length} column{table.columns.length === 1 ? "" : "s"}.</p>
-              <div className="card flush"><Table rows={table.rows.slice(0, 5)} columns={table.columns.slice(0, 8).map((c) => ({ label: c, render: (r) => String(r[c] ?? "").slice(0, 60) }))} /></div>
+              <p className="muted text-muted" style={{ margin: 0 }}><b>{fileName}</b>: {table.rows.length.toLocaleString()} row{table.rows.length === 1 ? "" : "s"}, {table.columns.length} column{table.columns.length === 1 ? "" : "s"}.</p>
+              <div className="card bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-md p-4 [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [&.flush_.card-head_+_*]:[border-top:1px_solid_var(--line)] [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:transform-[none]! [a&:hover]:shadow-none [border:1px_solid_var(--line)] shadow-none [&_>_.spread:first-child]:mb-3! [&_>_.spread_h2]:text-base [&_>_.spread_h2]:font-semibold [&_>_.spread_h2]:tracking-[-0.01em] [&.flush_>_.card-head_+_*]:border-t-0 [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&_>_.spread_.chips]:gap-0 [&_>_.spread_.chips]:flex-nowrap [&_>_.spread_.chips]:[border:1px_solid_var(--line-2)] [&_>_.spread_.chips]:rounded-sm [&_>_.spread_.chips]:overflow-hidden [&_>_.spread_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_>_.spread_.chip]:p-[0_10px] [&_>_.spread_.chip]:border-0 [&_>_.spread_.chip]:[border-left:1px_solid_var(--line-2)] [&_>_.spread_.chip]:rounded-none [&_>_.spread_.chip]:bg-transparent [&_>_.spread_.chip]:text-muted [&_>_.spread_.chip]:text-xs [&_>_.spread_.chip]:font-medium-plus [&_>_.spread_.chip:first-child]:border-l-0 [&_>_.spread_.chip.active]:bg-press [&_>_.spread_.chip.active]:text-text [&_>_.spread_.chip.on]:bg-press [&_>_.spread_.chip.on]:text-text [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100 flush"><Table rows={table.rows.slice(0, 5)} columns={table.columns.slice(0, 8).map((c) => ({ label: c, render: (r) => String(r[c] ?? "").slice(0, 60) }))} /></div>
             </>
           )}
         </>
       )}
       {step === 1 && (
         <>
-          <p className="muted" style={{ margin: 0 }}>Match each field to a column in your file. Leave a field unmatched to leave it empty (or to use its default). Cells that are empty are skipped.</p>
-          <div className="stack">
+          <p className="muted text-muted" style={{ margin: 0 }}>Match each field to a column in your file. Leave a field unmatched to leave it empty (or to use its default). Cells that are empty are skipped.</p>
+          <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5">
             {targets.map((t) => (
-              <div key={t.name} className="map-row">
-                <span className="map-field"><b>{t.name}</b> <span className="faint">{t.key ? "key" : t.type}</span>{t.required && <Badge tone="red">required</Badge>}</span>
+              <div key={t.name} className="map-row grid grid-cols-[minmax(160px,_0.8fr)_1.2fr] gap-3 items-center p-[8px_0] [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
+                <span className="map-field flex items-center gap-2 flex-wrap"><b>{t.name}</b> <span className="faint text-faint">{t.key ? "key" : t.type}</span>{t.required && <Badge tone="red">required</Badge>}</span>
                 <select value={mapping[t.name] || ""} onChange={(e) => setMapping((m) => ({ ...m, [t.name]: e.target.value }))} aria-label={`Column for ${t.name}`}>
                   <option value="">{t.required ? "Choose a column" : "Not imported"}</option>
                   {table.columns.map((c) => <option key={c}>{c}</option>)}
@@ -114,7 +114,7 @@ export default function ImportWizard({ env, resource, onClose, onDone }) {
               </div>
             ))}
           </div>
-          {missing.length > 0 && <div className="alert warn">Match the required field{missing.length > 1 ? "s" : ""}: {missing.map((t) => t.name).join(", ")}.</div>}
+          {missing.length > 0 && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] warn">Match the required field{missing.length > 1 ? "s" : ""}: {missing.map((t) => t.name).join(", ")}.</div>}
         </>
       )}
       {step === 2 && (
@@ -126,18 +126,18 @@ export default function ImportWizard({ env, resource, onClose, onDone }) {
             </select>
           </Field>
           <Switch checked={events} onChange={(v) => { setEvents(v); setReport(null); }} label="Run events, flows and realtime for each row" hint="Off by default: a bulk import should not send a welcome email for every row." />
-          <p className="hint" style={{ margin: 0 }}>Every row is checked against the resource's field rules before anything is written. Rows that fail are skipped and listed; the rest are imported.</p>
-          {progress !== null && <div className="alert info">Working… {progress.toLocaleString()} of {prepared.length.toLocaleString()} rows.</div>}
+          <p className="hint text-xs font-book text-muted leading-[1.45]" style={{ margin: 0 }}>Every row is checked against the resource's field rules before anything is written. Rows that fail are skipped and listed; the rest are imported.</p>
+          {progress !== null && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] info">Working… {progress.toLocaleString()} of {prepared.length.toLocaleString()} rows.</div>}
           {report && (
-            <div className={`alert ${report.failed ? "warn" : "ok"}`}>
+            <div className={`alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] ${report.failed ? "warn" : "ok"}`}>
               <b>{report.dry_run ? "Check complete. Nothing was written." : "Import complete."}</b>{" "}
               {report.created.toLocaleString()} {report.dry_run ? "would be added" : "added"}, {report.updated.toLocaleString()} {report.dry_run ? "would be updated" : "updated"}, {report.failed.toLocaleString()} {report.failed ? "failed" : "failed"}.
             </div>
           )}
           {report?.errors?.length > 0 && (
-            <div className="card flush"><Table rows={report.errors.slice(0, 50)} columns={[{ label: "Row", render: (e) => e.row }, { label: "Problem", render: (e) => <span className="error-text">{e.error}</span> }]} /></div>
+            <div className="card bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-md p-4 [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [&.flush_.card-head_+_*]:[border-top:1px_solid_var(--line)] [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:transform-[none]! [a&:hover]:shadow-none [border:1px_solid_var(--line)] shadow-none [&_>_.spread:first-child]:mb-3! [&_>_.spread_h2]:text-base [&_>_.spread_h2]:font-semibold [&_>_.spread_h2]:tracking-[-0.01em] [&.flush_>_.card-head_+_*]:border-t-0 [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&_>_.spread_.chips]:gap-0 [&_>_.spread_.chips]:flex-nowrap [&_>_.spread_.chips]:[border:1px_solid_var(--line-2)] [&_>_.spread_.chips]:rounded-sm [&_>_.spread_.chips]:overflow-hidden [&_>_.spread_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_>_.spread_.chip]:p-[0_10px] [&_>_.spread_.chip]:border-0 [&_>_.spread_.chip]:[border-left:1px_solid_var(--line-2)] [&_>_.spread_.chip]:rounded-none [&_>_.spread_.chip]:bg-transparent [&_>_.spread_.chip]:text-muted [&_>_.spread_.chip]:text-xs [&_>_.spread_.chip]:font-medium-plus [&_>_.spread_.chip:first-child]:border-l-0 [&_>_.spread_.chip.active]:bg-press [&_>_.spread_.chip.active]:text-text [&_>_.spread_.chip.on]:bg-press [&_>_.spread_.chip.on]:text-text [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100 flush"><Table rows={report.errors.slice(0, 50)} columns={[{ label: "Row", render: (e) => e.row }, { label: "Problem", render: (e) => <span className="error-text text-danger text-ui-sm font-medium">{e.error}</span> }]} /></div>
           )}
-          {report?.errors?.length > 50 && <p className="hint" style={{ margin: 0 }}>Showing the first 50 problems.</p>}
+          {report?.errors?.length > 50 && <p className="hint text-xs font-book text-muted leading-[1.45]" style={{ margin: 0 }}>Showing the first 50 problems.</p>}
         </>
       )}
     </Sheet>

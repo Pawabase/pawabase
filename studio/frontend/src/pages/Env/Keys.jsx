@@ -28,7 +28,7 @@ export default function Keys({ env }) {
         actions={<Button variant="primary" onClick={() => setCreating(true)}>New key</Button>}
       />
       <HealthCheck gatewayUrl={gateway_url} env={env} />
-      <Card flush>
+      <Card bleed flush>
         <Loading state={keys} empty="No keys.">
           {(data) => (
             <Table
@@ -41,7 +41,7 @@ export default function Keys({ env }) {
                 { label: "Restrictions", render: (k) => [k.allowed_ips?.length && `IPs: ${k.allowed_ips.join(", ")}`, k.allowed_routes?.length && `Routes: ${k.allowed_routes.join(", ")}`].filter(Boolean).join(" · ") || "none" },
                 { label: "Last used", render: (k) => when(k.last_used_at) },
                 { label: "State", render: (k) => <Badge tone={k.active ? "green" : "red"}>{k.active ? "active" : "revoked"}</Badge> },
-                { label: "", render: (k) => k.active && <span className="row" style={{ gap: 6 }}><Button size="sm" onClick={async () => { const hours = prompt(`Issue a replacement for ${k.name}. How many hours should the old key keep working? (0 ends it now)`, "24"); if (hours === null) return; const fresh = await run(() => post(`${base}/${k.id}/rotate`, { grace_hours: Number(hours) || 0 })); if (fresh && fresh !== true) { setRevealed(fresh); keys.reload(); } }}>Rotate</Button><Button size="sm" variant="danger" onClick={async () => { if (confirm(`Revoke ${k.name}? Clients using it stop working at once.`) && await run(() => post(`${base}/${k.id}/revoke`), "Key revoked")) keys.reload(); }}>Revoke</Button></span> },
+                { label: "", render: (k) => k.active && <span className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" style={{ gap: 6 }}><Button size="sm" onClick={async () => { const hours = prompt(`Issue a replacement for ${k.name}. How many hours should the old key keep working? (0 ends it now)`, "24"); if (hours === null) return; const fresh = await run(() => post(`${base}/${k.id}/rotate`, { grace_hours: Number(hours) || 0 })); if (fresh && fresh !== true) { setRevealed(fresh); keys.reload(); } }}>Rotate</Button><Button size="sm" variant="danger" onClick={async () => { if (confirm(`Revoke ${k.name}? Clients using it stop working at once.`) && await run(() => post(`${base}/${k.id}/revoke`), "Key revoked")) keys.reload(); }}>Revoke</Button></span> },
               ]}
             />
           )}
@@ -50,7 +50,7 @@ export default function Keys({ env }) {
       {creating && <NewKey base={base} onClose={() => setCreating(false)} onCreated={(k) => { setCreating(false); setRevealed(k); keys.reload(); }} />}
       {revealed && (
         <Modal title="Your new key" onClose={() => setRevealed(null)} footer={<Button variant="primary" onClick={() => setRevealed(null)}>Done</Button>}>
-          <div className="alert warn">Shown once. Copy it now.</div>
+          <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] warn">Shown once. Copy it now.</div>
           <CopyText text={revealed.key} />
         </Modal>
       )}
@@ -64,7 +64,7 @@ function HealthCheck({ gatewayUrl, env }) {
   return (
     <Card>
       <h3 style={{ marginTop: 0 }}>Health check</h3>
-      <p className="muted" style={{ fontSize: 12.5, marginTop: -6 }}>
+      <p className="muted text-muted" style={{ fontSize: 12.5, marginTop: -6 }}>
         Requires a key for this environment in the <code>apikey</code> header — a 200 proves the key resolves and the
         environment is up.
       </p>

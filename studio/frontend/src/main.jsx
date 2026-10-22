@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import "@xyflow/react/dist/style.css";
-import "./styles.css";
+import "./app.css";
 
 const pages = import.meta.glob("./pages/**/*.jsx", { eager: true });
 
@@ -17,5 +17,5 @@ createInertiaApp({
   setup({ el, App, props }) {
     createRoot(el).render(<App {...props} />);
   },
-  progress: { color: "#8b7cf0" },
+  progress: { color: "#ff7049" },
 });

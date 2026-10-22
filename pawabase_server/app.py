@@ -153,6 +153,11 @@ def create_app(
         )
         # Queued work is done by processes of their own (see ``worker_mode``). These two switches put it in this process instead, which
         # is for tests and throwaway runs: a slow job then shares the server's event loop.
+        if settings.change_capture:
+            from pawabase_server.data.cdc import ChangeCapture
+
+            platform.capture = ChangeCapture(platform)
+            await platform.capture.start()
         if settings.inline_worker:
             from pawabase_server.automation.event_processor import EventProcessor
             from pawabase_server.automation.worker import start_inline_worker
@@ -171,6 +176,9 @@ def create_app(
             task.cancel()
             with contextlib.suppress(BaseException):
                 await task
+        if platform.capture is not None:
+            await platform.capture.stop()
+            platform.capture = None
         if role == "server":
             await rollup.stop()
         worker = app.state.get("inline_worker")

@@ -96,6 +96,8 @@ class Platform:
         self.queue = queue or self._build_queue()
         #: The realtime hub, attached when the server is assembled (``None`` where only the platform runs, as in some tests).
         self.realtime: Any = None
+        #: The change-capture poller of a server process (see ``data/cdc.py``); ``None`` where none runs.
+        self.capture: Any = None
         self.outbound = httpx.AsyncClient(
             timeout=30.0, follow_redirects=False, headers={"user-agent": "Pawabase/0.1"}
         )

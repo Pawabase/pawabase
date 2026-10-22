@@ -8,6 +8,7 @@ Observability's system view.
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -20,6 +21,8 @@ from pawabase_server.db.models import (
     RequestLog,
 )
 from pawabase_server.observability.system_health import system_report
+
+logger = logging.getLogger("pawabase.api.advisor")
 
 #: How close to a limit is worth a mention, and when it is urgent.
 NEAR = 0.8
@@ -101,14 +104,9 @@ async def _limits(platform: Any, env: str, environment: Environment) -> list[dic
     return [entry for entry in found if entry]
 
 
-async def advise(platform: Any, env: str, minutes: int = 60) -> dict[str, Any]:
-    """Findings for one environment over the last *minutes*, most urgent first, and its usage against its limits."""
-    environment = await Environment.get(name=env)
-    since = datetime.now(UTC) - timedelta(minutes=minutes)
-    window = "the last hour" if minutes == 60 else f"the last {minutes} minutes"
+async def _requests(env: str, since: datetime, window: str) -> list[dict[str, str]]:
+    """The API the application's users call."""
     found: list[dict[str, str]] = []
-
-    # Requests: the API the application's users call.
     requests = RequestLog.filter(env=env, started_at__gte=since.isoformat())
     total = await requests.count()
     if total >= 20:
@@ -135,24 +133,32 @@ async def advise(platform: Any, env: str, minutes: int = 60) -> dict[str, Any]:
                     "observability#requests",
                 )
             )
+    return found
 
-    # Functions the application wrote.
+
+async def _functions(env: str, since: datetime, window: str) -> list[dict[str, str]]:
+    """Functions the application wrote."""
     runs = FunctionRun.filter(env=env, created_at__gte=since)
     calls = await runs.count()
-    if calls >= 5:
-        errored = await runs.filter(status__in=["failed", "error"]).count()
-        if _rate(errored, calls) >= 0.1:
-            found.append(
-                _finding(
-                    "critical" if _rate(errored, calls) >= 0.3 else "warning",
-                    "functions",
-                    "Functions are failing",
-                    f"{errored:,} of {calls:,} function runs in {window} failed.",
-                    "functions",
-                )
-            )
+    if calls < 5:
+        return []
+    errored = await runs.filter(status__in=["failed", "error"]).count()
+    if _rate(errored, calls) < 0.1:
+        return []
+    return [
+        _finding(
+            "critical" if _rate(errored, calls) >= 0.3 else "warning",
+            "functions",
+            "Functions are failing",
+            f"{errored:,} of {calls:,} function runs in {window} failed.",
+            "functions",
+        )
+    ]
 
-    # Background work, flows, webhooks and mail, from the same report Observability uses.
+
+async def _system(platform: Any, env: str, minutes: int, window: str) -> list[dict[str, str]]:
+    """Background work, flows, webhooks and mail, from the same report Observability uses."""
+    found: list[dict[str, str]] = []
     report = await system_report(platform, env, minutes)
     jobs = report["jobs"]["totals"]
     if jobs["total"] >= 5 and jobs["success_rate"] is not None:
@@ -211,9 +217,12 @@ async def advise(platform: Any, env: str, minutes: int = 60) -> dict[str, Any]:
                 "mail",
             )
         )
+    return found
 
-    # Limits: usage close to, or at, what the environment or its plan allows.
-    limits = await _limits(platform, env, environment)
+
+def _limit_findings(limits: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Usage close to, or at, what the environment or its plan allows."""
+    found: list[dict[str, str]] = []
     for entry in limits:
         share = entry["used"] / entry["limit"]
         if share >= AT:
@@ -236,10 +245,44 @@ async def advise(platform: Any, env: str, minutes: int = 60) -> dict[str, Any]:
                     entry["page"],
                 )
             )
+    return found
+
+
+async def advise(platform: Any, env: str, minutes: int = 60) -> dict[str, Any]:
+    """Findings for one environment over the last *minutes*, most urgent first, and its usage against its limits.
+
+    Each source is read on its own: one that cannot be read is named in ``unavailable`` and the rest still answer,
+    so a broken table or an unreachable worker never turns the dashboard's advisor into an error.
+    """
+    environment = await Environment.get(name=env)
+    since = datetime.now(UTC) - timedelta(minutes=minutes)
+    window = "the last hour" if minutes == 60 else f"the last {minutes} minutes"
+    found: list[dict[str, str]] = []
+    unavailable: list[str] = []
+
+    for area, section in (
+        ("requests", _requests(env, since, window)),
+        ("functions", _functions(env, since, window)),
+        ("system", _system(platform, env, minutes, window)),
+    ):
+        try:
+            found.extend(await section)
+        except Exception:  # noqa: BLE001 - see the docstring
+            logger.exception("advisor: could not read %s for %s", area, env)
+            unavailable.append(area)
+
+    limits: list[dict[str, Any]] = []
+    try:
+        limits = await _limits(platform, env, environment)
+        found.extend(_limit_findings(limits))
+    except Exception:  # noqa: BLE001
+        logger.exception("advisor: could not read limits for %s", env)
+        unavailable.append("limits")
 
     order = {"critical": 0, "warning": 1}
     return {
         "window_minutes": minutes,
         "findings": sorted(found, key=lambda f: order[f["severity"]]),
         "limits": limits,
+        "unavailable": unavailable,
     }

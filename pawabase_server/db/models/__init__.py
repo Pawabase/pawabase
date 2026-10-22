@@ -17,10 +17,13 @@ from pawabase_server.db.models.definitions import (
     EventSubscription,
     Flow,
     InboundHook,
+    MailKit,
     MailTemplate,
+    MailTemplateVersion,
     PolicyDef,
     Resource,
     RouteDef,
+    SavedQuery,
     Schedule,
     SchemaDef,
     TransformerDef,
@@ -39,13 +42,6 @@ from pawabase_server.db.models.framework import (
 from pawabase_server.db.models.functions import FunctionDeployment, FunctionRun
 from pawabase_server.db.models.gateway import GatewayInstance
 from pawabase_server.db.models.orgs import Invitation, Membership, Organization, Team, TeamMember
-from pawabase_server.db.models.realtime import (
-    PushDevice,
-    RealtimeChannelConfig,
-    RealtimeChannelState,
-    RealtimeMessage,
-    RealtimeUsageRecord,
-)
 from pawabase_server.db.models.platform_ops import (
     AlarmEvent,
     AlarmRule,
@@ -67,6 +63,13 @@ from pawabase_server.db.models.projects import (
     Project,
     ProjectDatabaseBinding,
     UsageCounter,
+)
+from pawabase_server.db.models.realtime import (
+    PushDevice,
+    RealtimeChannelConfig,
+    RealtimeChannelState,
+    RealtimeMessage,
+    RealtimeUsageRecord,
 )
 from pawabase_server.db.models.releases import (
     ApiVersion,
@@ -137,8 +140,10 @@ __all__ = [
     "JWTToken",
     "JobRun",
     "LoginEvent",
+    "MailKit",
     "MailLog",
     "MailTemplate",
+    "MailTemplateVersion",
     "Membership",
     "MetricCounter",
     "MfaFactor",
@@ -152,6 +157,7 @@ __all__ = [
     "RequestLog",
     "Resource",
     "RouteDef",
+    "SavedQuery",
     "Schedule",
     "SchemaDef",
     "SchemaMigration",

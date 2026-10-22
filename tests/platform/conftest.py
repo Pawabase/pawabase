@@ -21,6 +21,7 @@ def settings(tmp_path):
         code_path=str(tmp_path / "code"),
         public_url="http://gateway.test",
         inline_worker=True,
+        change_capture=False,  # a test starts the poller itself when it is the thing under test
         inline_scheduler=False,  # a test starts the scheduler itself when it is the thing under test
         function_isolation="inprocess",  # most tests run their functions in the test process; test_sandbox.py asks for worker processes
         record_buffer_seconds=0,  # records are written at once, so a test can read them right after the call

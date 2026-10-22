@@ -180,6 +180,8 @@ class Settings(Config):
     outbound_allow_hosts: str = ""
     inline_worker: bool = False
     inline_scheduler: bool = False
+    #: Deliver changes captured by database triggers (a resource's ``capture``): events and realtime for writes made outside the API.
+    change_capture: bool = True
     #: ``process``: ``serve`` runs the worker and the scheduler as supervised child processes. ``external``: it starts neither.
     worker_mode: str = "process"
     #: Jobs a worker process runs at once.
@@ -339,7 +341,9 @@ class Settings(Config):
     @property
     def function_vendor_enabled(self) -> bool:
         """Whether a TypeScript deployment's remote imports are fetched when it is activated (see ``functions/vendor.py``)."""
-        return self.function_install_enabled if self.function_vendor is None else self.function_vendor
+        return (
+            self.function_install_enabled if self.function_vendor is None else self.function_vendor
+        )
 
     @property
     def functions_runtime_remote(self) -> bool:

@@ -1,10 +1,11 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
 // Studio's Python server renders the HTML shell (sillo-inertia) and reads the
 // manifest to find the built entry; Vite only builds and serves the scripts.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   base: "/",
   server: { port: 5173, strictPort: true, cors: true, origin: "http://localhost:5173" },
   build: {
