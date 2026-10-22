@@ -27,7 +27,6 @@ SECTIONS: dict[str, str] = {
     **{kind: "Env/Definitions" for kind in DEFINITION_KINDS},
     "database": "Env/Database",
     "types": "Env/Types",
-    "rules": "Env/Rules",
     "tables": "Env/Tables",
     "topology": "Env/Topology",
     "flows": "Env/Flows",

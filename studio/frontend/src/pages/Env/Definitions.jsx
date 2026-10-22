@@ -1,4 +1,3 @@
-import { router } from "@inertiajs/react";
 import { useEffect, useState } from "react";
 import Layout, { SECTION_TONES, WEBHOOK_PAGES, webhooksSubnav } from "../../components/Layout";
 import { useDataSubnav } from "../../components/DataNav";
@@ -49,7 +48,6 @@ export default function Definitions({ env, kind }) {
         title={meta.title}
         description={meta.description}
         actions={<>
-          {kind === "policies" && <Button onClick={() => router.visit(`/envs/${env}/rules`)}><Icon name="rules" />Test rules</Button>}
           <Button variant="primary" onClick={create}><Icon name="plus" />New {singular(kind).toLowerCase()}</Button>
         </>}
       />
