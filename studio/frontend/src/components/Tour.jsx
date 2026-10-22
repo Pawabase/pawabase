@@ -34,7 +34,7 @@ function Confetti() {
     const ctx = canvas.getContext("2d");
     const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
     resize();
-    const colors = ["#6d5bd0", "#cfc4fa", "#ffd4b8", "#c4ebd9", "#f8e6a8", "#c3dcf6", "#f7cadb"];
+    const colors = ["#9A8CFF", "#FF7049", "#ffd4b8", "#c4ebd9", "#f8e6a8", "#c3dcf6", "#f7cadb"];
     const bits = Array.from({ length: 140 }, () => ({
       x: canvas.width / 2 + (Math.random() - 0.5) * 240, y: canvas.height * 0.45,
       vx: (Math.random() - 0.5) * 11, vy: -Math.random() * 12 - 3, size: 5 + Math.random() * 6,

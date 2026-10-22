@@ -142,7 +142,7 @@ function Providers({ env, kind }) {
             ))}
           </div>
         ) : (
-          <Card icon="enter" flush title="OAuth servers" actions={<Button variant="primary" size="sm" onClick={() => setEditing({ name: "", isNew: true })}><Icon name="plus" size={14} /> Add OAuth server</Button>}>
+          <Card bleed icon="enter" flush title="OAuth servers" actions={<Button variant="primary" size="sm" onClick={() => setEditing({ name: "", isNew: true })}><Icon name="plus" size={14} /> Add OAuth server</Button>}>
             <Table
               rows={customNames.map((name) => ({ name, ...providers[name] }))}
               onRowClick={(row) => setEditing({ name: row.name })}
@@ -228,7 +228,7 @@ function UserList({ base }) {
         <span className="grow flex-1 min-w-0" />
         <Button variant="primary" size="sm" onClick={() => setCreating(true)}><Icon name="plus" size={14} /> New user</Button>
       </div>
-      <Card flush>
+      <Card bleed flush>
         <Loading state={users} empty="No users match.">
           {(data) => (
             <>
@@ -424,7 +424,7 @@ function Roles({ base }) {
   const [editing, setEditing] = useState(null);
   const [run, busy] = useAction();
   return (
-    <Card icon="policies" flush title="Roles" actions={<Button size="sm" variant="primary" onClick={() => setEditing({ isNew: true, name: "", description: "", permissions: [] })}>New role</Button>}>
+    <Card bleed icon="policies" flush title="Roles" actions={<Button size="sm" variant="primary" onClick={() => setEditing({ isNew: true, name: "", description: "", permissions: [] })}>New role</Button>}>
       <Loading state={roles} empty="No roles yet.">
         {(data) => <Table rows={data.data} onRowClick={(r) => setEditing({ ...r, permissions: r.permissions || [] })} columns={[
           { label: "Role", render: (r) => <b>{r.name}</b> }, { label: "Description", key: "description" },
@@ -461,7 +461,7 @@ function Orgs({ base }) {
   const [creating, setCreating] = useState(false);
   return (
     <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
-      <Card icon="org" flush title="Organizations" actions={<Button variant="primary" size="sm" onClick={() => setCreating(true)}><Icon name="plus" size={14} /> New organization</Button>}>
+      <Card bleed icon="org" flush title="Organizations" actions={<Button variant="primary" size="sm" onClick={() => setCreating(true)}><Icon name="plus" size={14} /> New organization</Button>}>
         <Loading state={orgs} empty="No organizations yet. Create one here, or users create them through /auth/v1/orgs.">
           {(data) => <Table rows={data.data} onRowClick={(o) => setSelected(o.slug)} empty="No organizations yet. Create one here, or users create them through /auth/v1/orgs." columns={[{ label: "Name", render: (o) => <b>{o.name}</b> }, { label: "Slug", render: (o) => <code>{o.slug}</code> }, { label: "Members", key: "members" }, { label: "Created", render: (o) => when(o.created_at) }]} />}
         </Loading>
@@ -550,7 +550,7 @@ function Events({ base }) {
   const [failed, setFailed] = useState(false);
   const events = useApi(`${base}/events`, { ...AUTH, params: { failed: failed ? "true" : "" } });
   return (
-    <Card icon="enter" flush title="Sign-in activity" actions={<label className="check [label&]:flex [label&]:items-center [label&]:gap-2 [label&]:text-text [label&]:text-ui"><input type="checkbox" checked={failed} onChange={(e) => setFailed(e.target.checked)} /> failures only</label>}>
+    <Card bleed icon="enter" flush title="Sign-in activity" actions={<label className="check [label&]:flex [label&]:items-center [label&]:gap-2 [label&]:text-text [label&]:text-ui"><input type="checkbox" checked={failed} onChange={(e) => setFailed(e.target.checked)} /> failures only</label>}>
       <Loading state={events} empty="No activity yet.">
         {(data) => <Table rows={data.data} columns={[{ label: "When", render: (e) => when(e.created_at) }, { label: "Event", key: "kind" }, { label: "Email", key: "email" }, { label: "Result", render: (e) => <Badge tone={e.success ? "green" : "red"}>{e.success ? "ok" : e.reason || "failed"}</Badge> }, { label: "IP", key: "ip" }]} />}
       </Loading>

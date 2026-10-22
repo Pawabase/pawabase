@@ -2,7 +2,7 @@
 // `patch(changes)` to merge into it, and the project's references. The body
 // is exactly what the API stores.
 import { useState } from "react";
-import { Badge, Field, JsonInput, KeyValue, Section, Segmented, Switch, TagInput, IconButton } from "../ui";
+import { Badge, Choices, Field, JsonInput, KeyValue, Section, Segmented, Switch, TagInput, IconButton } from "../ui";
 import { Icon } from "../icons";
 import { ConditionBuilder, toTree } from "./ConditionBuilder";
 import { FieldsEditor } from "./FieldsEditor";
@@ -389,7 +389,14 @@ function WebhookForm({ body, patch, refs, isNew }) {
 
 // ── inbound hooks ─────────────────────────────────────────────────────────
 
-const VERIFY = [["hmac-sha256", "HMAC-SHA256"], ["hmac-sha512", "HMAC-SHA512"], ["hmac-sha256-ts", "HMAC-SHA256 with timestamp"], ["pawabase", "Pawabase signature"], ["token", "Shared token"], ["none", "None"]];
+const VERIFY = [
+  ["hmac-sha256", "HMAC-SHA256", "The signature most providers send."],
+  ["hmac-sha512", "HMAC-SHA512", "The same, with a longer hash."],
+  ["hmac-sha256-ts", "HMAC-SHA256 with timestamp", "Signs the time too, so replayed requests are refused."],
+  ["pawabase", "Pawabase signature", "The signed format Pawabase's own webhooks send."],
+  ["token", "Shared token", "A secret value sent in a header."],
+  ["none", "None", "Accept every request. Not recommended."],
+];
 
 function InboundForm({ body, patch, refs, isNew, env }) {
   const verification = body.verification || "hmac-sha256";
@@ -399,7 +406,7 @@ function InboundForm({ body, patch, refs, isNew, env }) {
         <Field label="Display name" optional><input placeholder="Stripe" {...text(body, "name", patch)} /></Field>
       </Identity>
       <Section icon="policies" title="Verification" description="Requests that fail verification are refused before anything runs.">
-        <Segmented options={VERIFY} value={verification} onChange={(v) => patch({ verification: v })} />
+        <Choices label="Verification" options={VERIFY} value={verification} onChange={(v) => patch({ verification: v })} />
         {verification !== "none" && (
           <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
             {verification !== "pawabase" && (

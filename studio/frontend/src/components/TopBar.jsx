@@ -161,7 +161,7 @@ function NewMenu({ env }) {
       label="Create"
       width={300}
       align="end"
-      trigger={(props) => <button type="button" className="appbar-btn inline-flex items-center gap-1.5 h-control p-[0_12px] [border:1px_solid_var(--line-2)] rounded-sm bg-transparent text-text font-inherit text-ui font-medium-plus cursor-pointer whitespace-nowrap [&:hover]:bg-hover [&:focus-visible]:outline-[2px_solid_var(--brand)] [&:focus-visible]:outline-offset-[1px] max-navigation:hidden" title="Create something" {...props}><Icon name="plus" size={14} /><span className="new-label">New</span></button>}
+          trigger={(props) => <button type="button" className="btn primary appbar-btn inline-flex items-center gap-1.5 h-control p-[0_12px] font-inherit text-ui font-medium-plus cursor-pointer whitespace-nowrap [&:focus-visible]:outline-[2px_solid_var(--brand)] [&:focus-visible]:outline-offset-[1px] max-navigation:hidden" title="Create something" {...props}><Icon name="plus" size={14} /><span className="new-label">New</span></button>}
     >
       {({ close }) => (
         <>

@@ -2,25 +2,29 @@
 
 @theme {
   /* surfaces */
-  --color-frame: #121117;
-  --color-canvas: #1b1922;
-  --color-surface: #211f2a;
-  --color-sunken: #292633;
-  --color-line: #302d39;
-  --color-line-2: #3c3847;
+  --color-hero: #08090a;
+  --color-frame: #08090a;
+  --color-canvas: #08090a;
+  --color-surface: #16171a;
+  --color-sunken: #16171a;
+  --color-line: #292a2d;
+  --color-line-2: #292a2d;
 
   /* text */
-  --color-ink: #f7f6fb;
-  --color-on-ink: #111116;
-  --color-text: #f7f6fb;
+  --color-ink: #ededed;
+  --color-on-ink: #08090a;
+  --color-text: #ededed;
   --color-muted: #aaa8b8;
   --color-faint: #747180;
 
   /* brand */
-  --color-brand: #7869ff;
-  --color-brand-strong: #a89eff;
-  --color-brand-soft: #282446;
-  --color-brand-ring: rgba(120, 105, 255, 0.34);
+  --color-brand: #ff7049;
+  --color-brand-strong: #ffffff;
+  --color-brand-soft: #3a211c;
+  --color-brand-ring: rgba(255, 112, 73, 0.34);
+  --color-accent: #9a8cff;
+  --color-accent-soft: #29243d;
+  --color-accent-line: #403762;
 
   /* pastels (decoration only) */
   --color-lavender: #cfc4fa;
@@ -42,11 +46,18 @@
   --color-info-soft: #1d2a40;
 
   /* interactive fills */
-  --color-hover: color-mix(in srgb, #f7f6fb 6%, transparent);
-  --color-press: color-mix(in srgb, #7869ff 19%, transparent);
-  --color-head-bg: color-mix(in srgb, #191920 82%, #111116);
-  --color-line-hover: color-mix(in srgb, #312f3a 55%, #aaa8b8);
-  --color-brand-line: color-mix(in srgb, #7869ff 22%, #24232c);
+  --color-hover: color-mix(in srgb, #ededed 6%, transparent);
+  --color-press: color-mix(in srgb, #ff7049 19%, transparent);
+  --color-head-bg: color-mix(in srgb, #16171a 82%, #08090a);
+  --color-line-hover: color-mix(in srgb, #292a2d 55%, #aaa8b8);
+  --color-brand-line: color-mix(in srgb, #ff7049 22%, #16171a);
+
+  /* controls */
+  --color-control: #f5f5f6;
+  --color-control-hover: #ffffff;
+  --color-control-ink: #111315;
+  --color-control-line: rgba(255, 255, 255, 0.78);
+  --color-control-accent: rgba(255, 112, 73, 0.45);
 
   /* radii */
   --radius-xs: 7px;
@@ -54,6 +65,7 @@
   --radius-md: 14px;
   --radius-lg: 18px;
   --radius-xl: 22px;
+  --radius-control: 8px;
 
   /* type */
   --font-sans: "Geist Variable", "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -114,16 +126,16 @@
 /*
  * Studio's visual system.
  *
- * Calm and rounded: an off-white canvas framed by a slightly deeper lilac,
- * white cards with large soft corners and no borders, pill buttons (ink filled
- * for the primary action), and a pastel palette — lavender, peach, mint,
- * butter, sky — for anything that is decoration rather than state.
+ * The landing hero's near-black canvas, one hairline frame, compact controls,
+ * and a white primary action with an orange baseline. Hover is one neutral
+ * wash everywhere; only semantic state colours change the fill.
  *
  * Status colours (ok / warn / danger / info) mean a state and are never used
  * for decoration. Studio uses one focused dark theme.
  */
 
 :root {
+  --hero: var(--color-hero);
   --frame: var(--color-frame);
   --canvas: var(--color-canvas);
   --surface: var(--color-surface);
@@ -140,6 +152,16 @@
   --brand-strong: var(--color-brand-strong);
   --brand-soft: var(--color-brand-soft);
   --brand-ring: var(--color-brand-ring);
+  --accent: var(--color-accent);
+  --accent-soft: var(--color-accent-soft);
+  --accent-line: var(--color-accent-line);
+
+  --control-bg: var(--color-control);
+  --control-bg-hover: var(--color-control-hover);
+  --control-ink: var(--color-control-ink);
+  --control-line: var(--color-control-line);
+  --control-accent: var(--color-control-accent);
+  --r-control: var(--radius-control);
 
   --lavender: var(--color-lavender);
   --peach: var(--color-peach);
@@ -386,12 +408,11 @@ html, body { background: var(--canvas); }
 @keyframes tour-ping { 0%, 100% { opacity: 1; } 50% { opacity: .6; } }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-   Design system v2: a framed app floating on a soft gradient, a wide white sidebar with a rounded edge, a search-first
-   top bar, big-number cards, lavender table headers. Pawabase's own violet and lilac, ink-navy text.
+   Design system v2: a framed app with a search-first top bar and compact data views.
    ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
 :root {
   --r-xl: 36px; --r-lg: 28px; --r-md: 20px; --r-sm: 12px;
-  --ink: #f7f6fb; --text: #f7f6fb; --muted: #aaa8b8; --faint: #747180;
+  --ink: #ededed; --text: #ededed; --muted: #aaa8b8; --faint: #747180;
   --canvas: var(--color-canvas); --sunken: var(--color-sunken); --line: var(--color-line); --line-2: var(--color-line-2);
 }
 
@@ -460,7 +481,7 @@ a.metric:hover::after { content: ""; position: absolute; left: 0; right: 0; bott
 .kpi.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--brand); }
 
 /* ── tabs: text with an underline on a hairline ─────────────────────────── */
-.tabs button.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 0; background: var(--text); }
+.tabs button.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 0; background: var(--accent); }
 
 /* ── segmented control: joined segments, one outline ────────────────────── */
 
@@ -518,11 +539,62 @@ th::first-letter { text-transform: uppercase; }
 .card-head .chip:first-child { border-left: 0; }
 .card-head .chip.active, .card-head .chip.on { background: var(--press); color: var(--text); }
 
-/* ── buttons are outlines: text and a border, no fill ───────────────────────
- * The one exception is the commit action at the foot of a sheet (Save, Create),
- * the single place a filled button tells you what finishes the task. */
-
-/* every button border is the same neutral grey; colour stays only in a destructive button's text */
+/* ── buttons ───────────────────────────────────────────────────────────────
+ * One action language: a white primary with the landing hero's orange
+ * baseline, neutral secondary fills, and one hover treatment. */
+.btn {
+  background: var(--surface) !important;
+  border-color: var(--line-2) !important;
+  border-radius: var(--r-control) !important;
+  color: var(--text) !important;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s !important;
+}
+.btn:not(.primary):not(.soft):not(.danger):not(.ghost):hover {
+  background: var(--hover) !important;
+  border-color: var(--line-hover) !important;
+  color: var(--text) !important;
+}
+.btn.primary {
+  background: var(--control-bg) !important;
+  border-color: var(--control-line) !important;
+  color: var(--control-ink) !important;
+  box-shadow: inset 0 -2px 0 var(--control-accent) !important;
+}
+.btn.primary:hover {
+  background: var(--control-bg-hover) !important;
+  border-color: var(--control-bg-hover) !important;
+  color: var(--control-ink) !important;
+}
+.btn.soft {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fff !important;
+}
+.btn.soft:hover {
+  background: color-mix(in srgb, var(--accent) 82%, #fff) !important;
+  border-color: color-mix(in srgb, var(--accent) 82%, #fff) !important;
+  color: #fff !important;
+}
+.btn.danger {
+  background: var(--danger-soft) !important;
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--danger-soft)) !important;
+  color: var(--danger) !important;
+}
+.btn.danger:hover {
+  background: color-mix(in srgb, var(--danger) 18%, var(--danger-soft)) !important;
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--danger-soft)) !important;
+  color: var(--danger) !important;
+}
+.btn.ghost {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--muted) !important;
+}
+.btn.ghost:hover {
+  background: var(--hover) !important;
+  border-color: transparent !important;
+  color: var(--text) !important;
+}
 
 /* ── popovers: one anchored surface for every menu ─────────────────────── */
 @keyframes pop-in { from { opacity: 0; transform: translateY(-3px); } }
@@ -558,7 +630,7 @@ kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; 
 /* A pane with its own section list on the left (email templates and the like). */
 
 /* Tabs across one record's view: an underline, not a pill strip. */
-.page-tabs-list button.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--text); }
+.page-tabs-list button.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); }
 
 /* ── API Explorer workbench ───────────────────────────────────────────── */
 
@@ -605,6 +677,35 @@ input, select, textarea { border-radius: var(--r); }
   filter: none !important;
 }
 @keyframes blink { 50% { opacity: 0.35; } }
+}
+
+.appbar,
+.secondary-bar {
+  background: var(--hero) !important;
+}
+.btn,
+.appbar-btn,
+.appbar-icon,
+.side-toggle,
+.subnav-action,
+.subnav-create,
+.subnav-foot,
+.ctx-btn,
+.icon-btn {
+  border-radius: var(--r-control) !important;
+}
+.appbar-btn:not(.primary):hover,
+.appbar-icon:hover,
+.side-toggle:hover,
+.subnav-action:hover,
+.subnav-create:hover,
+.subnav-foot:hover,
+.ctx-btn:hover,
+.ctx-btn[aria-expanded="true"],
+.icon-btn:hover {
+  background: var(--hover) !important;
+  border-color: var(--line-hover) !important;
+  color: var(--text) !important;
 }
 
 /* API Explorer: the builder and the inspector are one framed region, divided
@@ -660,17 +761,38 @@ input, select, textarea { border-radius: var(--r); }
 .fn-count.zero { color: var(--faint); font-weight: 500; }
 .fn-chip-n { margin-left: 6px; color: var(--faint); font-variant-numeric: tabular-nums; }
 
-/* a table sits flush in its card: keep the board square where the table starts */
-.card:has(.table-wrap) { border-top-left-radius: 0; border-top-right-radius: 0; }
-.card:has(.table-wrap) > .card-head { border-radius: 0; }
-
-/* boards are square where they open: a head or a table never starts inside a curve */
-.card:has(> .card-head) { border-top-left-radius: 0; border-top-right-radius: 0; }
-.card:has(> .card-head) > .card-head { border-radius: 0; }
-
-/* flush boards (tables, lists) are square all the way out */
-.card.flush { border-radius: 0; }
-.card.flush > .card-head { border-radius: 0; }
+/* Frames. A section of a page is a rounded, bordered card all the way round,
+   its head sharing the top corners. A table never floats: inside a card it
+   runs edge to edge and follows the card's corners; anywhere else it gets a
+   rounded frame of its own. (Cards are not clipped, so menus opened from a
+   card head are never cut off; the table rounds its own corners instead.) */
+.card > .table-wrap:first-child,
+.form-section:not(:has(> .form-section-head)) > div > .table-wrap:first-child {
+  border-top-left-radius: calc(var(--r) + 3px);
+  border-top-right-radius: calc(var(--r) + 3px);
+}
+/* A card the shell flattens into a full-width region (a direct child of the
+   content column) has no corners, so neither does its table. */
+.content > .card > .table-wrap { border-radius: 0; }
+/* A main list right under a filter or toolbar row opens on a rule, so the head never floats. */
+.content > :where(.row, .spread, .segmented, .usage-filters, div:not([class])) + .card.bleed,
+.content > :where(.row, .spread, .segmented, .usage-filters, div:not([class])) + .table-wrap.bleed { border-top: 1px solid var(--line); }
+/* Under a head, a table starts right at the head's rule: no gap above it, square on top. */
+.form-section:has(> .form-section-head) > div > .table-wrap:first-child { margin-top: -16px; }
+.card:not(.flush) > .card-head + .table-wrap { margin-top: -14px; }
+.card > .table-wrap:last-child,
+.form-section > div > .table-wrap:last-child {
+  border-bottom-left-radius: calc(var(--r) + 3px);
+  border-bottom-right-radius: calc(var(--r) + 3px);
+}
+.table-wrap:not(.bleed):not(.content > .table-wrap):not(.card .table-wrap):not(.form-section.overflow-hidden .table-wrap) {
+  border: 1px solid var(--line-2);
+  border-radius: calc(var(--r) + 4px);
+  overflow: auto;
+}
+.table-wrap:not(.bleed):not(.content > .table-wrap):not(.card .table-wrap):not(.form-section.overflow-hidden .table-wrap) tr:last-child td,
+.card > .table-wrap:last-child tr:last-child td,
+.form-section > div > .table-wrap:last-child tr:last-child td { border-bottom: 0; }
 
 /* observability carries one frame: every panel, chart or table, is the same bordered card */
 .obs .card { border: 1px solid var(--line-2); border-radius: calc(var(--r) + 2px); overflow: hidden; background: color-mix(in srgb, var(--surface) 58%, var(--canvas)); }
@@ -684,3 +806,48 @@ input, select, textarea { border-radius: var(--r); }
 .card:not(.flush) > .table-wrap:last-child { margin: 0 -18px -18px; }
 .form-section > div > .table-wrap { margin: 0 -16px; }
 .form-section > div > .table-wrap:last-child { margin: 0 -16px -16px; }
+/* a toolbar above the table (a stack inside the card) still lets the table reach the card's edges */
+.card:not(.flush) > .stack > .table-wrap:last-child { margin: 0 -18px -18px; border-radius: 0 0 calc(var(--r) + 3px) calc(var(--r) + 3px); }
+.card:not(.flush) > .stack > .table-wrap:last-child tr:last-child td { border-bottom: 0; }
+
+/* A page's main list (users, objects, definitions, jobs, logs) is not a card:
+   it runs square across the content column, ruled top and bottom, so its rows
+   meet the frame of the app. The shell already draws a direct child of
+   .content this way (no padding, gutter-padded cells); a main list nested one
+   level down, inside a gutter-padded stack, cancels exactly that gutter.
+   Supporting tables in configuration sections stay in their rounded cards. */
+.content > * > .card.bleed,
+.content > * > .table-wrap.bleed {
+  margin-left: calc(var(--gutter) * -1);
+  margin-right: calc(var(--gutter) * -1);
+  border-left: 0;
+  border-right: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.content > * > .card.bleed:first-child,
+.content > * > .table-wrap.bleed:first-child { margin-top: -16px; border-top: 0; }
+.content > * > .card.bleed:last-child,
+.content > * > .table-wrap.bleed:last-child { margin-bottom: -16px; border-bottom: 0; }
+.content > * > .table-wrap.bleed { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.content .card.bleed > .card-head,
+.content .card.bleed > .table-wrap { border-radius: 0; }
+.content > * > .card.bleed > .card-head { padding-left: var(--gutter); padding-right: var(--gutter); }
+.content > * > .card.bleed th:first-child,
+.content > * > .card.bleed td:first-child,
+.content > * > .table-wrap.bleed th:first-child,
+.content > * > .table-wrap.bleed td:first-child { padding-left: var(--gutter); }
+.content > * > .card.bleed th:last-child,
+.content > * > .card.bleed td:last-child,
+.content > * > .table-wrap.bleed th:last-child,
+.content > * > .table-wrap.bleed td:last-child { padding-right: var(--gutter); }
+
+/* The flow editor owns the viewport: the page must be a flex column so the
+   canvas gets a bounded height, the block palette and the inspector scroll
+   inside it, and fitView centres nodes in the visible area rather than in a
+   page-tall canvas. Unlayered on purpose — these beat the layout utilities. */
+.flow-page .main.flow-main { display: flex; flex-direction: column; }
+.flow-page .content.flow-content { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.flow-page .flow-shell { height: 100%; min-height: 0; }
+.flow-page .palette,
+.flow-page .inspector { min-height: 0; }

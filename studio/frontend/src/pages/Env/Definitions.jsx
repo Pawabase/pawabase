@@ -49,7 +49,7 @@ export default function Definitions({ env, kind }) {
         description={meta.description}
         actions={<Button variant="primary" onClick={create}><Icon name="plus" />New {singular(kind).toLowerCase()}</Button>}
       />
-      <Card flush>
+      <Card bleed flush>
         <Loading state={list}>
           {(data) => data.data.length === 0 ? (
             <EmptyState

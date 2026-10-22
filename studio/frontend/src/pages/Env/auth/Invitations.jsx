@@ -75,7 +75,7 @@ export default function Invitations({ base }) {
   const resend = async (row) => { if (await run(() => post(`${base}/invitations/${row.id}/resend`, {}, AUTH), `Sent again to ${row.email}`)) invitations.reload(); };
   return (
     <>
-      <Card icon="mail" flush title="Pending invitations" actions={<Button variant="primary" size="sm" onClick={() => setInviting(true)}><Icon name="plus" size={14} /> Invite people</Button>}>
+      <Card bleed icon="mail" flush title="Pending invitations" actions={<Button variant="primary" size="sm" onClick={() => setInviting(true)}><Icon name="plus" size={14} /> Invite people</Button>}>
         <Loading state={invitations} empty="No pending invitations.">
           {(data) => (
             <Table

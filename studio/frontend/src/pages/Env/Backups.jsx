@@ -104,7 +104,7 @@ export default function Backups({ env }) {
 
         <Card icon="backups" title="Restore from a backup">
           <div className="restore-step grid gap-3.5">
-            <label className={`dropzone grid gap-1 justify-items-center text-center p-[26px_18px] [border:2px_dashed_var(--line-strong,_var(--line))] rounded-sm bg-sunken cursor-pointer transition-[border-color_0.15s,_background_0.15s] [&:hover]:[border-color:var(--brand,_#7c6ee6)] [&:hover]:bg-lavender [&.over]:[border-color:var(--brand,_#7c6ee6)] [&.over]:bg-lavender [&_b]:text-base [&_input]:hidden ${over ? "over" : ""}`} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); setOver(false); const dropped = e.dataTransfer.files?.[0]; if (dropped) readFile(dropped); }}>
+            <label className={`dropzone grid gap-1 justify-items-center text-center p-[26px_18px] [border:2px_dashed_var(--line-strong,_var(--line))] rounded-sm bg-sunken cursor-pointer transition-[border-color_0.15s,_background_0.15s] [&:hover]:[border-color:var(--brand,_#FF7049)] [&:hover]:bg-brand-soft [&.over]:[border-color:var(--brand,_#FF7049)] [&.over]:bg-brand-soft [&_b]:text-base [&_input]:hidden ${over ? "over" : ""}`} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { e.preventDefault(); setOver(false); const dropped = e.dataTransfer.files?.[0]; if (dropped) readFile(dropped); }}>
               <input ref={input} type="file" accept="application/json,.json" onChange={(e) => e.target.files?.[0] && readFile(e.target.files[0])} />
               <Icon name="upload" />
               <b>{file ? file.name : "Choose a backup file, or drop it here"}</b>

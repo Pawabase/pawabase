@@ -14,8 +14,101 @@ const rank = (c) => (CATEGORY_ORDER.includes(c) ? CATEGORY_ORDER.indexOf(c) : 99
 const plain = (text) => (text || "").replace(/``/g, "");
 const BlocksContext = createContext({ byKey: {}, trace: {} });
 
+const BLOCK_ICONS = {
+  "auth.lookup": "users",
+  "auth.require": "secrets",
+  "auth.user": "users",
+  "policy.check": "policies",
+  "cache.delete": "trash",
+  "cache.get": "import",
+  "cache.invalidate": "refresh",
+  "cache.set": "upload",
+  "function.call": "functions",
+  "control.delay": "clock",
+  "control.foreach": "layers",
+  "control.if": "gitBranch",
+  "control.merge": "transformers",
+  "control.noop": "flowBlock",
+  "control.retry": "refresh",
+  "control.set": "braces",
+  "control.stop": "x",
+  "control.switch": "routes",
+  "control.timeout": "status",
+  "control.while": "chevronsUpDown",
+  "crypto.hash": "secrets",
+  "json.parse": "braces",
+  "json.stringify": "code",
+  "math.calculate": "usage",
+  "time.now": "clock",
+  "transform.batch": "layers",
+  "transform.filter": "transformers",
+  "transform.flatten": "transformers",
+  "transform.group": "transformers",
+  "transform.map": "transformers",
+  "transform.pick": "transformers",
+  "transform.rename": "transformers",
+  "transform.slice": "transformers",
+  "transform.sort": "transformers",
+  "transform.summarize": "transformers",
+  "transform.template": "transformers",
+  "transform.unique": "transformers",
+  "util.id": "keys",
+  "validate.schema": "schemas",
+  "event.emit": "events",
+  "http.request": "networking",
+  "secret.get": "secrets",
+  "webhook.send": "send",
+  "flow.call": "flows",
+  "queue.flow": "send",
+  "queue.function": "code",
+  "mail.send": "mail",
+  "log.write": "audit",
+  "metric.increment": "chart",
+  "realtime.publish": "realtime",
+  "db.query": "database",
+  "db.transaction": "schemas",
+  "resource.create": "plus",
+  "resource.delete": "trash",
+  "resource.get": "eye",
+  "resource.list": "resources",
+  "resource.update": "chevronsUpDown",
+  "error.raise": "x",
+  "response.return": "send",
+  "storage.delete": "trash",
+  "storage.put": "upload",
+  "storage.read": "eye",
+  "storage.signed_url": "link",
+  "trigger.event": "events",
+  "trigger.http": "networking",
+  "trigger.job": "jobs",
+  "trigger.manual": "play",
+  "trigger.realtime": "realtime",
+  "trigger.resource": "resources",
+  "trigger.schedule": "schedules",
+  "trigger.webhook": "webhooks",
+};
+
+const CATEGORY_ICONS = {
+  triggers: "bolt",
+  control: "routes",
+  resources: "resources",
+  responses: "send",
+  auth: "secrets",
+  data: "database",
+  code: "code",
+  events: "events",
+  jobs: "jobs",
+  mail: "mail",
+  storage: "storage",
+  realtime: "realtime",
+  cache: "refresh",
+  integrations: "networking",
+  observability: "observability",
+};
+
 function blockIcon(block) {
-  return block?.key ? `block:${block.key}` : "flowBlock";
+  if (!block) return "flowBlock";
+  return BLOCK_ICONS[block.key] || CATEGORY_ICONS[block.category] || "flowBlock";
 }
 
 export default function FlowEditor(props) {
@@ -108,7 +201,7 @@ function Editor({ env, flow, blocks }) {
   return (
     <Layout title={meta.name || "New flow"} crumbs={[<a key="f" href={envHref(env, "flows")}>flows</a>, meta.name || "new"]} full flowPage>
       <BlocksContext.Provider value={{ byKey, trace }}>
-        <div className="flow-shell grid grid-cols-[228px_minmax(0,_1fr)_304px] w-full h-full min-h-0 max-navigation:grid-cols-1">
+        <div className="flow-shell grid grid-cols-[248px_minmax(0,_1fr)_304px] h-full min-h-0 w-full p-0! max-navigation:grid-cols-1">
           <Palette blocks={blocks} onAdd={addBlock} />
           <div className="flow-canvas" ref={wrapper} onDrop={onDrop} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}>
             <div className="flow-toolbar absolute z-[4] top-0 left-0 right-0 flex items-center justify-between gap-3 pointer-events-auto h-[44px] p-[0_10px_0_14px] bg-canvas [border-bottom:1px_solid_var(--line)]">
@@ -140,7 +233,7 @@ function Editor({ env, flow, blocks }) {
             >
               <Background gap={22} size={1.5} color="var(--line-2)" />
               <Controls />
-              <MiniMap pannable zoomable nodeColor="#3a3649" nodeStrokeColor="#b9abff" maskColor="rgba(8,7,12,0.55)" />
+              <MiniMap pannable zoomable nodeColor="#3a211c" nodeStrokeColor="#9a8cff" maskColor="rgba(8,9,10,0.55)" />
             </ReactFlow>
           </div>
           <aside className="inspector bg-canvas overflow-auto [border-left:1px_solid_var(--line)] max-navigation:hidden">
@@ -186,28 +279,41 @@ function Palette({ blocks, onAdd }) {
     return Object.entries(out).sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b));
   }, [blocks, filter]);
   return (
-    <aside className="palette bg-canvas overflow-auto [border-right:1px_solid_var(--line)] max-navigation:hidden">
-      <div style={{ padding: "12px 10px 4px" }}>
-        <input placeholder={`Search ${blocks.length} blocks…`} value={filter} onChange={(e) => setFilter(e.target.value)} />
+    <aside className="subnav palette w-[248px] shrink-0 flex flex-col bg-canvas [border-right:1px_solid_var(--line)] z-[20] h-full min-h-0 max-navigation:hidden" aria-label="Blocks">
+      <div className="subnav-head h-[var(--bar)] box-border flex items-center justify-between p-[0_12px_0_16px] [border-bottom:1px_solid_var(--line)] text-base [&_b]:font-semibold">
+        <b>Blocks</b>
+        <span className="subnav-count text-2xs font-semibold text-faint">{blocks.length}</span>
       </div>
-      {groups.map(([category, items]) => (
-        <div key={category} className="palette-group p-[5px_10px] [&_h4]:m-[9px_3px_6px] [&_h4]:text-3xs [&_h4]:uppercase [&_h4]:tracking-[0.1em] [&_h4]:text-faint [&_h4]:font-bold-plus pb-1.5 [border-bottom:1px_solid_var(--line)] mb-1.5">
-          <h4>{category}</h4>
-          {items.map((b) => (
-            <div
-              key={b.key}
-              className="palette-item p-[8px_10px] rounded-sm bg-transparent mb-1 cursor-grab text-ui-sm font-medium-plus border-0 [&:hover]:border-brand [&:hover]:bg-hover [&_small]:block [&_small]:text-faint [&_small]:text-2xs [&_small]:leading-[1.3] [&_small]:m-[3px_0_0_22px] [&_small]:font-book m-0 [&:hover]:border-0"
-              draggable
-              onDragStart={(e) => { e.dataTransfer.setData("application/pawabase-block", b.key); e.dataTransfer.effectAllowed = "move"; }}
-              onDoubleClick={() => onAdd(b.key)}
-              title="Drag onto the canvas, or double-click to add"
-            >
-              <span className="palette-item-title flex items-center gap-[7px] min-w-0 [&_.icon]:flex-none [&_.icon]:text-muted"><Icon name={blockIcon(b)} size={15} /><span>{b.title}</span></span>
-              <small>{plain(b.description)}</small>
+      <div className="subnav-search flex items-center gap-2 m-[12px_12px_4px] p-[0_10px] [border:1px_solid_var(--line-2)] rounded-sm bg-transparent text-faint [&_input]:flex-1 [&_input]:min-w-0 [&_input]:border-0 [&_input]:outline-none [&_input]:shadow-none [&_input]:bg-transparent [&_input]:p-[8px_0] [&_input]:text-ui [&:focus-within]:border-brand h-control">
+        <Icon name="search" size={14} />
+        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search blocks…" aria-label="Search blocks" />
+      </div>
+      <nav className="subnav-list flex-1 min-h-0 overflow-y-auto p-[8px_10px]">
+        {groups.length === 0 && <p className="subnav-empty m-[16px_10px] text-muted text-ui">No blocks match.</p>}
+        {groups.map(([category, items]) => (
+          <div key={category} className="subnav-group m-[0_-10px] p-[4px_10px_8px] [&_+_.subnav-group]:mt-1.5 [&_+_.subnav-group]:[border-top:1px_solid_var(--line-2)] [&_+_.subnav-group]:pt-1.5">
+            <div className="palette-title flex items-center justify-between p-[10px_10px_6px] text-2xs font-semibold-plus uppercase tracking-[0.06em] text-muted [&::after]:hidden">
+              <span>{category}</span>
+              <span>{items.length}</span>
             </div>
-          ))}
-        </div>
-      ))}
+            {items.map((b) => (
+              <button
+                key={b.key}
+                type="button"
+                draggable
+                onDragStart={(e) => { e.dataTransfer.setData("application/pawabase-block", b.key); e.dataTransfer.effectAllowed = "move"; }}
+                onDoubleClick={() => onAdd(b.key)}
+                title={`${plain(b.description)} — drag onto the canvas, or double-click to add`}
+                className="subnav-item relative flex h-auto min-h-8 w-full cursor-grab items-center gap-2 rounded-sm border-0 bg-none p-[7px_10px] text-left font-inherit text-body font-medium text-muted shadow-none [&:hover]:bg-hover [&:hover]:text-text [&:hover_.palette-icon]:text-brand"
+              >
+                <Icon name={blockIcon(b)} size={15} className="palette-icon shrink-0 text-faint" />
+                <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{b.title}</span>
+                <span className="subnav-tag shrink-0 text-[10.5px] text-faint rounded-xs">{b.key.split(".").pop()}</span>
+              </button>
+            ))}
+          </div>
+        ))}
+      </nav>
     </aside>
   );
 }

@@ -118,14 +118,18 @@ export default function Overview({ runtime, env, overview }) {
         description={`${runtime.name} · ${env} · definitions v${overview.version}`}
         actions={
           <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap" style={{ gap: 10, justifyContent: "flex-end" }}>
-            <IdChip label="Project ID" value={projectId} />
-            <IdChip label="Service URL" value={gatewayUrl} />
             {loading ? <span className="live-dot w-2 h-2 rounded-full bg-ok shadow-none [&.busy]:bg-brand [&.busy]:animate-[blink_0.9s_ease-in-out_infinite] [&.off]:bg-[var(--faint)] [&.off]:shadow-none busy" title="Refreshing" /> : <span className={`live-dot w-2 h-2 rounded-full bg-ok shadow-none [&.busy]:bg-brand [&.busy]:animate-[blink_0.9s_ease-in-out_infinite] [&.off]:bg-[var(--faint)] [&.off]:shadow-none ${custom ? "off" : ""}`} title={custom ? "A fixed range does not refresh" : "Live: refreshes automatically"} />}
             <Segmented options={RANGES} value={custom ? null : range} onChange={(value) => { setCustom(null); setRange(value); }} />
             <DateRange value={custom} active={Boolean(custom)} onApply={setCustom} />
           </div>
         }
       />
+
+      {/* What identifies this environment, on a quiet line of its own so the head keeps room for the title and the range. */}
+      <div className="ov-ids flex flex-wrap items-center gap-2.5" style={{ padding: "12px var(--gutter)", borderBottom: "1px solid var(--line)" }}>
+        <IdChip label="Project ID" value={projectId} />
+        <IdChip label="Service URL" value={gatewayUrl} />
+      </div>
 
       {overview.problems?.length > 0 && (
         <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] warn">

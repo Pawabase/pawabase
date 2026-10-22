@@ -28,7 +28,7 @@ export default function Keys({ env }) {
         actions={<Button variant="primary" onClick={() => setCreating(true)}>New key</Button>}
       />
       <HealthCheck gatewayUrl={gateway_url} env={env} />
-      <Card flush>
+      <Card bleed flush>
         <Loading state={keys} empty="No keys.">
           {(data) => (
             <Table

@@ -72,7 +72,7 @@ export default function Mail({ env }) {
       )}
 
 
-      <Card icon="mail" flush title="Sent mail" actions={<Segmented value={filter} onChange={setFilter} options={STATUSES} />}>
+      <Card bleed icon="mail" flush title="Sent mail" actions={<Segmented value={filter} onChange={setFilter} options={STATUSES} />}>
         <Loading state={log} empty="Nothing has been sent from this environment yet.">
           {() => (
             <Table
@@ -234,7 +234,7 @@ function Templates({ base }) {
       <Loading state={templates}>
         {() => rows.length === 0
           ? <EmptyState icon="mail" tone="rose" title="No templates yet">Create one, then send it from a flow with the Send email block.</EmptyState>
-          : <Table rows={rows} onRowClick={(row) => setEditing({ ...row })} columns={[{ label: "Name", render: (r) => <b>{r.name}</b> }, { label: "Subject", render: (r) => <span className="muted text-muted">{r.subject}</span> }]} />}
+          : <Table bleed rows={rows} onRowClick={(row) => setEditing({ ...row })} columns={[{ label: "Name", render: (r) => <b>{r.name}</b> }, { label: "Subject", render: (r) => <span className="muted text-muted">{r.subject}</span> }]} />}
       </Loading>
       {editing && <TemplateEditor base={base} template={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); templates.reload(); }} />}
     </div>

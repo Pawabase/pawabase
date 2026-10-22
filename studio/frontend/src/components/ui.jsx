@@ -2,12 +2,17 @@ import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState
 import { Icon } from "./icons";
 
 export function Button({ variant, size, className = "", ...props }) {
-  return <button type="button" className={`btn inline-flex items-center justify-center gap-1.5 [border:1px_solid_var(--line-2)] bg-transparent text-text rounded-sm p-[0_12px] font-inherit font-medium-plus text-ui cursor-pointer whitespace-nowrap transition-[background_0.12s,_border-color_0.12s] [&:hover]:border-line-hover [&:active]:transform-[none] [&:disabled]:opacity-45 [&:disabled]:cursor-not-allowed [&.primary]:bg-brand [&.primary]:border-transparent [&.primary]:text-text [&.primary:hover]:filter-none [&.soft]:bg-transparent [&.soft]:border-line-2 [&.soft]:text-text [&.danger]:text-danger [&.danger]:border-line-2 [&.danger]:bg-transparent [&.ghost]:bg-transparent [&.ghost]:border-transparent [&.ghost]:text-muted [&.ghost:hover]:text-text [&.ghost:hover]:bg-hover [&.sm]:p-[0_10px] [&.sm]:text-ui-sm [&.icon-only]:p-0 [&.icon-only]:w-control [&.icon-only]:h-[30px] [&_.icon]:w-4 [&_.icon]:h-4 h-control shadow-none [&:hover]:bg-hover [&:active]:bg-press [&:focus-visible]:outline-[2px_solid_var(--brand)] [&:focus-visible]:outline-offset-[1px] [&.primary:hover]:bg-brand [&.primary:hover]:border-line-hover [&.danger:hover]:bg-danger-soft [&.sm]:h-control-sm [&.sm.icon-only]:w-control-sm [label&]:inline-flex filter-none [&.soft]:shadow-none [&.soft]:filter-none [&.primary]:shadow-none [&.primary]:filter-none [label&]:bg-transparent [label&]:shadow-none [label&]:filter-none [label&.primary]:bg-transparent [label&.primary]:shadow-none [label&.primary]:filter-none [label&.primary]:border-line-2 [label&.primary]:text-text [label&.primary:hover]:bg-hover [label&.primary:hover]:border-line-hover [&.soft:hover]:bg-hover [&:disabled]:bg-transparent [&.primary:disabled]:bg-brand [&.primary:disabled]:opacity-45 border-line-2 [label&]:border-line-2 [&.soft:hover]:border-line-hover [&.danger:hover]:border-line-hover [&.on]:border-brand [&.on]:text-text ${variant || ""} ${size || ""} ${className}`} {...props} />;
+  return <button type="button" className={`btn inline-flex items-center justify-center gap-1.5 [border:1px_solid_var(--line-2)] bg-surface text-text rounded-sm p-[0_12px] font-inherit font-medium-plus text-ui cursor-pointer whitespace-nowrap transition-[background_0.12s,_border-color_0.12s] [&:hover]:border-line-hover [&:active]:transform-[none] [&:disabled]:opacity-45 [&:disabled]:cursor-not-allowed [&.primary]:bg-brand [&.primary]:border-transparent [&.primary]:text-white [&.primary:hover]:filter-none [&.soft]:bg-accent [&.soft]:border-transparent [&.soft]:text-white [&.danger]:text-danger [&.danger]:border-line-2 [&.danger]:bg-danger-soft [&.ghost]:bg-transparent [&.ghost]:border-transparent [&.ghost]:text-muted [&.ghost:hover]:text-text [&.ghost:hover]:bg-hover [&.sm]:p-[0_10px] [&.sm]:text-ui-sm [&.icon-only]:p-0 [&.icon-only]:w-control [&.icon-only]:h-[30px] [&_.icon]:w-4 [&_.icon]:h-4 h-control shadow-none [&:hover]:bg-hover [&:active]:bg-press [&:focus-visible]:outline-[2px_solid_var(--brand)] [&:focus-visible]:outline-offset-[1px] [&.primary:hover]:bg-brand [&.primary:hover]:border-line-hover [&.danger:hover]:bg-danger-soft [&.sm]:h-control-sm [&.sm.icon-only]:w-control-sm [label&]:inline-flex filter-none [&.soft]:shadow-none [&.soft]:filter-none [&.primary]:shadow-none [&.primary]:filter-none [label&]:bg-surface [label&]:shadow-none [label&]:filter-none [label&.primary]:bg-brand [label&.primary]:shadow-none [label&.primary]:filter-none [label&.primary]:border-transparent [label&.primary]:text-white [label&.primary:hover]:bg-brand [label&.primary:hover]:border-line-hover [&.soft:hover]:bg-accent [&:disabled]:bg-surface [&.primary:disabled]:bg-brand [&.primary:disabled]:opacity-45 border-line-2 [label&]:border-line-2 [&.soft:hover]:border-line-hover [&.danger:hover]:border-line-hover [&.on]:border-brand [&.on]:text-text ${variant || ""} ${size || ""} ${className}`} {...props} />;
 }
 
-export function Card({ title, description, icon, actions, children, flush, className = "" }) {
+/**
+ * A bordered, rounded section. `flush` drops the padding for a table or list;
+ * `bleed` marks a page's main list, which runs square and edge to edge across
+ * the content column instead of sitting in a rounded frame.
+ */
+export function Card({ title, description, icon, actions, children, flush, bleed, className = "" }) {
   return (
-    <section className={`card shrink-0 flex flex-col bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-[calc(var(--r)_+_4px)] [border:1px_solid_var(--line-2)] shadow-none p-[16px_18px_18px] [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100 [&_.card-head_.chips]:gap-0 [&_.card-head_.chips]:flex-nowrap [&_.card-head_.chips]:[border:1px_solid_var(--line-2)] [&_.card-head_.chips]:rounded-sm [&_.card-head_.chips]:overflow-hidden [&_.card-head_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_.card-head_.chip]:p-[0_10px] [&_.card-head_.chip]:border-0 [&_.card-head_.chip]:[border-left:1px_solid_var(--line-2)] [&_.card-head_.chip]:rounded-none [&_.card-head_.chip]:bg-transparent [&_.card-head_.chip]:text-muted [&_.card-head_.chip]:text-xs [&_.card-head_.chip]:font-medium-plus [&_.card-head_.chip:first-child]:border-l-0 [&_.card-head_.chip.active]:bg-press [&_.card-head_.chip.active]:text-text [&_.card-head_.chip.on]:bg-press [&_.card-head_.chip.on]:text-text ${flush ? "flush" : ""} ${className}`}>
+    <section className={`card shrink-0 flex flex-col bg-[color-mix(in_srgb,_var(--surface)_58%,_var(--canvas))] rounded-[calc(var(--r)_+_4px)] [border:1px_solid_var(--line-2)] shadow-none p-[16px_18px_18px] [&.flush]:p-0 [&.flush]:overflow-hidden [&.sunken]:bg-head-bg [a&]:transition-[background_0.12s,_border-color_0.12s] [a&:hover]:bg-hover [a&:hover]:border-line-2 [&.flush_tr:last-child_td]:border-b-0 [&.dimmed]:opacity-70 [&.dimmed:hover]:opacity-100 [&_.card-head_.chips]:gap-0 [&_.card-head_.chips]:flex-nowrap [&_.card-head_.chips]:[border:1px_solid_var(--line-2)] [&_.card-head_.chips]:rounded-sm [&_.card-head_.chips]:overflow-hidden [&_.card-head_.chip]:h-[calc(var(--control-sm)_-_2px)] [&_.card-head_.chip]:p-[0_10px] [&_.card-head_.chip]:border-0 [&_.card-head_.chip]:[border-left:1px_solid_var(--line-2)] [&_.card-head_.chip]:rounded-none [&_.card-head_.chip]:bg-transparent [&_.card-head_.chip]:text-muted [&_.card-head_.chip]:text-xs [&_.card-head_.chip]:font-medium-plus [&_.card-head_.chip:first-child]:border-l-0 [&_.card-head_.chip.active]:bg-press [&_.card-head_.chip.active]:text-text [&_.card-head_.chip.on]:bg-press [&_.card-head_.chip.on]:text-text ${flush ? "flush" : ""} ${bleed ? "bleed" : ""} ${className}`}>
       {(title || actions) && (
         <div className={`card-head flex items-center justify-between gap-3 min-h-[54px] p-[0_18px] bg-[color-mix(in_srgb,_var(--surface)_72%,_var(--canvas))] [border-radius:calc(var(--r)_+_4px)_calc(var(--r)_+_4px)_0_0] ${flush ? "" : "[margin:-16px_-18px_14px]"}`}>
           <div className="flex items-center gap-2.5 min-w-0">
@@ -72,10 +77,11 @@ export function Loading({ state, children, empty }) {
   return children(state.data);
 }
 
-export function Table({ columns, rows, onRowClick, empty = "Nothing here yet." }) {
+/** A table. `bleed` marks a page's main list, standing on its own: square, edge to edge across the content column. */
+export function Table({ columns, rows, onRowClick, empty = "Nothing here yet.", bleed = false }) {
   if (!rows || rows.length === 0) return <Empty>{empty}</Empty>;
   return (
-    <div className="table-wrap overflow-auto p-0! m-0!">
+    <div className={`table-wrap overflow-auto p-0! ${bleed ? "bleed" : ""}`}>
       <table>
         <thead>
           <tr>{columns.map((c) => <th key={c.key || c.label}>{c.label}</th>)}</tr>
@@ -340,7 +346,7 @@ export function Sheet({ title, subtitle, icon, tone = "lavender", tabs, tab, onT
         ) : (
           <div className="sheet-body flex-1 overflow-auto p-[20px_20px_24px] flex flex-col gap-3.5">{children}</div>
         )}
-        {footer && <div className="sheet-foot shrink-0 flex items-center gap-2 p-[12px_20px] bg-canvas [border-top:1px_solid_var(--line)] min-h-[var(--dock)] box-border justify-end [&_.btn.primary]:bg-brand [&_.btn.primary]:border-brand [&_.btn.primary]:text-[#15121f] [&_.btn.primary:hover]:bg-[var(--brand-strong)] [&_.btn.primary:hover]:border-brand-strong">{footer}</div>}
+        {footer && <div className="sheet-foot shrink-0 flex items-center gap-2 p-[12px_20px] bg-canvas [border-top:1px_solid_var(--line)] min-h-[var(--dock)] box-border justify-end [&_.btn.primary]:bg-brand [&_.btn.primary]:border-brand [&_.btn.primary]:text-white [&_.btn.primary:hover]:bg-brand [&_.btn.primary:hover]:border-brand">{footer}</div>}
       </div>
     </>
   );
@@ -389,6 +395,32 @@ export function Segmented({ options, value, onChange }) {
         return (
           <button key={String(v)} type="button" role="radio" aria-checked={value === v} className={value === v ? "active" : ""} onClick={() => onChange(v)}>
             {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * One choice among options that each need a line of explanation: a rounded,
+ * bordered grid, one cell per option, divided by hairlines. Use it where a
+ * Segmented control would have to squeeze its labels.
+ */
+export function Choices({ options, value, onChange, columns = 2, label }) {
+  return (
+    <div role="radiogroup" aria-label={label} className={`choices grid gap-px overflow-hidden rounded-[calc(var(--r)_+_2px)] bg-line-2 [border:1px_solid_var(--line-2)] ${columns === 2 ? "grid-cols-2 max-mobile:grid-cols-1" : "grid-cols-1"}`}>
+      {options.map(([v, text, hint]) => {
+        const on = value === v;
+        return (
+          <button key={String(v)} type="button" role="radio" aria-checked={on} onClick={() => onChange(v)} className={`flex items-start gap-3 min-w-0 p-[12px_14px] text-left border-0 font-inherit cursor-pointer transition-[background_0.12s] ${on ? "bg-press" : "bg-canvas [&:hover]:bg-hover"} [&:focus-visible]:outline-[2px_solid_var(--brand)] [&:focus-visible]:outline-offset-[-2px]`}>
+            <span className={`mt-[2px] grid place-items-center shrink-0 w-4 h-4 rounded-full [border:1px_solid_var(--line-hover)] ${on ? "border-brand!" : ""}`}>
+              {on && <span className="w-2 h-2 rounded-full bg-brand" />}
+            </span>
+            <span className="min-w-0">
+              <span className={`block text-ui font-medium-plus ${on ? "text-text" : "text-text"}`}>{text}</span>
+              {hint && <span className="block mt-0.5 text-ui-sm text-muted leading-[1.45]">{hint}</span>}
+            </span>
           </button>
         );
       })}

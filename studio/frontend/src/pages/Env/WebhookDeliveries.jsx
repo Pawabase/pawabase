@@ -33,7 +33,7 @@ export default function WebhookDeliveries({ env }) {
         description="Every attempt to deliver an event to an endpoint. Failed attempts are retried on a growing schedule up to the endpoint's attempt limit; then they wait here to be sent again."
         actions={<Button disabled={busy} onClick={redeliverFailed}>Redeliver failed</Button>}
       />
-      <Card flush
+      <Card bleed flush
         title={<Segmented options={STATUSES} value={status} onChange={setStatus} />}
         actions={<select value={endpoint} onChange={(e) => setEndpoint(e.target.value)} style={{ width: 200 }}>
           <option value="">Every endpoint</option>

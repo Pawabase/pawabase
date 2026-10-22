@@ -219,7 +219,7 @@ function TableTab({ env, base, table, resource, initialView = "data", onTablesCh
           : <UnclaimedSchema env={env} table={table} columns={columns} onClaimed={() => onTablesChanged?.()} />
       )}
       {view === "indexes" && (resource
-        ? <div className="resource-columns p-[0_var(--gutter)_48px] [&_.stack.lg]:gap-0 [&_.card]:p-[24px_0_28px] [&_.card]:border-0 [&_.card]:rounded-none [&_.card]:[border-top:1px_solid_var(--line)] [&_.card]:bg-transparent [&_.card_>_.spread:first-child]:mb-4! [&_.card_.card-head]:min-h-0 [&_.card_.card-head]:p-[0_0_16px] [&_.card_.card-head]:border-b-0 [&_.schema-change]:border-line-2 [&_.schema-change]:rounded-none [&_.schema-change]:bg-transparent [&_.schema-change_+_.schema-change]:border-t-0 [&_.schema-entry]:rounded-none max-mobile:p-[0_16px_32px]"><div className="resource-columns-inner w-[min(100%,_720px)] m-[0_auto]"><IndexesPanel env={env} name={resource} onChanged={info.reload} /></div></div>
+        ? <div className="resource-columns p-[0_var(--gutter)_48px] pt-5 [&_.stack.lg]:gap-3 [&_.card_>_.spread:first-child]:mb-4! [&_.schema-change]:border-line-2 [&_.schema-change]:rounded-none [&_.schema-change]:bg-transparent [&_.schema-change_+_.schema-change]:border-t-0 [&_.schema-entry]:rounded-none max-mobile:p-[0_16px_32px]"><div className="resource-columns-inner w-[min(100%,_720px)] m-[0_auto]"><IndexesPanel env={env} name={resource} onChanged={info.reload} /></div></div>
         : <div className="tbl-state flex items-center justify-center gap-2 p-[48px_16px] text-muted text-ui">Define this table as a resource before managing its indexes.</div>
       )}
       {view === "history" && (resource
@@ -396,7 +396,7 @@ function ResourceColumns({ env, resource, onRowsChanged, onTablesChanged }) {
     if (result) { item.reload(); onRowsChanged?.(); }
   };
   return (
-    <div className="resource-columns p-[0_var(--gutter)_48px] [&_.stack.lg]:gap-0 [&_.card]:p-[24px_0_28px] [&_.card]:border-0 [&_.card]:rounded-none [&_.card]:[border-top:1px_solid_var(--line)] [&_.card]:bg-transparent [&_.card_>_.spread:first-child]:mb-4! [&_.card_.card-head]:min-h-0 [&_.card_.card-head]:p-[0_0_16px] [&_.card_.card-head]:border-b-0 [&_.schema-change]:border-line-2 [&_.schema-change]:rounded-none [&_.schema-change]:bg-transparent [&_.schema-change_+_.schema-change]:border-t-0 [&_.schema-entry]:rounded-none max-mobile:p-[0_16px_32px]">
+    <div className="resource-columns p-[0_var(--gutter)_48px] pt-5 [&_.stack.lg]:gap-3 [&_.card_>_.spread:first-child]:mb-4! [&_.schema-change]:border-line-2 [&_.schema-change]:rounded-none [&_.schema-change]:bg-transparent [&_.schema-change_+_.schema-change]:border-t-0 [&_.schema-entry]:rounded-none max-mobile:p-[0_16px_32px]">
       <div className="resource-columns-inner w-[min(100%,_720px)] m-[0_auto]">
         <div className="resource-columns-head flex items-center justify-between gap-4 min-h-[68px] [border-top:1px_solid_var(--line)] [&_>_div:first-child]:flex [&_>_div:first-child]:flex-col [&_>_div:first-child]:gap-0.5 [&_>_div:first-child_>_b]:text-base [&_>_div:first-child_>_b]:font-semibold max-mobile:items-start max-mobile:flex-col max-mobile:justify-center max-mobile:p-[14px_0]">
           <div><b>Columns</b><span className="muted text-muted">The columns and relations behind <b className="mono font-mono text-ui-sm">{resource}</b>.</span></div>

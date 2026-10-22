@@ -20,7 +20,7 @@ export default function Routes({ env, minutes, onRoute, onTrace }) {
   return (
     <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
       {state.data?.truncated && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)]">This window has more than 50,000 requests; only the newest are analysed. Choose a shorter window for exact numbers.</div>}
-      <Card icon="routes" flush title={<div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">
+      <Card bleed icon="routes" flush title={<div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">
         <Segmented options={SORTS} value={sort} onChange={setSort} />
         <input placeholder="Filter routes" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 200 }} />
       </div>}>

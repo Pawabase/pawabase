@@ -189,7 +189,7 @@ export default function Topology({ env }) {
         ) : (
           <div className={`topo grid grid-cols-[minmax(0,_1fr)] gap-4 items-start [&.with-detail]:grid-cols-[minmax(0,_1fr)_340px] max-layout:[&.with-detail]:grid-cols-1 ${chosen ? "with-detail" : ""}`}>
             <Card flush className="topo-canvas overflow-hidden">
-              <div className="topo-frame overflow-auto max-h-[calc(100vh_-_300px)] min-h-[380px] p-3 bg-sunken [background-image:radial-gradient(var(--line-2)_1px,_transparent_1px)] [background-size:20px_20px] [&_svg]:block" ref={frame} onClick={(e) => e.target === e.currentTarget && setSelected(null)}>
+              <div className="topo-frame overflow-auto max-h-[calc(100vh_-_300px)] min-h-[380px] p-3 bg-sunken [&_svg]:block" ref={frame} onClick={(e) => e.target === e.currentTarget && setSelected(null)}>
                 <svg width={grid.width * zoom} height={grid.height * zoom} viewBox={`0 0 ${grid.width} ${grid.height}`} role="img" aria-label="Diagram of resources and their relations">
                   <defs>
                     <marker id="topo-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" /></marker>

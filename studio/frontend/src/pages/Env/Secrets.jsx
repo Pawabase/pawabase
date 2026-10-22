@@ -16,7 +16,7 @@ export default function Secrets({ env }) {
         description={<>Encrypted at rest. Reference them as <code>secret://NAME</code> in settings, webhook headers and block configs, or read <code>ctx.secrets</code> in functions. Values are never shown again.</>}
         actions={<Button variant="primary" onClick={() => setEditing({ name: "", value: "", description: "", isNew: true })}>New secret</Button>}
       />
-      <Card flush>
+      <Card bleed flush>
         <Loading state={secrets} empty="No secrets yet.">
           {(data) => (
             <Table

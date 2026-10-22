@@ -78,36 +78,43 @@ export function FirewallOverview({ base, onBan, onNewRule }) {
           for (const row of s.timeline || []) hourly[row.hour] = (hourly[row.hour] || 0) + row.count;
           const peak = Math.max(1, ...Object.values(hourly));
           return (
-            <>
-              <StatStrip>
-                <Stat value={s.total} label="Requests acted on" />
-                <Stat tone={by.block ? "danger" : undefined} value={by.block || 0} label="Blocked" />
-                <Stat tone={by.rate_limit ? "warn" : undefined} value={by.rate_limit || 0} label="Rate limited" />
-                <Stat value={by.log || 0} label="Logged" />
-                <Stat value={s.active_bans} label="Active bans" />
-              </StatStrip>
+            // One board, rounded and divided inside by rules that meet its edges: the numbers, the activity, then the four top lists.
+            // The plain wrapper takes the page gutter on every side, so the board never sits on the head's rule.
+            <div>
+            <div className="fw-board [border:1px_solid_var(--line-2)] rounded-[calc(var(--r)_+_4px)] overflow-hidden bg-[color-mix(in_srgb,_var(--surface)_40%,_var(--canvas))]">
+              <div className="p-[14px_var(--gutter)] [&_.statstrip]:m-0">
+                <StatStrip>
+                  <Stat value={s.total} label="Requests acted on" />
+                  <Stat tone={by.block ? "danger" : undefined} value={by.block || 0} label="Blocked" />
+                  <Stat tone={by.rate_limit ? "warn" : undefined} value={by.rate_limit || 0} label="Rate limited" />
+                  <Stat value={by.log || 0} label="Logged" />
+                  <Stat value={s.active_bans} label="Active bans" />
+                </StatStrip>
+              </div>
               {Object.keys(hourly).length > 0 && (
-                <Card icon="events" title="Activity">
+                <section className="[border-top:1px_solid_var(--line)] p-[16px_var(--gutter)_18px]">
+                  <h3 className="flex items-center gap-2 m-[0_0_14px] text-[13.5px] font-semibold"><Icon name="events" size={16} className="text-brand" />Activity</h3>
                   <div className="fw-bars flex items-end gap-[3px] h-[96px] [&_i]:flex-1 [&_i]:min-w-[3px] [&_i]:bg-danger [&_i]:opacity-[0.75] [&_i]:rounded-[2px_2px_0_0]">{Object.entries(hourly).map(([hour, count]) => <i key={hour} title={`${new Date(hour).toLocaleString()} · ${count}`} style={{ height: `${Math.max(4, (count / peak) * 100)}%` }} />)}</div>
-                </Card>
+                </section>
               )}
               {s.total === 0 ? (
                 !noRules && (
-                  <div className="fw-empty flex flex-col items-center text-center gap-2 p-[44px_var(--gutter)] [&_h3]:m-[4px_0_0] [&_h3]:text-heading [&_h3]:font-semibold [&_p]:m-[0_0_8px] [&_p]:text-muted [&_p]:text-ui [&_p]:max-w-[460px]">
+                  <div className="fw-empty [border-top:1px_solid_var(--line)] flex flex-col items-center text-center gap-2 p-[44px_var(--gutter)] [&_h3]:m-[4px_0_0] [&_h3]:text-heading [&_h3]:font-semibold [&_p]:m-[0_0_8px] [&_p]:text-muted [&_p]:text-ui [&_p]:max-w-[460px]">
                     <Icon name="networking" size={20} className="faint text-faint" />
                     <h3>Nothing to report</h3>
                     <p>No request was blocked, limited or logged in this period.</p>
                   </div>
                 )
               ) : (
-                <div className="fw-tops grid grid-cols-[repeat(auto-fit,_minmax(320px,_1fr))] gap-3.5 [&.fw-flat]:grid-cols-2 [&.fw-flat]:gap-0 [&.fw-flat_>_.card:nth-child(odd)]:[border-right:1px_solid_var(--line)] [&.fw-flat_>_.card:nth-child(-n_+_2)]:[border-bottom:1px_solid_var(--line)] max-workbench:[&.fw-flat]:grid-cols-1 max-workbench:[&.fw-flat_>_.card]:border-r-0! max-workbench:[&.fw-flat_>_.card]:[border-bottom:1px_solid_var(--line)] fw-flat [&_>_.card]:m-0 [&_>_.card]:border-0 [&_>_.card]:rounded-none [&_>_.card]:bg-transparent [&_>_.card_>_.card-head]:p-[0_var(--gutter)]">
+                <div className="fw-tops [border-top:1px_solid_var(--line)] [&_>_.card_>_.card-head]:rounded-none [&_>_.card_>_.card-head]:bg-transparent grid grid-cols-[repeat(auto-fit,_minmax(320px,_1fr))] gap-3.5 [&.fw-flat]:grid-cols-2 [&.fw-flat]:gap-0 [&.fw-flat_>_.card:nth-child(odd)]:[border-right:1px_solid_var(--line)] [&.fw-flat_>_.card:nth-child(-n_+_2)]:[border-bottom:1px_solid_var(--line)] max-workbench:[&.fw-flat]:grid-cols-1 max-workbench:[&.fw-flat_>_.card]:border-r-0! max-workbench:[&.fw-flat_>_.card]:[border-bottom:1px_solid_var(--line)] fw-flat [&_>_.card]:m-0 [&_>_.card]:border-0 [&_>_.card]:rounded-none [&_>_.card]:bg-transparent [&_>_.card_>_.card-head]:p-[0_var(--gutter)]">
                   <TopList title="Top addresses" rows={s.top_ips} action={(ip) => <Button size="sm" onClick={() => onBan(ip)}>Ban</Button>} />
                   <TopList title="Top paths" rows={s.top_paths} mono />
                   <TopList title="Top rules" rows={s.top_rules} />
                   <TopList title="Top countries" rows={s.top_countries} empty="Set PAWABASE_FIREWALL_COUNTRY_HEADER behind a proxy that adds one." />
                 </div>
               )}
-            </>
+            </div>
+            </div>
           );
         }}
       </Loading>
@@ -165,7 +172,7 @@ export function FirewallRules({ base, prefill, onPrefilled }) {
             <Button variant="primary" onClick={() => setEditing(blank())}><Icon name="plus" />New rule</Button>
           </>
         ) : null} />
-      <Card flush>
+      <Card bleed flush>
         <Loading state={list} empty={
           <div className="fw-empty flex flex-col items-center text-center gap-2 p-[44px_var(--gutter)] [&_h3]:m-[4px_0_0] [&_h3]:text-heading [&_h3]:font-semibold [&_p]:m-[0_0_8px] [&_p]:text-muted [&_p]:text-ui [&_p]:max-w-[460px]">
             <Icon name="networking" size={20} className="faint text-faint" />
@@ -303,7 +310,7 @@ export function Bans({ base, prefill, onPrefilled }) {
   return (
     <>
       <PageHead title="IP bans" description="Addresses and ranges refused before any rule runs. Rate-limit rules and automatic bans add to this list; an allow rule still lets an address through." actions={<Button variant="primary" onClick={() => setAdding({ ip: "", seconds: 86400, reason: "" })}><Icon name="plus" />Ban an address</Button>} />
-      <Card icon="clock" flush title={<Segmented options={[[false, "Active"], [true, "All, with expired"]]} value={history} onChange={setHistory} />}>
+      <Card bleed icon="clock" flush title={<Segmented options={[[false, "Active"], [true, "All, with expired"]]} value={history} onChange={setHistory} />}>
         <Loading state={bans} empty="No address is banned.">
           {(data) => (
             <Table rows={data.data} empty="No address is banned." columns={[
@@ -344,7 +351,7 @@ export function FirewallEvents({ base, onBan }) {
         <input placeholder="IP address" value={filters.ip} onChange={(e) => set("ip")(e.target.value.trim())} style={{ width: 160 }} />
         <input placeholder="Path contains" value={filters.path} onChange={(e) => set("path")(e.target.value.trim())} style={{ width: 200 }} />
       </div>
-      <Card flush>
+      <Card bleed flush>
         <Loading state={events} empty="Nothing recorded yet.">
           {(data) => (
             <Table rows={data.data} empty="Nothing matches." columns={[

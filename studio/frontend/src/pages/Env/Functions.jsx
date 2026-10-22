@@ -75,7 +75,7 @@ function CodeView({ content, line, language = "python" }) {
   return (
     <div className="codeview [border:1px_solid_var(--line)] rounded-sm bg-[#121119] text-[#e6e3f7] [font:12.5px/1.65_var(--mono)] overflow-hidden max-h-[62vh] p-[10px_0]" role="region" aria-label="Source code">
       {rows.map((parts, index) => (
-        <div key={index} className={`codeview-line block whitespace-pre [&.target]:bg-[rgba(139,_108,_240,_0.22)] p-[0_16px_0_0] [&_i]:inline-block [&_i]:w-12 [&_i]:pr-3.5 [&_i]:text-right [&_i]:text-[var(--faint,_#9a96ad)] [&_i]:not-italic [&_i]:select-none ${line === index + 1 ? "target" : ""}`} ref={line === index + 1 ? (el) => el?.scrollIntoView({ block: "center" }) : undefined}>
+        <div key={index} className={`codeview-line block whitespace-pre [&.target]:bg-brand-soft p-[0_16px_0_0] [&_i]:inline-block [&_i]:w-12 [&_i]:pr-3.5 [&_i]:text-right [&_i]:text-[var(--faint,_#9a96ad)] [&_i]:not-italic [&_i]:select-none ${line === index + 1 ? "target" : ""}`} ref={line === index + 1 ? (el) => el?.scrollIntoView({ block: "center" }) : undefined}>
           <span className="codeview-n flex-none w-[52px] pr-3.5 text-right text-faint select-none">{index + 1}</span>
           <span className="codeview-t pr-[18px]">{parts.length ? parts.map(([kind, text], i) => <span key={i} className={`tok-${kind}`}>{text}</span>) : " "}</span>
         </div>
@@ -146,7 +146,7 @@ function RunDetail({ env, id, onClose }) {
   );
 }
 
-function RunsTable({ env, fn, onOpen }) {
+function RunsTable({ env, fn, onOpen, bleed = false }) {
   const [status, setStatus] = useState("");
   const runs = useApi(envPath(env, "/function-runs"), { params: { ...(fn ? { function: fn } : {}), ...(status ? { status } : {}), limit: 100 }, interval: 8000 });
   return (
@@ -163,6 +163,7 @@ function RunsTable({ env, fn, onOpen }) {
       <Loading state={runs} empty="No runs yet. Invoke a function, or call it over HTTP.">
         {(data) => (
           <Table
+            bleed={bleed}
             rows={data.data}
             onRowClick={(row) => onOpen(row.id)}
             columns={[
@@ -593,7 +594,7 @@ export default function Functions({ env }) {
               return (
                 <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
                   {data.errors?.length > 0 && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error"><b>Code failed to load</b><pre>{data.errors.join("\n")}</pre></div>}
-                  <Card
+                  <Card bleed
                     flush
                     title="All functions"
                     description={`${shown.length} loaded${failing ? ` · ${failing} with failures` : ""}`}
@@ -631,8 +632,8 @@ export default function Functions({ env }) {
       )}
       {selected && <FunctionPanel key={selected.name} env={env} fn={selected} base={base} branch="main" stats={stats[selected.name]} onRun={setOpenRun} />}
       {section.startsWith("fn:") && !selected && list.data && <PageHead title="Function not found" description={`No function named ${section.slice(3)} is loaded in this environment.`} />}
-      {section === "runs" && <><PageHead title="Runs" description="Every function call, newest first." /><Card icon="play"><RunsTable env={env} onOpen={setOpenRun} /></Card></>}
-      {section === "deployments" && <><PageHead title="Deployments" description="What pawabase deploy shipped. Activate an older one to roll back." /><Card icon="releases" flush><Deployments env={env} onChanged={reloadAll} /></Card></>}
+      {section === "runs" && <><PageHead title="Runs" description="Every function call, newest first." /><RunsTable env={env} onOpen={setOpenRun} bleed /></>}
+      {section === "deployments" && <><PageHead title="Deployments" description="What pawabase deploy shipped. Activate an older one to roll back." /><Card bleed icon="releases" flush><Deployments env={env} onChanged={reloadAll} /></Card></>}
       {section === "source" && <><PageHead title="Source files" description="The code the running deployment was built from." /><Card icon="code"><Source env={env} branch="main" /></Card></>}
 
       {openRun && <RunDetail env={env} id={openRun} onClose={() => setOpenRun(null)} />}

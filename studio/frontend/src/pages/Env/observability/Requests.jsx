@@ -10,7 +10,7 @@ export default function Requests({ base, onTrace }) {
   const [slow, setSlow] = useState(false);
   const requests = useApi(`${base}/requests`, { params: { status, search, request_id: requestId, limit: 100 }, interval: 10000 });
   return (
-    <Card icon="observability" flush title={<div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">
+    <Card bleed icon="observability" flush title={<div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">
       <input placeholder="Search path" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 220 }} />
       <input placeholder="Exact request id" value={requestId} onChange={(e) => setRequestId(e.target.value)} style={{ width: 250 }} />
       <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 150 }}><option value="">every status</option><option value="2xx">2xx success</option><option value="4xx">4xx client error</option><option value="5xx">5xx server error</option></select>

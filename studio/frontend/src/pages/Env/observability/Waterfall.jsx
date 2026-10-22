@@ -27,7 +27,8 @@ export default function Waterfall({ spans, total }) {
                 <span className="waterfall-kind font-semibold text-muted">{s.kind}</span>
                 <code title={s.name}>{s.name}</code>
               </div>
-              <div className="waterfall-track relative flex-1 h-4 bg-[linear-gradient(to_right,_transparent_calc(25%_-_1px),_var(--sunken)_calc(25%_-_1px),_var(--sunken)_25%,_transparent_25%,_transparent_calc(50%_-_1px),_var(--sunken)_calc(50%_-_1px),_var(--sunken)_50%,_transparent_50%,_transparent_calc(75%_-_1px),_var(--sunken)_calc(75%_-_1px),_var(--sunken)_75%,_transparent_75%)]">
+              <div className="waterfall-track relative flex-1 h-4">
+                {[25, 50, 75].map((tick) => <span key={tick} className="absolute inset-y-0 w-px bg-sunken" style={{ left: `${tick}%` }} />)}
                 <div className={`waterfall-bar absolute top-[3px] h-2.5 rounded-xs min-w-0.5 ${s.status === "error" ? "failed" : ""}`} style={{ left: `${left}%`, width: `${width}%`, background: s.status === "error" ? "var(--danger)" : kindColor(s.kind) }} />
                 <span className="waterfall-ms absolute top-0 text-2xs text-muted pl-1.5 whitespace-nowrap" style={{ left: `${Math.min(left + width, 88)}%` }}>{ms(s.duration_ms)}</span>
               </div>

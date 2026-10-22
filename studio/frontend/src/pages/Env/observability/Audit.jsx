@@ -7,7 +7,7 @@ export default function AuditLog({ env }) {
   const [scope, setScope] = useState("env");
   const audit = useApi("/audit", { params: { limit: 100, env: scope === "env" ? env : undefined }, interval: 20000 });
   return (
-    <Card icon="audit" flush title="Who changed what" actions={<div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5">
+    <Card bleed icon="audit" flush title="Who changed what" actions={<div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5">
       <select value={scope} onChange={(e) => setScope(e.target.value)} style={{ width: 190 }}><option value="env">this environment</option><option value="all">whole installation</option></select>
       <Link className="link-more inline-flex items-center gap-0.5 text-ui-sm font-semibold text-muted [&:hover]:text-text" href="/audit">Full audit log</Link>
     </div>}>

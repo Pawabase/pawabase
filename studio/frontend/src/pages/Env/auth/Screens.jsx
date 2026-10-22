@@ -5,7 +5,7 @@ import { post } from "../../../lib/api";
 import { AUTH, SettingsPanel, useAuthConfig } from "./shared";
 
 const DEFAULTS = {
-  name: "", logo_url: "", primary: "#6d5bd0", background: "#f3f1fb", card: "#ffffff", text: "#1f1b2e",
+  name: "", logo_url: "", primary: "#FF7049", background: "#f3f1fb", card: "#ffffff", text: "#1f1b2e",
   radius: 14, font: "system", theme: "light", layout: "split", tagline: "", hero_url: "", footer: "",
   login_title: "Welcome back", login_subtitle: "", login_button: "Sign in",
   signup_title: "Create your account", signup_subtitle: "", signup_button: "Create account", terms_url: "", privacy_url: "",
@@ -85,7 +85,7 @@ function CodeBlock({ text }) {
         <span className="muted text-muted small text-ui-sm">{lines.length} lines</span>
         <Button size="sm" onClick={() => { navigator.clipboard?.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1200); }}>{copied ? "Copied" : "Copy"}</Button>
       </div>
-      <pre className="codeview-body text-ink m-0 p-[14px_0] max-h-[640px] overflow-auto font-mono text-ui-sm leading-[1.6] [&_code]:text-ink"><code>{lines.map((line, i) => <span key={i} className="codeview-line block whitespace-pre [&.target]:bg-[rgba(139,_108,_240,_0.22)] p-[0_16px_0_0] [&_i]:inline-block [&_i]:w-12 [&_i]:pr-3.5 [&_i]:text-right [&_i]:text-[var(--faint,_#9a96ad)] [&_i]:not-italic [&_i]:select-none"><i>{i + 1}</i>{line || " "}{"\n"}</span>)}</code></pre>
+      <pre className="codeview-body text-ink m-0 p-[14px_0] max-h-[640px] overflow-auto font-mono text-ui-sm leading-[1.6] [&_code]:text-ink"><code>{lines.map((line, i) => <span key={i} className="codeview-line block whitespace-pre [&.target]:bg-brand-soft p-[0_16px_0_0] [&_i]:inline-block [&_i]:w-12 [&_i]:pr-3.5 [&_i]:text-right [&_i]:text-[var(--faint,_#9a96ad)] [&_i]:not-italic [&_i]:select-none"><i>{i + 1}</i>{line || " "}{"\n"}</span>)}</code></pre>
     </div>
   );
 }
@@ -191,12 +191,12 @@ export default function Screens({ env, base }) {
       {() => (
         <div className="screens grid grid-cols-[260px_minmax(0,_1fr)] gap-6 items-start max-search:grid-cols-1">
           <nav className="screens-list flex flex-col gap-1.5 sticky top-4 max-search:static max-search:flex-row max-search:flex-wrap" aria-label="Screens">
-            <button type="button" className={`screens-item text-left bg-surface [border:1px_solid_var(--line)] rounded-sm p-[12px_14px] cursor-pointer font-inherit text-inherit flex flex-col gap-[3px] [&_b]:flex [&_b]:items-center [&_b]:gap-2 [&_b]:text-base [&_span]:text-muted [&_span]:text-ui-sm [&_span]:leading-[1.4] [&:hover]:border-line-2 [&.active]:[border-color:var(--primary,_#6d5bd0)] [&.active]:shadow-none max-search:[flex:1_1_200px] ${selected === "brand" ? "active" : ""}`} onClick={() => setSelected("brand")}>
+            <button type="button" className={`screens-item text-left bg-surface [border:1px_solid_var(--line)] rounded-sm p-[12px_14px] cursor-pointer font-inherit text-inherit flex flex-col gap-[3px] [&_b]:flex [&_b]:items-center [&_b]:gap-2 [&_b]:text-base [&_span]:text-muted [&_span]:text-ui-sm [&_span]:leading-[1.4] [&:hover]:border-line-2 [&.active]:[border-color:var(--primary,_#FF7049)] [&.active]:shadow-none max-search:[flex:1_1_200px] ${selected === "brand" ? "active" : ""}`} onClick={() => setSelected("brand")}>
               <b>Brand & theme</b><span>Logo, colours, layout, fonts.</span>
             </button>
             <div className="nav-title text-2xs font-semibold uppercase tracking-[0.08em] text-faint p-[16px_10px_6px] [&::after]:hidden">Screens</div>
             {SCREENS.map((s) => (
-              <button key={s.key} type="button" className={`screens-item text-left bg-surface [border:1px_solid_var(--line)] rounded-sm p-[12px_14px] cursor-pointer font-inherit text-inherit flex flex-col gap-[3px] [&_b]:flex [&_b]:items-center [&_b]:gap-2 [&_b]:text-base [&_span]:text-muted [&_span]:text-ui-sm [&_span]:leading-[1.4] [&:hover]:border-line-2 [&.active]:[border-color:var(--primary,_#6d5bd0)] [&.active]:shadow-none max-search:[flex:1_1_200px] ${selected === s.key ? "active" : ""}`} onClick={() => setSelected(s.key)}>
+              <button key={s.key} type="button" className={`screens-item text-left bg-surface [border:1px_solid_var(--line)] rounded-sm p-[12px_14px] cursor-pointer font-inherit text-inherit flex flex-col gap-[3px] [&_b]:flex [&_b]:items-center [&_b]:gap-2 [&_b]:text-base [&_span]:text-muted [&_span]:text-ui-sm [&_span]:leading-[1.4] [&:hover]:border-line-2 [&.active]:[border-color:var(--primary,_#FF7049)] [&.active]:shadow-none max-search:[flex:1_1_200px] ${selected === s.key ? "active" : ""}`} onClick={() => setSelected(s.key)}>
                 <b>{s.label}{s.live ? <Badge tone="green">live</Badge> : null}</b><span>{s.about}</span>
               </button>
             ))}
