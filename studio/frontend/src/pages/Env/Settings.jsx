@@ -319,7 +319,7 @@ function DeleteEnvironment({ env, path, onClose, onQueued }) {
   const ready = value === env;
   return <Modal title={`Delete ${env}?`} onClose={onClose} footer={<><Button onClick={onClose} disabled={busy}>Cancel</Button><Button variant="danger" disabled={!ready || busy} onClick={async () => { if (await run(() => del(path), "Deletion queued in the background")) onQueued(); }}>Permanently delete</Button></>}>
     <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] danger"><b>This cannot be undone.</b> The background purge permanently removes this environment’s resource records and tables, storage objects, API keys, secrets, users, sessions, MFA data, organizations, mail, request, flow, event and audit logs.</div>
-    <p className="muted text-muted" style={{ margin: 0 }}>The environment is marked for deletion and will disappear once the worker finishes. A final installation-level receipt is retained for accountability.</p>
+    <p className="muted text-muted" style={{ margin: 0 }}>The environment is marked for deletion and will disappear shortly. A final installation-level receipt is retained for accountability.</p>
     <Field label={`Type ${env} to confirm`}><input autoFocus value={value} onChange={(e) => setValue(e.target.value)} autoComplete="off" /></Field>
   </Modal>;
 }

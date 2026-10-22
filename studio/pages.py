@@ -45,6 +45,7 @@ SECTIONS: dict[str, str] = {
     "realtime": "Env/Realtime",
     "dashboards": "Env/Dashboards",
     "observability": "Env/Observability",
+    "activity": "Env/Observability",
     "usage": "Env/Usage",
     "explorer": "Env/Explorer",
     "settings": "Env/Settings",

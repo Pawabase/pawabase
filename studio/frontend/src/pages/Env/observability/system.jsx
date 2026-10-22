@@ -13,7 +13,13 @@ export const COLOR = {
 };
 
 /** Which sidebar section explains each kind of finding. */
-export const AREA_SECTION = { queues: "queues", workers: "workers", schedules: "workers", flows: "flows", webhooks: "webhooks", mail: "mail", realtime: "realtime" };
+export const AREA_SECTION = { queues: "jobs", schedules: "schedules", flows: "flows", webhooks: "webhooks", mail: "mail", realtime: "realtime" };
+
+/** What each finding's area is called to someone building an app. */
+export const AREA_LABEL = { definitions: "Setup", queues: "Background jobs", schedules: "Schedules", flows: "Flows", webhooks: "Webhooks", mail: "Mail", realtime: "Realtime" };
+
+/** Findings an app's builder can act on: how Pawabase itself runs (its workers) is not one of them. */
+export const actionable = (problems) => (problems || []).filter((p) => p.area !== "workers");
 
 export const pct = (v) => (v == null ? "—" : `${v}%`);
 export const num = (v) => Number(v || 0).toLocaleString();
@@ -50,13 +56,14 @@ export function RateBadge({ value, good = 98, warn = 90 }) {
   return <Badge tone={value >= good ? "green" : value >= warn ? "yellow" : "red"}>{value}%</Badge>;
 }
 
-export function Problems({ problems, onOpen }) {
-  if (!problems?.length) return <Empty>Nothing needs attention in this window.</Empty>;
+export function Problems({ problems: all, onOpen }) {
+  const problems = actionable(all);
+  if (!problems.length) return <Empty>Nothing needs attention in this window.</Empty>;
   return (
     <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 8, padding: 4 }}>
       {problems.map((p, i) => (
         <button key={i} type="button" onClick={() => onOpen?.(AREA_SECTION[p.area])} className={`alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] ${p.severity === "critical" ? "error" : "warn"}`} style={{ textAlign: "left", border: 0, cursor: "pointer", font: "inherit" }}>
-          <b style={{ textTransform: "capitalize" }}>{p.area}</b> · {p.message}
+          <b>{AREA_LABEL[p.area] || p.area}</b> · {p.message}
         </button>
       ))}
     </div>

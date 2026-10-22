@@ -8,7 +8,7 @@ import { startTour } from "../lib/tour";
 const SECTIONS = [
   "overview", "database", "tables", "schemas", "transformers", "policies", "routes", "explorer",
   "functions", "flows", "subscriptions", "schedules", "webhooks", "inbound-hooks", "mail-templates",
-  "users", "storage", "realtime", "releases", "jobs", "events", "observability", "keys", "secrets", "settings",
+  "users", "storage", "realtime", "releases", "activity", "jobs", "events", "observability", "keys", "secrets", "settings",
 ];
 
 const READ_COMMANDS = [

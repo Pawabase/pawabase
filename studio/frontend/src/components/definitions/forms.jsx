@@ -477,7 +477,7 @@ function ScheduleForm({ body, patch, refs, isNew }) {
         </Field>
         <Enabled body={body} patch={patch} />
       </Section>
-      <Section icon="settings" title="Behaviour" description="What happens when a run is still going, or when the scheduler was down.">
+      <Section icon="settings" title="Behaviour" description="What happens when a run is still going, or when a run was missed.">
         {mode === "cron" && (
           <Field label="Time zone" optional hint="An IANA zone such as Africa/Lagos or Europe/Berlin. Empty is UTC.">
             <input className="mono font-mono text-ui-sm" value={body.timezone || ""} placeholder="UTC" onChange={(e) => patch({ timezone: e.target.value || null })} />

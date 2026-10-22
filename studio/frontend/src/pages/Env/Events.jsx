@@ -1,101 +1,13 @@
-import { router } from "@inertiajs/react";
-import { useState } from "react";
-import Layout, { envHref, sectionNav, useSection } from "../../components/Layout";
-import { Badge, Button, Card, Field, Json, JsonInput, Loading, Modal, PageHead, Status, Table, useAction, when } from "../../components/ui";
-import { envPath, get, post, useApi } from "../../lib/api";
+import { useEffect } from "react";
+import { Spinner } from "../../components/ui";
+
+// Events and flow runs now live under Activity. Old links and bookmarks land here and are sent on.
+const TARGET = { events: "events", graph: "event-map", runs: "flows", mail: "mail" };
 
 export default function Events({ env }) {
-  const base = envPath(env);
-  const [tab, setTab] = useSection(["events", "graph", "runs", "mail"]);
-  const [detail, setDetail] = useState(null);
-  const [emitting, setEmitting] = useState(false);
-  return (
-    <Layout title="Events & runs" subnav={sectionNav("Events & runs", [
-      { title: "Events", items: [["events", "Event log", null, { icon: "events" }], ["graph", "Event map", null, { icon: "observability" }]] },
-      { title: "What they started", items: [["runs", "Flow runs", null, { icon: "flows" }], ["webhook-deliveries", "Webhook deliveries", undefined, { href: envHref(env, "webhook-deliveries"), external: true, icon: "webhooks" }], ["mail", "Mail sent", null, { icon: "mail" }]] },
-    ], tab, setTab)}>
-      <PageHead title="Events & runs" description="Everything that happened: events on the bus, the flows they started, webhooks delivered and mail sent."
-        actions={<Button onClick={() => setEmitting(true)}>Emit test event</Button>} />
-      {tab === "events" && <EventList base={base} onOpen={async (e) => setDetail(await get(`${base}/events/${e.id}`))} />}
-      {tab === "graph" && <Graph base={base} />}
-      {tab === "runs" && <Runs base={base} env={env} onOpen={async (r) => setDetail(await get(`${base}/flow-runs/${r.id}`))} />}
-      {tab === "mail" && <Mail base={base} />}
-      {detail && <Modal wide title="Details" onClose={() => setDetail(null)}><Json value={detail} /></Modal>}
-      {emitting && <Emit base={base} onClose={() => setEmitting(false)} />}
-    </Layout>
-  );
-}
-
-function EventList({ base, onOpen }) {
-  const [name, setName] = useState("");
-  const events = useApi(`${base}/events`, { params: { name, limit: 100 }, interval: 5000 });
-  return (
-    <Card bleed icon="events" flush title={<input placeholder="Filter by exact name, e.g. resource.todos.created" value={name} onChange={(e) => setName(e.target.value)} style={{ width: 360 }} />}>
-      <Loading state={events} empty="No events yet.">
-        {(data) => <Table rows={data.data} onRowClick={onOpen} columns={[{ label: "Event", render: (e) => <code>{e.name}</code> }, { label: "Source", key: "source" }, { label: "Actor", key: "actor" }, { label: "Payload", key: "payload" }, { label: "When", render: (e) => when(e.created_at) }]} />}
-      </Loading>
-    </Card>
-  );
-}
-
-function Graph({ base }) {
-  const graph = useApi(`${base}/events-graph`);
-  return (
-    <Card bleed flush>
-      <Loading state={graph} empty="No producers or consumers defined yet.">
-        {(data) => <Table rows={data.data.map((r) => ({ ...r, id: r.event }))} columns={[
-          { label: "Producers", render: (r) => <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">{r.producers.map((p) => <Badge key={p} tone="blue">{p}</Badge>)}</div> },
-          { label: "Event", render: (r) => <code>{r.event}</code> },
-          { label: "Consumers", render: (r) => <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">{r.consumers.map((c) => <Badge key={typeof c === "string" ? c : JSON.stringify(c)} tone="green">{typeof c === "string" ? c : c.name || JSON.stringify(c)}</Badge>)}</div> },
-        ]} />}
-      </Loading>
-    </Card>
-  );
-}
-
-function Runs({ base, env, onOpen }) {
-  const [status, setStatus] = useState("");
-  const runs = useApi(`${base}/flow-runs`, { params: { status, limit: 100 }, interval: 5000 });
-  return (
-    <Card bleed icon="search" flush title={<select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 160 }}><option value="">every status</option><option>succeeded</option><option>failed</option><option>running</option></select>}>
-      <Loading state={runs} empty="No runs yet.">
-        {(data) => <Table rows={data.data} onRowClick={onOpen} columns={[
-          { label: "Flow", render: (r) => <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.visit(`/envs/${env}/flows/${r.flow}`); }} style={{ color: "var(--brand)" }}>{r.flow}</a> },
-          { label: "Status", render: (r) => <Status value={r.status} /> }, { label: "Trigger", key: "trigger" },
-          { label: "Duration", render: (r) => (r.duration_ms != null ? `${Math.round(r.duration_ms)} ms` : "—") },
-          { label: "Error", render: (r) => r.error && <span className="error-text text-danger text-ui-sm font-medium">{r.error}</span> }, { label: "When", render: (r) => when(r.created_at) },
-        ]} />}
-      </Loading>
-    </Card>
-  );
-}
-
-function Mail({ base }) {
-  const log = useApi(`${base}/mail/log`, { interval: 10000 });
-  const [to, setTo] = useState("");
-  const [run, busy] = useAction();
-  return (
-    <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 lg">
-      <Card icon="mail" title="Send a test message">
-        <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5"><input placeholder="you@example.com" value={to} onChange={(e) => setTo(e.target.value)} /><Button disabled={busy || !to} onClick={() => run(() => post(`${base}/mail/test`, { to: [to] }), "Test message queued")}>Send</Button></div>
-      </Card>
-      <Card bleed icon="mail" flush title="Mail log">
-        <Loading state={log} empty="Nothing sent yet.">
-          {(data) => <Table rows={data.data} columns={[{ label: "To", key: "to" }, { label: "Subject", key: "subject" }, { label: "Template", key: "template" }, { label: "Status", render: (m) => <Status value={m.status} /> }, { label: "Error", key: "error" }, { label: "When", render: (m) => when(m.created_at) }]} />}
-        </Loading>
-      </Card>
-    </div>
-  );
-}
-
-function Emit({ base, onClose }) {
-  const [name, setName] = useState("custom.test");
-  const [payload, setPayload] = useState({ hello: "world" });
-  const [run, busy] = useAction();
-  return (
-    <Modal title="Emit an event" onClose={onClose} footer={<Button variant="primary" disabled={busy || !name} onClick={async () => { if (await run(() => post(`${base}/events`, { name, payload }), "Event emitted")) onClose(); }}>Emit</Button>}>
-      <Field label="Name"><input value={name} onChange={(e) => setName(e.target.value)} /></Field>
-      <Field label="Payload"><JsonInput value={payload} onChange={setPayload} rows={8} /></Field>
-    </Modal>
-  );
+  useEffect(() => {
+    const section = new URLSearchParams(window.location.search).get("section");
+    window.location.replace(`/envs/${env}/activity#${TARGET[section] || "events"}`);
+  }, [env]);
+  return <div className="empty"><Spinner /></div>;
 }

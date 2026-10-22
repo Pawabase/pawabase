@@ -14,7 +14,7 @@ from typing import Any
 from sillo import HttpContext, SilloApp
 from sillo.responses import JSONResponse
 
-from studio.support import Deps, recently_seen
+from studio.support import Deps
 
 PROBE_TIMEOUT = 3.0
 CACHE_SECONDS = 3.0
@@ -34,21 +34,6 @@ async def probe(label: str, check: Callable[[], Awaitable[Any]]) -> dict[str, An
         "status": status,
         "latency_ms": round((time.perf_counter() - started) * 1000, 1),
         "detail": detail,
-    }
-
-
-def worker_entry(label: str, kind: str, workers: list[dict[str, Any]] | None) -> dict[str, Any]:
-    """What heartbeats say about a worker or scheduler. Processes that exited long ago leave rows behind; only recent ones count."""
-    if workers is None:
-        return {"name": label, "status": "unknown", "detail": "the API is unreachable"}
-    mine = [w for w in workers if w.get("kind") == kind and recently_seen(w)]
-    alive = [w for w in mine if w.get("alive")]
-    if alive:
-        return {"name": label, "status": "up", "detail": f"{len(alive)} running"}
-    return {
-        "name": label,
-        "status": "down" if mine else "unknown",
-        "detail": "stopped" if mine else "not running",
     }
 
 
@@ -87,23 +72,20 @@ def register(app: SilloApp, deps: Deps) -> None:
     async def alive() -> None:
         await core.get("/health")
 
+    async def api_up() -> None:
+        """The API is up when the gateway answers and the API itself reports healthy."""
+        await alive()
+        await component("api")
+
     async def compute() -> dict[str, Any]:
+        # What an application's builders care about: can their users reach the API, sign in, and connect live.
         services = list(
             await asyncio.gather(
-                probe("Gateway", alive),
-                probe("API", lambda: component("api")),
-                probe("Auth", lambda: component("auth")),
+                probe("API", api_up),
+                probe("Sign-in", lambda: component("auth")),
                 probe("Realtime", lambda: component("realtime")),
             )
         )
-        try:
-            workers = (await core.request("GET", "/platform/v1/workers")).get("data", [])
-        except Exception:
-            workers = None
-        services += [
-            worker_entry("Worker", "worker", workers),
-            worker_entry("Scheduler", "scheduler", workers),
-        ]
         return {"services": services, "checked_at": time.time()}
 
     board = StatusBoard(compute)

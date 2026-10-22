@@ -4,6 +4,7 @@ import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import "@xyflow/react/dist/style.css";
 import "./app.css";
+import "./primitives.css";
 
 const pages = import.meta.glob("./pages/**/*.jsx", { eager: true });
 

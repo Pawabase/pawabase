@@ -1,29 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Chart from "../../../components/Chart";
 import { Card, Empty, Loading, Segmented, when } from "../../../components/ui";
-import { envPath, get } from "../../../lib/api";
+import { envPath, get, useApi } from "../../../lib/api";
 import JobDetail from "./JobDetail";
 import { ms } from "./shared";
-import { AREA_SECTION, COLOR, Legend, num, pct } from "./system";
-
-// The same probe the header light uses: Studio asks every service for /health.
-function useServices() {
-  const [services, setServices] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    const check = async () => {
-      try {
-        const response = await fetch("/studio/status", { credentials: "same-origin", headers: { Accept: "application/json" } });
-        const body = await response.json();
-        if (alive) setServices(body.services || []);
-      } catch { if (alive) setServices([]); }
-    };
-    check();
-    const timer = setInterval(check, 30000);
-    return () => { alive = false; clearInterval(timer); };
-  }, []);
-  return services;
-}
+import { AREA_LABEL, COLOR, Legend, actionable, num } from "./system";
 
 const sum = (keys) => (row) => keys.reduce((n, k) => n + (row[k] || 0), 0);
 
@@ -35,7 +16,7 @@ function indicators(s) {
       lines: [["requests", "Requests", COLOR.info, "area"], ["client_errors", "4xx", COLOR.warn, "line"], ["errors", "5xx", COLOR.bad, "line"]] },
     { key: "latency", label: "Latency", value: ms(t.avg_latency_ms), sub: "average per request", rows: s.traffic.series, spark: (r) => r.latency_ms || 0, color: COLOR.brand, section: "routes", format: ms,
       lines: [["latency_ms", "Average latency (ms)", COLOR.brand, "bar"]] },
-    { key: "jobs", label: "Jobs", value: num(s.jobs.totals.total), sub: s.jobs.totals.failed ? `${num(s.jobs.totals.failed)} failed · ${s.jobs.backlog.waiting} waiting` : `${s.jobs.backlog.waiting} waiting`, bad: s.jobs.totals.failed > 0, rows: s.jobs.series, spark: sum(["succeeded", "failed", "retrying"]), color: COLOR.ok, section: "queues",
+    { key: "jobs", label: "Jobs", value: num(s.jobs.totals.total), sub: s.jobs.totals.failed ? `${num(s.jobs.totals.failed)} failed · ${s.jobs.backlog.waiting} waiting` : `${s.jobs.backlog.waiting} waiting`, bad: s.jobs.totals.failed > 0, rows: s.jobs.series, spark: sum(["succeeded", "failed", "retrying"]), color: COLOR.ok, section: "jobs",
       lines: [["succeeded", "Succeeded", COLOR.ok, "area"], ["failed", "Failed", COLOR.bad, "line"], ["retrying", "Retrying", COLOR.warn, "line"]] },
     { key: "flows", label: "Flow runs", value: num(s.flows.totals.runs), sub: s.flows.totals.failed ? `${s.flows.totals.failed} failed` : "none failed", bad: s.flows.totals.failed > 0, rows: s.flows.series, spark: sum(["succeeded", "failed"]), color: COLOR.brand, section: "flows",
       lines: [["succeeded", "Succeeded", COLOR.ok, "area"], ["failed", "Failed", COLOR.bad, "line"]] },
@@ -52,7 +33,7 @@ const FILTERS = [["all", "All"], ["job", "Jobs"], ["flow", "Flows"], ["webhook",
 /** Every recent failure from every subsystem, newest first. */
 function incidents(s) {
   return [
-    ...s.jobs.recent_failures.map((x) => ({ kind: "job", count: x.count, id: x.id, title: x.job, detail: `${x.queue} · ${x.error}`, at: x.at, section: "queues" })),
+    ...s.jobs.recent_failures.map((x) => ({ kind: "job", count: x.count, id: x.id, title: x.job, detail: x.error, at: x.at, section: "jobs" })),
     ...s.flows.recent_failures.map((x) => ({ kind: "flow", count: x.count, id: x.id, title: x.flow, detail: x.error, at: x.at, section: "flows" })),
     ...s.webhooks.recent_failures.map((x) => ({ kind: "webhook", count: x.count, id: x.id, title: `${x.endpoint} · ${x.event}`, detail: `${x.status_code ? `HTTP ${x.status_code} · ` : ""}${x.error}`, at: x.at, section: "webhooks" })),
     ...s.mail.recent_failures.map((x) => ({ kind: "mail", count: x.count, id: x.id, title: x.subject || "(no subject)", detail: x.error, at: x.at, section: "mail" })),
@@ -60,7 +41,8 @@ function incidents(s) {
 }
 
 export default function Overview({ env, system, onOpen }) {
-  const services = useServices();
+  // Definitions that cannot run (a flow that points at a missing function, say) are findings too.
+  const definitions = useApi(`${envPath(env)}/overview`);
   const [focus, setFocus] = useState("requests");
   const [filter, setFilter] = useState("all");
   const [showAll, setShowAll] = useState(false);
@@ -70,22 +52,28 @@ export default function Overview({ env, system, onOpen }) {
     if (item.kind === "job") setJob(await get(`${base}/jobs/${item.id}`));
     else onOpen(item.section);
   };
+  const found = (definitions.data?.problems || []).slice(0, 6).map((message) => ({ severity: "warning", area: "definitions", message: typeof message === "string" ? message : message.message || JSON.stringify(message) }));
   return (
     <Loading state={system}>
-      {(s) => <Body s={s} {...{ services, focus, setFocus, filter, setFilter, showAll, setShowAll, onOpen, openIncident }} job={job} closeJob={() => setJob(null)} base={base} />}
+      {(report) => (
+        <Body
+          s={{ ...report, problems: [...found, ...report.problems] }}
+          {...{ focus, setFocus, filter, setFilter, showAll, setShowAll, onOpen, openIncident }} job={job} closeJob={() => setJob(null)} base={base}
+        />
+      )}
     </Loading>
   );
 }
 
-function Body({ s, services, focus, setFocus, filter, setFilter, showAll, setShowAll, onOpen, openIncident, job, closeJob, base }) {
+function Body({ s: report, focus, setFocus, filter, setFilter, showAll, setShowAll, onOpen, openIncident, job, closeJob, base }) {
+  const s = useMemo(() => ({ ...report, problems: actionable(report.problems) }), [report]);
   const items = useMemo(() => indicators(s), [s]);
   const active = items.find((i) => i.key === focus) || items[0];
   const feed = useMemo(() => incidents(s), [s]);
   const shown = feed.filter((i) => filter === "all" || i.kind === filter);
   const critical = s.problems.filter((p) => p.severity === "critical").length;
   const warnings = s.problems.length - critical;
-  const down = (services || []).filter((x) => x.status === "down").length;
-  const tone = critical || down ? "error" : warnings ? "warn" : "ok";
+  const tone = critical ? "error" : warnings ? "warn" : "ok";
   const headline = critical || warnings
     ? [critical && `${critical} critical`, warnings && `${warnings} warning${warnings > 1 ? "s" : ""}`].filter(Boolean).join(" · ")
     : "Everything looks healthy";
@@ -93,10 +81,7 @@ function Body({ s, services, focus, setFocus, filter, setFilter, showAll, setSho
   return (
     <div className="flex flex-col gap-3">
       <div className={`banner flex items-center justify-between gap-3.5 p-[11px_16px] rounded-sm text-body flex-wrap [&.ok]:bg-ok-soft [&.ok]:text-ok [&.warn]:bg-warn-soft [&.warn]:text-warn [&.error]:bg-danger-soft [&.error]:text-danger [&_.services]:flex [&_.services]:gap-3.5 [&_.services]:flex-wrap [&_.services]:text-text [&_.services]:text-ui-sm [&_.services_span]:inline-flex [&_.services_span]:items-center [&_.services_span]:gap-1.5 ${tone}`}>
-        <b>{down ? `${down} service${down > 1 ? "s" : ""} unreachable · ` : ""}{headline}</b>
-        <span className="services">
-          {(services || []).map((x) => <span key={x.name} title={x.detail || ""}><i className={`light ${x.status}`} />{x.name}{x.status === "up" && x.latency_ms != null ? <span className="muted text-muted"> {Math.round(x.latency_ms)}ms</span> : null}</span>)}
-        </span>
+        <b>{headline}</b>
       </div>
 
       <Card icon="usage" title={<Segmented options={items.map((i) => [i.key, i.label])} value={active.key} onChange={setFocus} />} className="chart-card [&_h2]:text-heading"
@@ -120,7 +105,7 @@ function Body({ s, services, focus, setFocus, filter, setFilter, showAll, setSho
             {findings.map((p, i) => (
               <button key={i} type="button" className="finding flex gap-2.5 items-start w-full text-left border-0 bg-none font-inherit text-inherit p-[9px_6px] rounded-sm cursor-pointer [&:hover]:bg-sunken [&_.dot]:mt-1.5 [&_small]:block [&_small]:text-muted [&_small]:text-caption [&_small]:capitalize" onClick={() => onOpen(AREA_SECTION[p.area])}>
                 <i className={`dot w-[7px] h-[7px] rounded-full bg-[var(--faint)] flex-none inline-block [&.ok]:bg-ok [&.warn]:bg-warn [&.bad]:bg-danger [&.info]:bg-info ${p.severity === "critical" ? "bad" : "warn"}`} />
-                <span><small>{p.area}</small>{p.message}</span>
+                <span><small>{AREA_LABEL[p.area] || p.area}</small>{p.message}</span>
               </button>
             ))}
             {s.problems.length > 4 && <button type="button" className="chip [border:1px_solid_var(--line)] bg-none text-muted rounded-xs p-[3px_11px] font-inherit text-xs cursor-pointer [&:hover]:border-brand [&:hover]:text-brand-strong [&.on]:border-solid [&.on]:border-brand [&.on]:bg-brand-soft [&.on]:text-brand-strong font-semibold [&.active]:bg-text [&.active]:text-surface [&.active]:border-text" style={{ marginTop: 8 }} onClick={() => setShowAll(!showAll)}>{showAll ? "Show fewer" : `Show all ${s.problems.length}`}</button>}

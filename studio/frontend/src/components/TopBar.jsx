@@ -180,7 +180,7 @@ function NewMenu({ env }) {
   );
 }
 
-/** What the platform says needs attention right now: the same findings the Observability overview shows. */
+/** What the platform says needs attention right now: the same findings the Activity overview shows. */
 function Advisor({ env }) {
   const system = useApi(env ? `${envPath(env)}/advisor` : null, { interval: 60000 });
   if (!env) return null;
@@ -216,7 +216,7 @@ function Advisor({ env }) {
               ))}
             </div>
           )}
-          <div className="pop-foot flex flex-col gap-px p-1.5 [border-top:1px_solid_var(--line)]"><Link href={envHref(env, "observability")} className="pop-action flex items-center gap-2.5 h-8 p-[0_8px] border-0 rounded-xs bg-none text-muted font-inherit text-ui text-left cursor-pointer [&:hover]:bg-hover [&:hover]:text-text [&:hover]:outline-none [&:focus-visible]:bg-hover [&:focus-visible]:text-text [&:focus-visible]:outline-none" role="menuitem" onClick={() => close(false)}><Icon name="observability" size={15} />Open observability</Link></div>
+          <div className="pop-foot flex flex-col gap-px p-1.5 [border-top:1px_solid_var(--line)]"><Link href={envHref(env, "activity")} className="pop-action flex items-center gap-2.5 h-8 p-[0_8px] border-0 rounded-xs bg-none text-muted font-inherit text-ui text-left cursor-pointer [&:hover]:bg-hover [&:hover]:text-text [&:hover]:outline-none [&:focus-visible]:bg-hover [&:focus-visible]:text-text [&:focus-visible]:outline-none" role="menuitem" onClick={() => close(false)}><Icon name="observability" size={15} />Open activity</Link></div>
         </>
       )}
     </Popover>

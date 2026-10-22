@@ -32,20 +32,20 @@ const duration = (value) => {
   return n >= 1000 ? `${(n / 1000).toFixed(1)} s` : `${Math.round(n)} ms`;
 };
 
-/** The last requests through the gateway, refreshed every 10 seconds; each opens its trace in Observability. */
+/** The last requests through the gateway, refreshed every 10 seconds; each opens its trace in Activity. */
 function RecentRequests({ env }) {
   const requests = useApi(`${envPath(env)}/requests`, { params: { limit: 8 }, interval: 10000 });
   const rows = requests.data?.data || [];
   return (
     <div className="ov-panel flex flex-col gap-3 min-w-0 p-[18px_var(--gutter)_20px] [border-right:1px_solid_var(--line)] [&:last-child]:border-r-0 [&.flush]:p-0 [&.flush]:gap-0 [&_p]:m-0 max-layout:border-r-0 max-layout:[border-bottom:1px_solid_var(--line)] flush recent-requests flex flex-col min-h-0">
-      <div className="ov-panel-head flex items-center justify-between gap-2 [&.pad]:min-h-[52px] [&.pad]:p-[0_var(--gutter)] [&.pad]:[border-bottom:1px_solid_var(--line)] [&_h2]:text-base [&_h2]:font-semibold pad p-[14px_var(--gutter)] m-0"><h2>Recent requests</h2><Link className="link-more inline-flex items-center gap-0.5 text-ui-sm font-semibold text-muted [&:hover]:text-text" href={`${envHref(env, "observability")}#requests`}>View all <Icon name="chevronRight" size={14} /></Link></div>
+      <div className="ov-panel-head flex items-center justify-between gap-2 [&.pad]:min-h-[52px] [&.pad]:p-[0_var(--gutter)] [&.pad]:[border-bottom:1px_solid_var(--line)] [&_h2]:text-base [&_h2]:font-semibold pad p-[14px_var(--gutter)] m-0"><h2>Recent requests</h2><Link className="link-more inline-flex items-center gap-0.5 text-ui-sm font-semibold text-muted [&:hover]:text-text" href={`${envHref(env, "activity")}#requests`}>View all <Icon name="chevronRight" size={14} /></Link></div>
       {requests.loading && !requests.data ? <p className="muted text-muted small text-ui-sm pad p-[14px_var(--gutter)] m-0">Loading…</p> : rows.length === 0 ? (
         <div className="recent-empty flex-1 flex flex-col items-center justify-center gap-2 p-[32px_var(--gutter)] text-faint text-center [&_p]:m-0 [&_p]:text-ui-sm [&_p]:text-muted [&_p]:max-w-[260px]"><Icon name="pulse" size={18} /><p>No requests yet. Calls through the gateway appear here as they happen.</p></div>
       ) : (
         <ul className="recent-list list-none m-0 p-0 overflow-y-auto [&_li_a]:grid [&_li_a]:grid-cols-[52px_minmax(0,_1fr)_auto] [&_li_a]:grid-rows-[auto_auto] [&_li_a]:gap-x-2 [&_li_a]:gap-y-0.5 [&_li_a]:items-center [&_li_a]:p-[9px_var(--gutter)] [&_li_a]:[border-bottom:1px_solid_var(--line)] [&_li_a]:text-text [&_li:last-child_a]:border-b-0 [&_li_a:hover]:bg-hover [&_.method]:[font:600_11px_var(--mono)] [&_.method]:text-muted [&_.path]:text-xs [&_.path]:overflow-hidden [&_.path]:text-ellipsis [&_.path]:whitespace-nowrap [&_.meta]:col-[2_/_-1] [&_.meta]:text-caption [&_.meta]:text-faint">
           {rows.map((r) => (
             <li key={r.request_id || `${r.started_at}${r.path}`}>
-              <Link href={`${envHref(env, "observability")}#requests`} title={r.request_id}>
+              <Link href={`${envHref(env, "activity")}#requests`} title={r.request_id}>
                 <span className="method">{r.method}</span>
                 <code className="path">{r.path}</code>
                 <Badge tone={statusTone(r.status)}>{r.status}</Badge>
@@ -140,8 +140,8 @@ export default function Overview({ runtime, env, overview }) {
 
       <div className="ov-board [&_>_.metrics]:order-[0] [&_>_.metrics]:[border-bottom:1px_solid_var(--line-2)] [&_>_.metrics_.metric]:pl-[18px] [&_>_.metrics_.metric]:pr-[18px] [&_>_.metrics_.metric]:border-r-line-2 [&_>_.ov-grid]:[border-bottom-color:var(--line-2)] [&_>_.ov-grid:last-child]:border-b-0 [&_>_.ov-grid_>_.ov-panel]:border-r-line-2 [&_.chart-panel]:pl-[18px] [&_.chart-panel]:pr-[18px] [&_.recent-requests_.ov-panel-head.pad]:p-[0_18px] [&_.recent-requests_.ov-panel-head.pad]:border-b-line-2 max-layout:[&_>_.ov-grid.chart-split_>_.chart-panel]:border-r-0 max-layout:[&_>_.ov-grid.chart-split_>_.chart-panel]:[border-bottom:1px_solid_var(--line-2)] shadow-none [&_*]:shadow-none">
       <div className="metrics order-[-1] grid grid-cols-[repeat(auto-fit,_minmax(170px,_1fr))] gap-0 m-0 p-0 [border-bottom:1px_solid_var(--line)] bg-transparent">
-        <Metric label={`Requests, ${span}`} value={compact(s.requests)} sub={`${(s.error_rate ?? 0).toFixed(s.error_rate >= 10 ? 0 : 1)}% server errors`} href={envHref(env, "observability")} bad={s.error_rate >= 5} />
-        <Metric label="Average latency" value={s.avg_latency_ms != null ? `${compact(s.avg_latency_ms)} ms` : "—"} sub="across gateway requests" href={envHref(env, "observability")} />
+        <Metric label={`Requests, ${span}`} value={compact(s.requests)} sub={`${(s.error_rate ?? 0).toFixed(s.error_rate >= 10 ? 0 : 1)}% server errors`} href={envHref(env, "activity")} bad={s.error_rate >= 5} />
+        <Metric label="Average latency" value={s.avg_latency_ms != null ? `${compact(s.avg_latency_ms)} ms` : "—"} sub="across gateway requests" href={envHref(env, "activity")} />
         <Metric label="Flow runs, 24h" value={compact(day.flow_runs)} sub={day.flow_failures ? `${compact(day.flow_failures)} failed` : "none failed"} href={envHref(env, "flows")} bad={day.flow_failures > 0} />
         <Metric label="Jobs, 24h" value={compact(day.jobs)} sub={day.job_failures ? `${compact(day.job_failures)} failed` : "none failed"} href={envHref(env, "jobs")} bad={day.job_failures > 0} />
         <Metric label="Events, 24h" value={compact(day.events)} sub={`${compact(day.mail)} emails`} href={envHref(env, "events")} />

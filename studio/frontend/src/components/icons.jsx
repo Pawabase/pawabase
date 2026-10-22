@@ -16,7 +16,7 @@ const BULK_ICONS = {
   explorer: Map, functions: Code, flows: Diagram, flowBlock: Diagram, subscriptions: Notification,
   schedules: Calendar, webhooks: Send2, "inbound-hooks": DirectboxSend, "mail-templates": Message,
   users: Profile2User, storage: Folder, realtime: Wifi, jobs: Layer, events: Activity,
-  observability: ChartSquare, backups: ArchiveBox, releases: Layer, keys: Key, secrets: Lock,
+  activity: Activity, observability: ChartSquare, backups: ArchiveBox, releases: Layer, keys: Key, secrets: Lock,
   settings: Setting2, org: Building, team: People, mail: Message, projects: Category, audit: DocumentText,
   buckets: Folder, terminal: Monitor, panelLeft: LayoutMaximize, panelHover: LayoutMaximize,
   panelClosed: LayoutMaximize, maximize: Maximize4, minimize: Maximize3, plus: Add, x: CloseCircle,
