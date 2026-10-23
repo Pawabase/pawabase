@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
-from sillo import HttpContext, Router, created
+from sillo import HttpContext, Router, created, no_content
 from sillo.exceptions import HTTPException
 from tortoise.transactions import in_transaction
 
@@ -97,8 +97,33 @@ def register(r: Router, platform: Platform) -> None:
 
     @r.get(prefix + "/branches", auth=MANAGE, tags=["releases"])
     async def list_branches(ctx: HttpContext, env: str):
+        """Every branch, ``main`` first. ``main`` is the live definitions and has no row until its first revision, so it is
+        listed either way: a client that only shows what exists could never switch back to it."""
         environment = await get_environment(env)
-        return {"data": [dump(item) for item in await Branch.filter(environment=environment)]}
+        rows = [dump(item) for item in await Branch.filter(environment=environment)]
+        live = next((row for row in rows if row["name"] == "main"), None) or {
+            "id": None,
+            "name": "main",
+            "head_revision_id": None,
+            "changes": [],
+            "protected": True,
+        }
+        return {"data": [live, *(row for row in rows if row["name"] != "main")]}
+
+    @r.delete(prefix + "/branches/{branch_name}", auth=MANAGE, tags=["releases"])
+    async def delete_branch(ctx: HttpContext, env: str, branch_name: str):
+        """Throw a branch away. Its revisions stay in the history; ``main`` cannot be deleted."""
+        environment = await get_environment(env)
+        if branch_name == "main":
+            raise HTTPException(
+                status_code=400, detail="main is the live version and cannot be deleted"
+            )
+        branch = await Branch.get_or_none(environment=environment, name=branch_name)
+        if branch is None:
+            raise HTTPException(status_code=404, detail=f"branch {branch_name!r} does not exist")
+        await branch.delete()
+        await audit(ctx, "branch.deleted", env=env, target=branch_name)
+        return no_content()
 
     @r.post(prefix + "/branches", auth=MANAGE, tags=["releases"], request_model=BranchCreate)
     async def create_branch(ctx: HttpContext, env: str, body: BranchCreate):
