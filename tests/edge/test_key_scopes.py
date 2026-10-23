@@ -21,10 +21,12 @@ def test_read_and_write_are_separate():
 
 def test_a_scope_covers_only_its_own_paths():
     assert not scopes.allows(["data:*"], "GET", "/storage/v1/object/files/a.txt")
-    assert not scopes.allows(["webhooks:*"], "GET", f"{ENV}/users")
+    assert not scopes.allows(["webhooks:*"], "GET", f"{ENV}/auth/users")
     assert scopes.allows(["webhooks:*"], "POST", f"{ENV}/webhooks")
     assert scopes.allows(["webhooks:read"], "GET", f"{ENV}/webhook-deliveries")
-    assert not scopes.allows(["users:read"], "POST", f"{ENV}/users")
+    assert not scopes.allows(["users:read"], "POST", f"{ENV}/auth/users")
+    assert scopes.allows(["users:read"], "GET", f"{ENV}/auth/users/abc")
+    assert not scopes.allows(["users:*"], "GET", f"{ENV}/auth/roles")
     assert not scopes.allows(["users:*"], "GET", f"{ENV}/userset")
 
 
@@ -74,3 +76,23 @@ def test_the_edge_refuses_a_request_outside_the_keys_scopes():
     assert check_key("GET", "/rest/v1/orders", "1.1.1.1", info) is None
     assert check_key("DELETE", "/rest/v1/orders/1", "1.1.1.1", info) == "scope_not_allowed"
     assert check_key("GET", "/platform/v1/envs/x/keys", "1.1.1.1", info) == "scope_not_allowed"
+
+
+DEFINITION_KINDS = (
+    "schemas", "transformers", "policies", "resources", "flows", "buckets", "mail-templates", "routes", "subscriptions",
+    "webhooks", "inbound-hooks", "schedules", "auth/roles",
+)  # fmt: skip
+
+
+def test_the_deploy_preset_can_deploy_every_kind_of_definition_and_nothing_more():
+    deploy = next(p for p in scopes.PRESETS if p["id"] == "deploy")["scopes"]
+    for kind in DEFINITION_KINDS:
+        for method, path in (("GET", kind), ("POST", kind), ("PUT", f"{kind}/x"), ("DELETE", f"{kind}/x")):
+            assert scopes.allows(deploy, method, f"/platform/v1/envs/school/{path}"), (method, kind)
+    assert scopes.allows(deploy, "POST", "/platform/v1/envs/school/resources/orders/migrate")
+    for forbidden in ("keys", "auth/users", "secrets/x/reveal", "mail", "firewall", "database/query"):
+        method = "POST" if forbidden != "secrets/x/reveal" else "GET"
+        if forbidden == "secrets/x/reveal":
+            continue
+        assert not scopes.allows(deploy, method, f"/platform/v1/envs/school/{forbidden}"), forbidden
+    assert not scopes.allows(deploy, "POST", "/platform/v1/envs")
