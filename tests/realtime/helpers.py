@@ -60,6 +60,16 @@ class FakePlatform:
         self.events.append({"env": env, "name": name, "payload": payload, "actor": actor})
         return "e"
 
+    @property
+    def usage(self) -> Any:
+        """A meter that never refuses: these tests are not about plan limits."""
+        from types import SimpleNamespace
+
+        async def consume(state: Any, limit: str) -> None:
+            return None
+
+        return SimpleNamespace(consume=consume)
+
 
 FakeApi = FakePlatform
 
