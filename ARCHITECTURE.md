@@ -329,7 +329,9 @@ connections and presence.
 ## 10. Extending Pawabase
 
 * **Sillo routers**: `code/routes.py` exporting `router = Router(...)`, served under
-  `/rest/v1/x/…`.
+  `/rest/v1/x/…`. Handlers call `pawabase_server.extend.authorize(ctx, policy)` for the platform's
+  policy check and a runtime (data, events, secrets, outbound HTTP) acting for the caller. Mounted
+  code is trusted: it runs in the server process, so it is for the operator's own code.
 * **Python policies and transformers**: `@policy`, `@transformer`.
 * **Blocks**: any installed package exposing a `pawabase.blocks` entry point.
 * **Storage and OAuth providers**: Sillo storage drivers and `sillo-oauth` `OAuthProvider`s.
