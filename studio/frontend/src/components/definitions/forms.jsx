@@ -126,8 +126,9 @@ function PolicyForm({ body, patch, isNew }) {
 // ── resources ─────────────────────────────────────────────────────────────
 
 const OPS = [["list", "GET"], ["get", "GET"], ["create", "POST"], ["update", "PATCH"], ["delete", "DELETE"]];
+const OP_NAMES = { list: "See the list", get: "Open one record", create: "Add records", update: "Edit records", delete: "Delete records" };
 
-export function ResourceForm({ body, patch, refs, isNew, mode = "all" }) {
+export function ResourceForm({ body, patch, refs, isNew, mode = "all", onSavePolicy }) {
   const ops = body.operations || {};
   const fields = body.fields || [];
   const fieldNames = fields.map((f) => f.name).filter(Boolean);
@@ -137,7 +138,7 @@ export function ResourceForm({ body, patch, refs, isNew, mode = "all" }) {
   const [openRelation, setOpenRelation] = useState(null);
   return (
     <>
-      {mode !== "columns" && <Section icon="settings" title="Details">
+      {(mode === "all" || mode === "settings") && <Section icon="settings" title="Details">
         <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
           <Field label="Name" hint={isNew ? `Served at /rest/v1/${body.name || "<name>"}` : "The URL segment; fixed once created."}>
             <input className="mono font-mono text-ui-sm" autoFocus={isNew} placeholder="todos" {...text(body, "name", patch)} disabled={!isNew} />
@@ -156,7 +157,7 @@ export function ResourceForm({ body, patch, refs, isNew, mode = "all" }) {
           <Field label="Description" optional className="span"><input placeholder="What rows live here?" {...text(body, "description", patch)} /></Field>
         </div>
       </Section>}
-      {mode !== "settings" && <Section
+      {(mode === "all" || mode === "columns") && <Section
         icon="resources"
         title="Columns"
         description={`The primary key${body.timestamps !== false ? " and created_at / updated_at are" : " is"} added for you.`}
@@ -164,19 +165,19 @@ export function ResourceForm({ body, patch, refs, isNew, mode = "all" }) {
       >
         <FieldsEditor value={fields} onChange={(next) => patch({ fields: next })} schemas={refs.schemas} indexable interactive empty="No columns yet — add one for each value the API should carry." />
       </Section>}
-      {mode !== "columns" && <Section icon="secrets" title="Access" description="Which endpoints exist, and who may call each.">
+      {(mode === "all" || mode === "access") && <Section icon="secrets" title="Access" description="Which endpoints exist, and who may call each. Rules on record fields filter lists in the database, so people only ever get back rows they may see.">
         <div className="ops-table flex flex-col">
           {OPS.map(([op, method]) => {
             const setting = ops[op] || {};
             return (
-              <div key={op} className="op-row grid grid-cols-[200px_1fr] gap-3.5 items-center p-[10px_0] [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0 [&_.op-name]:flex [&_.op-name]:items-center [&_.op-name]:gap-2.5 [&_.op-name]:font-semibold-plus [&_.op-name]:capitalize">
+              <div key={op} className="op-row grid grid-cols-[200px_1fr] gap-3.5 items-center p-[10px_0] [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0 [&_.op-name]:flex [&_.op-name]:items-center [&_.op-name]:gap-2.5 [&_.op-name]:font-semibold-plus [&_.op-name]:normal-case">
                 <div className="op-name">
                   <Switch size="sm" checked={setting.enabled} onChange={(enabled) => setOp(op, { enabled })} />
                   <span className={`op-method font-mono text-[10.5px] font-bold p-[2px_7px] rounded-sm m-${method}`}>{method}</span>
-                  {op}
+                  {OP_NAMES[op]}
                 </div>
                 {setting.enabled ? (
-                  <PolicyPicker value={setting.policy} onChange={(policy) => setOp(op, { policy })} policies={refs.policies} nullLabel="Secret keys only" />
+                  <PolicyPicker value={setting.policy} onChange={(policy) => setOp(op, { policy })} policies={refs.policies} nullLabel="Default (signed-in users)" onSaveAs={onSavePolicy && ((name, condition) => onSavePolicy(name, condition, (ref) => setOp(op, { policy: ref })))} />
                 ) : (
                   <span className="hint text-xs font-book text-muted leading-[1.45]">Off: the endpoint is not served.</span>
                 )}
@@ -185,7 +186,7 @@ export function ResourceForm({ body, patch, refs, isNew, mode = "all" }) {
           })}
         </div>
       </Section>}
-      {mode !== "settings" && <Section
+      {(mode === "all" || mode === "columns") && <Section
         icon="link"
         title="Relations"
         description="Include related rows with ?expand=name."
@@ -226,7 +227,7 @@ export function ResourceForm({ body, patch, refs, isNew, mode = "all" }) {
         })}
         <button type="button" className="add-row [border:1.5px_dashed_var(--line-2)] bg-none rounded-sm p-2.5 text-muted font-inherit font-semibold text-ui cursor-pointer flex items-center justify-center gap-1.5 [&:hover]:border-brand [&:hover]:text-brand-strong [&:hover]:bg-brand-soft [&_.icon]:w-4 [&_.icon]:h-4" onClick={() => { setRel([...relations, { name: "", type: "belongs_to", resource: "", field: "" }]); setOpenRelation(relations.length); }}><Icon name="plus" />Add relation</button>
       </Section>}
-      {mode !== "columns" && <Section icon="settings" title="Behaviour">
+      {(mode === "all" || mode === "settings") && <Section icon="settings" title="Behaviour">
         <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
           <Switch checked={body.events !== false} onChange={(events) => patch({ events })} label="Emit events" hint={`${body.name || "name"}.created / updated / deleted`} />
           <Switch checked={!!body.realtime} onChange={(realtime) => patch({ realtime })} label="Broadcast changes" hint="Push row changes to realtime subscribers." />

@@ -14,6 +14,7 @@ const SOURCES = {
 
 export function useRefs(env) {
   const [refs, setRefs] = useState({ loaded: false, policies: [], flows: [], schemas: [], transformers: [], resources: [], fields: {} });
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     let live = true;
     const entries = Object.entries(SOURCES);
@@ -31,8 +32,8 @@ export function useRefs(env) {
       setRefs(next);
     });
     return () => { live = false; };
-  }, [env]);
-  return refs;
+  }, [env, tick]);
+  return { ...refs, reload: () => setTick((n) => n + 1) };
 }
 
 /** A <select> over one kind of reference, keeping an unknown current value visible. */
