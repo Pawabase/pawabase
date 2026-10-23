@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "check:layout": "node checks/flowLayout.check.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
