@@ -20,6 +20,7 @@ from pawabase_server.core.telemetry import note
 from pawabase_server.edge.errors import WS_CAPACITY, Refusal
 from pawabase_server.edge.limits import EnvironmentLimits
 from pawabase_server.edge.quotas import RequestQuota
+from pawabase_server.projects import quotas
 from pawabase_server.settings import Settings
 
 KEY_SCOPE = "pawabase.gateway.key"
@@ -87,6 +88,15 @@ class Admission:
                 extra={"retry_after": retry},
                 headers=((b"retry-after", str(retry).encode()),),
             )
+        if info:
+            over = await quotas.bandwidth_over(info.get("project_id"), info.get("project_limits"))
+            if over is not None:
+                self.stats["quota_rejected"] += 1
+                return Refusal(
+                    429,
+                    "bandwidth_quota_exceeded",
+                    "This project has used its bandwidth for the month.",
+                )
         if own is not None and own.quota is not None and not await own.quota.acquire():
             self.stats["quota_rejected"] += 1
             return Refusal(

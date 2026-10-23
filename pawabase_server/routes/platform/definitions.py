@@ -498,7 +498,13 @@ KINDS: list[dict[str, Any]] = [
         "key": "id",
     },
     {"path": "flows", "model": Flow, "body": FlowBody, "validate": validate_flow_body},
-    {"path": "buckets", "model": Bucket, "body": BucketBody, "validate": validate_bucket},
+    {
+        "path": "buckets",
+        "model": Bucket,
+        "body": BucketBody,
+        "validate": validate_bucket,
+        "limit": "max_buckets",
+    },
     {
         "path": "mail-templates",
         "model": MailTemplate,

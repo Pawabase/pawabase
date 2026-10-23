@@ -1,20 +1,27 @@
 import { usePage } from "@inertiajs/react";
 import { useState } from "react";
 import Layout from "../../components/Layout";
-import { Badge, Button, Card, CopyText, Field, Loading, Modal, PageHead, Table, TagInput, useAction, when } from "../../components/ui";
+import { Badge, Button, Card, Choices, CopyText, Field, Loading, Modal, PageHead, Section, Table, useAction, when } from "../../components/ui";
 import { envPath, post, useApi } from "../../lib/api";
 
-// These are scopes enforced by the current API. TagInput still accepts custom
-// values, so a key can be prepared for policy scopes too.
-const API_KEY_SCOPES = [
-  "resource:read",
-  "resource:write",
-  "routes:invoke",
-];
+/** A key's scopes in a few words: "Full access", or one chip per family with what it may do there. */
+function ScopeSummary({ scopes, catalog }) {
+  if (!scopes?.length) return <span className="text-muted">Full access</span>;
+  const labels = Object.fromEntries((catalog?.families || []).map((f) => [f.id, f.label]));
+  const by = {};
+  for (const scope of scopes) {
+    const [family, kind = "*"] = scope.split(":");
+    by[family] = by[family] === "*" || by[family] === kind ? by[family] : by[family] ? "*" : kind;
+  }
+  const word = { read: "read", write: "write", "*": "read & write" };
+  return <span className="flex flex-wrap gap-1">{Object.entries(by).map(([family, kind]) => <Badge key={family}>{scope(labels[family] || family, word[kind] || kind)}</Badge>)}</span>;
+}
+const scope = (label, kind) => `${label}: ${kind}`;
 
 export default function Keys({ env }) {
   const base = envPath(env, "/keys");
   const keys = useApi(base);
+  const catalog = useApi("/key-scopes").data;
   const [creating, setCreating] = useState(false);
   const [revealed, setRevealed] = useState(null);
   const [run] = useAction();
@@ -36,7 +43,7 @@ export default function Keys({ env }) {
                 { label: "Name", render: (k) => <b>{k.name}</b> },
                 { label: "Role", render: (k) => <Badge tone={k.role === "secret" ? "yellow" : "blue"}>{k.role}</Badge> },
                 { label: "Prefix", render: (k) => <code>{k.prefix}…</code> },
-                { label: "Scopes", render: (k) => (k.scopes?.length ? k.scopes.join(", ") : "all") },
+                { label: "Scopes", render: (k) => <ScopeSummary scopes={k.scopes} catalog={catalog} /> },
                 { label: "Restrictions", render: (k) => [k.allowed_ips?.length && `IPs: ${k.allowed_ips.join(", ")}`, k.allowed_routes?.length && `Routes: ${k.allowed_routes.join(", ")}`].filter(Boolean).join(" · ") || "none" },
                 { label: "Last used", render: (k) => when(k.last_used_at) },
                 { label: "State", render: (k) => <Badge tone={k.active ? "green" : "red"}>{k.active ? "active" : "revoked"}</Badge> },
@@ -46,7 +53,7 @@ export default function Keys({ env }) {
           )}
         </Loading>
       </Card>
-      {creating && <NewKey base={base} onClose={() => setCreating(false)} onCreated={(k) => { setCreating(false); setRevealed(k); keys.reload(); }} />}
+      {creating && <NewKey base={base} catalog={catalog} onClose={() => setCreating(false)} onCreated={(k) => { setCreating(false); setRevealed(k); keys.reload(); }} />}
       {revealed && (
         <Modal title="Your new key" onClose={() => setRevealed(null)} footer={<Button variant="primary" onClick={() => setRevealed(null)}>Done</Button>}>
           <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] warn">Shown once. Copy it now.</div>
@@ -72,25 +79,97 @@ function HealthCheck({ gatewayUrl, env }) {
   );
 }
 
-function NewKey({ base, onClose, onCreated }) {
-  const [data, setData] = useState({ name: "", role: "publishable", scopes: [], allowed_ips: "", allowed_routes: "" });
-  const [run, busy] = useAction();
+const EXPIRY = [["", "Never"], ["30", "30 days"], ["90", "90 days"], ["365", "1 year"]];
+const COLUMNS = "grid-cols-[minmax(0,1fr)_88px_88px]";
+
+/** What a key may do, as a table: one row per area, a Read and a Write column. Management areas need a secret key. */
+function Permissions({ catalog, role, value, onChange }) {
+  const covered = (family, kind) => value.includes("*") || value.includes(`${family}:*`) || value.includes(`${family}:${kind}`);
+  const toggle = (family, kind) => {
+    const held = { read: covered(family, "read"), write: covered(family, "write") };
+    held[kind] = !held[kind];
+    const rest = value.includes("*") ? catalog.families.filter((f) => f.id !== family).map((f) => `${f.id}:*`) : value.filter((v) => !v.startsWith(`${family}:`));
+    const own = held.read && held.write ? [`${family}:*`] : [held.read && `${family}:read`, held.write && `${family}:write`].filter(Boolean);
+    onChange([...rest, ...own]);
+  };
+  const groups = [...new Set(catalog.families.map((f) => f.group))];
+  const check = "h-4 w-4 cursor-pointer accent-[var(--brand)] disabled:cursor-not-allowed";
   return (
-    <Modal title="New API key" onClose={onClose} footer={<Button variant="primary" disabled={busy || !data.name} onClick={async () => {
-      const split = (value) => value.split(",").map((s) => s.trim()).filter(Boolean);
-      const r = await run(() => post(base, { name: data.name, role: data.role, scopes: data.scopes, allowed_ips: split(data.allowed_ips), allowed_routes: split(data.allowed_routes) }));
-      if (r) onCreated(r);
-    }}>Create</Button>}>
-      <Field label="Name"><input autoFocus value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} placeholder="web app" /></Field>
-      <Field label="Role">
-        <select value={data.role} onChange={(e) => setData({ ...data, role: e.target.value })}>
-          <option value="publishable">publishable — browsers and apps</option>
-          <option value="secret">secret — servers only</option>
-        </select>
-      </Field>
-      <Field label="Scopes" hint="Click a scope to limit the key. Leave empty for unrestricted access within its role."><TagInput value={data.scopes} onChange={(scopes) => setData({ ...data, scopes })} suggestions={API_KEY_SCOPES} placeholder="Custom scope, then Enter" /></Field>
-      <Field label="Allowed IP ranges" hint="Optional comma-separated IPs or CIDRs. The gateway rejects every other client."><input value={data.allowed_ips} onChange={(e) => setData({ ...data, allowed_ips: e.target.value })} placeholder="203.0.113.8, 10.0.0.0/8" /></Field>
-      <Field label="Allowed routes" hint="Optional comma-separated gateway rules: GET /rest/v1/* or POST /flows/v1/*."><input value={data.allowed_routes} onChange={(e) => setData({ ...data, allowed_routes: e.target.value })} placeholder="GET /rest/v1/*" /></Field>
+    <div className="overflow-hidden rounded-sm [border:1px_solid_var(--line)]">
+      <div className={`grid ${COLUMNS} items-center gap-3 bg-sunken p-[8px_14px] text-2xs font-bold uppercase tracking-[.08em] text-muted`}>
+        <span>Area</span><span className="text-center">Read</span><span className="text-center">Write</span>
+      </div>
+      {groups.map((group) => (
+        <div key={group}>
+          <div className="p-[10px_14px_4px] text-ui-sm font-semibold text-text [border-top:1px_solid_var(--line)]">{group}</div>
+          {catalog.families.filter((f) => f.group === group).map((f) => {
+            const locked = f.management && role !== "secret";
+            return (
+              <div key={f.id} className={`grid ${COLUMNS} items-center gap-3 p-[8px_14px] hover:bg-hover ${locked ? "opacity-45" : ""}`}>
+                <div className="min-w-0">
+                  <div className="text-ui font-medium">{f.label}</div>
+                  <div className="text-ui-sm leading-[1.4] text-muted">{f.description}</div>
+                </div>
+                {["read", "write"].map((kind) => (
+                  <span key={kind} className="grid place-items-center">
+                    <input type="checkbox" className={check} disabled={locked} checked={!locked && covered(f.id, kind)} onChange={() => toggle(f.id, kind)} title={f[kind].label} aria-label={`${f.label}: ${f[kind].label}`} />
+                  </span>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function summary(value) {
+  if (!value.length) return "Full access: no permission limits.";
+  const n = value.reduce((total, v) => total + (v.endsWith(":*") && v !== "*" ? 2 : 1), 0);
+  return `${n} permission${n === 1 ? "" : "s"} selected.`;
+}
+
+function NewKey({ base, catalog, onClose, onCreated }) {
+  const [data, setData] = useState({ name: "", role: "publishable", scopes: [], allowed_ips: "", allowed_routes: "", days: "", preset: "full" });
+  const [run, busy] = useAction();
+  const split = (value) => value.split(",").map((s) => s.trim()).filter(Boolean);
+  const management = new Set((catalog?.families || []).filter((f) => f.management).map((f) => f.id));
+  const presets = (catalog?.presets || []).filter((p) => data.role === "secret" || !p.scopes.some((s) => management.has(s.split(":")[0])));
+  const chosen = presets.find((p) => p.id === data.preset);
+  const setRole = (role) => setData({ ...data, role, preset: "full", scopes: role === "secret" ? data.scopes : data.scopes.filter((s) => !management.has(s.split(":")[0])) });
+  return (
+    <Modal title="New API key" onClose={onClose} footer={<>
+      <span className="mr-auto text-ui-sm text-muted">{summary(data.scopes)}</span>
+      <Button onClick={onClose}>Cancel</Button>
+      <Button variant="primary" disabled={busy || !data.name} onClick={async () => {
+        const expires_at = data.days ? new Date(Date.now() + Number(data.days) * 86400000).toISOString() : undefined;
+        const r = await run(() => post(base, { name: data.name, role: data.role, scopes: data.scopes, expires_at, allowed_ips: split(data.allowed_ips), allowed_routes: split(data.allowed_routes) }));
+        if (r) onCreated(r);
+      }}>Create key</Button>
+    </>}>
+      <Section title="Key" icon="keys">
+        <Field label="Name"><input autoFocus value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} placeholder="web app" /></Field>
+        <Choices label="Key type" columns={2} value={data.role} onChange={setRole} options={[
+          ["publishable", "Publishable", "For browsers and apps. Your policies apply."],
+          ["secret", "Secret", "For servers. Bypasses policies and can manage the environment."],
+        ]} />
+      </Section>
+      <Section title="Permissions" icon="policies" description="Anything outside these is refused at the gateway, whichever route it uses.">
+        <Field label="Start from" hint={chosen?.description}>
+          <select value={data.preset} onChange={(e) => { const p = presets.find((x) => x.id === e.target.value); setData({ ...data, preset: e.target.value, scopes: p ? p.scopes : data.scopes }); }}>
+            {data.preset === "custom" && <option value="custom">Custom</option>}
+            {presets.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+          </select>
+        </Field>
+        {catalog ? <Permissions catalog={catalog} role={data.role} value={data.scopes} onChange={(scopes) => setData({ ...data, scopes, preset: "custom" })} /> : <p className="m-0 text-muted">Loading permissions…</p>}
+        {data.role !== "secret" && <p className="m-0 text-ui-sm text-muted">Areas that manage the environment need a secret key.</p>}
+      </Section>
+      <Section title="Limits" icon="policies" description="Optional.">
+        <Field label="Expires"><select value={data.days} onChange={(e) => setData({ ...data, days: e.target.value })}>{EXPIRY.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+        <Field label="Allowed IP ranges" hint="Comma-separated IPs or CIDRs. Every other address is refused."><input value={data.allowed_ips} onChange={(e) => setData({ ...data, allowed_ips: e.target.value })} placeholder="203.0.113.0/24" /></Field>
+        <Field label="Allowed routes" hint="Comma-separated: GET /rest/v1/* or POST /flows/v1/*."><input value={data.allowed_routes} onChange={(e) => setData({ ...data, allowed_routes: e.target.value })} placeholder="GET /rest/v1/*" /></Field>
+      </Section>
     </Modal>
   );
 }

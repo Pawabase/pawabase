@@ -159,6 +159,7 @@ class Platform:
 
     async def stop(self) -> None:
         await self.records.stop()  # before the database closes
+        await self.usage.flush()
         await self.bus.stop()
         await self.sources.close()
         await self.storage.close()

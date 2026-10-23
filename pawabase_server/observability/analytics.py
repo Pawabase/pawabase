@@ -14,7 +14,7 @@ from typing import Any
 from tortoise.functions import Count
 
 from pawabase_server.db.models import EventLog, FlowRun, MetricCounter
-from pawabase_server.observability.request_metrics import REQUESTS_METRIC
+from pawabase_server.observability.request_metrics import BANDWIDTH_METRIC, REQUESTS_METRIC
 
 #: range → (span, bucket step)
 RANGES: dict[str, tuple[timedelta, timedelta]] = {
@@ -53,6 +53,8 @@ def _totals() -> dict[str, float]:
         "requests": 0,
         "errors": 0,
         "latency_total": 0.0,
+        "bytes_in": 0,
+        "bytes_out": 0,
         "events": 0,
         "flow_runs": 0,
         "flow_failures": 0,
@@ -67,6 +69,8 @@ def _summary(totals: dict[str, float]) -> dict[str, Any]:
         "errors": int(totals["errors"]),
         "error_rate": round(totals["errors"] / requests * 100, 2) if requests else 0.0,
         "avg_latency_ms": round(totals["latency_total"] / requests, 1) if requests else 0.0,
+        "bytes_in": int(totals["bytes_in"]),
+        "bytes_out": int(totals["bytes_out"]),
         "events": int(totals["events"]),
         "flow_runs": runs,
         "flow_failures": int(totals["flow_failures"]),
@@ -103,6 +107,8 @@ async def environment_analytics(
             "errors": 0,
             "client_errors": 0,
             "latency_ms": None,
+            "bytes_in": 0,
+            "bytes_out": 0,
             "events": 0,
             "flow_runs": 0,
             "flow_failures": 0,
@@ -140,6 +146,17 @@ async def environment_analytics(
             if "status=4xx" in row["tags"]:
                 bucket["client_errors"] += row["count"]
             latency[series.index(bucket)] += row["value"]
+    traffic = await MetricCounter.filter(env=env, name=BANDWIDTH_METRIC, window__gte=since).values(
+        "window", "tags", "value"
+    )
+    for row in traffic:
+        bucket, totals = place(row["window"])
+        if totals is None:
+            continue
+        direction = "bytes_in" if "dir=in" in row["tags"] else "bytes_out"
+        totals[direction] += row["value"]
+        if bucket is not None:
+            bucket[direction] += int(row["value"])
     for index, bucket in enumerate(series):
         if bucket["requests"]:
             bucket["latency_ms"] = round(latency[index] / bucket["requests"], 1)
@@ -207,3 +224,4 @@ async def environment_analytics(
             for r in failures
         ],
     }
+

@@ -6,6 +6,7 @@ import Layout, { envHref } from "../../components/Layout";
 import { Icon } from "../../components/icons";
 import { Badge, IdChip, PageHead, Segmented, when } from "../../components/ui";
 import { envPath, get, useApi } from "../../lib/api";
+import { byteLabel } from "./observability/shared";
 
 const RANGES = [["1h", "1h"], ["24h", "24h"], ["7d", "7d"], ["30d", "30d"]];
 const RANGE_NAMES = { "1h": "last hour", "24h": "last 24 hours", "7d": "last 7 days", "30d": "last 30 days" };
@@ -15,6 +16,8 @@ const C = {
   errors: "var(--danger)",
   client: "var(--warn)",
   latency: "var(--info)",
+  bandwidthOut: "var(--chart-mint)",
+  bandwidthIn: "var(--info)",
   events: "var(--chart-mint)",
   runs: "var(--brand)",
   failures: "var(--danger)",
@@ -23,6 +26,7 @@ const C = {
 const TABS = [
   { value: "traffic", label: "Traffic" },
   { value: "latency", label: "Latency" },
+  { value: "bandwidth", label: "Bandwidth" },
   { value: "automation", label: "Automation" },
 ];
 
@@ -142,6 +146,7 @@ export default function Overview({ runtime, env, overview }) {
       <div className="metrics order-[-1] grid grid-cols-[repeat(auto-fit,_minmax(170px,_1fr))] gap-0 m-0 p-0 [border-bottom:1px_solid_var(--line)] bg-transparent">
         <Metric label={`Requests, ${span}`} value={compact(s.requests)} sub={`${(s.error_rate ?? 0).toFixed(s.error_rate >= 10 ? 0 : 1)}% server errors`} href={envHref(env, "activity")} bad={s.error_rate >= 5} />
         <Metric label="Average latency" value={s.avg_latency_ms != null ? `${compact(s.avg_latency_ms)} ms` : "—"} sub="across gateway requests" href={envHref(env, "activity")} />
+        <Metric label={`Bandwidth, ${span}`} value={byteLabel((s.bytes_in || 0) + (s.bytes_out || 0))} sub={`${byteLabel(s.bytes_out)} sent · ${byteLabel(s.bytes_in)} received`} href={`${envHref(env, "activity")}#bandwidth`} />
         <Metric label="Flow runs, 24h" value={compact(day.flow_runs)} sub={day.flow_failures ? `${compact(day.flow_failures)} failed` : "none failed"} href={envHref(env, "flows")} bad={day.flow_failures > 0} />
         <Metric label="Jobs, 24h" value={compact(day.jobs)} sub={day.job_failures ? `${compact(day.job_failures)} failed` : "none failed"} href={envHref(env, "jobs")} bad={day.job_failures > 0} />
         <Metric label="Events, 24h" value={compact(day.events)} sub={`${compact(day.mail)} emails`} href={envHref(env, "events")} />
@@ -175,6 +180,22 @@ export default function Overview({ runtime, env, overview }) {
             <Chart height="fill" stepSeconds={step} data={series} format={(v) => `${compact(v)} ms`} series={[{ key: "latency_ms", label: "Average latency", color: C.latency, type: "bar" }]} empty="No requests to measure yet." />
           </>
         )}
+        {tab === "bandwidth" && (
+          <>
+            <p className="chart-sum flex items-baseline gap-1.5 flex-wrap m-[0_0_8px] text-muted text-body [&_b]:text-text [&_b]:text-display-sm [&_b]:font-bold-plus [&_b]:tracking-[-0.03em]"><b>{byteLabel((s.bytes_in || 0) + (s.bytes_out || 0))}</b> moved · {byteLabel(s.bytes_out)} sent, {byteLabel(s.bytes_in)} received</p>
+            <Chart
+              height="fill"
+              stepSeconds={step}
+              data={series}
+              format={byteLabel}
+              series={[
+                { key: "bytes_out", label: "Sent to clients", color: C.bandwidthOut, type: "area" },
+                { key: "bytes_in", label: "Received", color: C.bandwidthIn, type: "line" },
+              ]}
+              empty="No bandwidth recorded in this range. Requests through the gateway appear here."
+            />
+          </>
+        )}
         {tab === "automation" && (
           <>
             <p className="chart-sum flex items-baseline gap-1.5 flex-wrap m-[0_0_8px] text-muted text-body [&_b]:text-text [&_b]:text-display-sm [&_b]:font-bold-plus [&_b]:tracking-[-0.03em] [&_b_+_b]:text-heading [&_b:not(:first-child)]:text-heading"><b>{compact(s.flow_runs)}</b> flow runs{s.flow_success_rate != null && <> · <b>{s.flow_success_rate}%</b> succeeded</>} · <b>{compact(s.events)}</b> events<Legend items={[["Events", C.events], ["Flow runs", C.runs], ["Failed", C.failures]]} /></p>
@@ -195,6 +216,7 @@ export default function Overview({ runtime, env, overview }) {
       <RecentRequests env={env} />
       </section>
       </div>
+
 
       <div className="ov-board flex flex-col">
         <div className="flex items-center justify-between gap-3 h-[56px] p-[0_var(--gutter)] [border-bottom:1px_solid_var(--line)]">
@@ -239,3 +261,4 @@ function Legend({ items }) {
     </span>
   );
 }
+

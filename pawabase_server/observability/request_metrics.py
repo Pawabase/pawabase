@@ -24,6 +24,8 @@ from pawabase_server.core.telemetry import RequestRecord, Telemetry
 from pawabase_server.db.models import MetricCounter, RequestLog
 
 REQUESTS_METRIC = "pawabase.requests"
+#: Bytes moved per minute, tagged ``dir=in`` (received) or ``dir=out`` (sent); ``count`` is the requests that moved them.
+BANDWIDTH_METRIC = "pawabase.bandwidth"
 FLUSH_SECONDS = 5.0
 PRUNE_SECONDS = 3600.0
 
@@ -40,6 +42,7 @@ class RequestRollup:
         self.retention_days = retention_days
         self._last_prune = 0.0
         self.pending: dict[Key, list[float]] = defaultdict(lambda: [0, 0.0])
+        self.traffic: dict[Key, list[float]] = defaultdict(lambda: [0, 0.0])
         self.requests: list[RequestRecord] = []
         self._task: asyncio.Task | None = None
         self._flush_lock = asyncio.Lock()
@@ -56,6 +59,11 @@ class RequestRollup:
         bucket = self.pending[key]
         bucket[0] += 1
         bucket[1] += record.duration_ms
+        for direction, size in (("in", record.bytes_in), ("out", record.bytes_out)):
+            if size:
+                moved = self.traffic[(record.env, window, f"dir={direction}")]
+                moved[0] += 1
+                moved[1] += size
         self.requests.append(record)
 
     async def flush(self) -> None:
@@ -64,6 +72,7 @@ class RequestRollup:
 
     async def _flush_pending(self) -> None:
         pending, self.pending = self.pending, defaultdict(lambda: [0, 0.0])
+        traffic, self.traffic = self.traffic, defaultdict(lambda: [0, 0.0])
         requests, self.requests = self.requests, []
         if requests:
             try:
@@ -85,20 +94,26 @@ class RequestRollup:
                             user_agent=record.user_agent,
                             error=record.error,
                             notes=record.notes,
+                            bytes_in=record.bytes_in,
+                            bytes_out=record.bytes_out,
                         )
                         for record in requests
                     ]
                 )
             except Exception:
                 logger.exception("could not store request history")
-        for (env, window, tags), (count, total_ms) in pending.items():
-            match = MetricCounter.filter(env=env, name=REQUESTS_METRIC, tags=tags, window=window)
+        for name, counters in ((REQUESTS_METRIC, pending), (BANDWIDTH_METRIC, traffic)):
+            await self._store(name, counters)
+
+    async def _store(self, name: str, counters: dict[Key, list[float]]) -> None:
+        for (env, window, tags), (count, total_ms) in counters.items():
+            match = MetricCounter.filter(env=env, name=name, tags=tags, window=window)
             try:
                 if not await match.update(value=F("value") + total_ms, count=F("count") + count):
                     try:
                         await MetricCounter.create(
                             env=env,
-                            name=REQUESTS_METRIC,
+                            name=name,
                             tags=tags,
                             window=window,
                             value=total_ms,

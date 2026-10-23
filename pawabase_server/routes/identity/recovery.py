@@ -311,7 +311,7 @@ def _notice(config: AuthConfig, title: str, message: str, *, status_code: int = 
         headers={
             "content-security-policy": (
                 f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'unsafe-inline'; "
-                "img-src https: data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'"
+                "img-src 'self' https: data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'"
             ),
             "x-frame-options": "DENY",
             "cache-control": "no-store",

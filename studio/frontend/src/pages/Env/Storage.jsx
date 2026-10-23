@@ -21,8 +21,8 @@ export default function Storage({ env }) {
   const subnav = {
     title: "Storage",
     loading: buckets.loading,
-    empty: "No buckets yet. Create one with the + button.",
-    action: { label: "New bucket", onClick: () => setEditing({ isNew: true, body: KINDS.buckets.blank }) },
+    empty: "No buckets yet. Create one with the button above.",
+    create: { label: "New bucket", onClick: () => setEditing({ isNew: true, body: KINDS.buckets.blank }) },
     groups: [{ title: "Buckets", items: list.map((b) => ({ key: b.name, label: b.name, icon: "buckets", tag: b.public ? "public" : undefined })) }],
     active: bucket?.name,
     onSelect: (name) => setBucket(list.find((b) => b.name === name) || null),
@@ -34,7 +34,7 @@ export default function Storage({ env }) {
         description="Buckets on the environment's storage (local disk or any S3-compatible service). Objects are delivered from your application's gateway and follow each bucket's access policies."
       />
       {bucket ? <Objects key={bucket.name} base={base} bucket={bucket} env={env} onEdit={() => setEditing({ isNew: false, body: editable(bucket) })} /> : (
-        <Card><EmptyState icon="storage" tone="sky" title="No bucket yet">Create a bucket with the + button in the column on the left.</EmptyState></Card>
+        <Card><EmptyState icon="storage" tone="sky" title="No bucket yet">Create a bucket with the button in the sidebar.</EmptyState></Card>
       )}
       {editing && (
         <DefinitionSheet

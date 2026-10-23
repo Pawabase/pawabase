@@ -31,6 +31,7 @@ from pawabase_server.environments.configuration import report as configuration_r
 from pawabase_server.infra.storage import folders, transform
 from pawabase_server.infra.storage import shares as object_shares
 from pawabase_server.observability import audit_log as audit_log_store
+from pawabase_server.observability import bandwidth as bandwidth_report
 from pawabase_server.observability import route_stats
 from pawabase_server.observability.advisor import advise
 from pawabase_server.observability.analytics import DEFAULT_RANGE, environment_analytics
@@ -814,6 +815,17 @@ def register(r: Router, platform: Platform) -> None:
             sort=ctx.query_params.get("sort", "errors"),
             limit=limit,
         )
+
+    @r.get(
+        f"{base}/observability/bandwidth",
+        auth=MANAGE,
+        tags=["observability"],
+        summary="Bytes received and sent over a window, and the endpoints, callers and requests that moved the most",
+    )
+    async def bandwidth(ctx: HttpContext, env: str):
+        await get_environment(env)
+        await platform.app.state["request_rollup"].flush()
+        return await bandwidth_report.report(env, minutes_param(ctx))
 
     @r.get(
         f"{base}/observability/routes/detail",

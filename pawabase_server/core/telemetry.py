@@ -74,6 +74,9 @@ class RequestRecord:
     user_agent: str | None = None
     error: str | None = None
     notes: dict[str, Any] = field(default_factory=dict)
+    #: Bytes of request body received and of response body sent.
+    bytes_in: int = 0
+    bytes_out: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -227,14 +230,25 @@ class TelemetryRecorder:
         token = _trace.set(trace)
         origin_token = _origin.set(started)
         error: str | None = None
+        traffic = {"in": 0, "out": 0}
+
+        async def counted(message):
+            if message["type"] == "http.request":
+                traffic["in"] += len(message.get("body") or b"")
+            return message
+
+        async def count_receive():
+            return await counted(await receive())
 
         async def capture(message):
             if message["type"] == "http.response.start":
                 status_holder["status"] = message["status"]
+            elif message["type"] == "http.response.body":
+                traffic["out"] += len(message.get("body") or b"")
             await send(message)
 
         try:
-            await self.app(scope, receive, capture)
+            await self.app(scope, count_receive, capture)
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
             trace.setdefault("traceback", report(exc).trace()[-4_000:])
@@ -244,11 +258,13 @@ class TelemetryRecorder:
             _origin.reset(origin_token)
             await self.telemetry.record(
                 self._build(
-                    scope, receive, status_holder["status"], started, started_at, trace, error
+                    scope, receive, status_holder["status"], started, started_at, trace, error, traffic
                 )
             )
 
-    def _build(self, scope, receive, status, started, started_at, trace, error) -> RequestRecord:
+    def _build(
+        self, scope, receive, status, started, started_at, trace, error, traffic
+    ) -> RequestRecord:
         ctx = HttpContext(scope, receive)
         context = scope.get(SCOPE_KEY)
         user = scope.get("user")
@@ -279,6 +295,8 @@ class TelemetryRecorder:
             user_agent=headers.get("user-agent"),
             error=error,
             notes=trace,
+            bytes_in=traffic["in"],
+            bytes_out=traffic["out"],
         )
 
 

@@ -163,6 +163,9 @@ class Realtime:
         """
         self.authorizer.check_payload(payload)
         event = check_event(event)
+        await self.platform.usage.consume(
+            await self.platform.state(env), "max_realtime_messages_per_month"
+        )
         config = await self.store.get(env)
         rule = config.rule_for(channel)
         if rule.durable:

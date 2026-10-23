@@ -56,6 +56,11 @@ LIMIT_FIELDS = frozenset(
         "max_webhooks",
         "max_inbound_hooks",
         "max_queued_jobs",
+        "max_buckets",
+        "max_user_api_keys_per_user",
+        "max_emails_per_month",
+        "max_realtime_messages_per_month",
+        "monthly_bandwidth_bytes",
     }
 )
 

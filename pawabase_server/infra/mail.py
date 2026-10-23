@@ -216,6 +216,8 @@ class MailManager:
         attachments: list[dict[str, Any]] | None = None,
         label: str = "",
     ):
+        # Every delivery attempt counts against the plan's monthly emails, a retry too: a provider charges for it.
+        await self.platform.usage.consume(state, "max_emails_per_month")
         files = [
             {
                 "filename": item["filename"],

@@ -9,11 +9,13 @@ from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sillo import HttpContext, Router, created, no_content
 from sillo.exceptions import HTTPException
 from tortoise.transactions import in_transaction
 
+from pawabase_server.core.context import current_context
+from pawabase_server.edge import scopes as key_scopes
 from pawabase_server.automation.jobs.environments import PurgeEnvironmentJob
 from pawabase_server.core import envvars
 from pawabase_server.core.crypto import mask
@@ -81,6 +83,14 @@ class KeyCreate(BaseModel):
         default_factory=list,
         description="Gateway route rules such as 'GET /rest/v1/orders' or '/flows/v1/*'",
     )
+
+    @model_validator(mode="after")
+    def known_scopes(self):
+        try:
+            self.scopes = key_scopes.validate(self.scopes, role=self.role)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        return self
 
     @field_validator("allowed_ips")
     @classmethod
@@ -628,6 +638,10 @@ def register(r: Router, platform: Platform) -> None:
 
     # ── keys ─────────────────────────────────────────────────────────────
 
+    @r.get("/key-scopes", auth=MANAGE, tags=["keys"], summary="Every scope an API key can hold")
+    async def key_scope_catalog(ctx: HttpContext):
+        return key_scopes.catalog()
+
     @r.get("/envs/{env}/keys", auth=MANAGE, tags=["keys"], summary="List API keys")
     async def list_keys(ctx: HttpContext, env: str):
         environment = await get_environment(env)
@@ -643,6 +657,12 @@ def register(r: Router, platform: Platform) -> None:
     )
     async def create_key_route(ctx: HttpContext, env: str, body: KeyCreate):
         environment = await get_environment(env)
+        caller = current_context(ctx)
+        if caller is not None and not key_scopes.covers(caller.scopes, body.scopes):
+            raise HTTPException(
+                status_code=403,
+                detail="a key can only create keys with scopes it holds itself",
+            )
         full, key = await create_key(
             environment,
             body.name,
@@ -659,7 +679,7 @@ def register(r: Router, platform: Platform) -> None:
             "key.created",
             env=env,
             target=str(key.id),
-            details={"role": body.role},
+            details={"role": body.role, "scopes": body.scopes},
         )
         return created({**key_view(key), "key": full})
 

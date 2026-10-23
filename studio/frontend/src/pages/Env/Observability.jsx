@@ -5,6 +5,7 @@ import { Icon } from "../../components/icons";
 import { Button, PageHead, Segmented } from "../../components/ui";
 import { envPath, get } from "../../lib/api";
 import AuditLog from "./observability/Audit";
+import Bandwidth from "./observability/Bandwidth";
 import Errors from "./observability/Errors";
 import { Alarms, Logs, Metrics } from "./observability/Explore";
 import Flows from "./observability/Flows";
@@ -24,14 +25,14 @@ const WINDOWS = [[15, "15m"], [60, "1h"], [360, "6h"], [1440, "24h"], [10080, "7
 // The sidebar answers "what do you want to look at"; each entry is one page of the same place.
 const TABS = [
   ["overview", "Overview", [["overview", "Overview", "overview"]]],
-  ["requests", "Requests", [["routes", "Routes", "routes"], ["errors", "Errors", "status"], ["requests", "Requests", "networking"]]],
+  ["requests", "Requests", [["routes", "Routes", "routes"], ["errors", "Errors", "status"], ["requests", "Requests", "networking"], ["bandwidth", "Bandwidth", "usage"]]],
   ["background", "Background work", [["jobs", "Jobs", "jobs"], ["flows", "Flow runs", "flows"]]],
   ["messaging", "Events and messages", [["events", "Events", "events"], ["event-map", "Event map", "gitBranch"], ["webhooks", "Webhooks", "webhooks"], ["mail", "Mail", "mail"], ["realtime", "Realtime", "realtime"]]],
   ["explore", "Logs and alerts", [["logs", "Logs", "book"], ["alarms", "Alarms", "bell"], ["metrics", "Metrics", "usage"]]],
   ["audit", "Audit", [["audit", "Audit log", "audit"]]],
 ];
 const SECTIONS = TABS.flatMap(([, , items]) => items.map(([key]) => key));
-const NEEDS_WINDOW = new Set(["overview", "routes", "errors", "requests", "jobs", "flows", "events", "webhooks", "mail"]);
+const NEEDS_WINDOW = new Set(["overview", "routes", "errors", "requests", "bandwidth", "jobs", "flows", "events", "webhooks", "mail"]);
 // Links and bookmarks from before the sections were merged.
 const RENAMED = { queues: "jobs", workers: "jobs", database: "overview", cache: "overview", "event-log": "events" };
 
@@ -124,6 +125,7 @@ export default function Observability({ env }) {
           {section === "overview" && <Overview {...shared} />}
           {section === "routes" && <Routes env={env} minutes={minutes} onRoute={setRoute} onTrace={openTrace} />}
           {section === "errors" && <Errors env={env} minutes={minutes} onRoute={setRoute} onTrace={openTrace} />}
+          {section === "bandwidth" && <Bandwidth env={env} minutes={minutes} onTrace={openTrace} />}
           {section === "requests" && <Requests base={base} minutes={minutes} onTrace={openTrace} />}
           {section === "jobs" && <JobsPanel env={env} system={system} />}
           {section === "flows" && <><Flows {...shared} /><FlowRuns env={env} /></>}

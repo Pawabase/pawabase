@@ -39,8 +39,11 @@ from pawabase_server.db.models import (
     ApiKey,
     AuthUser,
     BackupSnapshot,
+    Bucket as BucketRecord,
     Environment,
     InboundHook,
+    MailLog,
+    MetricCounter,
     MfaFactor,
     Schedule,
     SessionInfo,
@@ -48,6 +51,7 @@ from pawabase_server.db.models import (
     WebhookEndpoint,
 )
 from pawabase_server.db.models import FlowRun as FlowRunRecord
+from pawabase_server.observability.request_metrics import BANDWIDTH_METRIC, REQUESTS_METRIC
 
 logger = logging.getLogger("pawabase.quotas")
 
@@ -69,6 +73,11 @@ NOUNS = {
     "max_upload_bytes": "bytes in one upload",
     "max_database_bytes": "bytes of database",
     "max_realtime_channels": "realtime channels in use",
+    "max_buckets": "storage buckets",
+    "max_user_api_keys_per_user": "API keys per user",
+    "max_emails_per_month": "emails this month",
+    "max_realtime_messages_per_month": "realtime messages this month",
+    "monthly_bandwidth_bytes": "bytes of bandwidth this month",
 }
 
 
@@ -123,6 +132,7 @@ COUNTERS: dict[str, Callable[[str], Awaitable[int]]] = {
     "max_inbound_hooks": lambda pid: _definitions(InboundHook, pid),
     "max_scheduled_jobs": lambda pid: _definitions(Schedule, pid),
     "max_environments": lambda pid: Environment.filter(project_id=pid).count(),
+    "max_buckets": lambda pid: _definitions(BucketRecord, pid),
 }
 
 
@@ -217,14 +227,32 @@ def check_auth_providers(limits: dict[str, Any] | None, enabled: list[str]) -> N
 
 # ── monthly metering ────────────────────────────────────────────────────
 
+async def _no_history(names: list[str], start: datetime) -> int:
+    return 0
+
+
 SEEDS: dict[str, Callable[[list[str], datetime], Awaitable[int]]] = {
     "flow_runs": lambda names, start: FlowRunRecord.filter(
         env__in=names, created_at__gte=start
     ).count(),
+    "emails": lambda names, start: (
+        MailLog.filter(
+            env__in=names, status__in=["sent", "suppressed"], sent_at__gte=start
+        ).count()
+    ),
+    # Nothing records a published message, so the counter is the only record; it starts at zero.
+    "realtime_messages": _no_history,
 }
 METERED = {
     "max_flow_runs_per_month": "flow_runs",
+    "max_emails_per_month": "emails",
+    "max_realtime_messages_per_month": "realtime_messages",
 }
+
+
+#: Metrics counted for every project, limited or not, because no record of them exists to count afterwards.
+TALLIED = frozenset({"realtime_messages"})
+TALLY_SECONDS = 5.0
 
 
 class UsageMeter:
@@ -233,6 +261,33 @@ class UsageMeter:
     def __init__(self) -> None:
         self._leased: dict[tuple[str, str, str], int] = {}
         self._locks: dict[tuple[str, str, str], asyncio.Lock] = {}
+        self._pending: dict[tuple[str, str], int] = {}
+        self._flusher: asyncio.Task | None = None
+
+    def _tally(self, project_id: str, metric: str) -> None:
+        self._pending[(project_id, metric)] = self._pending.get((project_id, metric), 0) + 1
+        if self._flusher is None or self._flusher.done():
+            try:
+                self._flusher = asyncio.get_running_loop().create_task(self._flush_soon())
+            except RuntimeError:  # no loop: the next count schedules it
+                self._flusher = None
+
+    async def _flush_soon(self) -> None:
+        await asyncio.sleep(TALLY_SECONDS)
+        await self.flush()
+
+    async def flush(self) -> None:
+        """Write the counts held in memory."""
+        pending, self._pending = self._pending, {}
+        period, _ = month()
+        for (project_id, metric), amount in pending.items():
+            try:
+                row, _created = await UsageCounter.get_or_create(
+                    project_id=project_id, metric=metric, period=period, defaults={"value": 0}
+                )
+                await UsageCounter.filter(id=row.id).update(value=F("value") + amount)
+            except Exception:
+                logger.exception("could not store %s usage", metric)
 
     @staticmethod
     def lease_size(allowed: int) -> int:
@@ -240,9 +295,17 @@ class UsageMeter:
         return max(1, min(16, allowed // 200))
 
     async def consume(self, state: Any, limit: str) -> None:
-        """Count one use of what *limit* meters for *state*'s project, or raise :class:`QuotaExceeded` when the month is used up."""
+        """Count one use of what *limit* meters for *state*'s project, or raise :class:`QuotaExceeded` when the month is used up.
+
+        A project without the limit is still counted for the metrics nothing else records (:data:`TALLIED`), in memory, written
+        every few seconds, so its usage page has something to show.
+        """
         allowed = allowance(state.project_limits, limit)
-        if not allowed or not state.project_id:
+        if not state.project_id:
+            return
+        if not allowed:
+            if METERED[limit] in TALLIED:
+                self._tally(state.project_id, METERED[limit])
             return
         metric = METERED[limit]
         period, start = month()
@@ -415,6 +478,53 @@ def upload_cap(state: Any, current: int) -> int:
     return min(current, allowed) if current else allowed
 
 
+# ── bandwidth ───────────────────────────────────────────────────────────
+
+_traffic: dict[str, tuple[float, int]] = {}
+TRAFFIC_SECONDS = 30.0
+
+
+async def month_totals(project_id: str, start: datetime | None = None) -> dict[str, int]:
+    """Requests made and bytes sent this month across the project's environments, from the per-minute request counters."""
+    start = start or month()[1]
+    names = await environment_names(project_id)
+    totals = {"requests": 0, "bytes_out": 0, "bytes_in": 0}
+    if not names:
+        return totals
+    rows = await MetricCounter.filter(
+        env__in=names,
+        window__gte=start,
+        name__in=[REQUESTS_METRIC, BANDWIDTH_METRIC],
+    ).values("name", "tags", "value", "count")
+    for row in rows:
+        if row["name"] == REQUESTS_METRIC:
+            totals["requests"] += int(row["count"] or 0)
+        elif row["tags"] == "dir=out":
+            totals["bytes_out"] += int(row["value"] or 0)
+        elif row["tags"] == "dir=in":
+            totals["bytes_in"] += int(row["value"] or 0)
+    return totals
+
+
+async def bandwidth_over(project_id: str | None, limits: dict[str, Any] | None) -> tuple[int, int] | None:
+    """``(allowed, used)`` when the project has sent more than its plan's ``monthly_bandwidth_bytes`` this month, else ``None``.
+
+    The month's total is read from the request counters at most every :data:`TRAFFIC_SECONDS`, so a request never waits on
+    the sum; a project can go over by what it sends in that time.
+    """
+    allowed = allowance(limits, "monthly_bandwidth_bytes")
+    if not allowed or not project_id:
+        return None
+    now = time.monotonic()
+    cached = _traffic.get(project_id)
+    if cached is None or cached[0] < now:
+        cached = _traffic[project_id] = (
+            now + TRAFFIC_SECONDS,
+            (await month_totals(project_id))["bytes_out"],
+        )
+    return (allowed, cached[1]) if cached[1] >= allowed else None
+
+
 # ── database bytes ──────────────────────────────────────────────────────
 
 _sizes: dict[str, tuple[float, int | None]] = {}
@@ -442,18 +552,100 @@ def forget_database_size(env: str) -> None:
 
 # ── reporting ───────────────────────────────────────────────────────────
 
+#: Every plan limit a person sees on the usage page, in the order they see it: ``(limit, group, unit)``. The limit's label is in
+#: :data:`NOUNS`' neighbour :data:`LABELS`. Limits enforced at the edge on rates (``rate_limit``…) are shown by the gateway's own card.
+REPORTED = (
+    ("monthly_request_limit", "Traffic", "count"),
+    ("monthly_bandwidth_bytes", "Traffic", "bytes"),
+    ("max_active_connections", "Traffic", "count"),
+    ("max_realtime_messages_per_month", "Traffic", "count"),
+    ("max_realtime_channels", "Traffic", "count"),
+    ("max_database_bytes", "Data", "bytes"),
+    ("max_storage_bytes", "Data", "bytes"),
+    ("max_buckets", "Data", "count"),
+    ("max_upload_bytes", "Data", "bytes"),
+    ("max_backups", "Data", "count"),
+    ("max_users_per_month", "People", "count"),
+    ("max_active_users", "People", "count"),
+    ("max_api_keys", "People", "count"),
+    ("max_user_api_keys_per_user", "People", "count"),
+    ("max_auth_sessions_per_user", "People", "count"),
+    ("max_mfa_factors_per_user", "People", "count"),
+    ("max_auth_providers", "People", "count"),
+    ("max_flow_runs_per_month", "Automation", "count"),
+    ("max_scheduled_jobs", "Automation", "count"),
+    ("max_emails_per_month", "Automation", "count"),
+    ("max_webhooks", "Automation", "count"),
+    ("max_inbound_hooks", "Automation", "count"),
+    ("max_environments", "Project", "count"),
+)
+LABELS = {
+    "monthly_request_limit": "API requests",
+    "monthly_bandwidth_bytes": "Bandwidth",
+    "max_active_connections": "Realtime connections",
+    "max_realtime_messages_per_month": "Realtime messages",
+    "max_realtime_channels": "Realtime channels",
+    "max_database_bytes": "PostgreSQL storage",
+    "max_storage_bytes": "Object storage",
+    "max_buckets": "Storage buckets",
+    "max_upload_bytes": "Largest upload",
+    "max_backups": "Backups",
+    "max_users_per_month": "Monthly active users",
+    "max_active_users": "Users",
+    "max_api_keys": "Environment API keys",
+    "max_user_api_keys_per_user": "API keys per user",
+    "max_auth_sessions_per_user": "Sessions per user",
+    "max_mfa_factors_per_user": "Second factors per user",
+    "max_auth_providers": "Sign-in providers",
+    "max_flow_runs_per_month": "Flow runs",
+    "max_scheduled_jobs": "Scheduled tasks",
+    "max_emails_per_month": "Emails sent",
+    "max_webhooks": "Outbound webhooks",
+    "max_inbound_hooks": "Inbound webhooks",
+    "max_environments": "Environments",
+}
+#: Limits that bound one thing rather than a total, so there is nothing to measure against them.
+MONTHLY = frozenset(
+    {
+        "monthly_request_limit",
+        "monthly_bandwidth_bytes",
+        "max_realtime_messages_per_month",
+        "max_users_per_month",
+        "max_flow_runs_per_month",
+        "max_emails_per_month",
+    }
+)
+PER_ITEM = frozenset(
+    {
+        "max_upload_bytes",
+        "max_user_api_keys_per_user",
+        "max_auth_sessions_per_user",
+        "max_mfa_factors_per_user",
+        "max_auth_providers",
+    }
+)
+
+
+def live_connections(platform: Any, names: list[str]) -> int:
+    realtime = getattr(platform, "realtime", None)
+    held = getattr(realtime, "connections", None) or {}
+    return sum(1 for connection in list(held.values()) if connection.env in names)
+
 
 async def usage_report(platform: Any, state: Any) -> list[dict[str, Any]]:
-    """Every plan limit the project has, with what it allows and what is used now (``used`` is ``None`` where it is per user or per
-    upload rather than a total). Limits enforced at the edge (requests, rates) are reported by the gateway, not here."""
-    limits = {
-        k: v for k, v in (state.project_limits or {}).items() if allowance(state.project_limits, k)
-    }
+    """Everything the usage page shows for the project: each limit with what it allows (``0`` when the project has none) and
+    what is used now (``None`` where the limit bounds one item, not a total).
+
+    A project without limits (the default project, made before there were plans) is reported the same way, every row unlimited, so
+    its usage is still visible.
+    """
     pid = state.project_id
-    if not pid or not limits:
+    if not pid:
         return []
+    limits = state.project_limits or {}
     names = await environment_names(pid)
     period, start = month()
+    traffic = await month_totals(pid, start)
 
     async def monthly(metric: str) -> int:
         row = await UsageCounter.get_or_none(project_id=pid, metric=metric, period=period)
@@ -475,29 +667,37 @@ async def usage_report(platform: Any, state: Any) -> list[dict[str, Any]]:
             .count()
         ),
         "max_flow_runs_per_month": lambda: monthly("flow_runs"),
+        "max_emails_per_month": lambda: monthly("emails"),
+        "max_realtime_messages_per_month": lambda: monthly("realtime_messages"),
         "max_storage_bytes": lambda: storage_used(platform, pid),
         "max_database_bytes": database,
     }
+
+    async def constant(value: int) -> int:
+        return value
+
+    measures["monthly_request_limit"] = lambda: constant(traffic["requests"])
+    measures["monthly_bandwidth_bytes"] = lambda: constant(traffic["bytes_out"])
+    measures["max_active_connections"] = lambda: constant(live_connections(platform, names))
     report = []
-    for name, allowed in sorted(limits.items()):
-        measure = measures.get(name)
-        if name in (
-            "daily_request_limit",
-            "monthly_request_limit",
-            "rate_limit",
-            "rate_window",
-            "max_active_connections",
-        ):
-            continue
-        used = await measure() if measure else None
+    for name, group, unit in REPORTED:
+        allowed = allowance(limits, name)
+        used = None
+        if name not in PER_ITEM and name in measures:
+            try:
+                used = await measures[name]()
+            except Exception:
+                logger.exception("could not measure %s", name)
         report.append(
             {
                 "limit": name,
-                "label": NOUNS.get(name, name),
+                "label": LABELS[name],
+                "group": group,
+                "unit": unit,
                 "allowed": allowed,
                 "used": used,
                 "percent": round(100 * used / allowed, 1) if used is not None and allowed else None,
-                "period": period if name.endswith("_per_month") else None,
+                "period": period if name in MONTHLY else None,
             }
         )
     return report

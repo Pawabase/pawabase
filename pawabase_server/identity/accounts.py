@@ -375,13 +375,37 @@ class Accounts:
             logger.warning("could not publish %s: %s", name, exc)
 
     async def send_mail(
-        self, env: str, *, to: str, subject: str, text: str, html: str | None = None
+        self,
+        env: str,
+        *,
+        to: str,
+        subject: str,
+        text: str,
+        html: str | None = None,
+        template: str | None = None,
+        data: dict[str, Any] | None = None,
     ) -> None:
-        self.outbox.append({"env": env, "to": [to], "subject": subject, "text": text, "html": html})
+        self.outbox.append(
+            {
+                "env": env,
+                "to": [to],
+                "subject": subject,
+                "text": text,
+                "html": html,
+                "template": template,
+            }
+        )
         del self.outbox[:-100]
         try:
             await self.platform.queue_mail(
-                env, to=[to], subject=subject, text=text, html=html, source="accounts"
+                env,
+                to=[to],
+                subject=subject,
+                text=text,
+                html=html,
+                template=template,
+                data=data,
+                source="accounts",
             )
         except Exception as exc:
             logger.warning("could not queue mail to %s: %s", to, exc)

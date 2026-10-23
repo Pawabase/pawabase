@@ -35,6 +35,11 @@ async def test_overview_charts_come_from_recorded_activity(api):
     assert stats["top_events"] == [{"name": "notes.created", "count": 3}]
     assert stats["previous"]["requests"] == 0
 
+    # Bandwidth: what came in and went out, in total, over time and by endpoint.
+    assert stats["summary"]["bytes_in"] > 0 and stats["summary"]["bytes_out"] > 0
+    assert sum(b["bytes_out"] for b in stats["series"]) == stats["summary"]["bytes_out"]
+
+
     # Studio's own management calls are not the environment's traffic.
     overview = await api.studio.get(f"{ENV}/overview")
     assert (
@@ -58,3 +63,31 @@ async def test_custom_window_picks_its_bucket_size_from_its_span(api):
         params={"from": (end - timedelta(days=30)).isoformat(), "to": end.isoformat()},
     )
     assert month["step_seconds"] == 86400 and len(month["series"]) == 30
+
+
+async def test_bandwidth_report_ranks_what_moved_the_most(api):
+    await api.studio.post(
+        f"{ENV}/resources",
+        json={
+            "name": "notes",
+            "fields": [{"name": "text", "type": "string", "required": True}],
+            "operations": {
+                "list": {"enabled": True, "policy": "public"},
+                "create": {"enabled": True, "policy": "public"},
+            },
+        },
+    )
+    await api.studio.post(f"{ENV}/resources/notes/migrate")
+    anon = api.context_headers("development")
+    await api.http.post("/rest/v1/notes", json={"text": "x" * 4000}, headers=anon)
+    for _ in range(2):
+        await api.http.get("/rest/v1/notes", headers=anon)
+
+    report = await api.studio.get(f"{ENV}/observability/bandwidth", params={"minutes": 60})
+    assert report["summary"]["bytes_in"] >= 4000 and report["summary"]["bytes_out"] > 0
+    assert report["summary"]["total"] == report["summary"]["bytes_in"] + report["summary"]["bytes_out"]
+    assert sum(b["bytes_out"] for b in report["series"]) == report["summary"]["bytes_out"]
+    ranked = {e["endpoint"]: e for e in report["endpoints"]}
+    assert ranked["POST /rest/v1/notes"]["bytes_in"] >= 4000
+    assert ranked["GET /rest/v1/notes"]["requests"] == 2
+    assert report["largest"] and report["largest"][0]["bytes_out"] >= report["largest"][-1]["bytes_out"]

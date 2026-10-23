@@ -22,6 +22,7 @@ from pawabase_server.db.models import AuthUser, UserApiKey
 from pawabase_server.identity import rbac, sessions
 from pawabase_server.identity.environment import AuthConfig
 from pawabase_server.identity.sessions import membership_role
+from pawabase_server.projects import quotas
 
 PREFIX = "pbu"
 #: How long the access token an edge mints for a key lives.
@@ -47,10 +48,15 @@ async def create(
     policy = config.policy("api_keys")
     if not policy["enabled"]:
         raise ValueError("API keys are not turned on for this environment")
-    if await UserApiKey.filter(user=user, revoked_at=None).count() >= policy["max_per_user"]:
+    held = await UserApiKey.filter(user=user, revoked_at=None).count()
+    if held >= policy["max_per_user"]:
         raise ValueError(
             f"you can have at most {policy['max_per_user']} API keys; delete one first"
         )
+    # The plan's ceiling sits above whatever the environment's own directory settings allow.
+    quotas.require_room(
+        "max_user_api_keys_per_user", quotas.allowance(config.project_limits, "max_user_api_keys_per_user"), held
+    )
     longest = policy["max_days"]
     days = expires_in_days
     if longest:

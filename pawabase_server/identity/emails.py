@@ -4,6 +4,12 @@ Overrides live in the environment's auth settings::
 
     "emails": {"verify": {"subject": "Confirm your {project} account", "text": "... {link} ..."}}
 
+or hand a message to one of the environment's published mail templates, which then reads
+``project``, ``email``, ``link`` (and the kind's other values) and ``brand``
+(``name``, ``logo_url``, ``primary``)::
+
+    "emails": {"verify": {"template": "welcome"}}
+
 Placeholders are ``{project}``, ``{link}``, ``{email}`` and, for invitations,
 ``{organization}`` and ``{role}``. Delivery goes through the API's mail
 service, so it uses the environment's own SMTP settings.
@@ -58,7 +64,42 @@ class _Safe(dict):
         return "{" + key + "}"
 
 
+def _brand(config: AuthConfig) -> dict[str, str]:
+    """What a stored template can read as ``brand``: the name, logo and colour chosen in Studio."""
+    branding = config.branding or {}
+    return {
+        "name": branding.get("name") or config.project_name or "Pawabase",
+        "logo_url": branding.get("logo_url") or "",
+        "primary": branding.get("primary") or "#6d5bd0",
+    }
+
+
+async def _stored_template(accounts: Accounts, config: AuthConfig, kind: str) -> str | None:
+    """The name of the published mail template chosen for this message, or nothing when it should use the default."""
+    name = (config.emails.get(kind) or {}).get("template")
+    if not name:
+        return None
+    try:
+        state = await accounts.platform.state(config.env)
+    except Exception:
+        return None
+    stored = state.mail_templates.get(name)
+    if stored is None or (
+        getattr(stored, "status", "published") == "draft" and not (stored.html or stored.text)
+    ):
+        return None
+    return name
+
+
 async def send(accounts: Accounts, config: AuthConfig, kind: str, to: str, **values: Any) -> None:
+    chosen = await _stored_template(accounts, config, kind)
+    if chosen:
+        data = {"project": config.project_name or "Pawabase", "email": to, "brand": _brand(config)}
+        data.update(values)
+        await accounts.send_mail(
+            config.env, to=to, subject="", text="", html=None, template=chosen, data=data
+        )
+        return
     template = {**DEFAULTS[kind], **(config.emails.get(kind) or {})}
     values = _Safe(project=config.project_name or "Pawabase", email=to, **values)
     subject = template["subject"].format_map(values)

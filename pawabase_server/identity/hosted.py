@@ -30,6 +30,7 @@ FIELD_TYPES = ("text", "tel", "textarea", "select", "checkbox")
 DEFAULTS: dict[str, Any] = {
     "name": "",
     "logo_url": "",
+    "logo_bucket": "",
     "primary": "#6d5bd0",
     "background": "#f3f1fb",
     "card": "#ffffff",
@@ -73,6 +74,7 @@ LIMITS = {
     "signup_subtitle": 200,
     "footer": 200,
     "logo_url": 2048,
+    "logo_bucket": 63,
     "hero_url": 2048,
     "terms_url": 2048,
     "privacy_url": 2048,

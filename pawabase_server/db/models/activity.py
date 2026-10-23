@@ -28,6 +28,9 @@ class RequestLog(Model):
     user_agent = fields.TextField(null=True)
     error = fields.TextField(null=True)
     notes = AnyJSONField(default=dict)
+    #: Bytes of request body received and of response body sent (empty on rows written before these were counted).
+    bytes_in = fields.BigIntField(null=True)
+    bytes_out = fields.BigIntField(null=True)
 
     class Meta:
         table = "pb_request_logs"

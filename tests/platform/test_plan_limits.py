@@ -196,7 +196,50 @@ async def test_plan_usage_reports_each_limit(api):
     report = {row["limit"]: row for row in (await api.studio.get(f"{ENV}/plan-usage"))["data"]}
     assert report["max_webhooks"]["used"] == 1 and report["max_webhooks"]["percent"] == 33.3
     assert report["max_flow_runs_per_month"]["used"] == 0
-    assert "daily_request_limit" not in report  # the gateway reports request limits
+    assert report["monthly_request_limit"]["allowed"] == 0  # not set, so unlimited
     policies = (await api.studio.get("/platform/v1/retry-policies"))["data"]
     webhook = next(p for p in policies if p["job"] == "DeliverWebhookJob")
     assert webhook["max_attempts"] == 5 and webhook["waits_seconds"][:2] == [10.0, 60.0]
+
+
+async def test_buckets_past_the_plan_are_refused(api):
+    await plan(api, max_buckets=1)
+    await api.studio.post(f"{ENV}/buckets", json={"name": "one", "public": False})
+    with pytest.raises(ServiceError) as error:
+        await api.studio.post(f"{ENV}/buckets", json={"name": "two", "public": False})
+    refused(error.value, "max_buckets")
+
+
+async def test_emails_and_realtime_messages_are_metered_monthly(api):
+    project = await plan(api, max_emails_per_month=1, max_realtime_messages_per_month=2)
+    state = await api.platform.state("development")
+    await api.platform.usage.consume(state, "max_emails_per_month")
+    with pytest.raises(quotas.QuotaExceeded):
+        await api.platform.usage.consume(state, "max_emails_per_month")
+    await api.platform.realtime.publish("development", "public:lobby", "hi", {})
+    await api.platform.realtime.publish("development", "public:lobby", "hi", {})
+    with pytest.raises(quotas.QuotaExceeded):
+        await api.platform.realtime.publish("development", "public:lobby", "hi", {})
+    period, _ = quotas.month()
+    row = await UsageCounter.get(project_id=project, metric="realtime_messages", period=period)
+    assert row.value == 2
+
+
+async def test_a_project_without_limits_still_reports_its_usage(api):
+    await plan(api)
+    state = await api.platform.state("development")
+    await api.platform.realtime.publish("development", "public:lobby", "hi", {})
+    await api.platform.usage.flush()
+    report = {row["limit"]: row for row in await quotas.usage_report(api.platform, state)}
+    assert report["max_realtime_messages_per_month"]["used"] == 1
+    assert all(row["allowed"] == 0 and row["percent"] is None for row in report.values())
+    assert {"monthly_bandwidth_bytes", "max_emails_per_month", "max_buckets"} <= set(report)
+
+
+async def test_bandwidth_past_the_plan_is_refused_at_the_edge(api):
+    project = await plan(api, monthly_bandwidth_bytes=1000)
+    limits = {"monthly_bandwidth_bytes": 1000}
+    assert await quotas.bandwidth_over(project, limits) is None
+    quotas._traffic[project] = (float("inf"), 5000)
+    assert await quotas.bandwidth_over(project, limits) == (1000, 5000)
+    quotas._traffic.pop(project)

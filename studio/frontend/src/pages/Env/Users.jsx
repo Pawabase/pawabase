@@ -8,7 +8,8 @@ import Domains from "./auth/Domains";
 import Invitations, { InviteSheet } from "./auth/Invitations";
 import Mfa from "./auth/Mfa";
 import Legal from "./auth/Legal";
-import Screens from "./auth/Screens";
+import Brand from "./auth/Brand";
+import EmailTemplates from "./auth/EmailTemplates";
 import ApiKeys from "./directory/ApiKeys";
 import Attributes from "./directory/Attributes";
 import Devices from "./directory/Devices";
@@ -29,7 +30,7 @@ const AUTH_GROUPS = [
   { title: "Sign-in", items: [["signin", "Sign-in & registration", "enter"], ["attributes", "Attributes", "braces"], ["providers", "Social providers", "external"], ["federation", "Company sign-in", "org"], ["oauth", "OAuth servers", "link"]] },
   { title: "Security", items: [["passwords", "Password policy", "secrets"], ["mfa", "Multi-factor", "keys"], ["recovery", "Account recovery", "refresh"], ["devices", "Devices", "terminal"], ["sessions", "Sessions", "clock"], ["protection", "Attack protection", "policies"], ["restrictions", "Restrictions", "audit"], ["domains", "Domains", "link"]] },
   { title: "Developers", items: [["apikeys", "User API keys", "keys"]] },
-  { title: "Look & feel", items: [["screens", "Screens", "panelLeft"], ["legal", "Legal", "book"], ["emails", "Email templates", "mail-templates"]] },
+  { title: "Look & feel", items: [["brand", "Brand", "sparkle"], ["legal", "Legal", "book"], ["emails", "Email templates", "mail-templates"]] },
   { title: "Records", items: [["events", "Sign-in activity", "events"], ["transfer", "Import & export", "upload"], ["config", "Configuration", "settings"]] },
 ];
 const AUTH_PARTS = AUTH_GROUPS.flatMap((group) => group.items.map(([key, label]) => [key, label]));
@@ -49,7 +50,7 @@ const AUTH_ABOUT = {
   devices: "Which browsers and apps people sign in from, and which are trusted.",
   apikeys: "Keys people create for themselves to call the API as themselves.",
   legal: "Your terms, privacy policy and other documents: what people see and what they must accept.",
-  screens: "Every sign-in screen your people see: preview it, read its code, and change how it looks and what it says.",
+  brand: "Your name, colour and logo: how sign-in pages and emails look.",
   mfa: "Authenticator apps, emailed codes and backup codes; who must use them, and who has.",
   sessions: "Everyone who is signed in right now, and how long a sign-in lasts.",
   protection: "Slow down guessing: lock accounts after repeated failures, and see who is locked.",
@@ -57,7 +58,7 @@ const AUTH_ABOUT = {
   domains: "Where a browser may be sent after signing in.",
   events: "Every sign-in, refresh and failure, newest first.",
   transfer: "Move people, roles and organizations between environments.",
-  emails: "The messages Pawabase sends for verification, recovery and invitations.",
+  emails: "Choose Pawabase's default wording or one of your mail templates for each message.",
   config: "Everything above in one place, for people who prefer a single form.",
 };
 
@@ -89,7 +90,7 @@ export default function Users({ env }) {
       {tab === "recovery" && <Recovery env={env} />}
       {tab === "devices" && <Devices env={env} base={base} />}
       {tab === "apikeys" && <ApiKeys env={env} base={base} />}
-      {tab === "screens" && <Screens env={env} base={base} />}
+      {tab === "brand" && <Brand env={env} />}
       {tab === "legal" && <Legal env={env} />}
       {tab === "mfa" && <Mfa env={env} base={base} />}
       {tab === "sessions" && <Sessions env={env} base={base} />}
@@ -98,7 +99,7 @@ export default function Users({ env }) {
       {tab === "domains" && <Domains env={env} />}
       {tab === "events" && <Events base={base} />}
       {tab === "transfer" && <Transfer env={env} base={base} />}
-      {tab === "emails" && <AuthConfig env={env} parts={["emails"]} title="Email templates" />}
+      {tab === "emails" && <EmailTemplates env={env} />}
       {tab === "config" && <AuthConfig env={env} parts={["general", "providers", "emails"]} title="Configuration" />}
     </Layout>
   );

@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from pawabase_server.core import firewall
+from pawabase_server.edge import scopes as key_scopes
 from pawabase_server.edge.errors import WS_FORBIDDEN, WS_MAINTENANCE, Refusal
 from pawabase_server.edge.request import Request
 
@@ -51,6 +52,8 @@ def check_key(method: str, path: str, client_ip: str, info: Mapping[str, Any]) -
     allowed_ips = info.get("allowed_ips") or []
     if allowed_ips and not _within(client_ip, list(allowed_ips)):
         return "ip_not_allowed"
+    if not key_scopes.allows(info.get("scopes") or (), method, path):
+        return "scope_not_allowed"
     rules = info.get("allowed_routes") or []
     if rules:
         method = method.upper()

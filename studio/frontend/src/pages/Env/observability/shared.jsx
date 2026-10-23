@@ -80,3 +80,13 @@ export function KindBars({ items }) {
     </div>
   );
 }
+
+/** "1.4 MB": a size in bytes for people. */
+export const byteLabel = (value) => {
+  const n = Number(value) || 0;
+  if (n < 1024) return `${n} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let size = n / 1024, unit = 0;
+  while (size >= 1024 && unit < units.length - 1) { size /= 1024; unit += 1; }
+  return `${size >= 100 ? size.toFixed(0) : size.toFixed(1)} ${units[unit]}`;
+};

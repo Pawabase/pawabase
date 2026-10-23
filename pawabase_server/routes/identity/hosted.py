@@ -97,7 +97,7 @@ def register(r: Router, accounts: Accounts) -> None:
         """A sign-in page may never be framed (clickjacking); the preview Studio shows inside itself carries no session and may be."""
         out = {
             "content-security-policy": (
-                f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'unsafe-inline'; img-src https: data:; "
+                f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'unsafe-inline'; img-src 'self' https: data:; "
                 f"connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors {'*' if framed else chr(39) + 'none' + chr(39)}"
             ),
             "referrer-policy": "no-referrer",
