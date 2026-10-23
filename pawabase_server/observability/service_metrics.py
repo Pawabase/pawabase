@@ -18,7 +18,6 @@ from pawabase_server.db.models import EventLog, JobRun, MailLog, WebhookDelivery
 QUEUES = {
     "events": "Event processing",
     "flows": "Flows",
-    "functions": "Functions",
     "webhooks": "Webhook jobs",
     "mail": "Mail jobs",
 }

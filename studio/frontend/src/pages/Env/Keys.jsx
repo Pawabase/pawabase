@@ -10,7 +10,6 @@ const API_KEY_SCOPES = [
   "resource:read",
   "resource:write",
   "routes:invoke",
-  "functions:invoke",
 ];
 
 export default function Keys({ env }) {
@@ -91,7 +90,7 @@ function NewKey({ base, onClose, onCreated }) {
       </Field>
       <Field label="Scopes" hint="Click a scope to limit the key. Leave empty for unrestricted access within its role."><TagInput value={data.scopes} onChange={(scopes) => setData({ ...data, scopes })} suggestions={API_KEY_SCOPES} placeholder="Custom scope, then Enter" /></Field>
       <Field label="Allowed IP ranges" hint="Optional comma-separated IPs or CIDRs. The gateway rejects every other client."><input value={data.allowed_ips} onChange={(e) => setData({ ...data, allowed_ips: e.target.value })} placeholder="203.0.113.8, 10.0.0.0/8" /></Field>
-      <Field label="Allowed routes" hint="Optional comma-separated gateway rules: GET /rest/v1/* or POST /functions/v1/*."><input value={data.allowed_routes} onChange={(e) => setData({ ...data, allowed_routes: e.target.value })} placeholder="GET /rest/v1/*" /></Field>
+      <Field label="Allowed routes" hint="Optional comma-separated gateway rules: GET /rest/v1/* or POST /flows/v1/*."><input value={data.allowed_routes} onChange={(e) => setData({ ...data, allowed_routes: e.target.value })} placeholder="GET /rest/v1/*" /></Field>
     </Modal>
   );
 }

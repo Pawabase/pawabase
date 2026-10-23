@@ -16,7 +16,6 @@ from pawabase_server.db.models import (
     ApiKey,
     AuthUser,
     Environment,
-    FunctionRun,
     Project,
     RequestLog,
 )
@@ -136,26 +135,6 @@ async def _requests(env: str, since: datetime, window: str) -> list[dict[str, st
     return found
 
 
-async def _functions(env: str, since: datetime, window: str) -> list[dict[str, str]]:
-    """Functions the application wrote."""
-    runs = FunctionRun.filter(env=env, created_at__gte=since)
-    calls = await runs.count()
-    if calls < 5:
-        return []
-    errored = await runs.filter(status__in=["failed", "error"]).count()
-    if _rate(errored, calls) < 0.1:
-        return []
-    return [
-        _finding(
-            "critical" if _rate(errored, calls) >= 0.3 else "warning",
-            "functions",
-            "Functions are failing",
-            f"{errored:,} of {calls:,} function runs in {window} failed.",
-            "functions",
-        )
-    ]
-
-
 async def _system(platform: Any, env: str, minutes: int, window: str) -> list[dict[str, str]]:
     """Background work, flows, webhooks and mail, from the same report Observability uses."""
     found: list[dict[str, str]] = []
@@ -262,7 +241,6 @@ async def advise(platform: Any, env: str, minutes: int = 60) -> dict[str, Any]:
 
     for area, section in (
         ("requests", _requests(env, since, window)),
-        ("functions", _functions(env, since, window)),
         ("system", _system(platform, env, minutes, window)),
     ):
         try:

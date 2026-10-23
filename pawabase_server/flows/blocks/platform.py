@@ -355,29 +355,6 @@ class CallFlow(Block):
         return BlockResult(output=await run.runtime.call_flow(config["flow"], config.get("input")))
 
 
-class DispatchFunction(Block):
-    """Runs a Python function as a background job."""
-
-    key = "queue.function"
-    title = "Queue function"
-    category = "jobs"
-    config = [
-        {"name": "function", "type": "string", "required": True},
-        {"name": "input", "type": "json"},
-        {"name": "delay", "type": "integer", "default": 0},
-        {"name": "queue", "type": "string"},
-    ]
-
-    async def run(self, config, run):
-        job_id = await run.runtime.dispatch_function(
-            config["function"],
-            config.get("input"),
-            delay=int(config.get("delay") or 0),
-            queue=config.get("queue"),
-        )
-        return BlockResult(output={"job_id": job_id})
-
-
 class Publish(Block):
     """Publishes a message to a realtime channel (through the realtime hub)."""
 
@@ -590,23 +567,6 @@ class GetSecret(Block):
         return BlockResult(output={"name": config["name"], "loaded": True})
 
 
-class CallFunction(Block):
-    """Calls a Python function inline and continues with its result."""
-
-    key = "function.call"
-    title = "Call function"
-    category = "code"
-    config = [
-        {"name": "function", "type": "string", "required": True},
-        {"name": "input", "type": "json"},
-    ]
-
-    async def run(self, config, run):
-        return BlockResult(
-            output=await run.runtime.call_function(config["function"], config.get("input"))
-        )
-
-
 # ── observability ──────────────────────────────────────────────────────────
 
 
@@ -746,7 +706,6 @@ BLOCKS = [
     EmitEvent,
     DispatchFlow,
     CallFlow,
-    DispatchFunction,
     Publish,
     StoragePut,
     StorageRead,
@@ -756,7 +715,6 @@ BLOCKS = [
     HttpRequest,
     SendWebhook,
     GetSecret,
-    CallFunction,
     Log,
     Metric,
     Respond,

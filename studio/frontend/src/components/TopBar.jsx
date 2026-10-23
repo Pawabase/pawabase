@@ -146,7 +146,7 @@ function EnvSwitcher({ runtime, envs, env, section, onCreate, onHistory }) {
 
 const CREATE = [
   ["tables", "Table", "A table exposed as a REST API", "resources"],
-  ["routes", "Route", "A custom endpoint for a flow or function", "routes"],
+  ["routes", "Route", "A custom endpoint for a flow", "routes"],
   ["policies", "Policy", "A reusable access rule", "policies"],
   ["flows", "Flow", "A visual workflow", "flows", "/flows/new"],
   ["storage", "Bucket", "Where uploaded files live", "storage"],
@@ -205,7 +205,7 @@ function Advisor({ env }) {
             <span className="faint text-faint small text-ui-sm">last hour</span>
           </div>
           {system.loading && !system.data ? <p className="pop-empty m-0 p-[14px_12px] text-muted text-ui-sm">Checking…</p> : findings.length === 0 ? (
-            <div className="pop-clear flex gap-2.5 items-start p-[8px_12px_14px] text-ok [&_b]:block [&_b]:text-text [&_b]:font-semibold [&_b]:text-ui [&_small]:block [&_small]:text-muted [&_small]:text-xs"><Icon name="check" size={16} /><span><b>All clear</b><small>Requests, functions, jobs, flows, webhooks and mail are healthy, and nothing is close to a limit.</small></span></div>
+            <div className="pop-clear flex gap-2.5 items-start p-[8px_12px_14px] text-ok [&_b]:block [&_b]:text-text [&_b]:font-semibold [&_b]:text-ui [&_small]:block [&_small]:text-muted [&_small]:text-xs"><Icon name="check" size={16} /><span><b>All clear</b><small>Requests, jobs, flows, webhooks and mail are healthy, and nothing is close to a limit.</small></span></div>
           ) : (
             <div className="pop-list flex flex-col gap-px p-[2px_6px_6px] overflow-y-auto min-h-0">
               {findings.map((f, i) => (

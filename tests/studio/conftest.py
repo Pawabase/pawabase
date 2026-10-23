@@ -85,21 +85,6 @@ class FakeApi:
                             "responses": {"200": {"description": "User"}},
                         }
                     },
-                    "/functions/v1/{name}": {
-                        "post": {
-                            "operationId": "functions.invoke",
-                            "summary": "Invoke a function",
-                            "parameters": [
-                                {
-                                    "name": "name",
-                                    "in": "path",
-                                    "required": True,
-                                    "schema": {"type": "string"},
-                                }
-                            ],
-                            "responses": {"200": {"description": "Result"}},
-                        }
-                    },
                     "/platform/v1/envs/{env}/events": {
                         "post": {
                             "operationId": "events.emit",

@@ -2,7 +2,7 @@
 
 ========== ===========================================================================================
 platform   ``/platform/v1``: the management plane Studio, the CLI and automation use
-data       ``/storage/v1``, ``/functions/v1``, ``/flows/v1``, ``/hooks/v1``: the data plane's own routes
+data       ``/storage/v1``, ``/flows/v1``, ``/hooks/v1``: the data plane's own routes
 identity   ``/auth/v1`` for your application's users, ``/admin/v1`` for operators
 realtime   ``/realtime/v1`` sockets and publishing, ``/internal/v1`` inspection
 public     the landing page, the status page, and what the edge reports about itself
@@ -26,7 +26,7 @@ def register_routes(
 ) -> None:
     from pawabase_server.routes import identity, public
     from pawabase_server.routes import realtime as realtime_routes
-    from pawabase_server.routes.data import functions_internal, hooks, invoke, storage
+    from pawabase_server.routes.data import hooks, invoke, storage
     from pawabase_server.routes.identity import admin as identity_admin
     from pawabase_server.routes.identity import directory as identity_directory
     from pawabase_server.routes.platform import (
@@ -38,14 +38,12 @@ def register_routes(
         definitions,
         environments,
         firewall,
-        functions,
         insights,
         mail,
         networking,
         operations,
-        releases,
         realtime_channels,
-        runtime,
+        releases,
         schema,
         status,
         types,
@@ -64,11 +62,9 @@ def register_routes(
         automation,
         operations,
         mail,
-        functions,
         insights,
         networking,
         firewall,
-        runtime,
         schema,
         status,
         types,
@@ -89,7 +85,6 @@ def register_routes(
 
     storage.register(app, platform)
     invoke.register(app, platform)
-    functions_internal.register(app, platform)
     hooks.register(app, platform)
     identity.register_routes(app, accounts)
     realtime_routes.register_routes(app, realtime)

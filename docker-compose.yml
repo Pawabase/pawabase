@@ -25,7 +25,7 @@ x-pawabase: &pawabase
     PAWABASE_DEFAULT_DATA_URL: ${PAWABASE_DEFAULT_DATA_URL:-postgres://pawabase:${POSTGRES_PASSWORD}@postgres:5432/pawabase}
     PAWABASE_REDIS_URL: redis://redis:6379/0
     PAWABASE_PROJECT_NAME: ${PAWABASE_PROJECT_NAME:-Pawabase}
-    # Private hosts functions may call (comma-separated). Empty keeps every private address refused.
+    # Private hosts a flow's HTTP request may call (comma-separated). Empty keeps every private address refused.
     PAWABASE_OUTBOUND_ALLOW_HOSTS: ${PAWABASE_OUTBOUND_ALLOW_HOSTS:-}
     # File storage: the bundled MinIO unless .env points these at your own S3-compatible service (AWS S3, Cloudflare R2, Backblaze B2,
     # DigitalOcean Spaces, Wasabi, ...).
@@ -36,14 +36,6 @@ x-pawabase: &pawabase
     PAWABASE_STORAGE_ACCESS_KEY: ${PAWABASE_STORAGE_ACCESS_KEY:-${MINIO_ROOT_USER:-pawabase}}
     PAWABASE_STORAGE_SECRET_KEY: ${PAWABASE_STORAGE_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-}}
     PAWABASE_STORAGE_PATH_STYLE: ${PAWABASE_STORAGE_PATH_STYLE:-true}
-    # A deployment's functions/requirements.txt is installed when it is deployed, so a function needing a library never means
-    # rebuilding the image. Set to false to refuse deployments that ask for packages.
-    PAWABASE_FUNCTION_INSTALL: ${PAWABASE_FUNCTION_INSTALL:-true}
-    # Functions run in the `functions` service below. Empty runs them inside the server instead (one container less, no isolation
-    # of the runtime from the server's credentials).
-    PAWABASE_FUNCTIONS_RUNTIME_URL: ${PAWABASE_FUNCTIONS_RUNTIME_URL-http://functions:8100}
-    # guarded (default): a function's fetch() goes through the platform's outbound guard. direct: workers open their own connections.
-    PAWABASE_FUNCTIONS_NETWORK: ${PAWABASE_FUNCTIONS_NETWORK:-guarded}
   volumes:
     - data:/data
     - ./code:/code:ro
@@ -77,34 +69,6 @@ services:
       disable: true
     depends_on:
       pawabase: { condition: service_healthy }
-
-  # The functions runtime: runs deployed functions (Deno and Python workers) for the server, on the internal network only. It has no
-  # database or Redis credentials and keeps no secrets: a function's secrets come from the server when its workers start, and what a
-  # function does on the platform the server does with the invocation's grant. Scale it with `--scale functions=N` behind a load balancer
-  # only together with a shared deployments volume; one instance serves many functions and requests at once.
-  functions:
-    image: ${PAWABASE_IMAGE:-pawabase:local}
-    command: ["functions"]
-    init: true
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      PAWABASE_APP_ENV: ${PAWABASE_APP_ENV:-production}
-      PAWABASE_FUNCTIONS_RUNTIME_HOST: 0.0.0.0
-      PAWABASE_FUNCTIONS_API_URL: http://pawabase:8001
-      PAWABASE_OUTBOUND_ALLOW_HOSTS: ${PAWABASE_OUTBOUND_ALLOW_HOSTS:-}
-      PAWABASE_FUNCTIONS_NETWORK: ${PAWABASE_FUNCTIONS_NETWORK:-guarded}
-      PAWABASE_FUNCTION_INSTALL: ${PAWABASE_FUNCTION_INSTALL:-true}
-    volumes:
-      # The deployments the server activates (it unpacks and vendors them; this service only reads them, and restores Python
-      # libraries a lost volume no longer has).
-      - data:/data
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3)"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
 
   # The control plane: a service of its own, managing the server over its internal listener (never published) with service tokens.
   # It has no sign-in unless PAWABASE_STUDIO_USERNAME/PASSWORD or PAWABASE_STUDIO_ACCESS_SECRET is set, so it is published on localhost only.

@@ -254,7 +254,7 @@ export function ResourceForm({ body, patch, refs, isNew, mode = "all" }) {
 function RouteForm({ body, patch, refs }) {
   const inputMode = body.input_schema ? "schema" : body.input_fields ? "fields" : "none";
   const setInput = (mode) => patch({ input_fields: mode === "fields" ? body.input_fields || [] : null, input_schema: mode === "schema" ? body.input_schema || refs.schemas[0] || "" : null });
-  const handlers = body.handler_type === "function" ? refs.functions : refs.flows;
+  const handlers = refs.flows;
   return (
     <>
       <Section icon="routes" title="Endpoint">
@@ -275,10 +275,7 @@ function RouteForm({ body, patch, refs }) {
       </Section>
       <Section icon="code" title="Handler" description="What runs when the endpoint is called.">
         <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
-          <Field label="Type">
-            <Segmented options={[["flow", "Flow"], ["function", "Function"]]} value={body.handler_type || "flow"} onChange={(handler_type) => patch({ handler_type, handler: "" })} />
-          </Field>
-          <Field label={body.handler_type === "function" ? "Function" : "Flow"} hint={handlers.length ? null : `No ${body.handler_type === "function" ? "functions" : "flows"} yet; type a name.`}>
+          <Field label="Flow" hint={handlers.length ? null : "No flows yet; type a name."}>
             {handlers.length ? (
               <RefSelect options={handlers} value={body.handler} allowEmpty={false} placeholder="Choose" onChange={(handler) => patch({ handler })} />
             ) : (
@@ -318,8 +315,8 @@ function eventSuggestions(refs) {
 
 function Target({ body, patch, refs, types }) {
   const t = body.target_type;
-  const options = t === "flow" ? refs.flows : t === "function" ? refs.functions : null;
-  const labels = { flow: "Flow", function: "Function", realtime: "Realtime channel", event: "Event name" };
+  const options = t === "flow" ? refs.flows : null;
+  const labels = { flow: "Flow", realtime: "Realtime channel", event: "Event name" };
   return (
     <div className="form-grid grid grid-cols-2 gap-[14px_16px] [&_.span]:col-span-full max-navigation:grid-cols-1">
       <Field label="Run">
@@ -351,7 +348,7 @@ function SubscriptionForm({ body, patch, refs, isNew }) {
         {conditional && <ConditionBuilder tree={tree} onChange={(t, condition) => { setTree(t); patch({ condition }); }} />}
       </Section>
       <Section icon="bolt" title="Then">
-        <Target body={body} patch={patch} refs={refs} types={["flow", "function", "realtime"]} />
+        <Target body={body} patch={patch} refs={refs} types={["flow", "realtime"]} />
         <Enabled body={body} patch={patch} />
       </Section>
     </>
@@ -471,7 +468,7 @@ function ScheduleForm({ body, patch, refs, isNew }) {
         )}
       </Section>
       <Section icon="bolt" title="Then">
-        <Target body={body} patch={patch} refs={refs} types={["flow", "function", "event"]} />
+        <Target body={body} patch={patch} refs={refs} types={["flow", "event"]} />
         <Field label="Payload" optional hint="Free-form JSON passed as the input.">
           <JsonInput value={body.payload ?? undefined} rows={4} onChange={(payload) => patch({ payload })} />
         </Field>

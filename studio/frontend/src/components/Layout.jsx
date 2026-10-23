@@ -75,7 +75,7 @@ export const ENV_NAV = [
   { items: [["overview", "Overview"]] },
   { title: "Data", items: [["data", "Data", "tables", "database"], ["explorer", "API Explorer"]] },
   { title: "Access", items: [["users", "Users & auth"], ["policies", "Policies"], ["keys", "API keys"], ["secrets", "Secrets"], ["networking", "Networking"]] },
-  { title: "Logic", items: [["functions", "Functions"], ["flows", "Flows"], ["routes", "Routes"], ["schedules", "Schedules"], ["subscriptions", "Event subscriptions"], ["webhooks", "Webhooks"]] },
+  { title: "Logic", items: [["flows", "Flows"], ["routes", "Routes"], ["schedules", "Schedules"], ["subscriptions", "Event subscriptions"], ["webhooks", "Webhooks"]] },
   { title: "Services", items: [["mail", "Mail"], ["storage", "Storage"], ["realtime", "Realtime"]] },
   { title: "Project", items: [["activity", "Activity"], ["usage", "Usage & plan"], ["backups", "Backups"], ["status", "Status page"], ["settings", "Settings"]] },
 ];
@@ -86,7 +86,7 @@ const ACTIVITY_SECTIONS = ["activity", "observability", "jobs", "events"];
 // The pastel each section wears on its sheet headers and empty states.
 export const SECTION_TONES = {
   resources: "lavender", schemas: "sky", transformers: "butter", policies: "mint", routes: "peach",
-  functions: "sky", flows: "lavender", subscriptions: "rose", schedules: "butter", webhooks: "peach",
+  flows: "lavender", subscriptions: "rose", schedules: "butter", webhooks: "peach",
   "inbound-hooks": "mint", mail: "rose", buckets: "sky", storage: "sky",
 };
 

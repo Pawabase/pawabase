@@ -10,18 +10,18 @@ ENV = "/platform/v1/envs/development"
 
 async def test_every_service_reports_the_same_fields(api):
     await JobRun.create(
-        id="j1", env="development", queue="functions", job="RunFunctionJob", status="failed"
+        id="j1", env="development", queue="flows", job="RunFlowJob", status="failed"
     )
     await JobRun.create(
-        id="j2", env="development", queue="functions", job="RunFunctionJob", status="completed"
+        id="j2", env="development", queue="flows", job="RunFlowJob", status="completed"
     )
     await JobRun.create(
-        id="j3", env="development", queue="functions", job="RunFunctionJob", status="queued"
+        id="j3", env="development", queue="flows", job="RunFlowJob", status="queued"
     )
     body = await api.studio.get(f"{ENV}/service-health?minutes=30")
     services = {s["service"]: s for s in body["data"]}
-    assert set(services) >= {"events", "flows", "functions", "webhook_deliveries", "mail"}
-    fn = services["functions"]
+    assert set(services) >= {"events", "flows", "webhook_deliveries", "mail"}
+    fn = services["flows"]
     assert (fn["failed"], fn["succeeded"], fn["waiting"], fn["failure_rate"]) == (1, 1, 1, 50.0)
     assert all(
         set(s) >= {"total", "failure_rate", "waiting", "oldest_waiting_seconds"}

@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
-from pawabase_server.db.models import FunctionRun, JobRun, MailLog
+from pawabase_server.db.models import FlowRun, JobRun, MailLog
 
 ENV = "/platform/v1/envs/development"
 
@@ -75,12 +75,12 @@ async def test_metric_series_and_the_catalog(api):
     assert {"requests", "error_rate", "latency_p95", "secrets_due"} <= names
 
 
-async def test_log_search_reads_function_logs_and_filters_them(api):
+async def test_log_search_reads_flow_logs_and_filters_them(api):
     now = datetime.now(UTC)
-    await FunctionRun.create(
+    await FlowRun.create(
         id="r1",
         env="development",
-        function="orders.pay",
+        flow="orders.pay",
         trigger="http",
         status="failed",
         logs=[
@@ -92,7 +92,7 @@ async def test_log_search_reads_function_logs_and_filters_them(api):
             {"level": "error", "message": "card declined by bank", "timestamp": now.isoformat()},
         ],
     )
-    everything = await api.studio.get(f"{ENV}/logs", params={"q": "source:function"})
+    everything = await api.studio.get(f"{ENV}/logs", params={"q": "source:flow"})
     assert everything["matched"] == 2 and everything["levels"] == {"info": 1, "error": 1}
     errors = await api.studio.get(f"{ENV}/logs", params={"q": 'level:error "declined"'})
     assert [e["message"] for e in errors["data"]] == ["card declined by bank"]

@@ -1,5 +1,5 @@
 # One image, four commands. `serve` is the Pawabase server: one process with identity, the management plane, the data plane, storage,
-# functions, flows, realtime and the public entry point. `studio` is the control plane, a service of its own that manages the server over its
+# flows, realtime and the public entry point. `studio` is the control plane, a service of its own that manages the server over its
 # internal listener. `worker` and `scheduler` are the queue worker and the scheduler, each a process of its own (`serve` also starts and
 # supervises them as children unless PAWABASE_WORKER_MODE=external). Compose runs them as containers next to Postgres, Redis and storage.
 
@@ -37,11 +37,8 @@ ENV PYTHONUNBUFFERED=1 \
     PAWABASE_STUDIO_HOST=0.0.0.0 \
     PAWABASE_STUDIO_PORT=8090 \
     PAWABASE_STORAGE_ROOT=/data/objects \
-    PAWABASE_DEPLOYMENTS_PATH=/data/deployments \
     PAWABASE_CODE_PATH=/code
 COPY --from=build /opt/venv /opt/venv
-# Deno runs TypeScript functions (functions/sandbox/typescript.py): one binary, copied from the official image.
-COPY --from=denoland/deno:bin-2.1.4 /deno /usr/local/bin/deno
 # Both packages run from source (Studio's built front end sits inside its own), so there is no wheel to rebuild or to leave files out of.
 COPY pawabase_server /app/pawabase_server
 COPY studio /app/studio

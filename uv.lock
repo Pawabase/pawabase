@@ -992,14 +992,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pawabase"
-version = "0.2.0"
-source = { git = "https://github.com/Pawabase/pawabase-python#93c78d21f3119cb8817fe4d61bc41a09cf9c81f0" }
-dependencies = [
-    { name = "httpx" },
-]
-
-[[package]]
 name = "pawabase-server"
 version = "0.2.0"
 source = { editable = "." }
@@ -1007,7 +999,6 @@ dependencies = [
     { name = "asyncpg" },
     { name = "httptools" },
     { name = "httpx" },
-    { name = "pawabase" },
     { name = "pillow" },
     { name = "pyotp" },
     { name = "sillo-framework", extra = ["all", "storage-s3"] },
@@ -1037,7 +1028,6 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.29" },
     { name = "httptools", specifier = ">=0.7" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "pawabase", git = "https://github.com/Pawabase/pawabase-python" },
     { name = "pillow", specifier = ">=11.3" },
     { name = "pyotp", specifier = ">=2.9" },
     { name = "signxml", marker = "extra == 'saml'", specifier = ">=4.0" },

@@ -199,7 +199,7 @@ export function Tabs({ tabs, value, onChange }) {
   );
 }
 
-/** Tabs across one record's view (a function's overview, runs, code): an underlined row, with room on the right for actions. */
+/** Tabs across one record's view (a record's overview, runs, code): an underlined row, with room on the right for actions. */
 export function PageTabs({ tabs, value, onChange, actions }) {
   return (
     <div className="page-tabs flex items-end gap-3 [border-bottom:1px_solid_var(--line)] mb-[18px]">

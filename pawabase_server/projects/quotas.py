@@ -2,12 +2,12 @@
 
 A project's ``limits`` (set by whoever administers the installation: the command line, or Pawabase Cloud through the runtime agent)
 name the most of each thing it may hold. The request limits (``daily_request_limit``, ``rate_limit``, …) live at the edge
-(``edge/limits.py``); function admission and deployments in ``functions/``. This module enforces the rest, each where the thing is
+(``edge/limits.py``). This module enforces the rest, each where the thing is
 made or used:
 
 * **Counts** (API keys, webhooks, inbound hooks, schedules, environments, backups, users): counted across the project's environments
   when one more is made. A count is exact; making things is rare enough for the query not to matter.
-* **Monthly metering** (function invocations, flow runs): a :class:`UsageCounter` row per project, metric and month, seeded from the
+* **Monthly metering** (flow runs): a :class:`UsageCounter` row per project, metric and month, seeded from the
   run records the first time it is needed. Each process leases a few units at a time with one atomic ``UPDATE``, so a busy project does
   not contend on its row; at worst a few leased units per process go unused at the end of a month.
 * **Stored bytes**: a gauge, changed by the size difference of every write and delete (:class:`MeteredBucket`), and recounted from the
@@ -40,7 +40,6 @@ from pawabase_server.db.models import (
     AuthUser,
     BackupSnapshot,
     Environment,
-    FunctionRun,
     InboundHook,
     MfaFactor,
     Schedule,
@@ -65,19 +64,11 @@ NOUNS = {
     "max_auth_sessions_per_user": "sessions per user",
     "max_mfa_factors_per_user": "second factors per user",
     "max_auth_providers": "sign-in providers",
-    "max_function_invocations_per_month": "function invocations this month",
     "max_flow_runs_per_month": "flow runs this month",
     "max_storage_bytes": "bytes of storage",
     "max_upload_bytes": "bytes in one upload",
     "max_database_bytes": "bytes of database",
     "max_realtime_channels": "realtime channels in use",
-    # What one function run may use (``functions/limits.py``): a run is held to them, never refused for them.
-    "max_function_memory_mb": "MB of memory per function run",
-    "max_function_cpu_seconds": "CPU seconds per function run",
-    "max_function_timeout_seconds": "seconds per function run",
-    "max_concurrent_runs_per_function": "runs of one function at once",
-    "max_function_body_mb": "MB of request body per function call",
-    "max_function_workers": "workers per HTTP function",
 }
 
 
@@ -227,15 +218,11 @@ def check_auth_providers(limits: dict[str, Any] | None, enabled: list[str]) -> N
 # ── monthly metering ────────────────────────────────────────────────────
 
 SEEDS: dict[str, Callable[[list[str], datetime], Awaitable[int]]] = {
-    "function_invocations": lambda names, start: FunctionRun.filter(
-        env__in=names, created_at__gte=start
-    ).count(),
     "flow_runs": lambda names, start: FlowRunRecord.filter(
         env__in=names, created_at__gte=start
     ).count(),
 }
 METERED = {
-    "max_function_invocations_per_month": "function_invocations",
     "max_flow_runs_per_month": "flow_runs",
 }
 
@@ -362,7 +349,7 @@ async def storage_used(platform: Any, project_id: str) -> int:
 class MeteredBucket(Bucket):
     """A bucket that keeps the project's stored-bytes gauge and refuses writes past ``max_storage_bytes``.
 
-    Every write path (the data API, signed uploads, Studio, functions) gets its bucket from the storage manager, so all of them are
+    Every write path (the data API, signed uploads, Studio, flows) gets its bucket from the storage manager, so all of them are
     metered here. A replacement counts the difference; a delete gives the bytes back.
     """
 
@@ -487,7 +474,6 @@ async def usage_report(platform: Any, state: Any) -> list[dict[str, Any]]:
             .values_list("user_id", flat=True)
             .count()
         ),
-        "max_function_invocations_per_month": lambda: monthly("function_invocations"),
         "max_flow_runs_per_month": lambda: monthly("flow_runs"),
         "max_storage_bytes": lambda: storage_used(platform, pid),
         "max_database_bytes": database,

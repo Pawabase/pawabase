@@ -44,9 +44,6 @@ services:
       PAWABASE_DEFAULT_DATA_URL: ${PAWABASE_DEFAULT_DATA_URL:-${PAWABASE_DATABASE_URL}}
       PAWABASE_REDIS_URL: ${PAWABASE_REDIS_URL:-}
       PAWABASE_EXTRA_CA_B64: ${PAWABASE_EXTRA_CA_B64:-}
-      # Functions run in worker processes of their own; `inprocess` runs them on the server's event loop.
-      PAWABASE_FUNCTION_ISOLATION: ${PAWABASE_FUNCTION_ISOLATION:-process}
-      PAWABASE_SANDBOX_MEMORY_MB: ${PAWABASE_SANDBOX_MEMORY_MB:-1024}
       # No idle connections, a small ceiling; PgBouncer 1.21+ needs no statement-cache change.
       PAWABASE_DB_POOL_MIN: ${PAWABASE_DB_POOL_MIN:-0}
       PAWABASE_DB_POOL_MAX: ${PAWABASE_DB_POOL_MAX:-3}

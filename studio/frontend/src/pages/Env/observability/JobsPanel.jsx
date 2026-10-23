@@ -7,7 +7,7 @@ import { del, envPath, get, post, useApi } from "../../../lib/api";
 import { COLOR, SeriesCard } from "./system";
 
 /** Job classes are generic (one class runs every function, flow and webhook); the row's target is the real name. */
-const JOB_KINDS = { RunFunctionJob: "function run", RunFlowJob: "flow run", DeliverWebhookJob: "webhook delivery", SendMailJob: "mail", ProcessEventJob: "event", PurgeEnvironmentJob: "environment purge" };
+const JOB_KINDS = { RunFlowJob: "flow run", DeliverWebhookJob: "webhook delivery", SendMailJob: "mail", ProcessEventJob: "event", PurgeEnvironmentJob: "environment purge" };
 const shortClass = (name) => String(name || "").split(/[.:]/).pop();
 const jobKind = (row) => JOB_KINDS[shortClass(row.job || row.job_class)] || shortClass(row.job || row.job_class) || "job";
 const jobTarget = (row) => row.target || row.payload?.function || row.payload?.flow || row.payload?.url || "";

@@ -26,29 +26,11 @@ from pawabase_server.core import envvars, namespace
 from pawabase_server.core.context import PlatformContext
 from pawabase_server.core.crypto import SecretBox, is_reference, reference_name
 from pawabase_server.core.events import EventBus, PlatformEvent
+from pawabase_server.core.mounted_code import MountedCode, forget_mounted_code, load_mounted_code
+from pawabase_server.core.record_buffer import RecordBuffer
 from pawabase_server.core.telemetry import note, span
 from pawabase_server.data.source import DataSourcePool
 from pawabase_server.environments.state import EnvironmentCache, EnvironmentState
-from pawabase_server.functions.deployment_mirror import DeploymentMirror
-from pawabase_server.functions.deployments import Deployments
-from pawabase_server.functions.execution_limits import ProjectExecutionLimiter
-from pawabase_server.functions.record_buffer import RecordBuffer
-from pawabase_server.functions.registry import (
-    MAIN,
-    RUNTIME,
-    FunctionSpec,
-    ProjectCode,
-    clear_functions,
-    list_resolved_functions,
-    load_code_dir,
-    resolve_function,
-)
-from pawabase_server.functions.runtime_rpc import Transactions
-from pawabase_server.functions.sandbox import SandboxPool
-from pawabase_server.functions.sandbox.host import Limits, resolve_confinement
-from pawabase_server.functions.http_functions import HttpFunctionSpec
-from pawabase_server.functions.limits import FunctionGates, RunLimits, resolve, timeout_of
-from pawabase_server.functions.service.gateway import gateway_for
 from pawabase_server.infra.mail import MailManager
 from pawabase_server.infra.storage.manager import StorageManager
 from pawabase_server.projects.quotas import UsageMeter
@@ -61,7 +43,7 @@ logger = logging.getLogger("pawabase.api")
 
 #: Queues the platform itself uses. Workers listen to these plus any
 #: developer queues named in PAWABASE_WORKER_QUEUES.
-PLATFORM_QUEUES = ["events", "webhooks", "flows", "functions", "mail", "default"]
+PLATFORM_QUEUES = ["events", "webhooks", "flows", "mail", "default"]
 
 _current: Platform | None = None
 
@@ -101,41 +83,10 @@ class Platform:
         self.outbound = httpx.AsyncClient(
             timeout=30.0, follow_redirects=False, headers={"user-agent": "Pawabase/0.1"}
         )
-        self.code: ProjectCode | None = None
-        self.deployment_mirror = DeploymentMirror(self)
+        self.code: MountedCode | None = None
         self.records = RecordBuffer(settings.record_buffer_seconds)
-        self.sandboxes = SandboxPool(
-            Limits(
-                memory_mb=settings.sandbox_memory_mb,
-                workers=settings.sandbox_workers,
-                idle_seconds=settings.sandbox_idle_seconds,
-                confinement=resolve_confinement(settings.sandbox_confinement),
-            )
-        )
-        self.project_execution = ProjectExecutionLimiter()
-        #: Monthly plan metering (function invocations, flow runs): see ``projects/quotas.py``.
+        #: Monthly plan metering (flow runs): see ``projects/quotas.py``.
         self.usage = UsageMeter()
-        self.sandbox_transactions = Transactions()
-        self.deployments = Deployments(
-            settings.deployments_path or Path(settings.code_path) / ".deployments",
-            install_requirements=settings.function_install_enabled,
-            index_url=settings.function_index_url,
-            install_timeout=settings.function_install_timeout,
-            binary_only=settings.function_install_binary_only,
-            vendor=settings.function_vendor_enabled,
-            vendor_timeout=settings.function_vendor_timeout,
-            npm_registry=settings.function_npm_registry,
-            http_limits={
-                "timeout": settings.functions_max_timeout_seconds,
-                "memory": settings.functions_memory_mb,
-                "concurrency": max(settings.functions_worker_concurrency, 1) * 8,
-            },
-        )
-        self.deployments.confinement = self.sandboxes.limits.confinement
-        #: Where functions run: this process, or the runtime service at ``PAWABASE_FUNCTIONS_RUNTIME_URL``.
-        self.functions = gateway_for(self)
-        #: Per-function concurrency (the project's ``max_concurrent_runs_per_function``, ``functions/limits.py``).
-        self.function_gates = FunctionGates()
         self.app: Any = None
         self.app: Any = None
         self.started_at = datetime.now(UTC)
@@ -166,10 +117,6 @@ class Platform:
         await self.bus.start()
         self.records.start()
         logger.info(await self.storage.prepare_default())
-        try:
-            await self.deployment_mirror.restore()
-        except Exception as exc:  # a failed restore must not stop the API starting
-            logger.error("could not restore function deployments from storage: %s", exc)
 
     async def audit_configuration(self) -> None:
         """Say, once at start-up, which configuration is kept where it should not be.
@@ -211,13 +158,10 @@ class Platform:
             )
 
     async def stop(self) -> None:
-        await self.functions.close()
-        await self.sandboxes.close()  # idempotent: the embedded runtime may have closed it already
         await self.records.stop()  # before the database closes
         await self.bus.stop()
         await self.sources.close()
         await self.storage.close()
-        await self.deployment_mirror.close()
         await self.mail.close()
         await self.outbound.aclose()
 
@@ -226,7 +170,6 @@ class Platform:
     async def state(self, env: str) -> EnvironmentState:
         state = await self.envs.get(env)
         self.ensure_code()
-        self.deployments.ensure_loaded(env)
         return state
 
     async def state_for(self, context: PlatformContext) -> EnvironmentState:
@@ -244,52 +187,16 @@ class Platform:
         self.ensure_code()
         return state
 
-    def ensure_code(self) -> ProjectCode:
-        """Load the mounted code directory once: functions, policies, routes."""
+    def ensure_code(self) -> MountedCode:
+        """Load the mounted code directory once: policies, transformers, routes."""
         if self.code is None:
-            self.code = load_code_dir(Path(self.settings.code_path), RUNTIME)
+            self.code = load_mounted_code(Path(self.settings.code_path))
             if self.code.errors:
                 logger.warning("mounted code errors: %s", self.code.errors)
         return self.code
 
-    def function_spec(self, env: str, name: str, branch: str | None = None) -> FunctionSpec | None:
-        """The function *name* as *branch* of *env* sees it: deployed on the branch, deployed to the environment, then mounted code."""
-        self.ensure_code()
-        self.deployments.ensure_loaded(env)
-        if branch and branch != MAIN:
-            self.deployments.ensure_loaded(env, branch)
-        return resolve_function(env, branch, name)
-
-    async def run_limits(self, state: EnvironmentState, spec: Any, *, kind: str) -> RunLimits:
-        """The limits a run of *spec* gets: its project's (else the installation's defaults), with the timeout its code asks for if shorter."""
-        return resolve(self.settings, kind=kind, project=state.project_limits, timeout=timeout_of(spec))
-
-    def http_function(self, env: str, name: str, branch: str | None = None) -> HttpFunctionSpec | None:
-        """The HTTP function *name* as *branch* of *env* sees it (``functions/<name>/index.ts`` of a TypeScript deployment)."""
-        return self.deployments.http_function(env, name, branch)
-
-    def http_functions(self, env: str, branch: str | None = None) -> list[HttpFunctionSpec]:
-        """Every HTTP function visible to *env* (and *branch*, whose own replace the environment's of the same name)."""
-        merged = dict(self.deployments.http_functions(env))
-        if branch and branch != MAIN:
-            merged.update(self.deployments.http_functions(env, branch))
-        return sorted(merged.values(), key=lambda spec: spec.name)
-
-    def function_specs(self, env: str, branch: str | None = None) -> list[FunctionSpec]:
-        self.ensure_code()
-        self.deployments.ensure_loaded(env)
-        if branch and branch != MAIN:
-            self.deployments.ensure_loaded(env, branch)
-        return list_resolved_functions(env, branch)
-
-    def reload_code(self) -> ProjectCode:
-        clear_functions(RUNTIME)
-        for name in [
-            name
-            for name in list(__import__("sys").modules)
-            if name.startswith(f"pawabase_code.{RUNTIME}.")
-        ]:
-            del __import__("sys").modules[name]
+    def reload_code(self) -> MountedCode:
+        forget_mounted_code()
         self.code = None
         self.envs.forget()
         return self.ensure_code()
@@ -316,18 +223,6 @@ class Platform:
         """
         value = envvars.get(state.env_name, key)
         return default if value is None else self.resolve_value(state, value)
-
-    def isolated(self, state: EnvironmentState, spec: Any) -> bool:
-        """Whether *spec* runs in a sandbox process: a deployed function, in an environment set to ``process`` isolation.
-
-        Code mounted on the runtime is the platform's own and always runs in the API process.
-        """
-        if "/" not in spec.project:
-            return False
-        if getattr(getattr(spec, "handler", None), "typescript", False):
-            return True  # a TypeScript function only ever runs in its Deno worker
-        mode = self.env_setting(state, "FUNCTION_ISOLATION", self.settings.function_isolation)
-        return str(mode).strip().lower() == "process"
 
     def resolve_value(self, state: EnvironmentState, value: Any) -> Any:
         """Replace a ``secret://NAME`` reference with the secret's value."""

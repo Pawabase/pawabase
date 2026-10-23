@@ -12,7 +12,7 @@ from sillo.exceptions import HTTPException
 from pawabase_server.compiler.common import error_body
 from pawabase_server.core.context import require_context
 from pawabase_server.flows import FlowError
-from pawabase_server.functions.execution import NotFound, call_function, run_flow
+from pawabase_server.flows.execution import NotFound, run_flow
 from pawabase_server.platform import Platform
 from pawabase_server.policies import build_policy_context
 
@@ -54,39 +54,6 @@ def _flow_http_policy(flow: Any) -> tuple[str | None, Any]:
 
 
 def register(app: Any, platform: Platform) -> None:
-    r = Router(prefix="/functions/v1", tags=["functions"])
-
-    @r.post("/{name}", summary="Invoke a function")
-    async def invoke_function(ctx: HttpContext, name: str):
-        context = require_context(ctx)
-        state = await platform.state_for(context)
-        branch = ctx.query_params.get("branch") or None
-        spec = platform.function_spec(context.env, name, branch)
-        if spec is None:
-            raise HTTPException(status_code=404, detail=f"no function {name!r}")
-        if not context.allows_scope("functions:invoke"):
-            raise PermissionDenied("This API key lacks the 'functions:invoke' scope")
-        body = await _json_body(ctx)
-        policy_context = await _enforce(ctx, state.engine, spec.policy, body)
-        try:
-            result = await call_function(
-                platform,
-                state,
-                name,
-                body,
-                trigger="http",
-                auth=policy_context["auth"],
-                request_id=ctx.headers.get("x-request-id"),
-                branch=branch,
-            )
-        except FlowError as exc:
-            return json_response(
-                error_body(exc.code, exc.message, exc.details), status_code=exc.status
-            )
-        return {"data": result}
-
-    app.mount_router(r)
-
     f = Router(prefix="/flows/v1", tags=["flows"])
 
     @f.post("/{name}", summary="Invoke a flow directly")

@@ -1,11 +1,9 @@
-"""Flows, functions, events, webhooks and schedules: running and inspecting them."""
+"""Flows, events, webhooks and schedules: running and inspecting them."""
 
 from __future__ import annotations
 
 import fnmatch
-import inspect
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -17,7 +15,6 @@ from pawabase_server.automation.jobs import (
     ProcessEventJob,
     PurgeEnvironmentJob,
     RunFlowJob,
-    RunFunctionJob,
     SendMailJob,
 )
 from pawabase_server.automation.jobs.webhooks import DeliverWebhookJob
@@ -30,7 +27,7 @@ from pawabase_server.db.models import (
     WebhookEndpoint,
 )
 from pawabase_server.flows import FlowError, default_registry, validate_flow
-from pawabase_server.functions.execution import NotFound, call_function, run_flow
+from pawabase_server.flows.execution import NotFound, run_flow
 from pawabase_server.observability import service_metrics
 from pawabase_server.platform import Platform
 from pawabase_server.projects import quotas
@@ -43,14 +40,6 @@ class RunBody(BaseModel):
     as_user: dict[str, Any] | None = Field(
         default=None, description="Run as if this auth context called it"
     )
-    branch: str | None = Field(
-        default=None, description="Run the code deployed on this branch (functions only)"
-    )
-
-
-def _source_of(key: str) -> str:
-    """Where a function came from: a branch deployment, the environment's deployment, or code mounted for the project."""
-    return "branch" if "@" in key else "deployment" if "/" in key else "mounted"
 
 
 class BulkRedeliver(BaseModel):
@@ -110,8 +99,7 @@ def register(r: Router, platform: Platform) -> None:
         kinds = (
             ProcessEventJob,
             RunFlowJob,
-            RunFunctionJob,
-            DeliverWebhookJob,
+                    DeliverWebhookJob,
             SendMailJob,
             PurgeEnvironmentJob,
         )
@@ -218,93 +206,6 @@ def register(r: Router, platform: Platform) -> None:
         if run is None:
             raise HTTPException(status_code=404, detail="no such run")
         return dump(run)
-
-    # ── functions ────────────────────────────────────────────────────────
-
-    @r.get(
-        f"{base}/functions",
-        auth=MANAGE,
-        tags=["functions"],
-        summary="Functions loaded for the project",
-    )
-    async def functions(ctx: HttpContext, env: str):
-        await platform.state(env)
-        code = platform.ensure_code()
-        branch = ctx.query_params.get("branch") or None
-        roots = [
-            platform.deployments.current(env, branch or "main").resolve(),
-            Path(platform.settings.code_path).resolve(),
-        ]
-
-        def where(handler: Any) -> dict[str, Any]:
-            if getattr(handler, "typescript", False):
-                # A TypeScript function's location comes from its own runtime (functions/sandbox/deno).
-                file, line = getattr(handler, "source", (None, None))
-                return {"file": file, "line": line}
-            try:
-                file = Path(inspect.getsourcefile(handler) or "").resolve()
-                line = inspect.getsourcelines(handler)[1]
-            except (OSError, TypeError):
-                return {"file": None, "line": None}
-            for root in roots:
-                if root in file.parents:
-                    return {"file": file.relative_to(root).as_posix(), "line": line}
-            return {"file": None, "line": None}
-
-        calls = [
-            {**spec.describe(), "kind": "call", "source": _source_of(spec.project), **where(spec.handler)}
-            for spec in platform.function_specs(env, branch)
-        ]
-        http = [
-            {
-                **spec.describe(),
-                "url": f"{platform.settings.public_url.rstrip('/')}/functions/v1/{spec.name}",
-                "public_url": f"{platform.settings.public_url.rstrip('/')}/functions/v1/public/{env}/{spec.name}"
-                if spec.config.auth == "public"
-                else None,
-            }
-            for spec in platform.http_functions(env, branch)
-        ]
-        return {
-            # fn() functions first, then HTTP functions (``kind: "http"``), each with its ``config`` and URL.
-            "data": calls + http,
-            "branch": branch or "main",
-            "modules": code.modules,
-            "errors": code.errors,
-            "router": code.router is not None,
-        }
-
-    @r.post(
-        f"{base}/functions/{{name}}/invoke",
-        auth=MANAGE,
-        tags=["functions"],
-        request_model=RunBody,
-        summary="Invoke a function now",
-    )
-    async def invoke(ctx: HttpContext, env: str, name: str, body: RunBody):
-        state = await platform.state(env)
-        try:
-            result = await call_function(
-                platform,
-                state,
-                name,
-                body.input,
-                trigger="manual",
-                auth=body.as_user or _caller_auth(ctx),
-                branch=body.branch,
-            )
-        except NotFound as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        except FlowError as exc:
-            return {
-                "status": "failed",
-                "error": exc.message,
-                "code": exc.code,
-                "details": exc.details,
-            }
-        except Exception as exc:
-            return {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}
-        return {"status": "succeeded", "result": result}
 
     # ── events ───────────────────────────────────────────────────────────
 

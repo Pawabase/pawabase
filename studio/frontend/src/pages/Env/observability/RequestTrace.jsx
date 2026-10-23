@@ -24,7 +24,7 @@ export default function RequestTrace({ value, onClose }) {
           <Stat label="Steps" value={summary.spans || 0} hint={summary.failed_spans ? `${summary.failed_spans} failed` : null} />
           <Stat label="DB queries" value={summary.db_queries || 0} hint={summary.db_queries ? `${ms(summary.db_ms)} total` : null} />
           <Stat label="Logs" value={summary.logs || 0} />
-          <Stat label="Flows / functions" value={`${summary.flows || 0} / ${summary.functions || 0}`} />
+          <Stat label="Flow runs" value={summary.flows || 0} />
           <Stat label="Events / jobs" value={`${summary.events || 0} / ${summary.jobs || 0}`} />
         </div>
 
@@ -52,16 +52,6 @@ export default function RequestTrace({ value, onClose }) {
               </div>
             ))}
           </div>
-        </Section>
-
-        <Section icon="functions" title={`Functions (${(value.function_runs || []).length})`} empty={!value.function_runs?.length}>
-          {(value.function_runs || []).map((run) => (
-            <Card icon="functions" key={run.id} title={run.function} actions={<Status value={run.status} />}>
-              <div className="faint text-faint">{run.trigger} · {ms(run.duration_ms)} · run <code>{run.id}</code></div>
-              {run.error && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error">{run.error}</div>}
-              <details><summary>Input and output</summary><Json value={{ input: run.input, output: run.output }} /></details>
-            </Card>
-          ))}
         </Section>
 
         <Section icon="flows" title={`Flow runs (${(value.flow_runs || []).length})`} empty={!value.flow_runs?.length}>

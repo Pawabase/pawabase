@@ -1,4 +1,4 @@
-// Names of the things a definition can point at — policies, flows, functions,
+// Names of the things a definition can point at — policies, flows,
 // schemas, transformers, resources — loaded once per open editor so pickers
 // offer real choices instead of free text.
 import { useEffect, useState } from "react";
@@ -7,14 +7,13 @@ import { envPath, get } from "../../lib/api";
 const SOURCES = {
   policies: "/policies",
   flows: "/flows",
-  functions: "/functions",
   schemas: "/schemas",
   transformers: "/transformers",
   resources: "/resources",
 };
 
 export function useRefs(env) {
-  const [refs, setRefs] = useState({ loaded: false, policies: [], flows: [], functions: [], schemas: [], transformers: [], resources: [], fields: {} });
+  const [refs, setRefs] = useState({ loaded: false, policies: [], flows: [], schemas: [], transformers: [], resources: [], fields: {} });
   useEffect(() => {
     let live = true;
     const entries = Object.entries(SOURCES);

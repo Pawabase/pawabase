@@ -27,7 +27,7 @@ from pawabase_server.core.transformers import TransformerError
 from pawabase_server.data.source import DataSourceError
 from pawabase_server.data.sql import SqlError
 from pawabase_server.flows import FlowError
-from pawabase_server.functions.execution import NotFound
+from pawabase_server.flows.execution import NotFound
 
 if TYPE_CHECKING:
     from pawabase_server.environments.state import EnvironmentState
@@ -109,7 +109,7 @@ def compile_environment(state: EnvironmentState) -> SilloApp:
     app.add_exception_handler(DataSourceError, unavailable)
     app.add_exception_handler(ValidationError, invalid)
     app.add_exception_handler(TransformerError, transformer_error)
-    # Anything not named above (a function that raised, a bug) is one log line and a clean JSON answer with a request id, never a traceback.
+    # Anything not named above (a flow that raised, a bug) is one log line and a clean JSON answer with a request id, never a traceback.
     errors.install(app, "data", debug=settings.debug)
 
     for resource in state.resources.values():

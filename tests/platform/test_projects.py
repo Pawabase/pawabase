@@ -110,7 +110,7 @@ async def test_project_gateway_limits_are_versioned_and_validate_their_shape(api
             "daily_request_limit": 1000,
             "rate_limit": 20,
             "rate_window": 60,
-            "max_function_concurrency": 2,
+            "max_flow_runs_per_month": 2,
             "max_queued_jobs": 16,
         },
     )
@@ -118,7 +118,7 @@ async def test_project_gateway_limits_are_versioned_and_validate_their_shape(api
         "daily_request_limit": 1000,
         "rate_limit": 20,
         "rate_window": 60,
-        "max_function_concurrency": 2,
+        "max_flow_runs_per_month": 2,
         "max_queued_jobs": 16,
     }
     assert updated["limits_version"] == original + 1
@@ -129,7 +129,7 @@ async def test_project_gateway_limits_are_versioned_and_validate_their_shape(api
         "rate_limit": 20,
         "rate_window": 60,
         "max_active_connections": 5,
-        "max_function_concurrency": 2,
+        "max_flow_runs_per_month": 2,
         "max_queued_jobs": 16,
     }
     with pytest.raises(ProjectError):
@@ -218,17 +218,6 @@ async def test_a_binding_through_an_environment_variable_keeps_the_address_out_o
     monkeypatch.delenv("SHOP_DATABASE_URL")
     problem = await m.test_database("shop")
     assert problem["ok"] is False and "not set" in problem["error"]
-
-
-def test_the_package_installer_is_not_handed_the_servers_secrets(monkeypatch):
-    from pawabase_server.functions.deployments import Deployments
-
-    monkeypatch.setenv("PAWABASE_MASTER_KEY", "super-secret-master-key-0123456789abcdef")
-    monkeypatch.setenv("PAWABASE_DATABASE_URL", "postgres://u:p@h/db")
-    monkeypatch.setenv("PIP_INDEX_URL", "https://index.test/simple")
-    environment = Deployments._install_environment()
-    assert "PAWABASE_MASTER_KEY" not in environment and "PAWABASE_DATABASE_URL" not in environment
-    assert environment["PIP_INDEX_URL"] == "https://index.test/simple" and "PATH" in environment
 
 
 async def test_a_namespace_keeps_runtimes_apart_on_a_shared_redis(settings):

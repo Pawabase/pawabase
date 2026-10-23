@@ -114,7 +114,7 @@ class Resource(_Definition):
 
 
 class RouteDef(_Definition):
-    """A custom API route served by a flow or a Python function."""
+    """A custom API route served by a flow."""
 
     environment = fields.ForeignKeyField(
         "models.Environment", related_name="routes", on_delete=fields.CASCADE
@@ -290,9 +290,9 @@ class EventSubscription(_Definition):
 
     Attributes:
         event: Name or pattern (``order.*``).
-        target_type: ``flow``, ``function``, ``realtime`` (publish to a channel)
+        target_type: ``flow``, ``realtime`` (publish to a channel)
             or ``webhook`` (deliver to subscribed endpoints).
-        target: The flow or function name, or the channel template.
+        target: The flow name, or the channel template.
         condition: Optional condition on ``event`` (``{"eq": ["$event.payload.status", "paid"]}``).
     """
 
@@ -366,8 +366,8 @@ class Schedule(_Definition):
     Attributes:
         cron: A cron expression, or
         interval_seconds: an interval.
-        target_type: ``flow``, ``function`` or ``event``.
-        payload: Input for the flow or function, or the event payload.
+        target_type: ``flow`` or ``event``.
+        payload: Input for the flow, or the event payload.
     """
 
     environment = fields.ForeignKeyField(

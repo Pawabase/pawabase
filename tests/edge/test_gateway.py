@@ -31,7 +31,6 @@ async def test_every_public_prefix_reaches_the_application(gateway):
         "/auth/v1/token",
         "/realtime/v1/publish",
         "/storage/v1/object/b/x",
-        "/functions/v1/hello",
     ):
         response = await gateway.http.post(path, json={"a": 1}, headers={"apikey": "sk_service"})
         assert response.status_code == 200, path

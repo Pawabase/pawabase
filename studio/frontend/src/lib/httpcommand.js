@@ -9,7 +9,7 @@
 
 export const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 const SAFE = new Set(["GET"]);
-const PUBLIC_PREFIXES = ["/functions/v1/", "/flows/v1/", "/auth/v1/", "/storage/v1/", "/health/v1", "/docs/v1/", "/hooks/v1/"];
+const PUBLIC_PREFIXES = ["/flows/v1/", "/auth/v1/", "/storage/v1/", "/health/v1", "/docs/v1/", "/hooks/v1/"];
 const VALUE_FLAGS = new Set(["query", "headers", "body", "as", "expect", "save"]);
 const SWITCHES = new Set(["raw", "confirm", "verbose", "v"]);
 const STATUS = { 200: "OK", 201: "Created", 202: "Accepted", 204: "No Content", 301: "Moved", 302: "Found", 304: "Not Modified", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 409: "Conflict", 413: "Payload Too Large", 422: "Unprocessable", 429: "Too Many Requests", 500: "Server Error", 502: "Bad Gateway", 503: "Unavailable", 504: "Timeout" };

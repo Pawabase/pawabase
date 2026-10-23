@@ -1,4 +1,4 @@
-// What happened in your app: every event that was emitted, which flows and functions listen for it, and every flow run.
+// What happened in your app: every event that was emitted, which flows listen for it, and every flow run.
 
 import { router } from "@inertiajs/react";
 import { useState } from "react";

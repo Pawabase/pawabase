@@ -101,15 +101,15 @@ async def test_an_interrupted_event_resumes_without_serving_a_consumer_twice(api
     )
     await api.studio.post(
         f"{ENV}/subscriptions",
-        json={"name": "second", "event": "order.*", "target_type": "function", "target": "b"},
+        json={"name": "second", "event": "order.*", "target_type": "flow", "target": "b"},
     )
     calls = []
     real = api.platform.dispatch
-    broken = {"function": True}
+    broken = {"b": True}
 
     async def dispatch(job, **kwargs):
-        calls.append(job.__name__)
-        if job.__name__ == "RunFunctionJob" and broken["function"]:
+        calls.append(kwargs.get("target"))
+        if kwargs.get("target") == "b" and broken["b"]:
             raise ConnectionError("queue unavailable")
         return await real(job, **kwargs)
 
@@ -122,10 +122,10 @@ async def test_an_interrupted_event_resumes_without_serving_a_consumer_twice(api
     assert log.routed_at is None
     assert [c["status"] for c in log.consumers] == ["queued", "failed"]
 
-    broken["function"] = False
+    broken["b"] = False
     calls.clear()
     await processor.handle(event, strict=True)
-    assert calls == ["RunFunctionJob"]  # the flow was served by the first attempt
+    assert calls == ["b"]  # the first flow was served by the first attempt
     log = await EventLog.get(event_id=event.id)
     assert log.routed_at is not None and [c["status"] for c in log.consumers] == [
         "queued",

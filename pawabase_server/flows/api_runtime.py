@@ -1,4 +1,4 @@
-"""The capabilities flows and functions call, backed by Sillo.
+"""The capabilities flows call, backed by Sillo.
 
 :class:`ApiRuntime` is the API's implementation of
 :class:`pawabase_server.flows.Runtime`. Each method lands on a platform service:
@@ -6,8 +6,8 @@ Resource stores for data, ``sillo.cache`` for caching, ``sillo.events`` for
 events, ``sillo.work`` for jobs, the realtime hub for realtime, ``sillo.storage`` for
 files, ``sillo.mail`` for email, and the environment's secrets.
 
-Operations made through the runtime are trusted: flows and functions are the
-developer's server-side code. A flow that must enforce a caller's rights does
+Operations made through the runtime are trusted: flows are the
+developer's server-side logic. A flow that must enforce a caller's rights does
 so explicitly with ``policy.check`` or ``auth.require``.
 """
 
@@ -30,9 +30,7 @@ from pawabase_server.data.store import Filter
 from pawabase_server.environments.state import EnvironmentState
 from pawabase_server.flows import BaseRuntime, FlowError, NotAvailable
 from pawabase_server.flows.engine import observable
-from pawabase_server.functions.registry import FunctionContext
 from pawabase_server.platform import Platform
-from pawabase_server.policies.engine import evaluate
 from pawabase_server.projects import quotas
 
 logger = logging.getLogger("pawabase.flow")
@@ -258,27 +256,6 @@ class ApiRuntime(BaseRuntime):
         )
         return child.result()
 
-    async def dispatch_function(self, function, input, *, delay=0, queue=None):
-        from pawabase_server.automation.jobs.functions import RunFunctionJob
-
-        if self.platform.function_spec(self.state.env_name, function, self.branch) is None:
-            raise FlowError(f"no function {function!r}", code="unknown_function")
-        return await self.platform.dispatch(
-            RunFunctionJob,
-            env=self.state.env_name,
-            queue=queue,
-            delay=delay,
-            target=function,
-            function=function,
-            branch=self.branch,
-            input=input,
-            trigger="job",
-            auth=self.auth,
-            request_id=self.request_id,
-            release_id=self.state.release_id,
-            api_version=self.state.api_version,
-        )
-
     async def publish(self, channel, event, payload):
         return await self.platform.publish(self.state, channel, event, payload)
 
@@ -373,22 +350,6 @@ class ApiRuntime(BaseRuntime):
     async def secret(self, name):
         return self.state.secret_values.get(name)
 
-    async def call_function(self, name, input):
-        if self.depth > 8:
-            raise FlowError("function calls are nested too deeply", code="too_deep")
-        from pawabase_server.functions.execution import call_function
-
-        return await call_function(
-            self.platform,
-            self.state,
-            name,
-            input,
-            trigger="flow",
-            auth=self.auth,
-            depth=self.depth + 1,
-            branch=self.branch,
-        )
-
     async def identity_user(self, user_id):
         from pawabase_server.identity.accounts import get_user, user_view
 
@@ -431,26 +392,4 @@ class ApiRuntime(BaseRuntime):
         await increment(self.state.env_name, name, value, tags or {})
 
 
-def function_context(
-    runtime: ApiRuntime, input: Any, trigger: str, request: Mapping[str, Any] | None = None
-) -> FunctionContext:
-    return FunctionContext(
-        request=request,
-        input=input,
-        auth=runtime.auth,
-        # The public kit's context still carries a ``project`` string: it is this runtime's name.
-        project=runtime.platform.settings.project_name,
-        env=runtime.state.env_name,
-        runtime=runtime,
-        trigger=trigger,
-        branch=runtime.branch or "main",
-    )
-
-
-def matches_condition(condition: Any, context: Mapping[str, Any]) -> bool:
-    if condition in (None, {}, True):
-        return True
-    return evaluate(condition, context)
-
-
-__all__ = ["ApiRuntime", "NotAvailable", "function_context", "json", "matches_condition"]
+__all__ = ["ApiRuntime", "NotAvailable", "json"]

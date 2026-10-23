@@ -14,7 +14,6 @@ from typing import Any
 from pawabase_server.db.models import (
     EventLog,
     FlowRun,
-    FunctionRun,
     JobRun,
     MailLog,
     MetricCounter,
@@ -51,9 +50,6 @@ METRICS: dict[str, dict[str, Any]] = {
     ),
     "flow_runs": _spec("Flow runs", "count", "Flow executions."),
     "flow_failures": _spec("Failed flow runs", "count", "Flow executions that failed."),
-    "function_failures": _spec(
-        "Failed function runs", "count", "Function invocations that failed."
-    ),
     "events": _spec("Events", "count", "Events published."),
     "mail_sent": _spec("Mail sent", "count", "Messages handed to the mail provider."),
     "mail_failed": _spec("Mail failed", "count", "Messages the provider refused."),
@@ -147,13 +143,6 @@ async def _points(
             (r["created_at"], 1 if metric == "flow_runs" or r["status"] == "failed" else 0, 0)
             for r in rows
         ]
-    if metric == "function_failures":
-        rows = (
-            await FunctionRun.filter(env=env, created_at__gte=start, status="failed")
-            .limit(ROW_CAP)
-            .values("created_at")
-        )
-        return [(r["created_at"], 1, 0) for r in rows]
     if metric == "events":
         rows = (
             await EventLog.filter(env=env, created_at__gte=start)
@@ -297,7 +286,7 @@ FIELDS = ("level", "source", "status", "route", "user", "ip", "method", "request
 
 
 def parse_query(text: str) -> dict[str, Any]:
-    """``level:error source:function:orders.pay "timed out" -healthcheck`` into filters and terms."""
+    """``level:error source:flow:orders.pay "timed out" -healthcheck`` into filters and terms."""
     filters: dict[str, str] = {}
     terms: list[str] = []
     excluded: list[str] = []
@@ -352,22 +341,6 @@ async def search_logs(
     query = parse_query(text)
     start = after or (aware_now() - timedelta(minutes=minutes))
     entries: list[dict[str, Any]] = []
-    for run in (
-        await FunctionRun.filter(env=env, created_at__gte=start).order_by("-created_at").limit(2000)
-    ):
-        for item in run.logs or []:
-            entry = dict(item) if isinstance(item, dict) else {"message": str(item)}
-            entries.append(
-                {
-                    "at": str(
-                        entry.get("timestamp") or entry.get("at") or run.created_at.isoformat()
-                    ),
-                    "level": str(entry.get("level") or "info").lower(),
-                    "message": str(entry.get("message", "")),
-                    "source": f"function:{run.function}",
-                    "request": run.request_id or "",
-                }
-            )
     for run in (
         await FlowRun.filter(env=env, created_at__gte=start).order_by("-created_at").limit(2000)
     ):
