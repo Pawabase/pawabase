@@ -24,8 +24,9 @@ function modeOf(value) {
   return value;
 }
 
-export function PolicyPicker({ value, onChange, policies = [], nullLabel = "Default (signed-in users)", allowNull = true, allowList = true }) {
+export function PolicyPicker({ value, onChange, policies = [], nullLabel = "Default (signed-in users)", allowNull = true, allowList = true, onSaveAs }) {
   const mode = modeOf(value);
+  const [saving, setSaving] = useState(null);
   const [tree, setTree] = useState(() => toTree(typeof value === "object" && !Array.isArray(value) ? value : { authenticated: true }));
   const known = BUILTINS.map(([k]) => k).concat(policies);
   const choose = (next) => {
@@ -65,6 +66,15 @@ export function PolicyPicker({ value, onChange, policies = [], nullLabel = "Defa
         )}
       </div>
       {mode === "__custom" && <ConditionBuilder tree={tree} onChange={(t, cond) => { setTree(t); onChange(cond); }} />}
+      {mode === "__custom" && onSaveAs && (saving === null
+        ? <button type="button" className="linklike" style={{ alignSelf: "flex-start" }} onClick={() => setSaving("")}>Save as a reusable policy…</button>
+        : (
+          <div className="list-row flex items-center gap-2">
+            <input autoFocus value={saving} onChange={(e) => setSaving(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_"))} placeholder="policy_name" style={{ maxWidth: 220 }} aria-label="Policy name" />
+            <Button size="sm" variant="primary" disabled={!/^[a-z][a-z0-9_]*$/.test(saving)} onClick={async () => { if (await onSaveAs(saving, value)) setSaving(null); }}>Save policy</Button>
+            <Button size="sm" onClick={() => setSaving(null)}>Cancel</Button>
+          </div>
+        ))}
       {mode === "__list" && (
         <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 sm" style={{ paddingLeft: 16, borderLeft: "2px solid var(--line)" }}>
           {value.map((item, i) => (

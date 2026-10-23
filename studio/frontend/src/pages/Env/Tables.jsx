@@ -4,6 +4,7 @@ import Layout, { envHref } from "../../components/Layout";
 import { useDataSubnav } from "../../components/DataNav";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Field, PageTabs, Popover, Sheet, Spinner, Switch, copyToClipboard, useAction, useToast } from "../../components/ui";
+import TableAccess from "../../components/TableAccess";
 import { HistoryPanel, IndexesPanel, SchemaPanel } from "../../components/SchemaPanels";
 import { ResourceForm, problem } from "../../components/definitions/forms";
 import { useRefs } from "../../components/definitions/refs";
@@ -191,6 +192,7 @@ function normaliseView(view) {
 const VIEWS = [
   ["data", "Data", "database"],
   ["columns", "Columns", "columns"],
+  ["access", "Access", "secrets"],
   ["indexes", "Indexes", "keys"],
   ["history", "History", "clock"],
   ["settings", "Settings", "settings"],
@@ -218,6 +220,7 @@ function TableTab({ env, base, table, resource, initialView = "data", onTablesCh
           ? <ResourceColumns env={env} resource={resource} onRowsChanged={info.reload} onTablesChanged={onTablesChanged} />
           : <UnclaimedSchema env={env} table={table} columns={columns} onClaimed={() => onTablesChanged?.()} />
       )}
+      {view === "access" && <TableAccess env={env} table={table} resource={resource} onDefine={() => setView("columns")} onChanged={onTablesChanged} />}
       {view === "indexes" && (resource
         ? <div className="resource-columns p-[0_var(--gutter)_48px] pt-5 [&_.stack.lg]:gap-3 [&_.card_>_.spread:first-child]:mb-4! [&_.schema-change]:border-line-2 [&_.schema-change]:rounded-none [&_.schema-change]:bg-transparent [&_.schema-change_+_.schema-change]:border-t-0 [&_.schema-entry]:rounded-none max-mobile:p-[0_16px_32px]"><div className="resource-columns-inner w-[min(100%,_720px)] m-[0_auto]"><IndexesPanel env={env} name={resource} onChanged={info.reload} /></div></div>
         : <div className="tbl-state flex items-center justify-center gap-2 p-[48px_16px] text-muted text-ui">Define this table as a resource before managing its indexes.</div>
