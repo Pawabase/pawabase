@@ -1,5 +1,28 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "PP Neue Montreal";
+  src: url("./fonts/ppneuemontreal-book.woff") format("woff");
+  font-weight: 100 499;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "PP Neue Montreal";
+  src: url("./fonts/ppneuemontreal-medium.woff") format("woff");
+  font-weight: 500 649;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "PP Neue Montreal";
+  src: url("./fonts/ppneuemontreal-bold.woff") format("woff");
+  font-weight: 650 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+
 @theme {
   /* surfaces */
   --color-hero: #08090a;
@@ -68,8 +91,8 @@
   --radius-control: 8px;
 
   /* type */
-  --font-sans: "Geist Variable", "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-sans: "PP Neue Montreal", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "PP Neue Montreal", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-weight-book: 450;
   --font-weight-medium-plus: 550;
   --font-weight-semibold-plus: 650;
@@ -183,8 +206,8 @@
   --r-lg: 22px;
   --r-md: 16px;
   --r-sm: 12px;
-  --mono: "Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --sans: "Geist Variable", "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "PP Neue Montreal", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --sans: "PP Neue Montreal", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   color-scheme: dark;
 }
 
