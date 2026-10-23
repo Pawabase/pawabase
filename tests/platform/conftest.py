@@ -23,7 +23,6 @@ def settings(tmp_path):
         inline_worker=True,
         change_capture=False,  # a test starts the poller itself when it is the thing under test
         inline_scheduler=False,  # a test starts the scheduler itself when it is the thing under test
-        function_isolation="inprocess",  # most tests run their functions in the test process; test_sandbox.py asks for worker processes
         record_buffer_seconds=0,  # records are written at once, so a test can read them right after the call
     )
 
@@ -83,11 +82,6 @@ async def api(settings):
 
     from pawabase_server.app import create_app
     from pawabase_server.core.clients import ServiceClient
-    from pawabase_server.functions.registry import clear_functions
-
-    # The function registry is process-wide and a runtime has one owner in it, so
-    # what one test loaded would otherwise still be there for the next.
-    clear_functions()
     app = create_app(settings)
     # The lifespan is driven directly rather than through the client's context
     # manager: pytest-asyncio runs fixture setup and teardown in different
@@ -105,4 +99,4 @@ async def api(settings):
         await studio.close()
         await http.aclose()
         await app._shutdown()
-        clear_functions()
+    

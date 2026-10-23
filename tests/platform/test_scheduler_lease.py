@@ -22,7 +22,7 @@ async def schedule(api, **fields):
         environment=environment,
         name="tick",
         cron="* * * * *",
-        target_type="function",
+        target_type="flow",
         target="f",
         **fields,
     )
@@ -60,8 +60,8 @@ async def test_overlap_skip_and_catch_up(api, monkeypatch):
     await JobRun.create(
         id="busy",
         env="development",
-        queue="functions",
-        job="RunFunctionJob",
+        queue="flows",
+        job="RunFlowJob",
         source="schedule",
         target="f",
         status="active",

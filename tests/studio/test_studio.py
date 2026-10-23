@@ -158,7 +158,6 @@ async def test_the_explorer_catalog_combines_the_compiled_and_runtime_apis(studi
     assert [item["id"] for item in catalog["documents"]] == ["application", "runtime"]
     runtime = catalog["documents"][1]["document"]
     assert "/auth/v1/user" in runtime["paths"]
-    assert "/functions/v1/{name}" in runtime["paths"]
     assert "/platform/v1/envs/{env}/events" in runtime["paths"]
     assert "/internal/v1/secrets" not in runtime["paths"]
 
@@ -175,7 +174,6 @@ def test_the_explorer_catalog_infers_concrete_environment_endpoints():
         }
     }
     paths = {
-        "/functions/v1/{name}": operation,
         "/flows/v1/{name}": operation,
         "/hooks/v1/{env}/{slug}": operation,
         "/storage/v1/object/{bucket}/{key}": {
@@ -191,15 +189,6 @@ def test_the_explorer_catalog_infers_concrete_environment_endpoints():
         paths,
         "main",
         {
-            "functions": [
-                {
-                    "name": "quote",
-                    "description": "Quote an order",
-                    "input_fields": [
-                        {"name": "items", "type": "integer", "required": True, "example": 2}
-                    ],
-                }
-            ],
             "flows": [
                 {
                     "name": "checkout",
@@ -210,12 +199,9 @@ def test_the_explorer_catalog_infers_concrete_environment_endpoints():
             "buckets": [{"name": "receipts"}],
         },
     )
-    assert "/functions/v1/quote" in expanded
     assert "/flows/v1/checkout" in expanded
     assert "/hooks/v1/main/stripe" in expanded
     assert "/storage/v1/object/receipts/{key}" in expanded
-    function = expanded["/functions/v1/quote"]["post"]
-    assert function["requestBody"]["content"]["application/json"]["schema"]["required"] == ["items"]
     storage = expanded["/storage/v1/object/receipts/{key}"]
     assert {"post", "put", "head"}.issubset(storage)
     assert "application/octet-stream" in storage["put"]["requestBody"]["content"]
@@ -292,7 +278,7 @@ async def test_the_explorer_can_call_any_public_endpoint_and_nothing_else(studio
         )
 
     for allowed in (
-        "/functions/v1/ping",
+        "/flows/v1/ping",
         "/health/v1",
         "/auth/v1/user",
         "/flows/v1/nightly",
@@ -312,9 +298,9 @@ async def test_the_explorer_can_call_any_public_endpoint_and_nothing_else(studio
         "/admin/v1/users",
         "/internal/v1/keys/resolve",
         "/rest/../platform/v1/x",
-        "/functions//v1/x",
+        "/flows//v1/x",
         "health",
-        "/functions/v1/..",
+        "/flows/v1/..",
         "/rest/v1/a\\b",
     ):
         assert (await call(refused)).status_code == 400, refused

@@ -61,7 +61,7 @@ def test_the_rule_is_an_allow_list_that_fails_closed():
         ("/", "GET"),
         ("/environments", "GET"),
         ("/envs/main", "GET"),
-        ("/envs/main/functions", "GET"),
+        ("/envs/main/flows", "GET"),
         ("/envs/main/flows/new", "GET"),
         ("/studio/api/platform/envs/main/resources", "POST"),
         ("/studio/api/platform/runtime", "GET"),

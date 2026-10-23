@@ -47,8 +47,6 @@ LIMIT_FIELDS = frozenset(
         "max_auth_providers",
         "max_flow_runs_per_month",
         "max_scheduled_jobs",
-        "max_function_invocations_per_month",
-        "max_function_deployments",
         "max_storage_bytes",
         "max_upload_bytes",
         "max_database_bytes",
@@ -57,15 +55,7 @@ LIMIT_FIELDS = frozenset(
         "max_realtime_channels",
         "max_webhooks",
         "max_inbound_hooks",
-        "max_function_concurrency",
         "max_queued_jobs",
-        # What one function run may use (``functions/limits.py``); unset fields take the installation's defaults.
-        "max_function_timeout_seconds",
-        "max_function_memory_mb",
-        "max_function_cpu_seconds",
-        "max_concurrent_runs_per_function",
-        "max_function_body_mb",
-        "max_function_workers",
     }
 )
 
@@ -78,10 +68,28 @@ class ProjectError(Exception):
         self.code = code
 
 
+#: Limits of features that no longer exist (custom Functions). Projects created earlier still have them stored, and a caller written for
+#: them may still send them: they are dropped, not refused.
+RETIRED_LIMITS = frozenset(
+    {
+        "max_function_invocations_per_month",
+        "max_function_deployments",
+        "max_function_concurrency",
+        "max_function_timeout_seconds",
+        "max_function_memory_mb",
+        "max_function_cpu_seconds",
+        "max_concurrent_runs_per_function",
+        "max_function_body_mb",
+        "max_function_workers",
+    }
+)
+
+
 def validate_limits(limits: dict[str, Any]) -> dict[str, int]:
     """Validate the persisted project gateway policy. Zero means unlimited."""
     if not isinstance(limits, dict):
         raise ProjectError("project limits must be an object")
+    limits = {name: value for name, value in limits.items() if name not in RETIRED_LIMITS}
     unknown = set(limits) - LIMIT_FIELDS
     if unknown:
         raise ProjectError(f"unknown project limit: {sorted(unknown)[0]}")

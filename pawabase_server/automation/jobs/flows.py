@@ -15,7 +15,7 @@ class RunFlowJob(PawabaseJob):
     timeout = 300.0
 
     async def perform(self) -> Any:
-        from pawabase_server.functions.execution import run_flow
+        from pawabase_server.flows.execution import run_flow
 
         platform, state = await self.environment()
         run = await run_flow(

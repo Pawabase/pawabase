@@ -1,13 +1,11 @@
 """Custom routes compiled into Sillo routes.
 
 A custom route names a method, a path (Sillo syntax, ``/orders/{id}/pay``), a
-policy, optional input and response schemas, and a handler: a Flow or a Python
-function. The handler receives::
+policy, optional input and response schemas, and a handler: a Flow. The handler receives::
 
     {"params": {"id": "42"}, "query": {...}, "body": {...validated...}}
 
-A flow answers with ``response.return``; otherwise its result, or the
-function's return value, is sent as JSON.
+A flow answers with ``response.return``; otherwise its result is sent as JSON.
 """
 
 from __future__ import annotations
@@ -79,13 +77,13 @@ def register_route(app: SilloApp, state: EnvironmentState, route: Any) -> str:
     gate = PlanGate(policy, engine=state.engine, scope="routes:invoke")
 
     async def run_handler(ctx: HttpContext, body: Any) -> Any:
-        from pawabase_server.functions.execution import call_function, run_flow
+        from pawabase_server.flows.execution import run_flow
 
         payload = {
             "params": {key: ctx.path_params[key] for key in ctx.path_params},
             "query": dict(ctx.query_params),
             "body": body.model_dump(mode="json") if hasattr(body, "model_dump") else body,
-            # What a function may need to judge the call itself: a store API key in
+            # What a flow may need to judge the call itself: a store API key in
             # `authorization`, the caller's address for risk checks, the user agent.
             "headers": {
                 name.lower(): value
@@ -117,44 +115,26 @@ def register_route(app: SilloApp, state: EnvironmentState, route: Any) -> str:
         except Exception:
             request_id = None
         status, headers = 200, {}
-        if route.handler_type == "function":
-            body_value = payload["body"]
-            function_input = (
-                {**payload["params"], **body_value}
-                if isinstance(body_value, dict)
-                else (body_value if body_value is not None else dict(payload["params"]))
-            )
-            result = await call_function(
-                platform,
-                state,
-                route.handler,
-                function_input,
-                trigger="http",
-                auth=context["auth"],
-                request_id=request_id,
-                request=payload,
+        entry = _http_entry(state, route)
+        run = await run_flow(
+            platform,
+            state,
+            route.handler,
+            payload,
+            trigger="http",
+            auth=context["auth"],
+            credential=context["credential"],
+            request_id=request_id,
+            entry=entry,
+        )
+        if run.response is not None:
+            status, headers, result = (
+                run.response.status,
+                run.response.headers,
+                run.response.body,
             )
         else:
-            entry = _http_entry(state, route)
-            run = await run_flow(
-                platform,
-                state,
-                route.handler,
-                payload,
-                trigger="http",
-                auth=context["auth"],
-                credential=context["credential"],
-                request_id=request_id,
-                entry=entry,
-            )
-            if run.response is not None:
-                status, headers, result = (
-                    run.response.status,
-                    run.response.headers,
-                    run.response.body,
-                )
-            else:
-                result = run.result()
+            result = run.result()
         note("handler", f"{route.handler_type}:{route.handler}")
         if route.transformer:
             result = await apply_transformer(
@@ -195,7 +175,7 @@ def register_route(app: SilloApp, state: EnvironmentState, route: Any) -> str:
     return f"{method} {route.path}"
 
 
-#: Never handed to a function: credentials of the platform itself and browser session state.
+#: Never handed to a flow: credentials of the platform itself and browser session state.
 _PRIVATE_HEADERS = {"cookie", "apikey", "x-api-key", "proxy-authorization"}
 
 

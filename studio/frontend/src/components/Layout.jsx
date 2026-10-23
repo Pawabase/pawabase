@@ -2,6 +2,7 @@ import { Head, Link, router, usePage } from "@inertiajs/react";
 import { useEffect, useRef, useState } from "react";
 import Console from "./Console";
 import NewEnvironment from "./NewEnvironment";
+import { BranchBanner, BranchesPanel } from "./BranchTools";
 import TopBar from "./TopBar";
 import Tour from "./Tour";
 
@@ -75,7 +76,7 @@ export const ENV_NAV = [
   { items: [["overview", "Overview"]] },
   { title: "Data", items: [["data", "Data", "tables", "database"], ["explorer", "API Explorer"]] },
   { title: "Access", items: [["users", "Users & auth"], ["policies", "Policies"], ["keys", "API keys"], ["secrets", "Secrets"], ["networking", "Networking"]] },
-  { title: "Logic", items: [["functions", "Functions"], ["flows", "Flows"], ["routes", "Routes"], ["schedules", "Schedules"], ["subscriptions", "Event subscriptions"], ["webhooks", "Webhooks"]] },
+  { title: "Logic", items: [["flows", "Flows"], ["routes", "Routes"], ["schedules", "Schedules"], ["subscriptions", "Event subscriptions"], ["webhooks", "Webhooks"]] },
   { title: "Services", items: [["mail", "Mail"], ["storage", "Storage"], ["realtime", "Realtime"]] },
   { title: "Project", items: [["activity", "Activity"], ["usage", "Usage & plan"], ["backups", "Backups"], ["status", "Status page"], ["settings", "Settings"]] },
 ];
@@ -86,7 +87,7 @@ const ACTIVITY_SECTIONS = ["activity", "observability", "jobs", "events"];
 // The pastel each section wears on its sheet headers and empty states.
 export const SECTION_TONES = {
   resources: "lavender", schemas: "sky", transformers: "butter", policies: "mint", routes: "peach",
-  functions: "sky", flows: "lavender", subscriptions: "rose", schedules: "butter", webhooks: "peach",
+  flows: "lavender", subscriptions: "rose", schedules: "butter", webhooks: "peach",
   "inbound-hooks": "mint", mail: "rose", buckets: "sky", storage: "sky",
 };
 
@@ -116,7 +117,6 @@ function branchKey(env) {
 }
 
 function BranchHistory({ runtime, env, url, onClose }) {
-  const branches = useApi(envPath(env, "/branches"));
   const revisions = useApi(envPath(env, "/revisions"));
   const versions = useApi(envPath(env, "/api-versions"));
   const releases = useApi(envPath(env, "/releases"));
@@ -124,34 +124,18 @@ function BranchHistory({ runtime, env, url, onClose }) {
   const [branch, setBranch] = useState(() => {
     try { return localStorage.getItem(branchKey(env)) || "main"; } catch { return "main"; }
   });
-  const [newBranch, setNewBranch] = useState("");
-  const [target, setTarget] = useState("main");
   const [tab, setTab] = useState("branches");
   const [revisionMessage, setRevisionMessage] = useState("");
   const [newVersion, setNewVersion] = useState("");
   const [release, setRelease] = useState({ revision_id: "", api_version: "", name: "", allow_breaking: false });
   const [run, busy] = useAction();
-  const branchDraft = useApi(branch === "main" ? null : envPath(env, `/branches/${branch}/draft`));
   useEffect(() => {
     const fromUrl = new URLSearchParams(url.split("?")[1] || "").get("branch");
     const next = fromUrl || (() => { try { return localStorage.getItem(branchKey(env)) || "main"; } catch { return "main"; } })();
     setBranch(next);
     try { localStorage.setItem(branchKey(env), next); } catch { /* session-only fallback */ }
   }, [env, url]);
-  const choose = (next) => {
-    setBranch(next);
-    try { localStorage.setItem(branchKey(env), next); } catch { /* session-only fallback */ }
-    window.dispatchEvent(new CustomEvent("pawabase:branch", { detail: { env, branch: next } }));
-    const target = new URL(window.location.href);
-    if (next === "main") target.searchParams.delete("branch");
-    else target.searchParams.set("branch", next);
-    // Reopen the workspace after Inertia reloads the checked-out definition
-    // tree. Only its Done control removes this marker.
-    target.searchParams.set("history", "1");
-    router.visit(`${target.pathname}${target.search}`, { preserveScroll: true, preserveState: false });
-  };
-  const items = branches.data?.data || [{ name: "main" }];
-  const reload = () => { branches.reload(); revisions.reload(); versions.reload(); releases.reload(); deployments.reload(); branchDraft.reload(); };
+  const reload = () => { revisions.reload(); versions.reload(); releases.reload(); deployments.reload(); };
   const act = async (fn) => { if (await run(fn)) reload(); };
   const revisionRows = revisions.data?.data || [], versionRows = versions.data?.data || [];
   const validRevisions = revisionRows.filter((item) => item.status === "valid");
@@ -160,23 +144,7 @@ function BranchHistory({ runtime, env, url, onClose }) {
   const createVersion = async () => { if (await run(() => post(envPath(env, "/api-versions"), { name: newVersion }), "API version created")) { setNewVersion(""); reload(); } };
   const prepareRelease = async () => { if (await run(() => post(envPath(env, "/releases"), draft), "Release prepared")) { setRelease({ revision_id: "", api_version: "", name: "", allow_breaking: false }); reload(); } };
   return <Sheet title="History" subtitle={`Working on ${branch} · ${runtime.name} / ${env}`} icon="gitBranch" tabs={[["branches", "Branches"], ["releases", "Releases"], ["revisions", "Revisions"], ["versions", "API versions"], ["deployments", "Deployments"]].map(([value, label]) => ({ value, label }))} tab={tab} onTab={setTab} tabsPlacement="top" onClose={onClose} footer={<Button onClick={onClose}>Done</Button>}>
-    {tab === "branches" && <>
-    <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
-      <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Checkout</h3><p>Switch the working definition tree instantly.</p></div></div>
-      <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 wrap">
-        {items.map((item) => <Button key={item.name} size="sm" variant={item.name === branch ? "primary" : ""} disabled={busy || item.name === branch} onClick={() => choose(item.name)}>{item.name}{item.protected ? " · protected" : ""}</Button>)}
-      </div>
-    </section>
-    <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
-      <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Create branch</h3><p>Starts from the checked-out branch, without changing it.</p></div></div>
-      <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5"><input value={newBranch} onChange={(event) => setNewBranch(event.target.value)} placeholder="feature-checkout" /><Button variant="primary" disabled={busy || !newBranch} onClick={() => act(async () => { await post(envPath(env, "/branches"), { name: newBranch, from_branch: branch === "main" ? null : branch }); const next = newBranch; setNewBranch(""); choose(next); })}>Create & checkout</Button></div>
-    </section>
-    {branch !== "main" && <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0">
-      <div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Merge {branch}</h3><p>Applies this branch’s isolated definitions to a target branch.</p></div></div>
-      <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5"><select value={target} onChange={(event) => setTarget(event.target.value)}>{items.filter((item) => item.name !== branch).map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select><Button variant="primary" disabled={busy} onClick={() => act(() => post(envPath(env, `/branches/${branch}/merge`), { target }))}>Merge into {target}</Button></div>
-      <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5" style={{ gap: 6, marginTop: 12 }}><span className="hint text-xs font-book text-muted leading-[1.45]">{branchDraft.data?.branch?.changes?.length || 0} recorded actions</span>{(branchDraft.data?.branch?.changes || []).slice().reverse().slice(0, 8).map((change, index) => <div className="hint text-xs font-book text-muted leading-[1.45]" key={`${change.at || index}-${index}`}>{change.action}{change.target ? ` · ${change.target}` : ""}{change.at ? ` · ${when(change.at)}` : ""}</div>)}</div>
-    </section>}
-    </>}
+    {tab === "branches" && <BranchesPanel env={env} branch={branch} />}
     {tab === "releases" && <>
       <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0"><div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Prepare release</h3><p>Point a stable API version at an immutable revision.</p></div></div><Field label="Revision"><select value={draft.revision_id} onChange={(event) => setRelease({ ...release, revision_id: event.target.value })}>{validRevisions.map((item) => <option key={item.id} value={item.id}>#{item.number} · {item.branch} · {item.message || item.checksum.slice(0, 8)}</option>)}</select></Field><Field label="API version"><select value={draft.api_version} onChange={(event) => setRelease({ ...release, api_version: event.target.value })}>{versionRows.map((item) => <option key={item.id}>{item.name}</option>)}</select></Field><Field label="Release name"><input value={release.name} onChange={(event) => setRelease({ ...release, name: event.target.value })} placeholder="v2.0.0" /></Field><label className="check [label&]:flex [label&]:items-center [label&]:gap-2 [label&]:text-text [label&]:text-ui"><input type="checkbox" checked={release.allow_breaking} onChange={(event) => setRelease({ ...release, allow_breaking: event.target.checked })} /> I acknowledge breaking compatibility findings.</label><div style={{ marginTop: 14 }}><Button variant="primary" disabled={busy || !draft.revision_id || !draft.api_version || !draft.name} onClick={prepareRelease}>Prepare release</Button></div></section>
       <section className="form-section bg-transparent rounded-none p-[20px_0] flex flex-col gap-3.5 border-0 [border-bottom:1px_solid_var(--line)] [&:last-child]:border-b-0"><div className="form-section-head flex items-start justify-between gap-3 [&_h3]:text-base [&_p]:m-[3px_0_0] [&_p]:text-ui-sm [&_p]:text-muted [&_.row]:shrink-0 [&_>_.btn]:shrink-0 [&_h3]:font-semibold"><div><h3>Prepared releases</h3></div></div><Loading state={releases} empty="No releases prepared.">{(data) => <Table rows={data.data} columns={[{ label: "Release", render: (item) => <b>{item.name}</b> }, { label: "Path", render: (item) => <code>/rest/{item.api_version}</code> }, { label: "Status", render: (item) => <Status value={item.status} /> }, { label: "Compatibility", render: (item) => item.compatibility?.compatible ? <Badge tone="green">compatible</Badge> : <Badge tone="red">breaking</Badge> }, { label: "Created", render: (item) => when(item.created_at) }, { label: "", render: (item) => <Button size="sm" disabled={busy || item.status === "active"} onClick={() => act(() => post(envPath(env, `/releases/${item.id}/activate`), {}))}>Activate</Button> }]} />}</Loading></section>
@@ -419,6 +387,7 @@ export default function Layout({ title, crumbs = [], children, full, subnav, flo
             {subnav && <SubNav subnav={subnav} backHref={env ? envHref(env, "overview") : "/"} showHeader={false} />}
             {navOpen && <div className="sheet-overlay fixed inset-0 bg-[rgba(6,_5,_10,_0.55)] backdrop-filter-none z-[50] animate-[fade_0.15s_ease]" style={{ zIndex: 39 }} onClick={() => setNavOpen(false)} />}
             <div className="main-col flex-1 min-w-0 flex flex-col h-full [&_.main]:flex-1 [&_.main]:min-h-0">
+              {env && <BranchBanner env={env} />}
               <main className={`main flex-1 min-w-0 overflow-auto bg-canvas rounded-none [&_>_.topbar]:hidden ${flowPage ? "flow-main" : ""}`}>
                 <div className={`content p-[4px_32px_64px] max-w-[1320px] [&.full]:max-w-none [&.full]:p-0 [&.full]:h-[calc(100%_-_76px)] max-navigation:p-[4px_16px_48px] [&_>_:where(.card,_.form-section,_section,_.alert,_.notice)_+_:where(.card,_.form-section,_section,_.alert,_.notice)]:mt-4 ${full ? "full" : ""} ${flowPage ? "flow-content" : ""}`}>
                   {children}

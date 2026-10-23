@@ -22,7 +22,7 @@ const reset = (seconds) => {
 const LIMIT_KEYS = {
   "New users / month": "max_users_per_month", "Active users": "max_active_users", "API keys": "max_api_keys", "Auth providers": "max_auth_providers",
   "Sessions per user": "max_auth_sessions_per_user", "MFA factors / user": "max_mfa_factors_per_user", "Flow runs / month": "max_flow_runs_per_month",
-  "Scheduled jobs": "max_scheduled_jobs", "Function invocations / month": "max_function_invocations_per_month", "Function deployments": "max_function_deployments",
+  "Scheduled jobs": "max_scheduled_jobs",
   Storage: "max_storage_bytes", Database: "max_database_bytes", "Largest upload": "max_upload_bytes", Backups: "max_backups",
   Environments: "max_environments", "Realtime channels": "max_realtime_channels", "Outbound webhooks": "max_webhooks", "Inbound hooks": "max_inbound_hooks",
 };
@@ -78,7 +78,7 @@ export default function Usage({ env }) {
     ["Access", "API keys", limits.max_api_keys], ["Access", "Auth providers", limits.max_auth_providers],
     ["Access", "Sessions per user", limits.max_auth_sessions_per_user], ["Access", "MFA factors / user", limits.max_mfa_factors_per_user],
     ["Automation", "Flow runs / month", limits.max_flow_runs_per_month], ["Automation", "Scheduled jobs", limits.max_scheduled_jobs],
-    ["Automation", "Function invocations / month", limits.max_function_invocations_per_month], ["Automation", "Function deployments", limits.max_function_deployments],
+   
     ["Data", "Storage", limits.max_storage_bytes, bytes], ["Data", "Database", limits.max_database_bytes, bytes],
     ["Data", "Largest upload", limits.max_upload_bytes, bytes], ["Data", "Backups", limits.max_backups],
     ["Infrastructure", "Environments", limits.max_environments], ["Infrastructure", "Realtime channels", limits.max_realtime_channels],

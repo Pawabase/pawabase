@@ -7,7 +7,7 @@ with backoff. For each event it:
 1. records it, with its origin, for Studio's event inspector;
 2. finds its consumers: subscriptions, flows whose ``trigger.event`` or
    ``trigger.resource`` matches, and outbound webhooks;
-3. hands each consumer its work: a queued flow or function job, a realtime
+3. hands each consumer its work: a queued flow job, a realtime
    publication, or a queued webhook delivery;
 4. records who consumed it and how that went.
 
@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import fnmatch
 import logging
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -32,8 +33,8 @@ from pawabase_server.core.events import PlatformEvent
 from pawabase_server.core.templating import render
 from pawabase_server.db.models import EventLog
 from pawabase_server.environments.state import EnvironmentState
-from pawabase_server.functions.runtime import matches_condition
 from pawabase_server.platform import Platform
+from pawabase_server.policies.engine import evaluate
 
 logger = logging.getLogger("pawabase.events")
 
@@ -68,6 +69,12 @@ def flow_event_entries(state: EnvironmentState, event: PlatformEvent) -> list[tu
                 if resource == config["resource"] and change in operations:
                     matches.append((flow.name, node["id"]))
     return matches
+
+
+def matches_condition(condition: Any, context: Mapping[str, Any]) -> bool:
+    if condition in (None, {}, True):
+        return True
+    return evaluate(condition, context)
 
 
 class EventRoutingFailed(RuntimeError):
@@ -148,7 +155,6 @@ class EventProcessor:
         done: dict[str, dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
         from pawabase_server.automation.jobs.flows import RunFlowJob
-        from pawabase_server.automation.jobs.functions import RunFunctionJob
 
         platform = self.platform
         consumers: list[dict[str, Any]] = []
@@ -167,7 +173,7 @@ class EventProcessor:
                 return
             try:
                 result = await work()
-                entry["status"] = "queued" if kind in ("flow", "function", "webhook") else "done"
+                entry["status"] = "queued" if kind in ("flow", "webhook") else "done"
                 if result is not None:
                     entry["ref"] = result
             except Exception as exc:
@@ -190,24 +196,6 @@ class EventProcessor:
                         target=s.target,
                         source="event",
                         flow=s.target,
-                        input=event_input,
-                        trigger="event",
-                        auth={"authenticated": False, "kind": "system"},
-                        request_id=event.request_id,
-                        release_id=state.release_id,
-                        api_version=state.api_version,
-                    ),
-                )
-            elif subscription.target_type == "function":
-                await attempt(
-                    "function",
-                    subscription.target,
-                    lambda s=subscription: platform.dispatch(
-                        RunFunctionJob,
-                        env=state.env_name,
-                        target=s.target,
-                        source="event",
-                        function=s.target,
                         input=event_input,
                         trigger="event",
                         auth={"authenticated": False, "kind": "system"},

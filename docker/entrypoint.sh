@@ -1,6 +1,6 @@
 #!/bin/sh
-# entrypoint [serve|studio|functions|worker|scheduler|migrate|check|version]: prepare the container, then hand over. `studio` runs the control
-# plane; `functions` runs the functions runtime service; `worker` and `scheduler` run the queue worker and the scheduler as processes of their
+# entrypoint [serve|studio|worker|scheduler|migrate|check|version]: prepare the container, then hand over. `studio` runs the control
+# plane;  `worker` and `scheduler` run the queue worker and the scheduler as processes of their
 # own; everything else is the server.
 set -e
 
@@ -27,10 +27,6 @@ fi
 
 if [ "$command" = "studio" ]; then
   exec python -m studio
-fi
-
-if [ "$command" = "functions" ]; then
-  exec python -m pawabase_server.functions.service
 fi
 
 exec python -m pawabase_server "$@"

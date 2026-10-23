@@ -20,7 +20,6 @@ from pawabase_server.db.models import (
     EventLog,
     FailedJobRecord,
     FlowRun,
-    FunctionRun,
     JobRun,
     MailLog,
     MetricCounter,
@@ -29,9 +28,8 @@ from pawabase_server.db.models import (
     WorkerHeartbeat,
 )
 from pawabase_server.environments.configuration import report as configuration_report
-from pawabase_server.infra.storage import folders
+from pawabase_server.infra.storage import folders, transform
 from pawabase_server.infra.storage import shares as object_shares
-from pawabase_server.infra.storage import transform
 from pawabase_server.observability import audit_log as audit_log_store
 from pawabase_server.observability import route_stats
 from pawabase_server.observability.advisor import advise
@@ -727,10 +725,7 @@ def register(r: Router, platform: Platform) -> None:
         runs = await FlowRun.filter(env=env, request_id=request_id).order_by("created_at")
         events = await EventLog.filter(env=env, request_id=request_id).order_by("id")
         jobs = await JobRun.filter(env=env, request_id=request_id).order_by("created_at")
-        function_runs = await FunctionRun.filter(env=env, request_id=request_id).order_by(
-            "created_at"
-        )
-        if not (request_rows or runs or events or jobs or function_runs):
+        if not (request_rows or runs or events or jobs):
             raise HTTPException(status_code=404, detail="no such request trace")
         logs, seen = [], set()
 
@@ -744,7 +739,7 @@ def register(r: Router, platform: Platform) -> None:
                 item.get("level"),
                 item.get("message"),
             )
-            if stamp in seen:  # a function's own log is also noted on the request it ran in
+            if stamp in seen:  # a flow's own log is also noted on the request it ran in
                 return
             seen.add(stamp)
             logs.append(item)
@@ -752,9 +747,6 @@ def register(r: Router, platform: Platform) -> None:
         for row in request_rows:
             for entry in (row.notes or {}).get("logs", []):
                 add_log(entry, "request")
-        for run in function_runs:
-            for entry in run.logs or []:
-                add_log(entry, f"function:{run.function}", function=run.function, run_id=run.id)
         for run in runs:
             for entry in run.logs or []:
                 add_log(entry, f"flow:{run.flow}", flow=run.flow, run_id=run.id)
@@ -771,7 +763,6 @@ def register(r: Router, platform: Platform) -> None:
             "requests": [dump(row) for row in request_rows],
             "spans": spans,
             "flow_runs": [dump(run) for run in runs],
-            "function_runs": [dump(run) for run in function_runs],
             "events": [dump(event) for event in events],
             "jobs": [dump(job) for job in jobs],
             "logs": logs,
@@ -781,7 +772,6 @@ def register(r: Router, platform: Platform) -> None:
                 "services": sorted({row.service for row in request_rows}),
                 "duration_ms": round(sum(row.duration_ms for row in request_rows), 3),
                 "flows": len(runs),
-                "functions": len(function_runs),
                 "events": len(events),
                 "jobs": len(jobs),
                 "logs": len(logs),
@@ -795,8 +785,7 @@ def register(r: Router, platform: Platform) -> None:
                 ),
                 "failed_spans": len(failed_spans),
                 "failed": any(row.status >= 500 for row in request_rows)
-                or any(run.status == "failed" for run in runs)
-                or any(run.status == "failed" for run in function_runs),
+                or any(run.status == "failed" for run in runs),
             },
         }
 

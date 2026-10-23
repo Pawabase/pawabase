@@ -47,7 +47,7 @@ export const KINDS = {
   },
   routes: {
     title: "Routes",
-    description: "Custom endpoints under /rest/v1, handled by a flow or a Python function.",
+    description: "Custom endpoints under /rest/v1, handled by a flow.",
     key: "id",
     columns: ["method", "path", "handler_type", "handler"],
     blank: { method: "POST", path: "", name: "", description: "", policy: "authenticated", input_fields: null, handler_type: "flow", handler: "", rate_limit: {}, enabled: true },
@@ -55,7 +55,7 @@ export const KINDS = {
   },
   subscriptions: {
     title: "Event subscriptions",
-    description: "Run a flow or function, or broadcast to a realtime channel, when an event is emitted.",
+    description: "Run a flow, or broadcast to a realtime channel, when an event is emitted.",
     columns: ["name", "event", "target_type", "target", "enabled"],
     blank: { name: "", description: "", event: "", target_type: "flow", target: "", condition: null, enabled: true },
     template: { name: "on_signup", description: "", event: "user.created", target_type: "flow", target: "welcome", condition: null, enabled: true },
@@ -77,7 +77,7 @@ export const KINDS = {
   },
   schedules: {
     title: "Schedules",
-    description: "Run a flow or function, or emit an event, on a cron expression or an interval.",
+    description: "Run a flow, or emit an event, on a cron expression or an interval.",
     columns: ["name", "cron", "interval_seconds", "target_type", "target", "enabled"],
     blank: { name: "", description: "", cron: "0 3 * * *", interval_seconds: null, target_type: "flow", target: "", payload: null, enabled: true },
     template: { name: "nightly_cleanup", description: "", cron: "0 3 * * *", interval_seconds: null, target_type: "flow", target: "cleanup", payload: null, enabled: true },

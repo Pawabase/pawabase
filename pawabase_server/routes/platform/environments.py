@@ -79,7 +79,7 @@ class KeyCreate(BaseModel):
     allowed_ips: list[str] = Field(default_factory=list, description="Client IPs or CIDR ranges")
     allowed_routes: list[str] = Field(
         default_factory=list,
-        description="Gateway route rules such as 'GET /rest/v1/orders' or '/functions/v1/*'",
+        description="Gateway route rules such as 'GET /rest/v1/orders' or '/flows/v1/*'",
     )
 
     @field_validator("allowed_ips")

@@ -1,17 +1,17 @@
 import logging
 
 from pawabase_server.core.ids import new_ulid
-from pawabase_server.db.models import FunctionRun
-from pawabase_server.functions.record_buffer import RecordBuffer
+from pawabase_server.core.record_buffer import RecordBuffer
+from pawabase_server.db.models import FlowRun
 
 ENV = "/platform/v1/envs/development"
 
 
-def run(function="f", **fields):
-    return FunctionRun(
+def run(flow="f", **fields):
+    return FlowRun(
         id=new_ulid(),
         env="development",
-        function=function,
+        flow=flow,
         trigger="http",
         status="succeeded",
         input={},
@@ -21,8 +21,8 @@ def run(function="f", **fields):
     )
 
 
-async def stored(function=None):
-    query = FunctionRun.filter(function=function) if function else FunctionRun.all()
+async def stored(flow=None):
+    query = FlowRun.filter(flow=flow) if flow else FlowRun.all()
     return await query.count()
 
 
@@ -73,10 +73,10 @@ async def test_a_failed_write_is_one_short_log_line_and_not_an_error(api, caplog
     twin = run("twin")
     await buffer.add(twin)
     await buffer.add(
-        FunctionRun(
+        FlowRun(
             id=twin.id,
             env="development",
-            function="twin",
+            flow="twin",
             trigger="http",
             status="s",
             input={},
@@ -88,6 +88,6 @@ async def test_a_failed_write_is_one_short_log_line_and_not_an_error(api, caplog
     lines = [r for r in caplog.records if r.name == "pawabase.api.records"]
     assert (
         len(lines) == 1
-        and "could not record 2 FunctionRun" in lines[0].getMessage()
+        and "could not record 2 FlowRun" in lines[0].getMessage()
         and not lines[0].exc_info
     )

@@ -66,7 +66,6 @@ def test_builtin_catalogue_is_substantial():
         "auth",
         "responses",
         "observability",
-        "code",
     } <= categories
 
 

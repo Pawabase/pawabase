@@ -9,7 +9,7 @@ import { envPath, get, post, useApi } from "../../../lib/api";
 import { MailStatus } from "./common";
 
 const STATUSES = [["all", "All"], ["sent", "Sent"], ["failed", "Failed"], ["suppressed", "Suppressed"], ["scheduled", "Scheduled"], ["canceled", "Canceled"]];
-const SOURCES = { studio: "Studio test", composer: "Composer", api: "API", flow: "Flow", function: "Function", auth: "Sign-in" };
+const SOURCES = { studio: "Studio test", composer: "Composer", api: "API", flow: "Flow", auth: "Sign-in" };
 
 export function Activity({ env, openId, onOpened }) {
   const base = envPath(env);

@@ -3,7 +3,7 @@
 Pawabase is a self-hostable backend platform built on [Sillo](https://github.com/sillohq/core).
 The developer brings the infrastructure (database, Redis, object storage, SMTP, OAuth
 credentials). Pawabase provides the platform around it: identity, policies, resources and
-APIs, realtime pub/sub, storage, events, queues, jobs, scheduling, caching, functions, flows,
+APIs, realtime pub/sub, storage, events, queues, jobs, scheduling, caching, flows,
 webhooks, secrets, documentation and observability, all operated from Studio.
 
 The one rule behind every decision is **Sillo first**: if Sillo (or a first-party Sillo package)
@@ -35,7 +35,7 @@ API would.
      ┌────────────▼──────────────────────────────────▼──────┐
      │  pawabase_server: one Sillo app, one Platform object   │   :8001 internal
      │  identity · management plane · data plane · storage ·  │   (not published)
-     │  functions · flows · events · realtime                 │
+     │  flows · events · realtime                             │
      │  + queue worker and scheduler, as tasks of this process │
      └────────────────────────────┬──────────────────────────┘
                                   │
@@ -69,7 +69,6 @@ The package is organised by what a module is for, not by which part of the produ
 | `db/` | `database` (connection and commands), `fields`, `models/` (every table), `migrations/` (one chain) |
 | `identity/` | `accounts` (the shared service and user accounts), `sessions`, `mfa`, `oauth`, `rbac`, `invitations`, `links`, `emails`, `environment` (auth settings), `backup` |
 | `environments/` | `state`, `env_settings`, `configuration`, `blueprints`, `releases`, `reseal`, `export_config` |
-| `functions/` | `registry`, `deployments`, `deployment_mirror`, `execution`, `runtime`, `runtime_rpc`, `record_buffer`, `sandbox/` |
 | `compiler/` | resources and routes compiled into Sillo routes; `dispatch` hands `/rest/<version>` to a released app |
 | `data/` | SQL across SQLite, PostgreSQL and MySQL; what happens after a record changes |
 | `automation/` | `worker`, `scheduler`, `event_processor`, `webhooks`, `jobs/` |
@@ -97,7 +96,6 @@ One origin. Nothing about the inside leaks into client code:
 | `/auth/v1/*` | identity (`routes/identity`) |
 | `/rest/v1/*` | the data plane: resources, custom routes, extension routes |
 | `/storage/v1/*` | storage |
-| `/functions/v1/*` | function invocation |
 | `/flows/v1/*` | flow invocation (HTTP-triggered flows) |
 | `/hooks/v1/*` | inbound webhooks |
 | `/realtime/v1/*` | realtime (HTTP and WebSocket) |
@@ -264,7 +262,7 @@ On change, the platform **compiles** an environment into a `SilloApp`:
 
 * each exposed operation (`list`, `get`, `create`, `update`, `delete`) becomes a Sillo route whose
   `request_model` and `response_model` are generated from the Resource's fields;
-* each custom route becomes a Sillo route whose handler runs a Flow or a Python function;
+* each custom route becomes a Sillo route whose handler runs a Flow;
 * the runtime's Python extension router (normal Sillo code) is mounted;
 * policies are enforced through a `useAuth` subclass on every route;
 * Sillo generates the OpenAPI document, and Atlas renders it.
@@ -284,14 +282,12 @@ A Flow is a graph of blocks (stored in the `@xyflow/react` shape so that Studio 
 directly). It is triggered by an HTTP route, a resource operation, an event, a realtime event, a
 schedule, a job, an inbound webhook or a manual run. Block configuration can reference flow
 state with `{{ path }}` templates (`input`, `auth`, `vars`, `steps.<id>.output`, `secrets`,
-`env`). Templates are lookups, not a language: logic that needs a language uses a Python
-function block.
+`env`). Templates are lookups, not a language.
 
 Blocks are discovered from the `pawabase.blocks` entry-point group, so third-party packages can
 add blocks. The built-in set (40+) covers HTTP, auth, policies, validation, resources, raw
 queries, transactions, conditions, switches, loops, cache, queues, jobs, events, realtime,
-storage, mail, webhooks, external HTTP, secrets, delays, retries, transformations, Python
-functions, logging, metrics, responses and errors.
+storage, mail, webhooks, external HTTP, secrets, delays, retries, transformations, logging, metrics, responses and errors.
 
 ---
 
@@ -304,7 +300,7 @@ Any part of the server publishes domain events (`user.created`, `order.paid`, `f
 * `memory` is used in tests and single-process development.
 
 The event processor records every event (origin service, payload, consumers, outcomes) for
-inspection, then fans out to subscriptions: flows, functions, jobs, outbound webhooks and
+inspection, then fans out to subscriptions: flows, jobs, outbound webhooks and
 realtime publication.
 
 ## 8. Realtime
@@ -332,9 +328,10 @@ connections and presence.
 
 ## 10. Extending Pawabase
 
-* **Python functions**: `code/functions/*.py`, decorated with `@function`.
 * **Sillo routers**: `code/routes.py` exporting `router = Router(...)`, served under
-  `/rest/v1/x/…`.
+  `/rest/v1/x/…`. Handlers call `pawabase_server.extend.authorize(ctx, policy)` for the platform's
+  policy check and a runtime (data, events, secrets, outbound HTTP) acting for the caller. Mounted
+  code is trusted: it runs in the server process, so it is for the operator's own code.
 * **Python policies and transformers**: `@policy`, `@transformer`.
 * **Blocks**: any installed package exposing a `pawabase.blocks` entry point.
 * **Storage and OAuth providers**: Sillo storage drivers and `sillo-oauth` `OAuthProvider`s.

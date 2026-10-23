@@ -99,7 +99,7 @@ bills by simple subscription. It is in pre-launch.
 | | |
 | --- | --- |
 | [Documentation](https://github.com/Pawabase/pawabase-docs) | Guides, tutorials and reference |
-| [Python library and command line](https://github.com/Pawabase/pawabase-python) | For functions and automation |
+| [Python library](https://github.com/Pawabase/pawabase-python) | For Python apps and scripts |
 | [TypeScript client](https://github.com/Pawabase/pawabase-js) | For web and mobile apps |
 | [Upgrading](docs/upgrading.md) | Moving an older installation forward |
 | [Architecture](ARCHITECTURE.md) | How it is built, for contributors |

@@ -30,10 +30,8 @@ async def running(tmp_path):
 
     from pawabase_server.app import create_server
     from pawabase_server.core.clients import ServiceClient
-    from pawabase_server.functions.registry import clear_functions
     from pawabase_server.settings import Settings
 
-    clear_functions()
     settings = Settings(
         _env_file=None,
         app_env="testing",
@@ -44,7 +42,6 @@ async def running(tmp_path):
         code_path=str(tmp_path / "code"),
         inline_worker=True,
         inline_scheduler=False,
-        function_isolation="inprocess",
         record_buffer_seconds=0,
         status_probe_interval=0,
         domain_refresh_interval=0,
@@ -88,4 +85,4 @@ async def running(tmp_path):
         await public.aclose()
         await studio.aclose()
         await server.app._shutdown()
-        clear_functions()
+    

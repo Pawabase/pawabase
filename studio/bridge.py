@@ -34,7 +34,6 @@ BRIDGE: dict[str, str] = {
 #: The public data-plane prefixes the explorer and the terminal's ``http`` command may call, beyond ``/rest``. Never ``/platform``,
 #: ``/admin`` or ``/internal``: those are management, and this request carries no operator.
 PUBLIC_PREFIXES = (
-    "/functions/v1/",
     "/flows/v1/",
     "/auth/v1/",
     "/storage/v1/",
@@ -99,38 +98,6 @@ def _without_path_parameters(path_item: dict[str, Any], names: set[str]) -> dict
     return result
 
 
-def _function_body(path_item: dict[str, Any], function: dict[str, Any]) -> None:
-    """Document a deployed function's declared input fields on its concrete operation."""
-    fields = function.get("input_fields") or []
-    if not fields:
-        return
-    properties: dict[str, Any] = {}
-    required: list[str] = []
-    for field in fields:
-        if not isinstance(field, dict) or not field.get("name"):
-            continue
-        name = str(field["name"])
-        schema = {
-            key: value
-            for key, value in field.items()
-            if key not in {"name", "required", "read_only", "write_only"}
-        }
-        properties[name] = schema
-        if field.get("required"):
-            required.append(name)
-    body_schema: dict[str, Any] = {"type": "object", "properties": properties}
-    if required:
-        body_schema["required"] = required
-    for operation in path_item.values():
-        if isinstance(operation, dict) and operation.get("operationId"):
-            operation["summary"] = function.get("description") or f"Invoke {function['name']}"
-            operation["requestBody"] = {
-                "required": bool(required),
-                "content": {"application/json": {"schema": body_schema}},
-            }
-            operation["x-pawabase-inferred"] = "function"
-
-
 def _document_manual_bodies(path: str, path_item: dict[str, Any]) -> None:
     """Fill the intentional OpenAPI gaps for handlers that parse streams or arbitrary JSON."""
     if path.startswith(("/flows/v1/", "/hooks/v1/")):
@@ -180,20 +147,12 @@ def _expand_runtime_paths(
 ) -> dict[str, Any]:
     """Turn name templates into the concrete endpoints present in one environment."""
     expanded: dict[str, Any] = {}
-    functions = definitions.get("functions", [])
     flows = definitions.get("flows", [])
     hooks = definitions.get("hooks", [])
     buckets = definitions.get("buckets", [])
     for path, path_item in paths.items():
         variants: list[tuple[str, dict[str, Any]]] = []
-        if path == "/functions/v1/{name}" and functions:
-            for function in functions:
-                name = str(function.get("name") or "")
-                if name:
-                    item = _without_path_parameters(path_item, {"name"})
-                    _function_body(item, function)
-                    variants.append((path.replace("{name}", name), item))
-        elif path == "/flows/v1/{name}" and flows:
+        if path == "/flows/v1/{name}" and flows:
             for flow in flows:
                 definition = flow.get("definition") or {}
                 direct = any(
@@ -263,7 +222,7 @@ def register(app: SilloApp, deps: Deps) -> None:
     async def explorer_openapi(ctx: HttpContext):
         """Return every documented API surface alongside the compiled app API.
 
-        The runtime document describes auth, functions, flows, storage,
+        The runtime document describes auth, flows, storage,
         realtime and the management plane.  The environment document is built
         separately because resources and custom routes are compiled per
         environment and per released API version.
@@ -294,7 +253,6 @@ def register(app: SilloApp, deps: Deps) -> None:
             if _for_the_application(path)
         }
         definition_paths = {
-            "functions": f"/platform/v1/envs/{env}/functions",
             "flows": f"/platform/v1/envs/{env}/flows",
             "hooks": f"/platform/v1/envs/{env}/inbound-hooks",
             "buckets": f"/platform/v1/envs/{env}/buckets",
@@ -405,7 +363,7 @@ def register(app: SilloApp, deps: Deps) -> None:
             return JSONResponse({"detail": "unsupported method"}, status_code=400)
         endpoint = str(body.get("endpoint") or "")
         if endpoint:
-            # A full public path, for anything beyond resources: functions, flows, sign-in, files, health.
+            # A full public path, for anything beyond resources: flows, sign-in, files, health.
             clean = endpoint.split("?", 1)[0]
             segments = clean.split("/")[1:]
             if (

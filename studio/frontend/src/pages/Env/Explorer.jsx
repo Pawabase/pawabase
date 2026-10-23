@@ -11,8 +11,8 @@ const METHOD_TONES = { get: "green", head: "green", post: "blue", put: "yellow",
 const GROUPS = [
   ["Tables", "database", "Read and write your data: list, create, update and delete records."],
   ["Application routes", "routes", "Your own HTTP routes and the flows behind them."],
+  ["Python routes", "code", "Routes written in Python and mounted on the server, such as Pawabase Cloud's actions."],
   ["Authentication", "users", "Sign up, sign in, tokens, sessions and second factors for your users."],
-  ["Functions", "functions", "Call your deployed functions over HTTP."],
   ["Flows", "flows", "Run flows directly."],
   ["Storage", "storage", "Upload, download, sign and share files in buckets."],
   ["Realtime", "realtime", "Publish to channels and read their history."],
@@ -74,9 +74,9 @@ function sampleFor(document, raw, depth = 0) {
 
 function categoryFor(path, operation, source) {
   const tags = (operation.tags || []).map((tag) => tag.toLowerCase());
+  if (path.startsWith("/rest/v1/x/")) return "Python routes";
   if (path.startsWith("/rest/")) return tags.some((tag) => tag === "routes") || String(operation.operationId || "").startsWith("route.") ? "Application routes" : "Tables";
   if (path.startsWith("/auth/")) return "Authentication";
-  if (path.startsWith("/functions/")) return "Functions";
   if (path.startsWith("/flows/")) return "Flows";
   if (path.startsWith("/storage/") || path.startsWith("/files/")) return "Storage";
   if (path.startsWith("/realtime/")) return "Realtime";

@@ -7,14 +7,14 @@ import { startTour } from "../lib/tour";
 
 const SECTIONS = [
   "overview", "database", "tables", "schemas", "transformers", "policies", "routes", "explorer",
-  "functions", "flows", "subscriptions", "schedules", "webhooks", "inbound-hooks", "mail-templates",
+  "flows", "subscriptions", "schedules", "webhooks", "inbound-hooks", "mail-templates",
   "users", "storage", "realtime", "releases", "activity", "jobs", "events", "observability", "keys", "secrets", "settings",
 ];
 
 const READ_COMMANDS = [
   ["resources", "List table definitions", "resources"], ["schemas", "List schemas", "schemas"],
   ["transformers", "List transformers", "transformers"], ["policies", "List policies", "policies"],
-  ["routes", "List custom routes", "routes"], ["functions", "List functions", "functions"],
+  ["routes", "List custom routes", "routes"],
   ["subscriptions", "List event subscriptions", "subscriptions"], ["schedules", "List schedules", "schedules"],
   ["webhooks", "List webhooks", "webhooks"], ["inbound-hooks", "List inbound hooks", "inbound-hooks"],
   ["mail-templates", "List mail templates", "mail-templates"], ["storage", "List storage buckets", "buckets"],

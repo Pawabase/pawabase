@@ -37,9 +37,8 @@ class Settings(Config):
         ``mail_*`` is the SMTP service every environment sends through (an environment can use another with ``<ENV>_MAIL_*``); without a
         host mail is logged and not sent.
 
-    Functions and jobs
-        ``code_path`` is where mounted code (``functions/``, ``policies/``, ``routes.py``) is read from; ``deployments_path`` is where
-        uploaded artifacts live (writable; defaults to ``<code_path>/.deployments``). The queue worker and the scheduler are
+    Flows and jobs
+        ``code_path`` is where mounted code (``policies.py``, ``transformers.py``, ``routes.py``) is read from. The queue worker and the scheduler are
         processes of their own, never tasks of the server: ``worker_mode`` is ``process`` (the default: ``serve`` starts and supervises
         them as child processes) or ``external`` (something else runs ``pawabase-server worker`` and ``pawabase-server scheduler``, as the
         compose files do). ``inline_worker`` and ``inline_scheduler`` put them inside the server process instead; off unless asked for,
@@ -121,7 +120,7 @@ class Settings(Config):
     db_pool_max: int | None = None
     db_statement_cache_size: int | None = None
     query_timeout: float = 15.0
-    #: How developer SQL (the Studio SQL console, a function's ``db``) reaches an environment that shares a Postgres database by
+    #: How developer SQL (the Studio SQL console) reaches an environment that shares a Postgres database by
     #: schema. ``role``: as a login role per environment that can use its own schema and nothing else, so no statement reaches
     #: another environment or the platform's tables; SQL is refused when that role cannot be made. ``off``: as the platform's own
     #: user — only for a single-tenant install where everyone with SQL access may read every environment.
@@ -152,31 +151,9 @@ class Settings(Config):
     mail_use_tls: bool | None = None
     mail_suppress: bool = False
 
-    # ── functions, flows and jobs ────────────────────────────────────────
+    # ── flows and jobs ────────────────────────────────────────
     code_path: str = "code"
-    #: Where ``pawabase deploy`` artifacts are stored: writable. Empty means ``<code_path>/.deployments``.
-    deployments_path: str = ""
-    #: Install a deployment's ``functions/requirements.txt`` at deploy time. ``None`` means yes, except in ``production``, where installing
-    #: packages from the network on a deploy is opt-in (``PAWABASE_FUNCTION_INSTALL=true``).
-    function_install: bool | None = None
-    #: Package index for those installs (empty: the installer's default).
-    function_index_url: str = ""
-    function_install_timeout: int = 300
-    #: Where a deployment's functions run: ``process`` (worker processes of their own, with limits: the default) or ``inprocess``.
-    #: ``<ENV>_FUNCTION_ISOLATION`` sets it for one environment.
-    function_isolation: str = "process"
-    #: Address-space limit of a sandbox worker, in MB (not enforced on macOS).
-    sandbox_memory_mb: int = 1024
-    #: Most worker processes one deployment may use at once; further calls wait for one.
-    sandbox_workers: int = 4
-    #: How long an unused worker is kept before it is stopped.
-    sandbox_idle_seconds: int = 300
-    #: What confines a sandbox worker beyond its own process (see ``functions/sandbox/confine.py``): Landlock (filesystem, TCP) and a
-    #: seccomp filter (no sockets, no tracing, no namespaces). ``required``: a worker that cannot be confined runs nothing.
-    #: ``auto`` (default): ``required`` on Linux; on other systems (macOS development) the process boundary only, with a warning.
-    #: ``off``: the process boundary only — for code you trust.
-    sandbox_confinement: Literal["auto", "required", "off"] = "auto"
-    #: Comma-separated host names a function's ``http_request`` may reach although they resolve to a private address.
+    #: Comma-separated host names a flow's HTTP request may reach although they resolve to a private address.
     outbound_allow_hosts: str = ""
     inline_worker: bool = False
     inline_scheduler: bool = False
@@ -190,56 +167,6 @@ class Settings(Config):
     #: Put this in front of every Redis channel, cache key and queue name, so runtimes can share one Redis without hearing each other.
     #: Empty keeps today's names. Set it to something unique per runtime when a Redis is shared.
     namespace: str = ""
-    #: Install a deployment's libraries from wheels only (``--only-binary :all:``): a source distribution runs its build script, which is
-    #: customer-controlled code, with the API's privileges.
-    function_install_binary_only: bool = False
-
-    # ── the functions runtime (``functions/service``) ────────────────────
-    #: Where the functions runtime service listens (``http://functions:8100``). Empty: the runtime runs inside this process, which is
-    #: what a single-process installation and the tests use. With a URL, this server forwards every invocation there.
-    functions_runtime_url: str = ""
-    #: How the runtime service reaches this server's internal listener for ``ctx.runtime`` calls and run reports
-    #: (``http://pawabase:8001``). Only the service reads it.
-    functions_api_url: str = "http://127.0.0.1:8001"
-    #: Where the runtime service listens when it runs on its own (``python -m pawabase_server.functions.service``).
-    functions_runtime_host: str = "127.0.0.1"
-    functions_runtime_port: int = 8100
-    #: ``guarded`` (default): a function's ``fetch()`` is made by the runtime through the outbound guard (no private addresses, no
-    #: DNS rebinding) and the worker itself has no sockets. ``direct``: the worker may open its own connections (raw TCP database
-    #: drivers); the filesystem and syscall confinement still apply. Only for code you trust with your network.
-    functions_network: Literal["guarded", "direct"] = "guarded"
-    #: Requests one HTTP function worker serves at once; the next request starts another worker, up to ``functions_max_workers``.
-    functions_worker_concurrency: int = 32
-    #: Most workers one HTTP function may run at once; beyond that requests wait (``functions_queue_seconds``) and then get 503.
-    functions_max_workers: int = 8
-    functions_queue_seconds: float = 10.0
-    #: The longest a request to an HTTP function may run (a function's ``config.timeout`` may lower it, never raise it).
-    functions_max_timeout_seconds: int = 400
-    #: How long work handed to ``waitUntil`` may continue after the response.
-    functions_background_seconds: int = 300
-    #: Heap limit of an HTTP function worker, in MB (a function's ``config.memory`` may lower it).
-    functions_memory_mb: int = 512
-    #: Resource limits every run gets (``functions/limits.py``). A function chooses its own in code (``memory``, ``cpu``, ``timeout``,
-    #: ``concurrency``) or an operator overrides them per environment; these are the defaults when nothing is chosen and the ceilings
-    #: nothing may exceed. The project's plan may lower the ceilings (``max_function_memory_mb``, ``max_function_cpu_seconds``,
-    #: ``max_function_timeout_seconds``).
-    function_default_timeout_seconds: int = 30
-    function_default_memory_mb: int = 512
-    function_max_memory_mb: int = 2048
-    #: CPU seconds one run may use. ``0`` as a default means "as long as its timeout".
-    function_default_cpu_seconds: float = 0
-    function_max_cpu_seconds: float = 300
-    #: The largest request body an HTTP function accepts, in MB (a function's ``maxBody`` may lower it).
-    functions_max_body_mb: int = 50
-    #: Outbound requests one invocation may make, and how many bytes it may receive from them.
-    functions_fetch_limit: int = 200
-    functions_fetch_max_bytes: int = 64 * 1024 * 1024
-    #: Resolve ``npm:``, ``jsr:`` and URL imports when a TypeScript deployment is activated, and run it from that copy only. ``None``
-    #: follows ``function_install`` (on, except in production unless enabled).
-    function_vendor: bool | None = None
-    #: The Deno registry mirrors to vendor from (empty: npm and jsr themselves).
-    function_npm_registry: str = ""
-    function_vendor_timeout: int = 300
 
     # ── projects ─────────────────────────────────────────────────────────
     #: The project a fresh installation starts with, and the one environments from before projects existed are attached to.
@@ -250,6 +177,8 @@ class Settings(Config):
     # ── runtime agent (Cloud-managed deployments only) ───────────────────
     #: Where this runtime's agent polls for provisioning jobs. Empty: no agent runs here.
     agent_url: str = ""
+    #: Where on the control plane the agent's two calls (``agent.poll``, ``agent.report``) are served: Pawabase Cloud's actions.
+    agent_path: str = "/rest/v1/x/cloud"
     agent_id: str = ""
     #: The control plane's publishable key, which its gateway asks of every call (it opens the door; the agent's signature is the credential).
     agent_api_key: str = ""
@@ -267,7 +196,7 @@ class Settings(Config):
     firewall_event_retention_days: int = 14
     #: Days the management audit log keeps an entry; 0 keeps everything. Purged once a day by the leading scheduler.
     audit_retention_days: int = 365
-    #: How often function and flow run records are written, in seconds. They gather in memory and go to the database in one batch.
+    #: How often flow run records are written, in seconds. They gather in memory and go to the database in one batch.
     #: ``0`` writes each record before the request returns.
     record_buffer_seconds: float = 0.5
 
@@ -283,7 +212,7 @@ class Settings(Config):
     max_body_bytes: int = 100 * 1024 * 1024
     hosts: str = ""
     trusted_proxies: str = "private"
-    #: Proxies between the edge and the open internet (a load balancer is 1). The caller's address, as handed to functions, is the entry
+    #: Proxies between the edge and the open internet (a load balancer is 1). The caller's address, as handed to flows, is the entry
     #: ``trusted_proxy_hops`` places from the right of ``X-Forwarded-For``.
     trusted_proxy_hops: int = 0
     #: Methods the edge accepts; anything else is answered 405.
@@ -331,24 +260,6 @@ class Settings(Config):
         env_prefix = "PAWABASE_"
 
     # ── derived values ───────────────────────────────────────────────────
-
-    @property
-    def function_install_enabled(self) -> bool:
-        return (
-            self.app_env != "production" if self.function_install is None else self.function_install
-        )
-
-    @property
-    def function_vendor_enabled(self) -> bool:
-        """Whether a TypeScript deployment's remote imports are fetched when it is activated (see ``functions/vendor.py``)."""
-        return (
-            self.function_install_enabled if self.function_vendor is None else self.function_vendor
-        )
-
-    @property
-    def functions_runtime_remote(self) -> bool:
-        """Whether functions run in the separate runtime service rather than in this process."""
-        return bool(self.functions_runtime_url.strip())
 
     def tuned(self, url: str) -> str:
         """*url* with this deployment's pool settings applied (Postgres only)."""

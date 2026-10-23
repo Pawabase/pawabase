@@ -73,7 +73,7 @@ export default function Mail({ env }) {
         <div className="mail-page"><Overview env={env} setup={setup.data} onGo={go} onOpenTemplate={setTemplate} onOpenMessage={(id) => { setMessage(id); setSection("activity"); }} /></div>
       </>}
       {section === "templates" && <>
-        <PageHead title="Templates" description="Emails that flows, functions and sign-in send by name. Edit visually, preview with sample values, publish when ready." />
+        <PageHead title="Templates" description="Emails that flows and sign-in send by name. Edit visually, preview with sample values, publish when ready." />
         <div className="mail-page"><Library key={creating ? "create" : "browse"} env={env} kit={kit} startCreating={creating} onOpen={setTemplate} /></div>
       </>}
       {section === "compose" && <>

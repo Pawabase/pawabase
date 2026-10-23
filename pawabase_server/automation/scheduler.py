@@ -6,7 +6,7 @@ nodes), so the process reconciles its registered jobs with the database every
 few seconds: new schedules are added, changed ones re-registered, removed ones
 dropped.
 
-A firing decides *when*; the work itself is queued (a flow or function job) or
+A firing decides *when*; the work itself is queued (a flow job) or
 published (an event), so it survives a scheduler restart.
 
 Any number of schedulers may run; one leads. Leadership is a database lease
@@ -147,7 +147,6 @@ class PlatformScheduler:
     async def fire(self, spec: dict[str, Any], *, manual: bool = False) -> None:
         """Run one schedule now. A timed firing happens only on the leader; *manual* ("Run now" in Studio) runs wherever it is asked."""
         from pawabase_server.automation.jobs.flows import RunFlowJob
-        from pawabase_server.automation.jobs.functions import RunFunctionJob
 
         if not self.leader and not manual:
             return  # another scheduler leads and fires this one
@@ -178,17 +177,6 @@ class PlatformScheduler:
                     target=spec["target"],
                     source="schedule",
                     flow=spec["target"],
-                    input=spec.get("payload") or {"scheduled_at": _now()},
-                    trigger="schedule",
-                    auth={"authenticated": False, "kind": "system"},
-                )
-            elif spec["target_type"] == "function":
-                await platform.dispatch(
-                    RunFunctionJob,
-                    env=env,
-                    target=spec["target"],
-                    source="schedule",
-                    function=spec["target"],
                     input=spec.get("payload") or {"scheduled_at": _now()},
                     trigger="schedule",
                     auth={"authenticated": False, "kind": "system"},

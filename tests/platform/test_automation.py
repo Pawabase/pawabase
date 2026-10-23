@@ -1,4 +1,4 @@
-"""Flows, functions, custom routes, events, webhooks, schedules and jobs."""
+"""Flows, custom routes, events, webhooks, schedules and jobs."""
 
 import hashlib
 import hmac
@@ -112,22 +112,6 @@ NOTIFY_FLOW = {
     },
 }
 
-FUNCTION_CODE = textwrap.dedent(
-    '''
-    from pawabase_server.functions.registry import function
-
-    @function("quote", input_fields=[{"name": "items", "type": "integer", "required": True, "minimum": 1}])
-    async def quote(ctx):
-        """Price a quote."""
-        return {"total": ctx.input["items"] * 5, "user": ctx.auth.get("user_id")}
-
-    @function("tally", policy="public")
-    async def tally(ctx):
-        orders = await ctx.runtime.resource_list("orders")
-        return {"orders": orders["total"]}
-    '''
-)
-
 ROUTES_CODE = textwrap.dedent(
     """
     from sillo import HttpContext, Router
@@ -143,10 +127,9 @@ ROUTES_CODE = textwrap.dedent(
 
 @pytest.fixture
 async def acme(api, settings, tmp_path):
-    code = tmp_path / "code" / "functions"
+    code = tmp_path / "code"
     code.mkdir(parents=True)
-    (code / "billing.py").write_text(FUNCTION_CODE)
-    (tmp_path / "code" / "routes.py").write_text(ROUTES_CODE)
+    (code / "routes.py").write_text(ROUTES_CODE)
     await api.studio.post(f"{ENV}/resources", json=ORDERS)
     await api.studio.post(f"{ENV}/resources/orders/migrate")
     for flow in (PAY_FLOW, NOTIFY_FLOW):
@@ -159,17 +142,6 @@ async def acme(api, settings, tmp_path):
             "handler": "pay-order",
             "policy": "authenticated",
             "name": "Pay order",
-        },
-    )
-    await api.studio.post(
-        f"{ENV}/routes",
-        json={
-            "method": "POST",
-            "path": "/quotes",
-            "handler_type": "function",
-            "handler": "quote",
-            "policy": "public",
-            "input_fields": [{"name": "items", "type": "integer", "required": True}],
         },
     )
     return api
@@ -232,32 +204,12 @@ async def test_custom_route_flow_and_event_consumer(acme):
     assert detail["logs"][0]["data"]["password"] == "[redacted]"
 
 
-async def test_functions_and_python_routes(acme):
+async def test_python_routes(acme):
     api = acme
     anon = api.context_headers("development")
-    quote = await api.http.post("/rest/v1/quotes", json={"items": 3}, headers=anon)
-    assert quote.status_code == 200 and quote.json()["total"] == 15
-    assert (
-        await api.http.post("/rest/v1/quotes", json={"items": "x"}, headers=anon)
-    ).status_code == 422
-
-    # /functions/v1 applies the function's own policy (quote requires sign-in).
-    assert (
-        await api.http.post("/functions/v1/quote", json={"items": 2}, headers=anon)
-    ).status_code == 401
-    signed_in = await api.http.post(
-        "/functions/v1/quote",
-        json={"items": 2},
-        headers=api.user_headers("development", user_id="9"),
-    )
-    assert signed_in.json() == {"data": {"total": 10, "user": "9"}}
-    tally = await api.http.post("/functions/v1/tally", headers=anon)
-    assert tally.json() == {"data": {"orders": 0}}
-
     hello = await api.http.get("/rest/v1/x/acme/hello", headers=anon)
     assert hello.json() == {"hello": "from normal Sillo code"}
-    listing = await api.studio.get(f"{ENV}/functions")
-    assert {f["name"] for f in listing["data"]} == {"quote", "tally"} and listing["router"] is True
+    assert api.platform.code.router is not None
 
 
 async def test_manual_run_and_validation(acme):
@@ -558,25 +510,6 @@ async def test_schedules_and_jobs(acme):
         )
     fired = await api.studio.post(f"{ENV}/schedules/nightly/run")
     assert fired["last_status"] == "emitted" and fired["run_count"] == 1
-    await api.studio.post(
-        f"{ENV}/schedules",
-        json={
-            "name": "tally",
-            "interval_seconds": 60,
-            "target_type": "function",
-            "target": "tally",
-        },
-    )
-    await api.studio.post(f"{ENV}/schedules/tally/run")
-    await api.drain()
-    jobs = (await api.studio.get(f"{ENV}/jobs?job=RunFunctionJob"))["data"]
-    assert (
-        jobs[0]["status"] == "completed"
-        and jobs[0]["result"] == {"orders": 0}
-        and jobs[0]["source"] == "schedule"
-    )
-    queues = (await api.studio.get(f"{ENV}/queues"))["data"]
-    assert next(q for q in queues if q["name"] == "functions")["jobs"]["completed"] == 1
     workers = (await api.studio.get("/platform/v1/workers"))["data"]
     assert workers[0]["name"].startswith("inline")
 
@@ -685,7 +618,7 @@ def test_mime_patterns():
     assert ", ".join(patterns) == "image/*, application/pdf"
 
 
-async def test_input_policies_see_the_body_on_resources_and_routes(acme):
+async def test_input_policies_see_the_body_on_resources(acme):
     """Gates decide before the body is read; `$input` conditions wait for it."""
     api = acme
     await api.studio.post(
@@ -695,29 +628,11 @@ async def test_input_policies_see_the_body_on_resources_and_routes(acme):
             "condition": {"all": [{"authenticated": True}, {"lte": ["$input.total", 100]}]},
         },
     )
-    await api.studio.post(
-        f"{ENV}/policies",
-        json={
-            "name": "few_items",
-            "condition": {"all": [{"authenticated": True}, {"lte": ["$input.items", 5]}]},
-        },
-    )
     await api.studio.put(
         f"{ENV}/resources/orders",
         json={
             **ORDERS,
             "operations": {**ORDERS["operations"], "create": {"enabled": True, "policy": "small"}},
-        },
-    )
-    await api.studio.post(
-        f"{ENV}/routes",
-        json={
-            "method": "POST",
-            "path": "/small-quotes",
-            "handler_type": "function",
-            "handler": "quote",
-            "policy": "few_items",
-            "input_fields": [{"name": "items", "type": "integer", "required": True}],
         },
     )
     ada = api.user_headers("development", user_id="7")
@@ -727,13 +642,3 @@ async def test_input_policies_see_the_body_on_resources_and_routes(acme):
     assert (
         await api.http.post("/rest/v1/orders", json={"total": 400}, headers=ada)
     ).status_code == 403
-    assert (
-        await api.http.post("/rest/v1/small-quotes", json={"items": 3}, headers=ada)
-    ).status_code == 200
-    assert (
-        await api.http.post("/rest/v1/small-quotes", json={"items": 9}, headers=ada)
-    ).status_code == 403
-    anonymous = api.context_headers("development")
-    assert (
-        await api.http.post("/rest/v1/small-quotes", json={"items": 3}, headers=anonymous)
-    ).status_code == 401

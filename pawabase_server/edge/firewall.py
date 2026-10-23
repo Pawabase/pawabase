@@ -46,7 +46,6 @@ PATH_ENV = {
     "/docs/v1/": 3,
     "/storage/v1/files/": 4,
     "/storage/v1/signed/": 4,
-    "/functions/v1/public/": 4,
 }
 
 

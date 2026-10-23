@@ -1,13 +1,14 @@
 import { router } from "@inertiajs/react";
 import {
   Background, Controls, Handle, MiniMap, Position, ReactFlow, ReactFlowProvider,
-  addEdge, useEdgesState, useNodesState, useReactFlow,
+  addEdge, useEdgesState, useNodesInitialized, useNodesState, useReactFlow,
 } from "@xyflow/react";
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import Layout, { envHref } from "../../components/Layout";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Field, Json, JsonInput, Segmented, useAction } from "../../components/ui";
 import { envPath, post, put } from "../../lib/api";
+import { arrange, isCramped } from "../../lib/flowLayout";
 
 const CATEGORY_ORDER = ["triggers", "control", "resources", "responses", "auth", "data", "code", "events", "jobs", "mail", "storage", "realtime", "cache", "integrations", "observability"];
 const rank = (c) => (CATEGORY_ORDER.includes(c) ? CATEGORY_ORDER.indexOf(c) : 99);
@@ -23,7 +24,6 @@ const BLOCK_ICONS = {
   "cache.get": "import",
   "cache.invalidate": "refresh",
   "cache.set": "upload",
-  "function.call": "functions",
   "control.delay": "clock",
   "control.foreach": "layers",
   "control.if": "gitBranch",
@@ -60,7 +60,6 @@ const BLOCK_ICONS = {
   "webhook.send": "send",
   "flow.call": "flows",
   "queue.flow": "send",
-  "queue.function": "code",
   "mail.send": "mail",
   "log.write": "audit",
   "metric.increment": "chart",
@@ -129,8 +128,16 @@ function Editor({ env, flow, blocks }) {
     timeout: flow?.timeout ?? 60,
     record_runs: flow?.record_runs ?? true,
   }));
-  const [nodes, setNodes, onNodesChange] = useNodesState((flow?.definition?.nodes || []).map(toCanvasNode));
-  const [edges, setEdges, onEdgesChange] = useEdgesState((flow?.definition?.edges || []).map(toCanvasEdge));
+  // A flow made by code has every block at the same spot: open it already arranged.
+  const start = useMemo(() => {
+    const first = (flow?.definition?.nodes || []).map(toCanvasNode);
+    const joined = (flow?.definition?.edges || []).map(toCanvasEdge);
+    const cramped = isCramped(first);
+    return { nodes: cramped ? tidy(first, joined, byKey) : first, edges: joined, cramped };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [nodes, setNodes, onNodesChange] = useNodesState(start.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(start.edges);
   const [selected, setSelected] = useState(null);
   const [problems, setProblems] = useState(null);
   const [runResult, setRunResult] = useState(null);
@@ -154,6 +161,22 @@ function Editor({ env, flow, blocks }) {
   const onConnect = useCallback((params) => {
     setEdges((eds) => addEdge(toCanvasEdge({ ...params, id: `${params.source}-${params.sourceHandle || "next"}-${params.target}` }), eds));
   }, [setEdges]);
+
+  // The first arrangement had to guess how big each block is; once they are on screen, do it again with their real sizes.
+  const measured = useNodesInitialized();
+  const refined = useRef(false);
+  useEffect(() => {
+    if (!start.cramped || !measured || refined.current) return;
+    refined.current = true;
+    setNodes((ns) => tidy(ns, edges, byKey));
+    window.requestAnimationFrame(() => flowApi.fitView({ padding: 0.2 }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [measured]);
+
+  const tidyUp = () => {
+    setNodes((ns) => tidy(ns, edges, byKey));
+    window.requestAnimationFrame(() => flowApi.fitView({ padding: 0.2, duration: 250 }));
+  };
 
   const addBlock = (key, position) => {
     const block = byKey[key];
@@ -212,6 +235,7 @@ function Editor({ env, flow, blocks }) {
                 {problems && (problems.length ? <Badge tone="red">{problems.length} problem(s)</Badge> : <Badge tone="green">valid</Badge>)}
               </div>
               <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5 flow-toolbar-actions pointer-events-auto gap-1.5 [&_.btn]:p-[0_10px] [&_.btn]:text-ui-sm [&_.btn]:h-control-sm">
+                <Button onClick={tidyUp} title="Arrange the blocks neatly, top to bottom"><Icon name="layers" size={14} />Arrange</Button>
                 <Button onClick={validate} disabled={busy}>Validate</Button>
                 {!isNew && <Button onClick={() => setPanel("run")}>Test run</Button>}
                 <Button variant="primary" onClick={save} disabled={busy || !meta.name}>Save</Button>
@@ -591,6 +615,21 @@ function blockHandles(block, config) {
     handles = [...names, "default"];
   }
   return handles;
+}
+
+/** The blocks with new positions from :func:`arrange`, using the sizes they have on screen and the order of each block's outputs. */
+function tidy(nodes, edges, byKey) {
+  const handles = (id) => {
+    const node = nodes.find((n) => n.id === id);
+    const block = node && byKey[node.data.block];
+    if (!block) return [];
+    const list = blockHandles(block, node.data.config);
+    if (!block.trigger && !list.includes("error")) list.push("error");
+    return list;
+  };
+  const sizes = Object.fromEntries(nodes.filter((n) => n.measured?.width).map((n) => [n.id, { width: n.measured.width, height: n.measured.height }]));
+  const positions = arrange(nodes, edges, sizes, handles);
+  return nodes.map((n) => ({ ...n, position: positions[n.id] || n.position }));
 }
 
 function toCanvasNode(node) {

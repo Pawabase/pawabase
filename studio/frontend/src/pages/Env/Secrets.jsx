@@ -15,7 +15,7 @@ export default function Secrets({ env }) {
     <Layout title="Secrets">
       <PageHead
         title="Secrets"
-        description={view === "values" ? "Values your app reads that are not secret, like a store name or a feature switch. Keep anything private in Secrets." : <>Encrypted at rest. Reference them as <code>secret://NAME</code> in settings, webhook headers and block configs, or read <code>ctx.secrets</code> in functions. Values are never shown again.</>}
+        description={view === "values" ? "Values your app reads that are not secret, like a store name or a feature switch. Keep anything private in Secrets." : <>Encrypted at rest. Reference them as <code>secret://NAME</code> in settings, webhook headers and block configs. Values are never shown again.</>}
         actions={<>
           <Segmented value={view} onChange={setView} options={[["secrets", "Secrets"], ["values", "Plain values"]]} />
           {view === "secrets" && <Button variant="primary" onClick={() => setEditing({ name: "", value: "", description: "", isNew: true })}>New secret</Button>}

@@ -30,7 +30,6 @@ SECTIONS: dict[str, str] = {
     "tables": "Env/Tables",
     "topology": "Env/Topology",
     "flows": "Env/Flows",
-    "functions": "Env/Functions",
     "storage": "Env/Storage",
     "users": "Env/Users",
     "mail": "Env/Mail",

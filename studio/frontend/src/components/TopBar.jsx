@@ -146,7 +146,7 @@ function EnvSwitcher({ runtime, envs, env, section, onCreate, onHistory }) {
 
 const CREATE = [
   ["tables", "Table", "A table exposed as a REST API", "resources"],
-  ["routes", "Route", "A custom endpoint for a flow or function", "routes"],
+  ["routes", "Route", "A custom endpoint for a flow", "routes"],
   ["policies", "Policy", "A reusable access rule", "policies"],
   ["flows", "Flow", "A visual workflow", "flows", "/flows/new"],
   ["storage", "Bucket", "Where uploaded files live", "storage"],
@@ -205,7 +205,7 @@ function Advisor({ env }) {
             <span className="faint text-faint small text-ui-sm">last hour</span>
           </div>
           {system.loading && !system.data ? <p className="pop-empty m-0 p-[14px_12px] text-muted text-ui-sm">Checking…</p> : findings.length === 0 ? (
-            <div className="pop-clear flex gap-2.5 items-start p-[8px_12px_14px] text-ok [&_b]:block [&_b]:text-text [&_b]:font-semibold [&_b]:text-ui [&_small]:block [&_small]:text-muted [&_small]:text-xs"><Icon name="check" size={16} /><span><b>All clear</b><small>Requests, functions, jobs, flows, webhooks and mail are healthy, and nothing is close to a limit.</small></span></div>
+            <div className="pop-clear flex gap-2.5 items-start p-[8px_12px_14px] text-ok [&_b]:block [&_b]:text-text [&_b]:font-semibold [&_b]:text-ui [&_small]:block [&_small]:text-muted [&_small]:text-xs"><Icon name="check" size={16} /><span><b>All clear</b><small>Requests, jobs, flows, webhooks and mail are healthy, and nothing is close to a limit.</small></span></div>
           ) : (
             <div className="pop-list flex flex-col gap-px p-[2px_6px_6px] overflow-y-auto min-h-0">
               {findings.map((f, i) => (
@@ -253,6 +253,8 @@ function HelpMenu({ env, confined }) {
   );
 }
 
+import { BranchSwitcher } from "./BranchTools";
+
 export default function TopBar({ runtime, envs, env, section, confined, crumbs = [], onMenu, onHistory, onCreateEnv }) {
   return (
     <header className="appbar flex items-center gap-1.5 h-[var(--bar)] p-[0_12px_0_0] [border-bottom:1px_solid_var(--line)] bg-[color-mix(in_srgb,_var(--canvas)_94%,_var(--surface))] relative z-[35] min-w-0 [&_.menu-btn]:hidden [&_.lights]:h-6 [&_.lights]:p-[0_8px_0_12px] [&_.lights]:[border-left:1px_solid_var(--line)] [&_.lights]:rounded-none [&_.lights]:ml-1 [&_.lights:hover]:bg-none [&_.top-search_.cmd-field]:h-control [&_.top-search_.cmd-field]:w-[240px] [&_.top-search_.cmd-field]:p-[0_6px_0_10px] [&_.top-search_.cmd-field]:[border:1px_solid_var(--line-2)] [&_.top-search_.cmd-field]:rounded-sm [&_.top-search_.cmd-field]:bg-transparent [&_.top-search_.cmd-field]:shadow-none [&_.cmd.open_.cmd-field]:w-[340px] [&_.cmd.open_.cmd-field]:border-brand [&_.cmd.open_.cmd-field]:shadow-none [&_.cmd-field:focus-within]:w-[340px] [&_.cmd-field:focus-within]:border-brand [&_.cmd-field:focus-within]:shadow-none max-navigation:[&_.menu-btn]:grid max-navigation:[&_.menu-btn]:ml-2 max-navigation:[&_.top-search_.cmd-field]:w-[160px] max-navigation:[&_.cmd.open_.cmd-field]:w-[160px] max-wide:[&_.top-search_.cmd-field]:w-[170px] w-full pl-4 max-navigation:pl-2 overflow-visible [&_.top-search]:min-w-0 [&_.top-search]:shrink-0 [&_.top-search_.cmd-field]:max-w-[100%] [&_.popover-wrap]:shrink-0 [&_.lights]:shrink-0 max-wide:[&_.cmd.open_.cmd-field]:w-[170px] max-search:[&_.new-label]:hidden max-search:[&_.top-search_.cmd-field_kbd]:hidden max-search:[&_.top-search_.cmd-field]:w-[130px] max-search:[&_.cmd.open_.cmd-field]:w-[130px]">
@@ -264,6 +266,7 @@ export default function TopBar({ runtime, envs, env, section, confined, crumbs =
         <ProjectMenu runtime={runtime} envs={envs} env={env} section={section} confined={confined} />
         {env && <span className="ctx-sep text-line-2 text-[18px] font-[300] p-[0_2px]">/</span>}
         <EnvSwitcher runtime={runtime} envs={envs} env={env} section={section} onCreate={onCreateEnv} onHistory={onHistory} />
+        {env && <BranchSwitcher env={env} onManage={onHistory} />}
         {crumbs.map((c, i) => <span key={i} className="appbar-crumb inline-flex items-center gap-1.5 text-text text-ui font-medium-plus whitespace-nowrap [&_.sep]:text-faint"><span className="ctx-sep text-line-2 text-[18px] font-[300] p-[0_2px]">/</span>{c}</span>)}
       </nav>
       <span className="appbar-spacer flex-1" />

@@ -6,7 +6,6 @@ requires-python = ">=3.11"
 license = "BSD-3-Clause"
 dependencies = [
     "httpx>=0.27",
-    "pawabase",
     "sillo-framework[all,storage-s3]>=1.0.0",
     "sillo-oauth>=1.0.0",
     "sillo-wire>=1.0.0",
@@ -29,9 +28,6 @@ saml = ["signxml>=4.0"]
 [project.scripts]
 pawabase-server = "pawabase_server.cli:main"
 
-[tool.uv.sources]
-pawabase = { git = "https://github.com/Pawabase/pawabase-python" }
-
 [build-system]
 requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
@@ -48,8 +44,7 @@ dev = [
 ]
 
 # ``pawabase_server`` is the self-hosted platform: one package, one process. ``studio`` is its control plane, a service of its own that manages
-# the server over HTTP. The public Kit and CLI (``pawabase``) live in
-# Pawabase/pawabase-python and are a dependency, which is why this package is not called ``pawabase``.
+# the server over HTTP.
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

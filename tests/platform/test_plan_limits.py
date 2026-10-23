@@ -8,18 +8,9 @@ from pawabase_server.db.models import BackupSnapshot, Environment, SessionInfo, 
 from pawabase_server.projects import quotas
 from pawabase_server.projects.manager import ProjectManager
 from tests.platform.test_realtime_rows import subscriber
-from tests.platform.test_sandbox import archive
 
 ENV = "/platform/v1/envs/development"
 PASSWORD = "Correct-horse-9"
-
-CODE = """
-from pawabase_server.functions.registry import function
-
-@function("pl.ping", policy="public")
-async def ping(ctx):
-    return {"pong": True}
-"""
 
 FLOW = {
     "name": "noop",
@@ -62,29 +53,6 @@ async def test_webhooks_and_schedules_past_the_plan_are_refused(api):
     with pytest.raises(ServiceError) as error:
         await api.studio.post(f"{ENV}/schedules", json={"name": "b", **schedule})
     refused(error.value, "max_scheduled_jobs")
-
-
-async def test_function_invocations_are_metered_per_month(api):
-    project = await plan(api, max_function_invocations_per_month=2)
-    await api.studio.post(f"{ENV}/function-deployments", json={"archive": archive(CODE)})
-    for _ in range(2):
-        body = await api.studio.post(f"{ENV}/functions/pl.ping/invoke", json={"input": {}})
-        assert body["result"] == {"pong": True}, body
-    body = await api.studio.post(f"{ENV}/functions/pl.ping/invoke", json={"input": {}})
-    assert body["status"] == "failed" and body["code"] == "quota_exceeded", body
-    counter = await UsageCounter.get(project_id=project, metric="function_invocations")
-    assert counter.value == 2
-
-
-async def test_a_new_month_counter_is_seeded_from_what_already_ran(api):
-    await api.studio.post(f"{ENV}/function-deployments", json={"archive": archive(CODE)})
-    await api.studio.post(
-        f"{ENV}/functions/pl.ping/invoke", json={"input": {}}
-    )  # unlimited: not metered
-    project = await plan(api, max_function_invocations_per_month=5)
-    await api.studio.post(f"{ENV}/functions/pl.ping/invoke", json={"input": {}})
-    counter = await UsageCounter.get(project_id=project, metric="function_invocations")
-    assert counter.value == 2  # the run before the limit, found in the run records, plus this one
 
 
 async def test_stored_bytes_are_metered_and_capped(api):
@@ -221,13 +189,13 @@ async def test_realtime_channels_in_use_follow_the_plan(api):
 
 
 async def test_plan_usage_reports_each_limit(api):
-    await plan(api, max_webhooks=3, max_function_invocations_per_month=100, daily_request_limit=10)
+    await plan(api, max_webhooks=3, max_flow_runs_per_month=100, daily_request_limit=10)
     await api.studio.post(
         f"{ENV}/webhooks", json={"name": "a", "url": "https://example.com/h", "events": ["*"]}
     )
     report = {row["limit"]: row for row in (await api.studio.get(f"{ENV}/plan-usage"))["data"]}
     assert report["max_webhooks"]["used"] == 1 and report["max_webhooks"]["percent"] == 33.3
-    assert report["max_function_invocations_per_month"]["used"] == 0
+    assert report["max_flow_runs_per_month"]["used"] == 0
     assert "daily_request_limit" not in report  # the gateway reports request limits
     policies = (await api.studio.get("/platform/v1/retry-policies"))["data"]
     webhook = next(p for p in policies if p["job"] == "DeliverWebhookJob")
