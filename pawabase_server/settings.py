@@ -177,6 +177,8 @@ class Settings(Config):
     # ── runtime agent (Cloud-managed deployments only) ───────────────────
     #: Where this runtime's agent polls for provisioning jobs. Empty: no agent runs here.
     agent_url: str = ""
+    #: Where on the control plane the agent's two calls (``agent.poll``, ``agent.report``) are served: Pawabase Cloud's actions.
+    agent_path: str = "/rest/v1/x/cloud"
     agent_id: str = ""
     #: The control plane's publishable key, which its gateway asks of every call (it opens the door; the agent's signature is the credential).
     agent_api_key: str = ""
