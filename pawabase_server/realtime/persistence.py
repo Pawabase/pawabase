@@ -52,7 +52,9 @@ async def store_durable(
     return row, True
 
 
-async def durable_history(platform: Any, env: str, channel: str, limit: int) -> list[dict[str, Any]]:
+async def durable_history(
+    platform: Any, env: str, channel: str, limit: int
+) -> list[dict[str, Any]]:
     """The most recent durable messages on *channel*, newest-last (matching the in-memory backlog's order)."""
     from pawabase_server.db.models import RealtimeMessage
 
@@ -83,8 +85,10 @@ async def purge_expired(batch_size: int = 500) -> int:
     """Delete durable messages whose retention has passed. Returns how many were removed, for the sweep log."""
     from pawabase_server.db.models import RealtimeMessage
 
-    expired = await RealtimeMessage.filter(expires_at__lt=datetime.now(UTC)).limit(batch_size).values_list(
-        "id", flat=True
+    expired = (
+        await RealtimeMessage.filter(expires_at__lt=datetime.now(UTC))
+        .limit(batch_size)
+        .values_list("id", flat=True)
     )
     if not expired:
         return 0

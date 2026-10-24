@@ -40,8 +40,12 @@ class GatewayRegistry:
         self.settings = settings
         self.id = settings.gateway_instance_id or default_instance_id()
         self.plane_id = settings.gateway_plane_id
-        self.host = settings.gateway_public_host or f"{_display_host(settings.host)}:{settings.port}"
-        self.internal_url = f"http://{_display_host(settings.internal_host)}:{settings.internal_port}"
+        self.host = (
+            settings.gateway_public_host or f"{_display_host(settings.host)}:{settings.port}"
+        )
+        self.internal_url = (
+            f"http://{_display_host(settings.internal_host)}:{settings.internal_port}"
+        )
         self.version = settings.gateway_version
         self._task: asyncio.Task | None = None
         self._draining = False
@@ -62,15 +66,24 @@ class GatewayRegistry:
                 },
                 id=self.id,
             )
-            logger.info("gateway instance %s registered (plane=%s, host=%s)", self.id, self.plane_id or "-", self.host)
+            logger.info(
+                "gateway instance %s registered (plane=%s, host=%s)",
+                self.id,
+                self.plane_id or "-",
+                self.host,
+            )
         except Exception:  # noqa: BLE001 - registration must never stop the gateway from serving
             logger.exception("could not register gateway instance %s", self.id)
 
     async def heartbeat(self) -> None:
         try:
-            await GatewayInstance.filter(id=self.id).update(heartbeat_at=datetime.now(UTC), draining=self._draining)
+            await GatewayInstance.filter(id=self.id).update(
+                heartbeat_at=datetime.now(UTC), draining=self._draining
+            )
         except Exception:  # noqa: BLE001
-            logger.warning("could not renew heartbeat for gateway instance %s", self.id, exc_info=True)
+            logger.warning(
+                "could not renew heartbeat for gateway instance %s", self.id, exc_info=True
+            )
 
     async def drain(self) -> None:
         """Mark this instance as draining: it stops being shown as healthy, so new traffic should stop reaching it.
@@ -80,7 +93,9 @@ class GatewayRegistry:
         """
         self._draining = True
         try:
-            await GatewayInstance.filter(id=self.id).update(draining=True, drain_requested_at=datetime.now(UTC))
+            await GatewayInstance.filter(id=self.id).update(
+                draining=True, drain_requested_at=datetime.now(UTC)
+            )
             logger.info("gateway instance %s is draining", self.id)
         except Exception:  # noqa: BLE001
             logger.warning("could not mark gateway instance %s as draining", self.id, exc_info=True)

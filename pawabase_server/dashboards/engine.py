@@ -76,13 +76,17 @@ def _validate_binding(where: str, widget_type: str, binding: Any) -> list[str]:
     spec = WIDGET_TYPES[widget_type]
     for key in spec["required"]:
         if not binding.get(key):
-            problems.append(_problem(where, f"binding.{key} is required for a {widget_type} widget"))
+            problems.append(
+                _problem(where, f"binding.{key} is required for a {widget_type} widget")
+            )
     if widget_type in ("metric", "chart"):
         aggregate = binding.get("aggregate")
         if aggregate and aggregate not in AGGREGATES:
             problems.append(_problem(where, f"aggregate must be one of {', '.join(AGGREGATES)}"))
         if aggregate and aggregate != "count" and not binding.get("field"):
-            problems.append(_problem(where, f"binding.field is required for aggregate {aggregate!r}"))
+            problems.append(
+                _problem(where, f"binding.field is required for aggregate {aggregate!r}")
+            )
     if widget_type == "chart" and binding.get("chart_type") not in (*CHART_TYPES, None):
         problems.append(_problem(where, f"chart_type must be one of {', '.join(CHART_TYPES)}"))
     if widget_type == "form" and binding.get("mode") not in (*FORM_MODES, None):
@@ -139,11 +143,11 @@ def validate_dashboard(definition: Any) -> list[str]:
                 widget_ids.add(widget_id)
             widget_type = widget.get("type")
             if widget_type not in WIDGET_TYPES:
-                problems.append(
-                    _problem(wwhere, f"type must be one of {', '.join(WIDGET_TYPES)}")
-                )
+                problems.append(_problem(wwhere, f"type must be one of {', '.join(WIDGET_TYPES)}"))
                 continue
             if widget.get("width", "full") not in WIDTHS:
                 problems.append(_problem(wwhere, f"width must be one of {', '.join(WIDTHS)}"))
-            problems.extend(_validate_binding(f"{wwhere}.binding", widget_type, widget.get("binding")))
+            problems.extend(
+                _validate_binding(f"{wwhere}.binding", widget_type, widget.get("binding"))
+            )
     return problems

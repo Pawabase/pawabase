@@ -78,5 +78,9 @@ async def test_a_service_policy_refuses_signed_in_users(shop):
 
 async def test_conditions_on_the_body_are_checked(shop):
     ada = shop.user_headers("development", user_id="7")
-    assert (await shop.http.post("/rest/v1/x/shop/small", json={"size": 3}, headers=ada)).status_code == 200
-    assert (await shop.http.post("/rest/v1/x/shop/small", json={"size": 9}, headers=ada)).status_code in (401, 403)
+    assert (
+        await shop.http.post("/rest/v1/x/shop/small", json={"size": 3}, headers=ada)
+    ).status_code == 200
+    assert (
+        await shop.http.post("/rest/v1/x/shop/small", json={"size": 9}, headers=ada)
+    ).status_code in (401, 403)

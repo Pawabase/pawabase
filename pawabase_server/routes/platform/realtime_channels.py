@@ -67,14 +67,24 @@ def register(r: Router, platform: Platform) -> None:
         rows = await RealtimeChannelConfig.filter(environment=environment)
         return {"data": [row.describe() for row in rows]}
 
-    @r.post(base, auth=MANAGE, tags=["realtime"], request_model=ChannelBody, summary="Add a channel rule")
+    @r.post(
+        base,
+        auth=MANAGE,
+        tags=["realtime"],
+        request_model=ChannelBody,
+        summary="Add a channel rule",
+    )
     async def add_channel(ctx: HttpContext, env: str, body: ChannelBody):
         environment = await get_environment(env)
         if await RealtimeChannelConfig.get_or_none(environment=environment, pattern=body.pattern):
-            raise HTTPException(status_code=409, detail=f"a rule for {body.pattern!r} already exists")
+            raise HTTPException(
+                status_code=409, detail=f"a rule for {body.pattern!r} already exists"
+            )
         row = await RealtimeChannelConfig.create(environment=environment, **body.model_dump())
         reload(env)
-        await audit(ctx, "realtime.channel_added", env=env, target=row.id, details={"pattern": row.pattern})
+        await audit(
+            ctx, "realtime.channel_added", env=env, target=row.id, details={"pattern": row.pattern}
+        )
         return created(row.describe())
 
     @r.patch(
@@ -90,14 +100,28 @@ def register(r: Router, platform: Platform) -> None:
             setattr(row, key, value)
         await row.save()
         reload(env)
-        await audit(ctx, "realtime.channel_changed", env=env, target=row.id, details={"pattern": row.pattern})
+        await audit(
+            ctx,
+            "realtime.channel_changed",
+            env=env,
+            target=row.id,
+            details={"pattern": row.pattern},
+        )
         return row.describe()
 
-    @r.delete(f"{base}/{{channel_id}}", auth=MANAGE, tags=["realtime"], summary="Delete a channel rule")
+    @r.delete(
+        f"{base}/{{channel_id}}", auth=MANAGE, tags=["realtime"], summary="Delete a channel rule"
+    )
     async def delete_channel(ctx: HttpContext, env: str, channel_id: str):
         row = await row_of(env, channel_id)
         pattern = row.pattern
         await row.delete()
         reload(env)
-        await audit(ctx, "realtime.channel_removed", env=env, target=channel_id, details={"pattern": pattern})
+        await audit(
+            ctx,
+            "realtime.channel_removed",
+            env=env,
+            target=channel_id,
+            details={"pattern": pattern},
+        )
         return no_content()

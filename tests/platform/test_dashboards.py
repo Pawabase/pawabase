@@ -22,7 +22,11 @@ METRIC_DASHBOARD = {
                         "id": "w1",
                         "type": "metric",
                         "title": "Orders",
-                        "binding": {"source": "resource", "resource": "orders", "aggregate": "count"},
+                        "binding": {
+                            "source": "resource",
+                            "resource": "orders",
+                            "aggregate": "count",
+                        },
                     }
                 ],
             }
@@ -36,9 +40,25 @@ async def create_dashboard(api, body=None):
 
 
 async def test_create_rejects_an_invalid_definition(api):
-    bad = {**METRIC_DASHBOARD, "definition": {"pages": [{"id": "p1", "name": "Home", "path": "/", "widgets": [
-        {"id": "w1", "type": "metric", "binding": {"source": "resource", "resource": "orders"}}
-    ]}]}}
+    bad = {
+        **METRIC_DASHBOARD,
+        "definition": {
+            "pages": [
+                {
+                    "id": "p1",
+                    "name": "Home",
+                    "path": "/",
+                    "widgets": [
+                        {
+                            "id": "w1",
+                            "type": "metric",
+                            "binding": {"source": "resource", "resource": "orders"},
+                        }
+                    ],
+                }
+            ]
+        },
+    }
     with pytest.raises(ServiceError) as err:
         await create_dashboard(api, bad)
     assert err.value.status == 422

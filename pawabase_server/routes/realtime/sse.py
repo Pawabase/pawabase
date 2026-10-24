@@ -38,10 +38,14 @@ class _QueueSocket:
     async def send_json(self, payload: dict) -> None:
         await self.queue.put(payload)
 
-    async def send_text(self, payload: str) -> None:  # pragma: no cover - Peer's default encoding is JSON
+    async def send_text(
+        self, payload: str
+    ) -> None:  # pragma: no cover - Peer's default encoding is JSON
         await self.queue.put({"type": "text", "payload": payload})
 
-    async def send_bytes(self, payload: bytes) -> None:  # pragma: no cover - never sent as bytes here
+    async def send_bytes(
+        self, payload: bytes
+    ) -> None:  # pragma: no cover - never sent as bytes here
         await self.queue.put({"type": "bytes"})
 
     async def close(self) -> None:
@@ -55,14 +59,18 @@ def client_address(ctx: HttpContext) -> str | None:
 
 
 def register(app: SilloApp, realtime: Realtime) -> None:
-    @app.get("/realtime/v1/sse", summary="Subscribe to one or more channels over Server-Sent Events")
+    @app.get(
+        "/realtime/v1/sse", summary="Subscribe to one or more channels over Server-Sent Events"
+    )
     async def stream(ctx: HttpContext):
         context = ctx.scope.get(SCOPE_KEY)
         if context is None:
             raise HTTPException(status_code=401, detail="an API key is required")
         if realtime.draining:
             raise HTTPException(status_code=503, detail="this instance is shutting down")
-        channels = [c.strip() for c in (ctx.query_params.get("channels") or "").split(",") if c.strip()]
+        channels = [
+            c.strip() for c in (ctx.query_params.get("channels") or "").split(",") if c.strip()
+        ]
         if not channels:
             raise HTTPException(status_code=422, detail="pass at least one channel in ?channels=")
         if len(channels) > MAX_CHANNELS_PER_STREAM:

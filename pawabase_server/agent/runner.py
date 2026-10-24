@@ -66,7 +66,9 @@ class ControlPlane:
 
     async def call(self, function: str, body: dict[str, Any]) -> dict[str, Any]:
         envelope = sign_request(self.settings.agent_token, self.settings.agent_id, body)
-        reply = await self.http.post(f"{self.settings.agent_path.rstrip('/')}/{function}", json=envelope)
+        reply = await self.http.post(
+            f"{self.settings.agent_path.rstrip('/')}/{function}", json=envelope
+        )
         reply.raise_for_status()
         return reply.json()
 

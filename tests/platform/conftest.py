@@ -82,6 +82,7 @@ async def api(settings):
 
     from pawabase_server.app import create_app
     from pawabase_server.core.clients import ServiceClient
+
     app = create_app(settings)
     # The lifespan is driven directly rather than through the client's context
     # manager: pytest-asyncio runs fixture setup and teardown in different
@@ -99,4 +100,3 @@ async def api(settings):
         await studio.close()
         await http.aclose()
         await app._shutdown()
-    

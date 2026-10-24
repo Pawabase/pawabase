@@ -99,7 +99,7 @@ def register(r: Router, platform: Platform) -> None:
         kinds = (
             ProcessEventJob,
             RunFlowJob,
-                    DeliverWebhookJob,
+            DeliverWebhookJob,
             SendMailJob,
             PurgeEnvironmentJob,
         )

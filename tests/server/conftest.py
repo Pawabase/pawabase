@@ -85,4 +85,3 @@ async def running(tmp_path):
         await public.aclose()
         await studio.aclose()
         await server.app._shutdown()
-    

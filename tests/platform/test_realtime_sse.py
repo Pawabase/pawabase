@@ -37,7 +37,9 @@ def realtime_token(settings, user_id="1"):
     ``routes/realtime/ws.py``."""
     from pawabase_server.core.tokens import issue_user_token
 
-    return issue_user_token(settings.jwt_master_secret, env=ENV, user_id=user_id, jti=f"j{user_id}", session_id="s")
+    return issue_user_token(
+        settings.jwt_master_secret, env=ENV, user_id=user_id, jti=f"j{user_id}", session_id="s"
+    )
 
 
 def _free_port() -> int:
@@ -50,7 +52,9 @@ def _free_port() -> int:
 async def live_server(api):
     """The same app the ``api`` fixture built, served over a real TCP socket so streaming is real."""
     port = _free_port()
-    config = uvicorn.Config(api.app, host="127.0.0.1", port=port, log_level="warning", lifespan="off")
+    config = uvicorn.Config(
+        api.app, host="127.0.0.1", port=port, log_level="warning", lifespan="off"
+    )
     server = uvicorn.Server(config)
     task = asyncio.create_task(server.serve())
     try:

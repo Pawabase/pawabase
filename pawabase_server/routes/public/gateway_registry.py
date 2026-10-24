@@ -45,20 +45,33 @@ def register(app: SilloApp, settings: Settings) -> None:
     async def instances(ctx: HttpContext) -> dict[str, Any]:
         rows = await GatewayInstance.all().order_by("host")
         return {
-            "data": [row.describe() | {"healthy": row.is_healthy(stale_after=settings.gateway_stale_seconds)} for row in rows],
+            "data": [
+                row.describe()
+                | {"healthy": row.is_healthy(stale_after=settings.gateway_stale_seconds)}
+                for row in rows
+            ],
             "stale_after_seconds": settings.gateway_stale_seconds,
         }
 
-    @app.post("/internal/v1/gateway/drain", auth=SERVICE_ONLY, request_model=DrainBody, exclude_from_schema=True)
+    @app.post(
+        "/internal/v1/gateway/drain",
+        auth=SERVICE_ONLY,
+        request_model=DrainBody,
+        exclude_from_schema=True,
+    )
     async def drain(ctx: HttpContext, body: DrainBody) -> dict[str, Any]:
         from datetime import UTC, datetime
 
-        updated = await GatewayInstance.filter(id=body.id).update(draining=True, drain_requested_at=datetime.now(UTC))
+        updated = await GatewayInstance.filter(id=body.id).update(
+            draining=True, drain_requested_at=datetime.now(UTC)
+        )
         if not updated:
             raise HTTPException(status_code=404, detail=f"no gateway instance {body.id!r}")
         return {"drained": body.id}
 
-    @app.delete("/internal/v1/gateway/instances/{instance_id}", auth=SERVICE_ONLY, exclude_from_schema=True)
+    @app.delete(
+        "/internal/v1/gateway/instances/{instance_id}", auth=SERVICE_ONLY, exclude_from_schema=True
+    )
     async def remove(ctx: HttpContext, instance_id: str) -> dict[str, Any]:
         """Remove a row outright: for an instance the orchestrator confirmed is gone, not for one that is merely draining."""
         removed = await GatewayInstance.filter(id=instance_id).delete()

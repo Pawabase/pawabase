@@ -45,7 +45,8 @@ def _validated(definition: dict[str, Any]) -> dict[str, Any]:
     problems = validate_dashboard(definition)
     if problems:
         raise HTTPException(
-            status_code=422, detail={"message": "the dashboard cannot be published", "problems": problems}
+            status_code=422,
+            detail={"message": "the dashboard cannot be published", "problems": problems},
         )
     return definition
 
@@ -66,15 +67,24 @@ def register(r: Router, platform: Platform) -> None:
         rows = await Dashboard.filter(environment=environment)
         return {"data": [row.describe() for row in rows]}
 
-    @r.post(base, auth=MANAGE, tags=["dashboards"], request_model=DashboardBody, summary="Create a dashboard")
+    @r.post(
+        base,
+        auth=MANAGE,
+        tags=["dashboards"],
+        request_model=DashboardBody,
+        summary="Create a dashboard",
+    )
     async def add_dashboard(ctx: HttpContext, env: str, body: DashboardBody):
         environment = await get_environment(env)
         if await Dashboard.get_or_none(environment=environment, name=body.name):
-            raise HTTPException(status_code=409, detail=f"a dashboard named {body.name!r} already exists")
+            raise HTTPException(
+                status_code=409, detail=f"a dashboard named {body.name!r} already exists"
+            )
         problems = validate_dashboard(body.definition)
         if problems:
             raise HTTPException(
-                status_code=422, detail={"message": "the dashboard is invalid", "problems": problems}
+                status_code=422,
+                detail={"message": "the dashboard is invalid", "problems": problems},
             )
         row = await Dashboard.create(
             environment=environment,
@@ -87,7 +97,12 @@ def register(r: Router, platform: Platform) -> None:
         await audit(ctx, "dashboards.created", env=env, target=row.id, details={"name": row.name})
         return created(row.describe())
 
-    @r.get(f"{base}/{{dashboard_id}}", auth=MANAGE, tags=["dashboards"], summary="A dashboard's full definition")
+    @r.get(
+        f"{base}/{{dashboard_id}}",
+        auth=MANAGE,
+        tags=["dashboards"],
+        summary="A dashboard's full definition",
+    )
     async def get_dashboard(ctx: HttpContext, env: str, dashboard_id: str):
         return (await row_of(env, dashboard_id)).describe()
 
@@ -105,7 +120,8 @@ def register(r: Router, platform: Platform) -> None:
             problems = validate_dashboard(changes["definition"])
             if problems:
                 raise HTTPException(
-                    status_code=422, detail={"message": "the dashboard is invalid", "problems": problems}
+                    status_code=422,
+                    detail={"message": "the dashboard is invalid", "problems": problems},
                 )
         for key, value in changes.items():
             setattr(row, key, value)
@@ -113,7 +129,9 @@ def register(r: Router, platform: Platform) -> None:
         await audit(ctx, "dashboards.changed", env=env, target=row.id, details={"name": row.name})
         return row.describe()
 
-    @r.delete(f"{base}/{{dashboard_id}}", auth=MANAGE, tags=["dashboards"], summary="Delete a dashboard")
+    @r.delete(
+        f"{base}/{{dashboard_id}}", auth=MANAGE, tags=["dashboards"], summary="Delete a dashboard"
+    )
     async def delete_dashboard(ctx: HttpContext, env: str, dashboard_id: str):
         row = await row_of(env, dashboard_id)
         name = row.name
