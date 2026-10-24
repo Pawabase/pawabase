@@ -4,6 +4,7 @@ import Layout, { envHref } from "../../components/Layout";
 import { useDataSubnav } from "../../components/DataNav";
 import { Icon } from "../../components/icons";
 import { Badge, Button, Field, PageTabs, Popover, Sheet, Spinner, Switch, copyToClipboard, useAction, useToast } from "../../components/ui";
+import RowForm, { kindOf, parsed } from "../../components/RowForm";
 import TableAccess from "../../components/TableAccess";
 import { HistoryPanel, IndexesPanel, SchemaPanel } from "../../components/SchemaPanels";
 import { ResourceForm, problem } from "../../components/definitions/forms";
@@ -262,16 +263,19 @@ function DataView({ env, base, table, columns, info, resource }) {
     setPage((p) => ({ ...p, offset: 0 }));
   };
   const last = page.offset + data.length;
-  const pkCol = columns.find((name) => types[name]?.primary_key);
+  const pkCol = columns.find((c) => c.primary_key)?.name;
+  const definition = useApi(resource ? envPath(env, `/resources/${resource}`) : null);
+  const fields = useMemo(() => Object.fromEntries((definition.data?.fields || []).map((f) => [f.name, f])), [definition.data]);
+  // Columns the database or the platform fills in: not asked for when adding a row.
+  const automatic = new Set([pkCol, "created_at", "updated_at"].filter(Boolean));
   const createRow = async () => {
     setCreateError(null);
     setCreateBusy(true);
     try {
       const body = {};
-      for (const name of columns) {
+      for (const name of names) {
         const v = newValues[name];
-        if (v === "" || v === null || v === undefined) continue;
-        if (pkCol && name === pkCol) continue; // backend auto-generates the primary key
+        if (v === "" || v === null || v === undefined || automatic.has(name)) continue;
         body[name] = v;
       }
       await post(envPath(env, `/resources/${resource}/records`), body);
@@ -363,20 +367,16 @@ function DataView({ env, base, table, columns, info, resource }) {
           </>
         }>
           {createError && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error">{createError}</div>}
-          <div className="stack flex flex-col gap-3 [&.sm]:gap-1.5 [&.lg]:gap-5 sm" style={{ gap: 12 }}>
-            {names.map((name) => {
-              const c = types[name];
-              return (
-                <Field key={name} label={name} hint={c?.type ? String(c.type).toLowerCase() : undefined} optional={!c?.primary_key}>
-                  <input className="mono font-mono text-ui-sm" value={newValues[name] ?? ""} onChange={(e) => setNewValues({ ...newValues, [name]: e.target.value || null })} placeholder={c?.primary_key ? "auto-generated" : undefined} />
-                </Field>
-              );
-            })}
-        </div>
+          <RowForm
+            columns={columns.filter((c) => !automatic.has(c.name))}
+            fields={fields}
+            values={newValues}
+            onChange={(name, value) => setNewValues((current) => ({ ...current, [name]: value }))}
+          />
       </Sheet>
       )}
 
-      {row && <RowSheet table={table} row={row} columns={names} types={types} env={env} resource={resource} onClose={() => setRow(null)} onUpdated={() => { rows.reload(); info.reload(); setRow(null); }} />}
+      {row && <RowSheet table={table} row={row} columns={columns} fields={fields} env={env} resource={resource} onClose={() => setRow(null)} onUpdated={() => { rows.reload(); info.reload(); setRow(null); }} />}
     </>
   );
 }
@@ -632,78 +632,81 @@ function SortButton({ columns, sort, onApply }) {
   );
 }
 
-function RowSheet({ table, row, columns, types, env, resource, onClose, onUpdated }) {
+/** A row opens ready to edit: typed inputs, only what changed is sent, Cmd/Ctrl+S saves. A table that is not yet a resource is shown read-only. */
+function RowSheet({ table, row, columns, fields, env, resource, onClose, onUpdated }) {
   const toast = useToast();
+  const pk = columns.find((c) => c.primary_key)?.name;
+  const original = useMemo(
+    () => Object.fromEntries(columns.map((c) => [c.name, kindOf(c, fields[c.name]) === "json" ? parsed(row[c.name]) : row[c.name]])),
+    [columns, fields, row],
+  );
+  const [values, setValues] = useState(original);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const automatic = [pk, "created_at", "updated_at"].filter(Boolean);
+  const editable = columns.filter((c) => !automatic.includes(c.name));
+  const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  const changed = editable.filter((c) => !same(values[c.name], original[c.name])).map((c) => c.name);
   const json = JSON.stringify(row, null, 2);
-  const [editing, setEditing] = useState(false);
-  const [editValues, setEditValues] = useState(row);
-  const [saveBusy, setSaveBusy] = useState(false);
-  const [saveError, setSaveError] = useState(null);
-  const pkCol = columns.find((name) => types[name]?.primary_key);
-  const saveRow = async () => {
-    setSaveError(null);
-    setSaveBusy(true);
+  const id = pk ? row[pk] : row.id;
+  const save = async () => {
+    if (!changed.length || busy || !resource) return;
+    setError(null);
+    setBusy(true);
     try {
-      const body = {};
-      for (const name of columns) {
-        const v = editValues[name];
-        if (v === "" || v === null || v === undefined) continue;
-        if (pkCol && name === pkCol) continue;
-        body[name] = v;
-      }
-      await patch(envPath(env, `/resources/${resource}/records/${row.id}`), body);
-      setEditing(false);
+      const body = Object.fromEntries(changed.map((name) => [name, values[name] ?? null]));
+      await patch(envPath(env, `/resources/${resource}/records/${id}`), body);
       onUpdated?.();
       toast("Row saved", "ok");
     } catch (err) {
-      setSaveError(err.message);
+      setError(err.message);
     } finally {
-      setSaveBusy(false);
+      setBusy(false);
     }
   };
+  useEffect(() => {
+    const onKey = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); save(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+  const meta = columns.filter((c) => automatic.includes(c.name));
   return (
     <Sheet
-      title={row.id != null ? `${table} · ${row.id}` : table}
+      title={id != null ? `${table} · ${id}` : table}
       icon="resources"
       onClose={onClose}
       footer={
         <>
-          {editing ? (
-            <>
-              <Button onClick={() => { setEditing(false); setEditValues(row); setSaveError(null); }}>Cancel</Button>
-              <Button variant="primary" disabled={saveBusy} onClick={saveRow}>{saveBusy ? "Saving…" : "Save changes"}</Button>
-            </>
-          ) : (
-            <>
-              <Button size="sm" onClick={async () => toast((await copyToClipboard(json)) ? "Row copied as JSON" : "Could not copy", "ok")}><Icon name="copy" size={14} /> Copy as JSON</Button>
-              <Button size="sm" variant="primary" onClick={() => { setEditValues({ ...row }); setEditing(true); setSaveError(null); }}><Icon name="edit" size={14} /> Edit</Button>
-            </>
-          )}
+          <Button size="sm" className="mr-auto" onClick={async () => toast((await copyToClipboard(json)) ? "Row copied as JSON" : "Could not copy", "ok")}><Icon name="copy" size={14} /> Copy as JSON</Button>
+          {resource && <span className="text-ui-sm text-muted">{changed.length ? `${changed.length} unsaved change${changed.length === 1 ? "" : "s"}` : "No changes"}</span>}
+          <Button onClick={onClose}>{changed.length ? "Discard" : "Close"}</Button>
+          {resource && <Button variant="primary" disabled={busy || !changed.length} onClick={save}>{busy ? "Saving…" : "Save changes"}</Button>}
         </>
       }
     >
-      {editing && saveError && <div className="alert rounded-sm p-[11px_14px] text-ui [&.error]:text-danger [&.error]:bg-danger-soft [&.warn]:text-warn [&.warn]:bg-warn-soft [&.ok]:text-ok [&.ok]:bg-ok-soft [&.info]:text-info [&.info]:bg-info-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)] error">{saveError}</div>}
-      <dl className="tbl-row m-0 flex flex-col [&_>_div]:grid [&_>_div]:grid-cols-[180px_minmax(0,_1fr)] [&_>_div]:gap-3 [&_>_div]:p-[10px_0] [&_>_div]:[border-bottom:1px_solid_var(--line)] [&_dt]:flex [&_dt]:flex-col [&_dt]:gap-0.5 [&_dt]:text-muted [&_dt]:text-ui-sm [&_dt_small]:text-faint [&_dt_small]:[font:10.5px_var(--mono)] [&_dd]:m-0 [&_dd]:[font:12.5px_var(--mono)] [&_dd]:wrap-anywhere [&_dd.null]:text-faint [&_dd.null]:italic [&_dd_pre]:m-0 [&_dd_pre]:p-[8px_10px] [&_dd_pre]:[border:1px_solid_var(--line)] [&_dd_pre]:rounded-sm [&_dd_pre]:bg-head-bg [&_dd_pre]:text-xs [&_dd_pre]:whitespace-pre-wrap">
-        {columns.map((name) => {
-          const c = types[name];
-          const value = editValues[name];
-          const { text, kind } = display(value);
-          if (editing) {
-            return (
-              <div key={name} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <dt><span className="mono font-mono text-ui-sm">{name}</span>{c?.type && <small>{String(c.type).toLowerCase()}</small>}</dt>
-                <input className="mono font-mono text-ui-sm" value={value == null ? "" : String(value)} onChange={(e) => setEditValues({ ...editValues, [name]: e.target.value || null })} placeholder={c?.primary_key ? "auto-generated" : undefined} />
-              </div>
-            );
-          }
-          return (
-            <div key={name}>
-              <dt><span className="mono font-mono text-ui-sm">{name}</span>{c?.type && <small>{String(c.type).toLowerCase()}</small>}</dt>
-              <dd className={kind}>{kind === "json" ? <pre>{JSON.stringify(asJson(value) ?? value, null, 2)}</pre> : text}</dd>
+      {!resource && (
+        <p className="m-0 rounded-sm bg-sunken p-[10px_14px] text-ui text-muted">This table is not a resource yet, so its rows are read-only here. Define it from the Columns tab to edit rows.</p>
+      )}
+      {error && <div className="rounded-sm p-[11px_14px] text-ui text-danger bg-danger-soft [border:1px_solid_color-mix(in_srgb,_currentColor_22%,_transparent)]" role="alert">{error}</div>}
+      {meta.length > 0 && (
+        <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 rounded-sm bg-sunken p-[12px_14px] text-ui-sm">
+          {meta.map((c) => (
+            <div key={c.name} className="contents">
+              <dt className="font-mono text-muted">{c.name}</dt>
+              <dd className="m-0 truncate font-mono">{row[c.name] == null ? "—" : String(row[c.name])}</dd>
             </div>
-          );
-        })}
-      </dl>
+          ))}
+        </dl>
+      )}
+      <RowForm
+        columns={editable}
+        fields={fields}
+        values={values}
+        readOnly={resource ? [] : editable.map((c) => c.name)}
+        onChange={(name, value) => setValues((current) => ({ ...current, [name]: value }))}
+      />
     </Sheet>
   );
 }
