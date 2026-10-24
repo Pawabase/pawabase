@@ -59,7 +59,7 @@ def create_studio(
         settings.server_url,
         secret=settings.internal_secret,
         issuer="studio",
-        # Creating environments from a blueprint builds each of them in one call.
+        # Some management calls run long: migrating a large table, restoring a backup.
         timeout=120.0,
     )
     frontend = Path(settings.frontend_dir)
