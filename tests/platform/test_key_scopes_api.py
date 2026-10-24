@@ -9,7 +9,9 @@ ENV = "/platform/v1/envs/development"
 
 async def test_creating_keys_validates_scopes_and_lists_the_catalog(api):
     with pytest.raises(ServiceError) as error:
-        await api.studio.post(f"{ENV}/keys", json={"name": "x", "role": "secret", "scopes": ["nope:read"]})
+        await api.studio.post(
+            f"{ENV}/keys", json={"name": "x", "role": "secret", "scopes": ["nope:read"]}
+        )
     assert error.value.status == 422
     made = await api.studio.post(
         f"{ENV}/keys", json={"name": "users", "role": "secret", "scopes": ["users:read"]}
@@ -25,7 +27,16 @@ ADMIN_ONLY = (
     "/platform/v1/code", "/platform/v1/envs", "/platform/v1/key-scopes", "/platform/v1/overview", "/platform/v1/retry-policies",
     "/platform/v1/runtime", "/platform/v1/usage", "/platform/v1/workers",
 )  # fmt: skip
-ENV_ADMIN_ONLY = ("api-versions", "branches", "deployments", "previews", "promote", "releases", "revisions", "auth/hosted-source")
+ENV_ADMIN_ONLY = (
+    "api-versions",
+    "branches",
+    "deployments",
+    "previews",
+    "promote",
+    "releases",
+    "revisions",
+    "auth/hosted-source",
+)
 
 
 async def test_every_management_route_is_covered_by_a_narrow_scope_or_deliberately_admin_only(api):
@@ -47,11 +58,25 @@ async def test_every_management_route_is_covered_by_a_narrow_scope_or_deliberate
         path = parts[1]
         concrete = re.sub(r"\{[^}]+\}", "x", path.replace("{env}", "school"))
         for method in (m for m in parts[0].split(",") if m not in ("HEAD", "OPTIONS")):
-            if any(scopes.allows([f"{f.id}:*"], method, concrete) for f in scopes.FAMILIES if f.id != "admin"):
+            if any(
+                scopes.allows([f"{f.id}:*"], method, concrete)
+                for f in scopes.FAMILIES
+                if f.id != "admin"
+            ):
                 continue
             tail = path.removeprefix("/platform/v1/envs/{env}/")
-            deliberate = path.startswith(ADMIN_ONLY) and not tail.startswith(("auth/", "resources")) and path != "/platform/v1/envs/{env}/auth"
-            deliberate = deliberate or path in ("/platform/v1/envs/{env}", "/platform/v1/envs/{env}/auth") or tail.startswith(ENV_ADMIN_ONLY)
+            deliberate = (
+                path.startswith(ADMIN_ONLY)
+                and not tail.startswith(("auth/", "resources"))
+                and path != "/platform/v1/envs/{env}/auth"
+            )
+            deliberate = (
+                deliberate
+                or path in ("/platform/v1/envs/{env}", "/platform/v1/envs/{env}/auth")
+                or tail.startswith(ENV_ADMIN_ONLY)
+            )
             if not deliberate:
                 forgotten.append((method, path))
-    assert forgotten == [], f"add these to a scope family in edge/scopes.py, or to ADMIN_ONLY here: {forgotten}"
+    assert forgotten == [], (
+        f"add these to a scope family in edge/scopes.py, or to ADMIN_ONLY here: {forgotten}"
+    )

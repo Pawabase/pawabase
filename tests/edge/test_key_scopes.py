@@ -87,10 +87,22 @@ DEFINITION_KINDS = (
 def test_the_deploy_preset_can_deploy_every_kind_of_definition_and_nothing_more():
     deploy = next(p for p in scopes.PRESETS if p["id"] == "deploy")["scopes"]
     for kind in DEFINITION_KINDS:
-        for method, path in (("GET", kind), ("POST", kind), ("PUT", f"{kind}/x"), ("DELETE", f"{kind}/x")):
+        for method, path in (
+            ("GET", kind),
+            ("POST", kind),
+            ("PUT", f"{kind}/x"),
+            ("DELETE", f"{kind}/x"),
+        ):
             assert scopes.allows(deploy, method, f"/platform/v1/envs/school/{path}"), (method, kind)
     assert scopes.allows(deploy, "POST", "/platform/v1/envs/school/resources/orders/migrate")
-    for forbidden in ("keys", "auth/users", "secrets/x/reveal", "mail", "firewall", "database/query"):
+    for forbidden in (
+        "keys",
+        "auth/users",
+        "secrets/x/reveal",
+        "mail",
+        "firewall",
+        "database/query",
+    ):
         method = "POST" if forbidden != "secrets/x/reveal" else "GET"
         if forbidden == "secrets/x/reveal":
             continue

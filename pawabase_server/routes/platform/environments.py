@@ -14,13 +14,13 @@ from sillo import HttpContext, Router, created, no_content
 from sillo.exceptions import HTTPException
 from tortoise.transactions import in_transaction
 
-from pawabase_server.core.context import current_context
-from pawabase_server.edge import scopes as key_scopes
 from pawabase_server.automation.jobs.environments import PurgeEnvironmentJob
 from pawabase_server.core import envvars
+from pawabase_server.core.context import current_context
 from pawabase_server.core.crypto import mask
 from pawabase_server.core.records import upsert
 from pawabase_server.db.models import ApiKey, Environment, Project, ProjectDatabaseBinding, Secret
+from pawabase_server.edge import scopes as key_scopes
 from pawabase_server.environments import blueprints, env_settings
 from pawabase_server.environments.keys import create_key
 from pawabase_server.identity import directory, hosted, legal, signup_form

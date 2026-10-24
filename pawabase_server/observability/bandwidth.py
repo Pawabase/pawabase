@@ -65,9 +65,12 @@ async def report(env: str, minutes: int) -> dict[str, Any]:
     """Bandwidth over the last *minutes*: totals, a series, and the heaviest endpoints, callers and single requests."""
     step = timedelta(minutes=step_for(minutes))
     now = datetime.now(UTC)
-    end = datetime.fromtimestamp(
-        (now.timestamp() // step.total_seconds()) * step.total_seconds(), UTC
-    ) + step
+    end = (
+        datetime.fromtimestamp(
+            (now.timestamp() // step.total_seconds()) * step.total_seconds(), UTC
+        )
+        + step
+    )
     count = max(1, -(-timedelta(minutes=minutes) // step))
     start = end - step * count
     series = [

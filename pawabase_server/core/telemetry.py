@@ -258,7 +258,14 @@ class TelemetryRecorder:
             _origin.reset(origin_token)
             await self.telemetry.record(
                 self._build(
-                    scope, receive, status_holder["status"], started, started_at, trace, error, traffic
+                    scope,
+                    receive,
+                    status_holder["status"],
+                    started,
+                    started_at,
+                    trace,
+                    error,
+                    traffic,
                 )
             )
 

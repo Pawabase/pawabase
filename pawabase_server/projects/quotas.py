@@ -39,7 +39,6 @@ from pawabase_server.db.models import (
     ApiKey,
     AuthUser,
     BackupSnapshot,
-    Bucket as BucketRecord,
     Environment,
     InboundHook,
     MailLog,
@@ -49,6 +48,9 @@ from pawabase_server.db.models import (
     SessionInfo,
     UsageCounter,
     WebhookEndpoint,
+)
+from pawabase_server.db.models import (
+    Bucket as BucketRecord,
 )
 from pawabase_server.db.models import FlowRun as FlowRunRecord
 from pawabase_server.observability.request_metrics import BANDWIDTH_METRIC, REQUESTS_METRIC
@@ -227,6 +229,7 @@ def check_auth_providers(limits: dict[str, Any] | None, enabled: list[str]) -> N
 
 # ── monthly metering ────────────────────────────────────────────────────
 
+
 async def _no_history(names: list[str], start: datetime) -> int:
     return 0
 
@@ -235,11 +238,9 @@ SEEDS: dict[str, Callable[[list[str], datetime], Awaitable[int]]] = {
     "flow_runs": lambda names, start: FlowRunRecord.filter(
         env__in=names, created_at__gte=start
     ).count(),
-    "emails": lambda names, start: (
-        MailLog.filter(
-            env__in=names, status__in=["sent", "suppressed"], sent_at__gte=start
-        ).count()
-    ),
+    "emails": lambda names, start: MailLog.filter(
+        env__in=names, status__in=["sent", "suppressed"], sent_at__gte=start
+    ).count(),
     # Nothing records a published message, so the counter is the only record; it starts at zero.
     "realtime_messages": _no_history,
 }
@@ -506,7 +507,9 @@ async def month_totals(project_id: str, start: datetime | None = None) -> dict[s
     return totals
 
 
-async def bandwidth_over(project_id: str | None, limits: dict[str, Any] | None) -> tuple[int, int] | None:
+async def bandwidth_over(
+    project_id: str | None, limits: dict[str, Any] | None
+) -> tuple[int, int] | None:
     """``(allowed, used)`` when the project has sent more than its plan's ``monthly_bandwidth_bytes`` this month, else ``None``.
 
     The month's total is read from the request counters at most every :data:`TRAFFIC_SECONDS`, so a request never waits on

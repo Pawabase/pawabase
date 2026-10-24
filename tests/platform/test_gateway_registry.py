@@ -16,7 +16,9 @@ def test_a_default_instance_id_is_distinct_each_time():
 
 
 async def test_an_instance_registers_itself_and_heartbeats(api):
-    registry = GatewayRegistry(api.settings.model_copy(update={"gateway_instance_id": "g1", "gateway_plane_id": "plane-a"}))
+    registry = GatewayRegistry(
+        api.settings.model_copy(update={"gateway_instance_id": "g1", "gateway_plane_id": "plane-a"})
+    )
     await registry.register()
     row = await GatewayInstance.get(id="g1")
     assert row.plane_id == "plane-a" and row.draining is False
@@ -48,9 +50,13 @@ async def test_draining_is_visible_immediately_and_this_instances_readiness_refl
 async def test_is_healthy_excludes_draining_and_stale_rows(api):
     await GatewayInstance.create(id="fresh", host="a:8080", internal_url="http://a:8001")
     stale = await GatewayInstance.create(id="stale", host="b:8080", internal_url="http://b:8001")
-    await GatewayInstance.filter(id="stale").update(heartbeat_at=datetime.now(UTC) - timedelta(minutes=10))
+    await GatewayInstance.filter(id="stale").update(
+        heartbeat_at=datetime.now(UTC) - timedelta(minutes=10)
+    )
     await stale.refresh_from_db()
-    draining = await GatewayInstance.create(id="draining-one", host="c:8080", internal_url="http://c:8001", draining=True)
+    draining = await GatewayInstance.create(
+        id="draining-one", host="c:8080", internal_url="http://c:8001", draining=True
+    )
     fresh = await GatewayInstance.get(id="fresh")
     assert fresh.is_healthy(stale_after=30) is True
     assert stale.is_healthy(stale_after=30) is False
@@ -58,7 +64,11 @@ async def test_is_healthy_excludes_draining_and_stale_rows(api):
 
 
 async def test_stop_marks_draining_and_cancels_the_heartbeat_loop(api):
-    registry = GatewayRegistry(api.settings.model_copy(update={"gateway_instance_id": "g4", "gateway_heartbeat_seconds": 0.01}))
+    registry = GatewayRegistry(
+        api.settings.model_copy(
+            update={"gateway_instance_id": "g4", "gateway_heartbeat_seconds": 0.01}
+        )
+    )
     registry.start()
     await asyncio.sleep(0.05)
     await registry.stop()
@@ -69,8 +79,10 @@ async def test_stop_marks_draining_and_cancels_the_heartbeat_loop(api):
 
 async def test_prune_stale_removes_only_rows_older_than_the_window(api):
     await GatewayInstance.create(id="recent", host="a", internal_url="http://a")
-    old = await GatewayInstance.create(id="old", host="b", internal_url="http://b")
-    await GatewayInstance.filter(id="old").update(heartbeat_at=datetime.now(UTC) - timedelta(hours=2))
+    await GatewayInstance.create(id="old", host="b", internal_url="http://b")
+    await GatewayInstance.filter(id="old").update(
+        heartbeat_at=datetime.now(UTC) - timedelta(hours=2)
+    )
     removed = await GatewayRegistry(api.settings).prune_stale(older_than_seconds=3600)
     assert removed == 1
     assert await GatewayInstance.filter(id="recent").exists()
@@ -97,7 +109,9 @@ async def test_health_ready_is_reachable_with_no_api_key(api):
 async def test_studio_lists_every_registered_instance_and_whether_each_is_healthy(api):
     registry = api.platform.app.state["gateway_registry"]
     await registry.register()
-    await GatewayInstance.create(id="sibling", host="sibling:8080", internal_url="http://sibling:8001", plane_id="plane-b")
+    await GatewayInstance.create(
+        id="sibling", host="sibling:8080", internal_url="http://sibling:8001", plane_id="plane-b"
+    )
     listing = await api.studio.get("/internal/v1/gateway/instances")
     ids = {row["id"]: row for row in listing["data"]}
     assert registry.id in ids and "sibling" in ids

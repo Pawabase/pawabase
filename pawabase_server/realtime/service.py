@@ -179,7 +179,8 @@ class Realtime:
                 payload,
                 client_msg_id=client_msg_id,
                 sender=sender,
-                retention_seconds=rule.retention_seconds or self.settings.realtime_retention_seconds,
+                retention_seconds=rule.retention_seconds
+                or self.settings.realtime_retention_seconds,
             )
             if not created:
                 return {"id": row.id, "channel": channel, "event": event, "duplicate": True}

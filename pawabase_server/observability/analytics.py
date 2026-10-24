@@ -224,4 +224,3 @@ async def environment_analytics(
             for r in failures
         ],
     }
-

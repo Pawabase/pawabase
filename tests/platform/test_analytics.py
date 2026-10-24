@@ -39,7 +39,6 @@ async def test_overview_charts_come_from_recorded_activity(api):
     assert stats["summary"]["bytes_in"] > 0 and stats["summary"]["bytes_out"] > 0
     assert sum(b["bytes_out"] for b in stats["series"]) == stats["summary"]["bytes_out"]
 
-
     # Studio's own management calls are not the environment's traffic.
     overview = await api.studio.get(f"{ENV}/overview")
     assert (
@@ -85,9 +84,14 @@ async def test_bandwidth_report_ranks_what_moved_the_most(api):
 
     report = await api.studio.get(f"{ENV}/observability/bandwidth", params={"minutes": 60})
     assert report["summary"]["bytes_in"] >= 4000 and report["summary"]["bytes_out"] > 0
-    assert report["summary"]["total"] == report["summary"]["bytes_in"] + report["summary"]["bytes_out"]
+    assert (
+        report["summary"]["total"] == report["summary"]["bytes_in"] + report["summary"]["bytes_out"]
+    )
     assert sum(b["bytes_out"] for b in report["series"]) == report["summary"]["bytes_out"]
     ranked = {e["endpoint"]: e for e in report["endpoints"]}
     assert ranked["POST /rest/v1/notes"]["bytes_in"] >= 4000
     assert ranked["GET /rest/v1/notes"]["requests"] == 2
-    assert report["largest"] and report["largest"][0]["bytes_out"] >= report["largest"][-1]["bytes_out"]
+    assert (
+        report["largest"]
+        and report["largest"][0]["bytes_out"] >= report["largest"][-1]["bytes_out"]
+    )

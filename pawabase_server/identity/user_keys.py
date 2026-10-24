@@ -55,7 +55,9 @@ async def create(
         )
     # The plan's ceiling sits above whatever the environment's own directory settings allow.
     quotas.require_room(
-        "max_user_api_keys_per_user", quotas.allowance(config.project_limits, "max_user_api_keys_per_user"), held
+        "max_user_api_keys_per_user",
+        quotas.allowance(config.project_limits, "max_user_api_keys_per_user"),
+        held,
     )
     longest = policy["max_days"]
     days = expires_in_days
