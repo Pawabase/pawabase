@@ -47,6 +47,48 @@ function describe(rule) {
 
 const seconds = (value) => (!value ? "—" : value < 120 ? `${value}s` : value < 7200 ? `${Math.round(value / 60)} min` : value < 172800 ? `${Math.round(value / 3600)} h` : `${Math.round(value / 86400)} days`);
 
+// ── shared pieces ───────────────────────────────────────────────────────
+
+/** Starting points for a first rule: one rounded list, a row each, nothing floating. */
+function TemplatePicker({ onPick }) {
+  return (
+    <div className="w-full max-w-[640px] text-left">
+      <div className="mb-2 text-2xs font-semibold-plus uppercase tracking-[0.06em] text-faint">Start from a template</div>
+      <div className="overflow-hidden rounded-[calc(var(--r)_+_4px)] [border:1px_solid_var(--line-2)]" role="list">
+        {TEMPLATES.map((t, index) => (
+          <button
+            key={t.label}
+            type="button"
+            role="listitem"
+            onClick={() => onPick({ ...blank(), ...t.rule })}
+            className={`grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto_16px] items-center gap-3 border-0 bg-transparent p-[12px_16px] text-left font-inherit text-text transition-[background] duration-150 hover:bg-hover focus-visible:bg-hover focus-visible:outline-none ${index ? "[border-top:1px_solid_var(--line)]" : ""}`}
+          >
+            <span className="min-w-0">
+              <b className="block text-ui font-medium">{t.label}</b>
+              <small className="mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap text-ui-sm text-muted">{describe({ ...blank(), ...t.rule })}</small>
+            </span>
+            <Badge tone={ACTION_TONES[t.rule.action]}>{ACTION_LABELS[t.rule.action]}</Badge>
+            <Icon name="chevronRight" size={14} className="text-faint" />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** What the firewall does with no rules, and the way to make the first one. Flat on the page: no card around it. */
+function NoRules({ onNew, onPick }) {
+  return (
+    <div className="mx-auto flex max-w-[640px] flex-col items-center gap-2 p-[40px_0_24px] text-center">
+      <span className="grid h-10 w-10 place-items-center rounded-[calc(var(--r)_+_4px)] bg-sunken text-muted"><Icon name="policies" size={20} /></span>
+      <h3 className="m-[6px_0_0] text-heading font-semibold">No rules yet</h3>
+      <p className="m-0 max-w-[460px] text-ui text-muted">Every request goes through, except those from banned addresses. Add a rule to allow, block, log or rate-limit by address, path, country, header and more.</p>
+      <div className="mt-3"><Button variant="primary" onClick={onNew}><Icon name="plus" />New rule</Button></div>
+      <div className="mt-8 w-full"><TemplatePicker onPick={onPick} /></div>
+    </div>
+  );
+}
+
 // ── overview ────────────────────────────────────────────────────────────
 
 export function FirewallOverview({ base, onBan, onNewRule }) {
@@ -57,63 +99,46 @@ export function FirewallOverview({ base, onBan, onNewRule }) {
   return (
     <>
       <PageHead title="Firewall" description="Every request to this environment's API passes through the firewall first: bans, then your rules in order." actions={<Segmented options={[[1, "1 h"], [24, "24 h"], [168, "7 days"]]} value={hours} onChange={setHours} />} />
-      {noRules && (
-        <div className="fw-empty flex flex-col items-center text-center gap-2 p-[44px_var(--gutter)] [&_h3]:m-[4px_0_0] [&_h3]:text-heading [&_h3]:font-semibold [&_p]:m-[0_0_8px] [&_p]:text-muted [&_p]:text-ui [&_p]:max-w-[460px]">
-          <Icon name="policies" size={20} className="faint text-faint" />
-          <h3>No rules yet</h3>
-          <p>Requests go through unchecked except for bans. Start from a template:</p>
-          <div className="fw-templates w-full max-w-[560px] mt-[18px] text-left [border-top:1px_solid_var(--line)] [&_>_span]:block [&_>_span]:p-[12px_0_6px] [&_>_span]:text-2xs [&_>_span]:font-semibold-plus [&_>_span]:tracking-[0.06em] [&_>_span]:uppercase [&_>_span]:text-muted [&_button]:flex [&_button]:flex-col [&_button]:gap-0.5 [&_button]:w-full [&_button]:p-[10px_0] [&_button]:border-0 [&_button]:[border-bottom:1px_solid_var(--line)] [&_button]:bg-none [&_button]:text-inherit [&_button]:font-inherit [&_button]:text-left [&_button]:cursor-pointer [&_button:hover_b]:underline [&_button_b]:text-body [&_button_b]:font-semibold [&_button_small]:text-xs [&_button_small]:text-muted [&_button_small]:overflow-hidden [&_button_small]:text-ellipsis [&_button_small]:whitespace-nowrap">
-            {TEMPLATES.map((t) => (
-              <button key={t.label} type="button" onClick={() => onNewRule({ ...blank(), ...t.rule })}>
-                <b>{t.label}</b><small>{ACTION_LABELS[t.rule.action]} · {describe({ ...blank(), ...t.rule })}</small>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
       <Loading state={stats}>
         {(s) => {
           const by = s.by_action || {};
           const hourly = {};
           for (const row of s.timeline || []) hourly[row.hour] = (hourly[row.hour] || 0) + row.count;
           const peak = Math.max(1, ...Object.values(hourly));
+          const quiet = s.total === 0;
           return (
-            // One board, rounded and divided inside by rules that meet its edges: the numbers, the activity, then the four top lists.
-            // The plain wrapper takes the page gutter on every side, so the board never sits on the head's rule.
-            <div>
-            <div className="fw-board [border:1px_solid_var(--line-2)] rounded-[calc(var(--r)_+_4px)] overflow-hidden bg-[color-mix(in_srgb,_var(--surface)_40%,_var(--canvas))]">
-              <div className="p-[14px_var(--gutter)] [&_.statstrip]:m-0">
-                <StatStrip>
-                  <Stat value={s.total} label="Requests acted on" />
-                  <Stat tone={by.block ? "danger" : undefined} value={by.block || 0} label="Blocked" />
-                  <Stat tone={by.rate_limit ? "warn" : undefined} value={by.rate_limit || 0} label="Rate limited" />
-                  <Stat value={by.log || 0} label="Logged" />
-                  <Stat value={s.active_bans} label="Active bans" />
-                </StatStrip>
-              </div>
-              {Object.keys(hourly).length > 0 && (
-                <section className="[border-top:1px_solid_var(--line)] p-[16px_var(--gutter)_18px]">
-                  <h3 className="flex items-center gap-2 m-[0_0_14px] text-[13.5px] font-semibold"><Icon name="events" size={16} className="text-brand" />Activity</h3>
-                  <div className="fw-bars flex items-end gap-[3px] h-[96px] [&_i]:flex-1 [&_i]:min-w-[3px] [&_i]:bg-danger [&_i]:opacity-[0.75] [&_i]:rounded-[2px_2px_0_0]">{Object.entries(hourly).map(([hour, count]) => <i key={hour} title={`${new Date(hour).toLocaleString()} · ${count}`} style={{ height: `${Math.max(4, (count / peak) * 100)}%` }} />)}</div>
-                </section>
-              )}
-              {s.total === 0 ? (
-                !noRules && (
-                  <div className="fw-empty [border-top:1px_solid_var(--line)] flex flex-col items-center text-center gap-2 p-[44px_var(--gutter)] [&_h3]:m-[4px_0_0] [&_h3]:text-heading [&_h3]:font-semibold [&_p]:m-[0_0_8px] [&_p]:text-muted [&_p]:text-ui [&_p]:max-w-[460px]">
-                    <Icon name="networking" size={20} className="faint text-faint" />
-                    <h3>Nothing to report</h3>
-                    <p>No request was blocked, limited or logged in this period.</p>
-                  </div>
-                )
+            <div className="flex flex-col gap-8">
+              <StatStrip>
+                <Stat value={s.total} label="Requests acted on" />
+                <Stat tone={by.block ? "danger" : undefined} value={by.block || 0} label="Blocked" />
+                <Stat tone={by.rate_limit ? "warn" : undefined} value={by.rate_limit || 0} label="Rate limited" />
+                <Stat value={by.log || 0} label="Logged" />
+                <Stat value={s.active_bans} label="Active bans" />
+              </StatStrip>
+              {noRules ? (
+                <NoRules onNew={() => onNewRule(blank())} onPick={onNewRule} />
+              ) : quiet ? (
+                <p className="m-0 border-0 p-[8px_0] text-ui text-muted [border-top:1px_solid_var(--line)]">Nothing was blocked, limited or logged in this period.</p>
               ) : (
-                <div className="fw-tops [border-top:1px_solid_var(--line)] [&_>_.card_>_.card-head]:rounded-none [&_>_.card_>_.card-head]:bg-transparent grid grid-cols-[repeat(auto-fit,_minmax(320px,_1fr))] gap-3.5 [&.fw-flat]:grid-cols-2 [&.fw-flat]:gap-0 [&.fw-flat_>_.card:nth-child(odd)]:[border-right:1px_solid_var(--line)] [&.fw-flat_>_.card:nth-child(-n_+_2)]:[border-bottom:1px_solid_var(--line)] max-workbench:[&.fw-flat]:grid-cols-1 max-workbench:[&.fw-flat_>_.card]:border-r-0! max-workbench:[&.fw-flat_>_.card]:[border-bottom:1px_solid_var(--line)] fw-flat [&_>_.card]:m-0 [&_>_.card]:border-0 [&_>_.card]:rounded-none [&_>_.card]:bg-transparent [&_>_.card_>_.card-head]:p-[0_var(--gutter)]">
-                  <TopList title="Top addresses" rows={s.top_ips} action={(ip) => <Button size="sm" onClick={() => onBan(ip)}>Ban</Button>} />
-                  <TopList title="Top paths" rows={s.top_paths} mono />
-                  <TopList title="Top rules" rows={s.top_rules} />
-                  <TopList title="Top countries" rows={s.top_countries} empty="Set PAWABASE_FIREWALL_COUNTRY_HEADER behind a proxy that adds one." />
-                </div>
+                <>
+                  {Object.keys(hourly).length > 0 && (
+                    <section>
+                      <h3 className="m-[0_0_12px] text-heading font-semibold">Activity</h3>
+                      <div className="flex h-[96px] items-end gap-[3px]">
+                        {Object.entries(hourly).map(([hour, count]) => (
+                          <i key={hour} title={`${new Date(hour).toLocaleString()}: ${count}`} className="min-w-[3px] flex-1 rounded-[2px_2px_0_0] bg-danger opacity-75" style={{ height: `${Math.max(4, (count / peak) * 100)}%` }} />
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                  <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-x-10 gap-y-8">
+                    <TopList title="Top addresses" rows={s.top_ips} action={(ip) => <Button size="sm" onClick={() => onBan(ip)}>Ban</Button>} />
+                    <TopList title="Top paths" rows={s.top_paths} mono />
+                    <TopList title="Top rules" rows={s.top_rules} />
+                    <TopList title="Top countries" rows={s.top_countries} empty="Set PAWABASE_FIREWALL_COUNTRY_HEADER behind a proxy that adds one." />
+                  </div>
+                </>
               )}
-            </div>
             </div>
           );
         }}
@@ -122,27 +147,45 @@ export function FirewallOverview({ base, onBan, onNewRule }) {
   );
 }
 
+/** A ranked list: a heading, then a row each with a bar for scale. Flat, divided by hairlines. */
 function TopList({ title, rows, action, mono, empty = "Nothing yet." }) {
   const max = Math.max(1, ...(rows || []).map((r) => r.count));
   return (
-    <Card icon="policies" title={title} flush>
-      {!rows?.length ? <p className="muted text-muted" style={{ padding: 16 }}>{empty}</p> : (
-        <div className="fw-top flex flex-col">
-          {rows.map((r) => (
-            <div key={r.value} className="fw-top-row flex items-center gap-2.5 p-[8px_16px] [border-top:1px_solid_var(--line)] text-ui [&:first-child]:border-t-0 [&_.grow]:overflow-hidden [&_.grow]:text-ellipsis [&_.grow]:whitespace-nowrap pl-gutter pr-gutter">
-              <span className={`grow flex-1 min-w-0 ${mono ? "mono" : ""}`} title={r.value}>{r.value}</span>
-              <span className="fw-top-bar w-[90px] h-1.5 bg-sunken rounded-[3px] overflow-hidden flex-none [&_i]:block [&_i]:h-full [&_i]:bg-danger [&_i]:opacity-70"><i style={{ width: `${(r.count / max) * 100}%` }} /></span>
-              <b>{r.count}</b>
+    <section className="min-w-0">
+      <h3 className="m-[0_0_6px] text-heading font-semibold">{title}</h3>
+      {!rows?.length ? <p className="m-0 p-[10px_0] text-ui text-muted [border-top:1px_solid_var(--line)]">{empty}</p> : (
+        <div className="flex flex-col [border-top:1px_solid_var(--line)]">
+          {rows.map((r, index) => (
+            <div key={r.value} className={`flex min-h-[40px] items-center gap-3 text-ui ${index ? "[border-top:1px_solid_var(--line)]" : ""}`}>
+              <span className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${mono ? "font-mono text-ui-sm" : ""}`} title={r.value}>{r.value}</span>
+              <span className="h-1.5 w-[90px] flex-none overflow-hidden rounded-full bg-sunken"><i className="block h-full rounded-full bg-danger opacity-70" style={{ width: `${(r.count / max) * 100}%` }} /></span>
+              <b className="w-10 text-right tabular-nums">{r.count}</b>
               {action && action(r.value)}
             </div>
           ))}
         </div>
       )}
-    </Card>
+    </section>
   );
 }
 
 // ── rules ───────────────────────────────────────────────────────────────
+
+const RULE_COLUMNS = ({ data, run, base, reload, move }) => [
+                { label: "#", render: (r) => <span className="faint text-faint">{data.data.indexOf(r) + 1}</span> },
+                { label: "Rule", render: (r) => <div><b>{r.name}</b>{r.mode === "simulate" && <> <Badge tone="lavender">simulate</Badge></>}{r.expired && <> <Badge>expired</Badge></>}<div className="hint text-xs font-book text-muted leading-[1.45]">{describe(r)}</div></div> },
+                { label: "Action", render: (r) => <Badge tone={ACTION_TONES[r.action]}>{ACTION_LABELS[r.action]}</Badge> },
+                { label: "Limit", render: (r) => (r.rate_limit ? <span className="small text-ui-sm">{r.rate_limit.requests} / {seconds(r.rate_limit.window_seconds)} by {r.rate_limit.by}{r.rate_limit.ban_seconds ? `, ban ${seconds(r.rate_limit.ban_seconds)}` : ""}</span> : <span className="faint text-faint">—</span>) },
+                { label: "Hits", render: (r) => <span title={r.last_hit_at ? `Last ${when(r.last_hit_at)}` : "Never matched"}>{r.hits || 0}</span> },
+                { label: "Expires", render: (r) => (r.expires_at ? when(r.expires_at) : <span className="faint text-faint">never</span>) },
+                { label: "On", render: (r) => <span onClick={(e) => e.stopPropagation()}><Switch checked={r.enabled} onChange={async (enabled) => { if (await run(() => patch(`${base}/firewall/${r.id}`, { enabled }))) reload(); }} /></span> },
+                { label: "", render: (r) => { const i = data.data.indexOf(r); return (
+                  <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    <Button size="sm" disabled={i === 0} onClick={() => move(data.data, i, -1)} aria-label="Move up">↑</Button>
+                    <Button size="sm" disabled={i === data.data.length - 1} onClick={() => move(data.data, i, 1)} aria-label="Move down">↓</Button>
+                  </div>
+                ); } },
+              ]
 
 export function FirewallRules({ base, prefill, onPrefilled }) {
   const list = useApi(`${base}/firewall`);
@@ -172,46 +215,21 @@ export function FirewallRules({ base, prefill, onPrefilled }) {
             <Button variant="primary" onClick={() => setEditing(blank())}><Icon name="plus" />New rule</Button>
           </>
         ) : null} />
-      <Card bleed flush>
-        <Loading state={list} empty={
-          <div className="fw-empty flex flex-col items-center text-center gap-2 p-[44px_var(--gutter)] [&_h3]:m-[4px_0_0] [&_h3]:text-heading [&_h3]:font-semibold [&_p]:m-[0_0_8px] [&_p]:text-muted [&_p]:text-ui [&_p]:max-w-[460px]">
-            <Icon name="networking" size={20} className="faint text-faint" />
-            <h3>No rules yet</h3>
-            <p>Requests no rule matches go through, subject to bans and managed rules.</p>
-            <Button variant="primary" onClick={() => setEditing(blank())}><Icon name="plus" />New rule</Button>
-            <div className="fw-templates w-full max-w-[560px] mt-[18px] text-left [border-top:1px_solid_var(--line)] [&_>_span]:block [&_>_span]:p-[12px_0_6px] [&_>_span]:text-2xs [&_>_span]:font-semibold-plus [&_>_span]:tracking-[0.06em] [&_>_span]:uppercase [&_>_span]:text-muted [&_button]:flex [&_button]:flex-col [&_button]:gap-0.5 [&_button]:w-full [&_button]:p-[10px_0] [&_button]:border-0 [&_button]:[border-bottom:1px_solid_var(--line)] [&_button]:bg-none [&_button]:text-inherit [&_button]:font-inherit [&_button]:text-left [&_button]:cursor-pointer [&_button:hover_b]:underline [&_button_b]:text-body [&_button_b]:font-semibold [&_button_small]:text-xs [&_button_small]:text-muted [&_button_small]:overflow-hidden [&_button_small]:text-ellipsis [&_button_small]:whitespace-nowrap">
-              <span>Or start from</span>
-              {TEMPLATES.map((t) => (
-                <button key={t.label} type="button" onClick={() => setEditing({ ...blank(), ...t.rule })}>
-                  <b>{t.label}</b><small>{ACTION_LABELS[t.rule.action]} · {describe({ ...blank(), ...t.rule })}</small>
-                </button>
-              ))}
-            </div>
-          </div>
-        }>
-          {(data) => (
-            <Table
-              rows={data.data}
-              onRowClick={(r) => setEditing(r)}
-              columns={[
-                { label: "#", render: (r) => <span className="faint text-faint">{data.data.indexOf(r) + 1}</span> },
-                { label: "Rule", render: (r) => <div><b>{r.name}</b>{r.mode === "simulate" && <> <Badge tone="lavender">simulate</Badge></>}{r.expired && <> <Badge>expired</Badge></>}<div className="hint text-xs font-book text-muted leading-[1.45]">{describe(r)}</div></div> },
-                { label: "Action", render: (r) => <Badge tone={ACTION_TONES[r.action]}>{ACTION_LABELS[r.action]}</Badge> },
-                { label: "Limit", render: (r) => (r.rate_limit ? <span className="small text-ui-sm">{r.rate_limit.requests} / {seconds(r.rate_limit.window_seconds)} by {r.rate_limit.by}{r.rate_limit.ban_seconds ? `, ban ${seconds(r.rate_limit.ban_seconds)}` : ""}</span> : <span className="faint text-faint">—</span>) },
-                { label: "Hits", render: (r) => <span title={r.last_hit_at ? `Last ${when(r.last_hit_at)}` : "Never matched"}>{r.hits || 0}</span> },
-                { label: "Expires", render: (r) => (r.expires_at ? when(r.expires_at) : <span className="faint text-faint">never</span>) },
-                { label: "On", render: (r) => <span onClick={(e) => e.stopPropagation()}><Switch checked={r.enabled} onChange={async (enabled) => { if (await run(() => patch(`${base}/firewall/${r.id}`, { enabled }))) reload(); }} /></span> },
-                { label: "", render: (r) => { const i = data.data.indexOf(r); return (
-                  <div className="row flex items-center gap-2 [&.wrap]:flex-wrap [&.top]:items-start [td_&]:gap-1.5" onClick={(e) => e.stopPropagation()}>
-                    <Button size="sm" disabled={i === 0} onClick={() => move(data.data, i, -1)} aria-label="Move up">↑</Button>
-                    <Button size="sm" disabled={i === data.data.length - 1} onClick={() => move(data.data, i, 1)} aria-label="Move down">↓</Button>
-                  </div>
-                ); } },
-              ]}
-            />
-          )}
-        </Loading>
-      </Card>
+      {list.data && list.data.data.length === 0 ? (
+        <NoRules onNew={() => setEditing(blank())} onPick={(rule) => setEditing(rule)} />
+      ) : (
+        <Card bleed flush>
+          <Loading state={list}>
+            {(data) => (
+              <Table
+                rows={data.data}
+                onRowClick={(r) => setEditing(r)}
+                columns={RULE_COLUMNS({ data, run, base, reload, move })}
+              />
+            )}
+          </Loading>
+        </Card>
+      )}
       {editing && <RuleSheet base={base} initial={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />}
     </>
   );
