@@ -13,13 +13,16 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import time
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
+from tortoise import connections
 from tortoise.expressions import F
 
+from pawabase_server.core.ids import new_ulid
 from pawabase_server.core.telemetry import RequestRecord, Telemetry
 from pawabase_server.db.models import MetricCounter, RequestLog
 
@@ -32,6 +35,78 @@ PRUNE_SECONDS = 3600.0
 logger = logging.getLogger("pawabase.api.metrics")
 
 Key = tuple[str, datetime, str]
+
+
+_COLUMNS = (
+    "created_at, updated_at, id, request_id, service, env, method, path, route, status, duration_ms, started_at, "
+    '"role", "user", ip, user_agent, error, notes, bytes_in, bytes_out'
+)
+_INSERT = (
+    f"INSERT INTO pb_request_logs ({_COLUMNS}) VALUES ("
+    + ", ".join(f"${n}::jsonb" if n == 18 else f"${n}" for n in range(1, 21))
+    + ")"
+)
+
+
+async def _store_requests(requests: list[RequestRecord]) -> None:
+    """Write a batch of request records. On Postgres they go straight in as one prepared statement: building a model object for each
+    request costs more than the insert, and every request pays it."""
+    connection = connections.get(RequestLog._meta.default_connection or "default")
+    if getattr(connection.capabilities, "dialect", "") != "postgres":
+        await RequestLog.bulk_create(
+            [
+                RequestLog(
+                    request_id=record.request_id or "unknown",
+                    service=record.service,
+                    env=record.env or "",
+                    method=record.method,
+                    path=record.path,
+                    route=record.route,
+                    status=record.status,
+                    duration_ms=record.duration_ms,
+                    started_at=record.started_at,
+                    role=record.role,
+                    user=record.user,
+                    ip=record.ip,
+                    user_agent=record.user_agent,
+                    error=record.error,
+                    notes=record.notes,
+                    bytes_in=record.bytes_in,
+                    bytes_out=record.bytes_out,
+                )
+                for record in requests
+            ]
+        )
+        return
+    now = datetime.now(UTC)
+    await connection.execute_many(
+        _INSERT,
+        [
+            (
+                now,
+                now,
+                new_ulid(),
+                record.request_id or "unknown",
+                record.service,
+                record.env or "",
+                record.method,
+                record.path,
+                record.route,
+                record.status,
+                record.duration_ms,
+                record.started_at,
+                record.role,
+                record.user,
+                record.ip,
+                record.user_agent,
+                record.error,
+                json.dumps(record.notes or {}, default=str),
+                record.bytes_in,
+                record.bytes_out,
+            )
+            for record in requests
+        ],
+    )
 
 
 class RequestRollup:
@@ -76,30 +151,7 @@ class RequestRollup:
         requests, self.requests = self.requests, []
         if requests:
             try:
-                await RequestLog.bulk_create(
-                    [
-                        RequestLog(
-                            request_id=record.request_id or "unknown",
-                            service=record.service,
-                            env=record.env or "",
-                            method=record.method,
-                            path=record.path,
-                            route=record.route,
-                            status=record.status,
-                            duration_ms=record.duration_ms,
-                            started_at=record.started_at,
-                            role=record.role,
-                            user=record.user,
-                            ip=record.ip,
-                            user_agent=record.user_agent,
-                            error=record.error,
-                            notes=record.notes,
-                            bytes_in=record.bytes_in,
-                            bytes_out=record.bytes_out,
-                        )
-                        for record in requests
-                    ]
-                )
+                await _store_requests(requests)
             except Exception:
                 logger.exception("could not store request history")
         for name, counters in ((REQUESTS_METRIC, pending), (BANDWIDTH_METRIC, traffic)):

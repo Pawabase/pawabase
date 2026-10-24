@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import time
+import weakref
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
@@ -310,30 +312,65 @@ async def load_state(platform: Platform, environment: Environment) -> Environmen
     return state
 
 
+_caches: weakref.WeakSet[EnvironmentCache] = weakref.WeakSet()
+
+
+def recheck() -> None:
+    """A definition changed in this process: every loaded environment is checked against the database on its next use."""
+    for cache in _caches:
+        cache._checked.clear()
+        cache._targets.clear()
+
+
 class EnvironmentCache:
-    """Loaded :class:`EnvironmentState` objects, by environment and version."""
+    """Loaded :class:`EnvironmentState` objects, by environment and version.
+
+    Every request needs its environment's state, and checking that the loaded state is still current is a database read. Within
+    ``env_state_ttl`` seconds of the last check the loaded state is served without asking again: a change made through this process
+    drops it at once (``forget``), and one made by another process is seen when the interval ends.
+    """
 
     def __init__(self, platform: Platform) -> None:
         self.platform = platform
         self._states: dict[str, EnvironmentState] = {}
         self._release_states: dict[tuple[str, str], EnvironmentState] = {}
         self._locks: dict[str, asyncio.Lock] = {}
+        #: When each environment's loaded version was last confirmed current.
+        self._checked: dict[str, float] = {}
+        #: What each ``(environment, api version)`` last resolved to: ``None`` for the live definitions, else a release id.
+        self._targets: dict[tuple[str, str], tuple[float, str | None]] = {}
+        _caches.add(self)
+
+    @property
+    def ttl(self) -> float:
+        return float(getattr(self.platform.settings, "env_state_ttl", 0) or 0)
 
     async def get(self, env: str) -> EnvironmentState:
+        cached = self._states.get(env)
+        ttl = self.ttl
+        if cached is not None and ttl > 0 and time.monotonic() - self._checked.get(env, 0.0) < ttl:
+            return cached
+        if cached is not None:
+            versions = await Environment.filter(name=env).values_list("version", flat=True)
+            version = versions[0] if versions else None
+            if version is None:
+                self.forget(env)
+                raise HTTPException(status_code=404, detail=f"no environment {env!r}")
+            if cached.version == version:
+                self._checked[env] = time.monotonic()
+                return cached
         environment = await Environment.filter(name=env).first()
         if environment is None:
             raise HTTPException(status_code=404, detail=f"no environment {env!r}")
-        key = env
-        cached = self._states.get(key)
-        if cached is not None and cached.version == environment.version:
-            return cached
-        lock = self._locks.setdefault(key, asyncio.Lock())
+        lock = self._locks.setdefault(env, asyncio.Lock())
         async with lock:
-            cached = self._states.get(key)
+            cached = self._states.get(env)
             if cached is not None and cached.version == environment.version:
+                self._checked[env] = time.monotonic()
                 return cached
             state = await load_state(self.platform, environment)
-            self._states[key] = state
+            self._states[env] = state
+            self._checked[env] = time.monotonic()
             return state
 
     async def get_release(self, env: str, release_id: str) -> EnvironmentState:
@@ -370,9 +407,19 @@ class EnvironmentCache:
     async def get_version(self, env: str, version: str) -> EnvironmentState:
         from pawabase_server.db.models import ApiVersion
 
+        ttl = self.ttl
+        remembered = self._targets.get((env, version))
+        if remembered is not None and ttl > 0 and time.monotonic() - remembered[0] < ttl:
+            release_id = remembered[1]
+            if release_id is not None:
+                return await self.get_release(env, release_id)
+            state = await self.get(env)
+            state.api_version = "v1"
+            return state
         api_version = await ApiVersion.filter(environment__name=env, name=version).first()
         # An environment stays live on v1 until it explicitly activates a release.
         if api_version is None and version == "v1":
+            self._targets[(env, version)] = (time.monotonic(), None)
             state = await self.get(env)
             state.api_version = "v1"
             return state
@@ -384,20 +431,27 @@ class EnvironmentCache:
             )
         if not api_version.active_release_id:
             if version == "v1":
+                self._targets[(env, version)] = (time.monotonic(), None)
                 state = await self.get(env)
                 state.api_version = "v1"
                 return state
             raise HTTPException(
                 status_code=503, detail=f"API version {version!r} has no active release"
             )
+        self._targets[(env, version)] = (time.monotonic(), api_version.active_release_id)
         return await self.get_release(env, api_version.active_release_id)
 
     def forget(self, env: str | None = None) -> None:
         if env is None:
             self._states.clear()
             self._release_states.clear()
+            self._checked.clear()
+            self._targets.clear()
             return
         self._states.pop(env, None)
+        self._checked.pop(env, None)
+        for key in [k for k in self._targets if k[0] == env]:
+            del self._targets[key]
         for key in [k for k in self._release_states if k[0] == env]:
             del self._release_states[key]
 
@@ -405,3 +459,4 @@ class EnvironmentCache:
 async def bump(environment_id: str) -> None:
     """Mark an environment's definitions as changed."""
     await Environment.filter(id=environment_id).update(version=F("version") + 1)
+    recheck()

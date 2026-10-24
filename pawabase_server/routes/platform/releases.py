@@ -312,6 +312,7 @@ def register(r: Router, platform: Platform) -> None:
         version = await ApiVersion.create(
             environment=environment, name=body.name, is_default=body.is_default
         )
+        platform.envs.forget(env)
         await audit(ctx, "api_version.created", env=env, target=body.name)
         return created(dump(version))
 

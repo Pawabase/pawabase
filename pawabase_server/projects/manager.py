@@ -23,8 +23,9 @@ from pawabase_server.core.ids import new_ulid
 from pawabase_server.data.source import DataSource, DataSourceError
 from pawabase_server.db.models import Environment, Project, ProjectDatabaseBinding
 from pawabase_server.environments.keys import create_key
-from pawabase_server.environments.state import data_schema_name, project_data_url
+from pawabase_server.environments.state import data_schema_name, project_data_url, recheck
 from pawabase_server.projects import quotas, refs
+from pawabase_server.projects.catalogue import KEYS
 from pawabase_server.settings import Settings
 
 logger = logging.getLogger("pawabase.projects")
@@ -32,37 +33,7 @@ logger = logging.getLogger("pawabase.projects")
 SLUG = re.compile(r"^[a-z][a-z0-9-]{1,39}$")
 ID = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 SCHEMA = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
-LIMIT_FIELDS = frozenset(
-    {
-        "daily_request_limit",
-        "monthly_request_limit",
-        "rate_limit",
-        "rate_window",
-        "max_active_connections",
-        "max_users_per_month",
-        "max_active_users",
-        "max_api_keys",
-        "max_auth_sessions_per_user",
-        "max_mfa_factors_per_user",
-        "max_auth_providers",
-        "max_flow_runs_per_month",
-        "max_scheduled_jobs",
-        "max_storage_bytes",
-        "max_upload_bytes",
-        "max_database_bytes",
-        "max_backups",
-        "max_environments",
-        "max_realtime_channels",
-        "max_webhooks",
-        "max_inbound_hooks",
-        "max_queued_jobs",
-        "max_buckets",
-        "max_user_api_keys_per_user",
-        "max_emails_per_month",
-        "max_realtime_messages_per_month",
-        "monthly_bandwidth_bytes",
-    }
-)
+LIMIT_FIELDS = KEYS
 
 
 class ProjectError(Exception):
@@ -390,6 +361,7 @@ class ProjectManager:
     async def _invalidate(self, project: Project) -> None:
         """Make running servers rebuild the environments of this project, so none keeps a connection from the old binding."""
         await Environment.filter(project_id=project.id).update(version=F("version") + 1)
+        recheck()
 
     # ── environments ─────────────────────────────────────────────────────
 

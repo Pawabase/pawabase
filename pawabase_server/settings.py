@@ -189,6 +189,9 @@ class Settings(Config):
     #: Derives the passwords of managed project databases from their ids, so a job names a database without carrying a password.
     agent_secret_seed: str = ""
     request_retention_days: int = 14
+    #: Seconds a loaded environment (and which release an API version serves) is trusted before the database is asked again. A change made
+    #: through this server applies at once; one made by another process within this many seconds. 0 asks on every request.
+    env_state_ttl: float = 1.0
     #: The header a trusted proxy in front sets to the client's country (``cf-ipcountry`` behind Cloudflare), for firewall rules on
     #: ``country``. Empty: country is not known. Read only from proxies listed in ``trusted_proxies``.
     firewall_country_header: str = ""
@@ -196,6 +199,15 @@ class Settings(Config):
     firewall_event_retention_days: int = 14
     #: Days the management audit log keeps an entry; 0 keeps everything. Purged once a day by the leading scheduler.
     audit_retention_days: int = 365
+    #: Days each other kind of log is kept when the project's plan doesn't say; 0 keeps it for ever. A plan's limit of the same name wins
+    #: (``observability/retention.py``).
+    login_event_retention_days: int = 0
+    flow_run_retention_days: int = 0
+    event_log_retention_days: int = 0
+    webhook_delivery_retention_days: int = 0
+    job_run_retention_days: int = 0
+    mail_log_retention_days: int = 0
+    alarm_event_retention_days: int = 0
     #: How often flow run records are written, in seconds. They gather in memory and go to the database in one batch.
     #: ``0`` writes each record before the request returns.
     record_buffer_seconds: float = 0.5

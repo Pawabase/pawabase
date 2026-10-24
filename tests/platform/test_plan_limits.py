@@ -243,3 +243,14 @@ async def test_bandwidth_past_the_plan_is_refused_at_the_edge(api):
     quotas._traffic[project] = (float("inf"), 5000)
     assert await quotas.bandwidth_over(project, limits) == (1000, 5000)
     quotas._traffic.pop(project)
+
+
+def test_the_limit_catalogue_is_the_one_list():
+    from pawabase_server.projects import manager, quotas
+    from pawabase_server.projects.catalogue import KEYS, LIMITS, catalogue
+
+    assert manager.LIMIT_FIELDS == KEYS
+    assert set(quotas.LABELS) == KEYS
+    assert {name for name, *_ in quotas.REPORTED} <= KEYS
+    assert len({limit.key for limit in LIMITS}) == len(LIMITS)
+    assert {row["key"] for row in catalogue()} == KEYS

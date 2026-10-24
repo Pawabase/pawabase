@@ -178,13 +178,32 @@ def issue_user_token(
     return sillo_jwt.encode(payload, derive_env_secret(master, env))
 
 
+#: Tokens verified a moment ago, by ``(token, environment, master secret)``: the signature check is the dearest part of authenticating a
+#: request, and the same token arrives on every request of a session. An entry lives until the token's own expiry or ``_VERIFIED_FOR``
+#: seconds, whichever is sooner, so nothing is trusted for longer than the token itself allows.
+_VERIFIED_FOR = 30.0
+_VERIFIED_MAX = 4096
+_verified: dict[tuple[str, str, str], tuple[float, dict[str, Any]]] = {}
+
+
 def verify_user_token(token: str, master: str, *, env: str) -> dict[str, Any]:
     """Verify a user access token for *env*. Raises :class:`TokenInvalid`."""
+    key = (token, env, master)
+    hit = _verified.get(key)
+    now = time.monotonic()
+    if hit is not None and hit[0] > now:
+        return dict(hit[1])
     claims = _decode(token, derive_env_secret(master, env), audience=USER_AUDIENCE)
     if claims.get("typ") != "access":
         raise TokenInvalid("not an access token")
     if claims.get("env") != env:
         raise TokenInvalid("token belongs to another environment")
+    lifetime = min(_VERIFIED_FOR, float(claims.get("exp", 0)) - time.time())
+    if lifetime > 0:
+        if len(_verified) >= _VERIFIED_MAX:
+            for stale in list(_verified)[: _VERIFIED_MAX // 2]:
+                del _verified[stale]
+        _verified[key] = (now + lifetime, dict(claims))
     return claims
 
 

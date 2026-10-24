@@ -128,9 +128,7 @@ def create_app(
     platform.app = app
     gateway_registry = GatewayRegistry(settings) if role == "server" else None
     app.state["gateway_registry"] = gateway_registry
-    rollup = RequestRollup(retention_days=settings.request_retention_days).attach(
-        app.state["pawabase.telemetry"]
-    )
+    rollup = RequestRollup().attach(app.state["pawabase.telemetry"])
     app.state["request_rollup"] = rollup
     tasks: list[asyncio.Task] = []
 

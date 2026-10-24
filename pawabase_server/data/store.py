@@ -297,7 +297,10 @@ class ResourceStore:
         sql, params = query.get_parameterized_sql()
         rows = [self._decode(row) for row in await self.source.fetch(sql, params)]
         total = None
-        if count:
+        if count and offset == 0 and len(rows) < limit:
+            # The first page is not full: it is everything, and nothing needs counting.
+            total = len(rows)
+        elif count:
             count_query = self._where(
                 qc.from_(self.table).select(Count(Star()).as_("total")), filters
             )

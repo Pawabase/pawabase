@@ -54,6 +54,7 @@ from pawabase_server.db.models import (
 )
 from pawabase_server.db.models import FlowRun as FlowRunRecord
 from pawabase_server.observability.request_metrics import BANDWIDTH_METRIC, REQUESTS_METRIC
+from pawabase_server.projects.catalogue import LIMITS
 
 logger = logging.getLogger("pawabase.quotas")
 
@@ -557,76 +558,11 @@ def forget_database_size(env: str) -> None:
 
 #: Every plan limit a person sees on the usage page, in the order they see it: ``(limit, group, unit)``. The limit's label is in
 #: :data:`NOUNS`' neighbour :data:`LABELS`. Limits enforced at the edge on rates (``rate_limit``…) are shown by the gateway's own card.
-REPORTED = (
-    ("monthly_request_limit", "Traffic", "count"),
-    ("monthly_bandwidth_bytes", "Traffic", "bytes"),
-    ("max_active_connections", "Traffic", "count"),
-    ("max_realtime_messages_per_month", "Traffic", "count"),
-    ("max_realtime_channels", "Traffic", "count"),
-    ("max_database_bytes", "Data", "bytes"),
-    ("max_storage_bytes", "Data", "bytes"),
-    ("max_buckets", "Data", "count"),
-    ("max_upload_bytes", "Data", "bytes"),
-    ("max_backups", "Data", "count"),
-    ("max_users_per_month", "People", "count"),
-    ("max_active_users", "People", "count"),
-    ("max_api_keys", "People", "count"),
-    ("max_user_api_keys_per_user", "People", "count"),
-    ("max_auth_sessions_per_user", "People", "count"),
-    ("max_mfa_factors_per_user", "People", "count"),
-    ("max_auth_providers", "People", "count"),
-    ("max_flow_runs_per_month", "Automation", "count"),
-    ("max_scheduled_jobs", "Automation", "count"),
-    ("max_emails_per_month", "Automation", "count"),
-    ("max_webhooks", "Automation", "count"),
-    ("max_inbound_hooks", "Automation", "count"),
-    ("max_environments", "Project", "count"),
-)
-LABELS = {
-    "monthly_request_limit": "API requests",
-    "monthly_bandwidth_bytes": "Bandwidth",
-    "max_active_connections": "Realtime connections",
-    "max_realtime_messages_per_month": "Realtime messages",
-    "max_realtime_channels": "Realtime channels",
-    "max_database_bytes": "PostgreSQL storage",
-    "max_storage_bytes": "Object storage",
-    "max_buckets": "Storage buckets",
-    "max_upload_bytes": "Largest upload",
-    "max_backups": "Backups",
-    "max_users_per_month": "Monthly active users",
-    "max_active_users": "Users",
-    "max_api_keys": "Environment API keys",
-    "max_user_api_keys_per_user": "API keys per user",
-    "max_auth_sessions_per_user": "Sessions per user",
-    "max_mfa_factors_per_user": "Second factors per user",
-    "max_auth_providers": "Sign-in providers",
-    "max_flow_runs_per_month": "Flow runs",
-    "max_scheduled_jobs": "Scheduled tasks",
-    "max_emails_per_month": "Emails sent",
-    "max_webhooks": "Outbound webhooks",
-    "max_inbound_hooks": "Inbound webhooks",
-    "max_environments": "Environments",
-}
+REPORTED = tuple((limit.key, limit.group, limit.unit) for limit in LIMITS if limit.reported)
+LABELS = {limit.key: limit.label for limit in LIMITS}
 #: Limits that bound one thing rather than a total, so there is nothing to measure against them.
-MONTHLY = frozenset(
-    {
-        "monthly_request_limit",
-        "monthly_bandwidth_bytes",
-        "max_realtime_messages_per_month",
-        "max_users_per_month",
-        "max_flow_runs_per_month",
-        "max_emails_per_month",
-    }
-)
-PER_ITEM = frozenset(
-    {
-        "max_upload_bytes",
-        "max_user_api_keys_per_user",
-        "max_auth_sessions_per_user",
-        "max_mfa_factors_per_user",
-        "max_auth_providers",
-    }
-)
+MONTHLY = frozenset(limit.key for limit in LIMITS if limit.kind == "month")
+PER_ITEM = frozenset(limit.key for limit in LIMITS if limit.kind == "item")
 
 
 def live_connections(platform: Any, names: list[str]) -> int:

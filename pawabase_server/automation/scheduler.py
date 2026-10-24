@@ -24,15 +24,15 @@ import logging
 import os
 import socket
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from sillo.work.scheduler import CronTrigger, IntervalTrigger, SchedulerManager
 
 from pawabase_server.backup import snapshots
 from pawabase_server.core import leases
-from pawabase_server.db.models import Environment, FirewallEvent, JobRun, Schedule
-from pawabase_server.observability import alarms, audit_log
+from pawabase_server.db.models import Environment, JobRun, Schedule
+from pawabase_server.observability import alarms, retention
 from pawabase_server.observability import status as status_page
 from pawabase_server.platform import Platform
 
@@ -157,6 +157,11 @@ class PlatformScheduler:
             await self._record(spec, "skipped")
             logger.info("schedule %s skipped: its previous run is still going", spec["name"])
             return
+        if not manual and await self._still_running(spec, queued_only=True):
+            # Whatever the overlap policy, a second copy of a job nothing has picked up yet only deepens the queue.
+            await self._record(spec, "skipped")
+            logger.info("schedule %s skipped: its previous run has not started", spec["name"])
+            return
         try:
             if spec["kind"] == "flow":
                 await platform.dispatch(
@@ -201,8 +206,8 @@ class PlatformScheduler:
             schedule.run_count += 1
             await schedule.save(update_fields=["last_run_at", "last_status", "run_count"])
 
-    async def _still_running(self, spec: dict[str, Any]) -> bool:
-        """Whether the job a schedule queued last time is still waiting or running."""
+    async def _still_running(self, spec: dict[str, Any], *, queued_only: bool = False) -> bool:
+        """Whether the job a schedule queued last time is still waiting or running (``queued_only``: waiting, not yet started)."""
         if spec.get("target_type") == "event":
             return False
         target = spec.get("flow") if spec["kind"] == "flow" else spec.get("target")
@@ -210,7 +215,7 @@ class PlatformScheduler:
             env=spec["env"],
             source="schedule",
             target=target,
-            status__in=["queued", "active", "retrying"],
+            status__in=["queued"] if queued_only else ["queued", "active", "retrying"],
         ).exists()
 
     async def catch_up(self) -> int:
@@ -284,12 +289,10 @@ class PlatformScheduler:
                 logger.exception("platform task %s failed", name)
 
     async def _retention(self) -> None:
-        """Purge what is kept for a limited time: audit entries and firewall events."""
-        settings = self.platform.settings
-        await audit_log.purge(settings.audit_retention_days)
-        if settings.firewall_event_retention_days > 0:
-            cutoff = datetime.now(UTC) - timedelta(days=settings.firewall_event_retention_days)
-            await FirewallEvent.filter(created_at__lt=cutoff).delete()
+        """Delete the logs older than their plan's (or the platform's) retention."""
+        removed = await retention.sweep(self.platform.settings)
+        if removed:
+            logger.info("retention removed %s", removed)
 
     async def _loop(self) -> None:
         while self._running:

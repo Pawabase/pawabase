@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import socket
+import zlib
 from datetime import UTC, datetime
 
 from sillo.work.queue import ConnectionManager, PayloadSerializer, QueueWorker, WorkerOptions
@@ -22,8 +24,20 @@ logger = logging.getLogger("pawabase.worker")
 
 
 def worker_queues() -> list[str]:
+    """The queues a worker serves, in the order it looks at them.
+
+    A worker takes work from the first queue that has any, so one order for every worker means a long queue near the front starves the
+    ones behind it (a backlog of webhook deliveries kept flows waiting for good). The three busy queues are therefore rotated by worker
+    process: every worker serves all of them, and each one is first for some worker.
+    """
     extra = [q.strip() for q in os.getenv("PAWABASE_WORKER_QUEUES", "").split(",") if q.strip()]
-    return PLATFORM_QUEUES + [q for q in extra if q not in PLATFORM_QUEUES]
+    queues = PLATFORM_QUEUES + [q for q in extra if q not in PLATFORM_QUEUES]
+    busy = [q for q in ("events", "webhooks", "flows") if q in queues]
+    if len(busy) > 1:
+        turn = zlib.crc32(f"{socket.gethostname()}:{os.getpid()}".encode()) % len(busy)
+        rotated = iter(busy[turn:] + busy[:turn])
+        queues = [next(rotated) if q in busy else q for q in queues]
+    return queues
 
 
 def build_worker(

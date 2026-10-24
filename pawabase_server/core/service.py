@@ -25,14 +25,18 @@ from pawabase_server.settings import Settings
 
 
 class DatabaseContext:
-    """Runs a WebSocket connection inside the database context the application opened at startup."""
+    """Runs a request or a WebSocket connection inside the database context the application opened at startup.
+
+    A plain ASGI layer: Sillo's own registration of the same hook is a dispatch middleware, and every one of those costs a task, a pair of
+    memory streams and an event-loop round trip for each message that passes through it.
+    """
 
     def __init__(self, manager: Any) -> None:
         self.manager = manager
         self.app: Any = None
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "websocket":
+        if scope["type"] not in ("http", "websocket"):
             await self.app(scope, receive, send)
             return
         await self.manager.ensure_context(None, lambda: self.app(scope, receive, send))
@@ -102,11 +106,15 @@ def create_service(
     record = app.state.get("record")
     if record is not None:
         # Record re-enters the database context per request, but only for the middleware registered before it. The data-plane dispatcher
-        # and the other inner middleware query the database too, so the context wraps the whole stack (entering it twice is a no-op).
-        # Sillo applies that to HTTP only: a WebSocket session reads the database as well (channel rules, policies), so it enters the
-        # context here.
+        # and the other inner middleware query the database too, so the context wraps the whole stack, and a WebSocket session reads
+        # the database as well (channel rules, policies). Record registered its own copy as a dispatch middleware; this plain ASGI layer
+        # outside everything replaces it.
+        app.http_middleware[:] = [
+            entry
+            for entry in app.http_middleware
+            if entry.kwargs.get("dispatch") != record.ensure_context
+        ]
         app.use(DatabaseContext(record))
-        app.use(record.ensure_context)
 
     async def service_error(ctx: HttpContext, exc: ServiceError):
         body = exc.body if isinstance(exc.body, dict) else {"detail": exc.body}
